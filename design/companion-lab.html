@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Companion Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap">
+<style>
+:root{--bg:#F7F5F0;--card:#FFFFFF;--line:#E6E3DA;--text:#24231F;--muted:#77756D;--star:#EF9F27}
+@media (prefers-color-scheme:dark){:root{--bg:#171715;--card:#22221F;--line:#34332F;--text:#EDEBE4;--muted:#9C9A92}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+header{padding:32px 0 8px}
+h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.01em}
+header p{margin:6px 0 0;color:var(--muted);font-size:15px}
+.bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{font:700 14px Nunito,system-ui,sans-serif;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed=true]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip kbd{font:inherit;opacity:.5;margin-left:4px;font-size:12px}
+.sep{width:1px;height:24px;background:var(--line);margin:0 4px}
+.cap{margin:8px 0 0;font-size:13px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;padding:20px 0 64px}
+.grid.only .card:not(.starred){display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px 14px 14px;transition:border-color .2s}
+.card.starred{border-color:var(--star)}
+.stage{aspect-ratio:1;cursor:pointer;border-radius:14px;outline-offset:2px}
+.stage svg{width:100%;height:100%;display:block;color:var(--muted);overflow:visible;transition:filter .6s}
+.meta{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.name{margin:0;font-size:17px;font-weight:800}
+.vibe{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.star{background:none;border:1px solid var(--line);border-radius:999px;width:34px;height:34px;flex:none;cursor:pointer;color:var(--muted);font-size:17px;line-height:1}
+.card.starred .star{color:var(--star);border-color:var(--star)}
+
+/* rig + face */
+.rig{transform-box:fill-box;transform-origin:50% 100%;animation:breathe 3.6s ease-in-out infinite}
+.floaty{animation:float 3.2s ease-in-out infinite}
+.shadow{transform-box:fill-box;transform-origin:center}
+.shadow.fl{animation:shadowfloat 3.2s ease-in-out infinite}
+.eyes{transition:transform .35s ease}
+.eye{transform-box:fill-box;transform-origin:center;transition:transform .3s ease}
+.e-open{transform-box:fill-box;transform-origin:center;animation:blink 4.4s infinite}
+.e-happy,.e-sleep,.m-talk,.m-happy,.m-think,.m-sleep,.ov{opacity:0;transition:opacity .2s}
+.e-open,.m-idle{transition:opacity .2s}
+.m-talk{transform-box:fill-box;transform-origin:center}
+.ov-think circle{fill:currentColor}
+.ov-sleep text{fill:currentColor;font-family:Nunito,system-ui,sans-serif}
+.sp{fill:#EF9F27;transform-box:fill-box;transform-origin:center}
+
+/* moods: shared */
+[data-mood=listening] .rig{animation:lean 2.4s ease-in-out infinite}
+[data-mood=listening] .eyes{transform:translateY(3px)}
+[data-mood=listening] .eye{transform:scale(1.12)}
+[data-mood=thinking] .rig{animation:sway 2.6s ease-in-out infinite}
+[data-mood=thinking] .eyes{transform:translate(5px,-6px)}
+[data-mood=thinking] .m-idle{opacity:0}
+[data-mood=thinking] .m-think,[data-mood=thinking] .ov-think{opacity:1}
+[data-mood=thinking] .ov-think circle{animation:dot 1.2s infinite}
+[data-mood=thinking] .ov-think circle:nth-child(2){animation-delay:.2s}
+[data-mood=thinking] .ov-think circle:nth-child(3){animation-delay:.4s}
+[data-mood=talking] .rig{animation:talkb .4s ease-in-out infinite}
+[data-mood=talking] .m-idle{opacity:0}
+[data-mood=talking] .m-talk{opacity:1;animation:mtalk .28s ease-in-out infinite}
+[data-mood=happy] .rig{animation:hop .9s ease-in-out infinite}
+[data-mood=happy] .shadow{animation:shadowhop .9s ease-in-out infinite}
+[data-mood=happy] .e-open,[data-mood=happy] .m-idle{opacity:0}
+[data-mood=happy] .e-happy,[data-mood=happy] .m-happy,[data-mood=happy] .ov-happy{opacity:1}
+[data-mood=happy] .sp{animation:spark 1.1s ease-in-out infinite}
+[data-mood=happy] .sp2{animation-delay:.45s}
+[data-mood=sleepy] .rig{animation-duration:6.5s}
+[data-mood=sleepy] .floaty{animation-duration:6.5s}
+[data-mood=sleepy] .stage svg{filter:saturate(.5)}
+[data-mood=sleepy] .e-open,[data-mood=sleepy] .m-idle{opacity:0}
+[data-mood=sleepy] .e-sleep,[data-mood=sleepy] .m-sleep,[data-mood=sleepy] .ov-sleep{opacity:1}
+[data-mood=sleepy] .zz{animation:zz 2.6s ease-out infinite}
+[data-mood=sleepy] .zz2{animation-delay:1.3s}
+
+/* poke */
+.card.poke .rig{animation:squish .6s ease-out!important}
+.card.poke .e-open,.card.poke .e-sleep{opacity:0!important}
+.card.poke .e-happy{opacity:1!important}
+
+/* character extras */
+.orb-ring{opacity:0;transform-box:fill-box;transform-origin:center;transition:opacity .3s}
+[data-mood=listening] .orb-ring{opacity:1}
+[data-mood=thinking] .orb-ring{opacity:1;animation:spin 3s linear infinite}
+
+#c-pixel .rig,#c-pixel .e-open,#c-pixel .m-talk{animation-timing-function:steps(2)!important}
+#c-pixel .eyes,#c-pixel .eye{transition-timing-function:steps(3)}
+
+/* Specs: glasses get pushed up, glint while thinking, slide down when sleepy */
+.specs{transform-box:fill-box;transform-origin:center;transition:transform .4s ease}
+[data-mood=listening] .specs{transform:translateY(-3px)}
+[data-mood=sleepy] .specs{transform:translateY(7px) rotate(-6deg)}
+[data-mood=thinking] #c-specs .eyes{transform:translate(3px,-4px)}
+.glint{opacity:0}
+[data-mood=thinking] .glint{animation:glint 1.6s ease-in-out infinite}
+
+/* Shades: slide down to peek, flip up when happy or sleepy */
+.shades{transform-box:fill-box;transform-origin:center;transition:transform .45s cubic-bezier(.3,1.4,.5,1)}
+[data-mood=listening] .shades{transform:rotate(-5deg)}
+[data-mood=thinking] .shades{transform:translateY(12px)}
+[data-mood=happy] .shades,[data-mood=sleepy] .shades,.card.poke .shades{transform:translateY(-26px)}
+
+/* Beanie: pom-pom bounces, hat gets pulled over the eyes at night */
+.hat{transition:transform .4s ease}
+.pom{transform-box:fill-box;transform-origin:50% 100%;animation:pom 3.6s ease-in-out infinite}
+[data-mood=talking] .pom{animation-duration:.4s}
+[data-mood=happy] .pom{animation:pomhop .45s ease-in-out infinite}
+[data-mood=listening] .hat{transform:translateY(-3px)}
+[data-mood=sleepy] .hat{transform:translateY(13px)}
+
+/* Headphones: vibes to music, lifts them off to listen to you */
+[data-mood=idle] #c-phones .rig{animation:bop .9s ease-in-out infinite}
+.phones{transition:transform .4s ease}
+[data-mood=listening] .phones{transform:translateY(-14px)}
+.notes text{fill:currentColor;opacity:0;font-size:17px}
+[data-mood=idle] .notes text,[data-mood=happy] .notes text{animation:note 2.2s ease-out infinite}
+[data-mood=idle] .notes .n2,[data-mood=happy] .notes .n2{animation-delay:1.1s}
+
+/* Hoodie: hood brim drops over the eyes when sleepy */
+.brim{transform-box:fill-box;transform-origin:50% 0;transition:transform .45s ease}
+[data-mood=sleepy] .brim{transform:scaleY(3.6)}
+[data-mood=thinking] #c-hoodie .eyes{transform:translate(5px,-2px)}
+
+/* Visor: scan line sweeps while thinking */
+.scan{opacity:0}
+[data-mood=thinking] .scan{opacity:1;animation:scan 1.1s ease-in-out infinite alternate}
+
+/* Dapper: mustache wiggles when talking, tips the hat when happy */
+.stache{transform-box:fill-box;transform-origin:50% 30%;transition:transform .3s ease}
+[data-mood=talking] .stache{animation:stache .3s ease-in-out infinite}
+[data-mood=happy] .stache{transform:translateY(-2px) scale(1.08)}
+.tophat{transform-box:fill-box;transform-origin:15% 100%;transition:transform .45s cubic-bezier(.3,1.4,.5,1)}
+[data-mood=happy] .tophat,.card.poke .tophat{transform:translateY(-6px) rotate(-18deg)}
+[data-mood=sleepy] .tophat{transform:translateY(5px) rotate(8deg)}
+
+.new{display:inline-block;font-size:11px;font-weight:800;color:#3C3489;background:#EEEDFE;border-radius:999px;padding:2px 7px;margin-left:6px;vertical-align:3px}
+
+@keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.015,1.035)}}
+@keyframes lean{0%,100%{transform:rotate(-5deg) scale(1,1.02)}50%{transform:rotate(-5deg) scale(1.01,1.045)}}
+@keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes talkb{0%,100%{transform:translateY(0) scale(1,1)}50%{transform:translateY(-2px) scale(1.01,1.03)}}
+@keyframes hop{0%,100%{transform:translateY(0) scale(1,1)}15%{transform:translateY(0) scale(1.08,.92)}45%{transform:translateY(-20px) scale(.95,1.06)}70%{transform:translateY(0) scale(1.06,.94)}85%{transform:translateY(0) scale(.99,1.01)}}
+@keyframes squish{0%{transform:scale(1,1)}25%{transform:scale(1.16,.84)}55%{transform:scale(.92,1.1)}80%{transform:scale(1.03,.97)}100%{transform:scale(1,1)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes shadowfloat{0%,100%{transform:scale(1)}50%{transform:scale(.78)}}
+@keyframes shadowhop{0%,15%,70%,100%{transform:scale(1)}45%{transform:scale(.6)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes mtalk{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1.1)}}
+@keyframes dot{0%,100%{opacity:.2}50%{opacity:1}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:1}100%{opacity:0;transform:translate(10px,-22px)}}
+@keyframes spark{0%,100%{transform:scale(.3);opacity:0}50%{transform:scale(1);opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes glint{0%,100%{opacity:0}40%,60%{opacity:.9}}
+@keyframes pom{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes pomhop{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.12)}}
+@keyframes bop{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(1px) rotate(-3deg)}50%{transform:translateY(-2px) rotate(0)}75%{transform:translateY(1px) rotate(3deg)}}
+@keyframes note{0%{opacity:0;transform:translate(0,0)}25%{opacity:1}100%{opacity:0;transform:translate(8px,-24px)}}
+@keyframes scan{from{transform:translateX(0)}to{transform:translateX(74px)}}
+@keyframes stache{0%,100%{transform:scaleY(1) rotate(0)}50%{transform:scaleY(.85) rotate(2deg)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>Companion Lab</h1>
+  <p id="sub"></p>
+</header>
+<div class="bar">
+  <div class="wrap">
+    <div class="row" id="moods"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="chip" id="cycle" aria-pressed="false">Cycle moods <kbd>C</kbd></button>
+      <button class="chip" id="only" aria-pressed="false">Starred only <span id="count"></span></button>
+    </div>
+    <p class="cap" id="cap"></p>
+  </div>
+</div>
+<main class="wrap">
+  <div class="grid" id="lab" data-mood="idle"></div>
+</main>
+<script>
+const MOODS = [
+  ['idle', 'Idle', 'just hanging out'],
+  ['listening', 'Listening', 'while you type'],
+  ['thinking', 'Thinking', 'waiting on a reply'],
+  ['talking', 'Talking', 'a reply is streaming in'],
+  ['happy', 'Happy', 'you finish something or hit a goal'],
+  ['sleepy', 'Sleepy', 'quiet hours, after 10:30pm'],
+];
+
+const STAR = 'M0 -9 Q2 -2 9 0 Q2 2 0 9 Q-2 2 -9 0 Q-2 -2 0 -9Z';
+const OVERLAYS = `
+  <g class="ov ov-think" transform="translate(146 44)"><circle cx="0" r="4"/><circle cx="12" r="4"/><circle cx="24" r="4"/></g>
+  <g class="ov ov-sleep" transform="translate(148 62)"><text class="zz" font-size="18" font-weight="800">z</text><text class="zz zz2" x="12" y="-14" font-size="13" font-weight="800">z</text></g>
+  <g class="ov ov-happy"><g transform="translate(38 66)"><path class="sp" d="${STAR}"/></g><g transform="translate(164 56)"><path class="sp sp2" d="${STAR}"/></g></g>`;
+
+function eyeInner(r, ink, style) {
+  if (style === 'pixel') {
+    return `<g class="e-open"><rect x="${-r}" y="${-r}" width="${2*r}" height="${2*r}" fill="${ink}"/></g>
+      <rect class="e-happy" x="${-r}" y="${-r*.2}" width="${2*r}" height="${r*.7}" fill="${ink}"/>
+      <rect class="e-sleep" x="${-r}" y="${r*.2}" width="${2*r}" height="${r*.45}" fill="${ink}"/>`;
+  }
+  const shine = style === 'round' ? `<circle cx="${r*.28}" cy="${-r*.38}" r="${r*.3}" fill="#fff"/>` : '';
+  return `<g class="e-open"><ellipse rx="${r*.82}" ry="${r}" fill="${ink}"/>${shine}</g>
+    <path class="e-happy" d="M${-r} ${r*.35} Q0 ${-r*1.1} ${r} ${r*.35}" fill="none" stroke="${ink}" stroke-width="${r*.5}" stroke-linecap="round"/>
+    <path class="e-sleep" d="M${-r} ${-r*.1} Q0 ${r*.75} ${r} ${-r*.1}" fill="none" stroke="${ink}" stroke-width="${r*.45}" stroke-linecap="round"/>`;
+}
+
+function eyesSVG({ y, gap, r, ink, style = 'round', count = 2 }) {
+  const xs = count === 1 ? [100] : [100 - gap / 2, 100 + gap / 2];
+  return `<g class="eyes">${xs.map(x =>
+    `<g transform="translate(${x} ${y})"><g class="eye">${eyeInner(r, ink, style)}</g></g>`).join('')}</g>`;
+}
+
+function mouthSVG({ y, w, ink, style = 'round' }) {
+  let inner;
+  if (style === 'pixel') {
+    inner = `<rect class="m-idle" x="${-w/2}" y="0" width="${w}" height="4" fill="${ink}"/>
+      <rect class="m-talk" x="${-w*.3}" y="-3" width="${w*.6}" height="10" fill="${ink}"/>
+      <rect class="m-happy" x="${-w*.7}" y="-2" width="${w*1.4}" height="9" fill="${ink}"/>
+      <rect class="m-think" x="${w*.1}" y="0" width="6" height="6" fill="${ink}"/>
+      <rect class="m-sleep" x="${-w*.3}" y="2" width="${w*.6}" height="3" fill="${ink}"/>`;
+  } else {
+    const sw = Math.max(2.5, w * .18);
+    inner = `<path class="m-idle" d="M${-w/2} 0 Q0 ${w*.45} ${w/2} 0" fill="none" stroke="${ink}" stroke-width="${sw}" stroke-linecap="round"/>
+      <ellipse class="m-talk" cy="${w*.12}" rx="${w*.28}" ry="${w*.26}" fill="${ink}"/>
+      <path class="m-happy" d="M${-w*.55} ${-w*.05} Q0 ${w*.85} ${w*.55} ${-w*.05}Z" fill="${ink}"/>
+      <circle class="m-think" cx="${w*.2}" cy="${w*.1}" r="${w*.13}" fill="${ink}"/>
+      <path class="m-sleep" d="M${-w*.25} ${w*.1} L${w*.25} ${w*.1}" stroke="${ink}" stroke-width="${sw}" stroke-linecap="round"/>`;
+  }
+  return `<g transform="translate(100 ${y})"><g class="mouth">${inner}</g></g>`;
+}
+
+function cheeksSVG({ dx, y, color }) {
+  return `<g class="cheeks"><ellipse cx="${100-dx}" cy="${y}" rx="7" ry="4" fill="${color}" fill-opacity=".55"/><ellipse cx="${100+dx}" cy="${y}" rx="7" ry="4" fill="${color}" fill-opacity=".55"/></g>`;
+}
+
+const CHARS = [
+  {
+    id: 'orb', name: 'Orb', vibe: 'Calm, abstract, minimal',
+    back: `<g transform="translate(100 112)"><circle class="orb-ring" r="62" fill="none" stroke="#AFA9EC" stroke-width="2.5" stroke-dasharray="6 8"/></g>`,
+    body: `<circle cx="100" cy="112" r="48" fill="#7F77DD"/><circle cx="84" cy="94" r="10" fill="#AFA9EC"/>`,
+  },
+  {
+    id: 'blob', name: 'Blob', vibe: 'Cute, expressive, friendly',
+    body: `<path d="M45 150 Q38 100 70 78 Q100 58 135 78 Q165 98 158 150 Q155 170 100 170 Q48 170 45 150Z" fill="#5DCAA5"/>`,
+    eyes: { y: 112, gap: 28, r: 7, ink: '#04342C' },
+    mouth: { y: 130, w: 14, ink: '#04342C' },
+  },
+  {
+    id: 'pixel', name: 'Pixel', vibe: 'Retro, playful, game-like',
+    body: `<rect x="66" y="72" width="16" height="16" fill="#F0997B"/><rect x="118" y="72" width="16" height="16" fill="#F0997B"/><rect x="56" y="88" width="88" height="80" fill="#F0997B"/>`,
+    eyes: { y: 116, gap: 32, r: 6, ink: '#4A1B0C', style: 'pixel' },
+    mouth: { y: 140, w: 18, ink: '#4A1B0C', style: 'pixel' },
+  },
+  {
+    id: 'specs', name: 'Specs', vibe: 'Big round glasses, study mode', isNew: true,
+    body: `<path d="M45 150 Q38 100 70 78 Q100 58 135 78 Q165 98 158 150 Q155 170 100 170 Q48 170 45 150Z" fill="#FAC775"/>`,
+    eyes: { y: 112, gap: 32, r: 6, ink: '#412402' },
+    mouth: { y: 136, w: 12, ink: '#412402' },
+    cheeks: { dx: 36, y: 132, color: '#F0997B' },
+    top: `<g class="specs">
+      <path d="M71 110 L54 104 M129 110 L146 104" stroke="#412402" stroke-width="3.5" stroke-linecap="round"/>
+      <circle cx="84" cy="112" r="14" fill="#fff" fill-opacity=".3" stroke="#412402" stroke-width="3.5"/>
+      <circle cx="116" cy="112" r="14" fill="#fff" fill-opacity=".3" stroke="#412402" stroke-width="3.5"/>
+      <path d="M98 111 Q100 107 102 111" fill="none" stroke="#412402" stroke-width="3.5" stroke-linecap="round"/>
+      <path class="glint" d="M77 106 L85 98 M109 106 L117 98" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    </g>`,
+  },
+  {
+    id: 'shades', name: 'Shades', vibe: 'Too cool, secretly soft', isNew: true,
+    body: `<rect x="56" y="80" width="88" height="88" rx="28" fill="#85B7EB"/>`,
+    eyes: { y: 118, gap: 32, r: 6, ink: '#042C53' },
+    mouth: { y: 142, w: 14, ink: '#042C53' },
+    top: `<g transform="translate(100 116)"><g class="shades">
+      <rect x="-38" y="-10" width="32" height="18" rx="5" fill="#042C53"/>
+      <rect x="6" y="-10" width="32" height="18" rx="5" fill="#042C53"/>
+      <rect x="-7" y="-6" width="14" height="4" fill="#042C53"/>
+      <rect x="-33" y="-6" width="9" height="3" rx="1.5" fill="#fff" fill-opacity=".5"/>
+      <rect x="11" y="-6" width="9" height="3" rx="1.5" fill="#fff" fill-opacity=".5"/>
+    </g></g>`,
+  },
+  {
+    id: 'beanie', name: 'Beanie', vibe: 'Cozy, chill, always cold', isNew: true,
+    body: `<ellipse cx="100" cy="126" rx="54" ry="46" fill="#F5C4B3"/>`,
+    eyes: { y: 136, gap: 34, r: 6, ink: '#4A1B0C' },
+    mouth: { y: 152, w: 12, ink: '#4A1B0C' },
+    cheeks: { dx: 34, y: 150, color: '#F0997B' },
+    top: `<g class="hat">
+      <path d="M48 116 Q48 66 100 64 Q152 66 152 116Z" fill="#D85A30"/>
+      <rect x="44" y="106" width="112" height="16" rx="8" fill="#993C1D"/>
+      <path d="M62 108 V120 M78 108 V120 M94 108 V120 M110 108 V120 M126 108 V120 M142 108 V120" stroke="#712B13" stroke-width="2" stroke-opacity=".5"/>
+      <g transform="translate(100 64)"><g class="pom"><circle cy="-8" r="11" fill="#FAECE7"/></g></g>
+    </g>`,
+  },
+  {
+    id: 'phones', name: 'Headphones', vibe: 'Always has music on', isNew: true,
+    body: `<circle cx="100" cy="116" r="50" fill="#9FE1CB"/>`,
+    eyes: { y: 112, gap: 30, r: 6, ink: '#04342C' },
+    mouth: { y: 130, w: 12, ink: '#04342C' },
+    front: `<g class="phones">
+      <path d="M50 112 Q50 52 100 52 Q150 52 150 112" fill="none" stroke="#2C2C2A" stroke-width="7" stroke-linecap="round"/>
+      <rect x="38" y="98" width="18" height="34" rx="8" fill="#D4537E"/>
+      <rect x="144" y="98" width="18" height="34" rx="8" fill="#D4537E"/>
+    </g>`,
+    top: `<g class="notes"><text x="150" y="66">&#9834;</text><text class="n2" x="162" y="86">&#9835;</text></g>`,
+  },
+  {
+    id: 'cyclops', name: 'Cyclops', vibe: 'One big eye, all feelings', isNew: true,
+    body: `<path d="M100 54 L93 72 L107 72Z" fill="#D4537E"/><path d="M45 150 Q38 100 70 78 Q100 58 135 78 Q165 98 158 150 Q155 170 100 170 Q48 170 45 150Z" fill="#ED93B1"/><circle cx="100" cy="108" r="21" fill="#fff"/>`,
+    eyes: { y: 108, r: 12, ink: '#4B1528', count: 1 },
+    mouth: { y: 142, w: 14, ink: '#4B1528' },
+  },
+  {
+    id: 'hoodie', name: 'Hoodie', vibe: 'Low-key, hood always up', isNew: true,
+    body: `<path d="M40 170 Q34 96 64 70 Q100 44 136 70 Q166 96 160 170Z" fill="#534AB7"/><ellipse cx="100" cy="118" rx="40" ry="36" fill="#FAEEDA" stroke="#3C3489" stroke-width="5"/>`,
+    eyes: { y: 114, gap: 28, r: 6, ink: '#412402' },
+    mouth: { y: 132, w: 11, ink: '#412402' },
+    cheeks: { dx: 26, y: 128, color: '#F0997B' },
+    top: `<ellipse class="brim" cx="100" cy="77" rx="40" ry="7" fill="#3C3489"/>
+      <path d="M86 152 L84 170 M114 152 L116 170" stroke="#CECBF6" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="84" cy="172" r="3.5" fill="#CECBF6"/><circle cx="116" cy="172" r="3.5" fill="#CECBF6"/>`,
+  },
+  {
+    id: 'visor', name: 'Visor', vibe: 'Gamer, a little futuristic', isNew: true,
+    body: `<rect x="46" y="104" width="10" height="18" rx="4" fill="#888780"/><rect x="144" y="104" width="10" height="18" rx="4" fill="#888780"/><rect x="54" y="70" width="92" height="98" rx="30" fill="#D3D1C7" stroke="#888780" stroke-width="2"/><rect x="58" y="98" width="84" height="28" rx="14" fill="#2C2C2A"/>`,
+    front: `<clipPath id="visorclip"><rect x="58" y="98" width="84" height="28" rx="14"/></clipPath><g clip-path="url(#visorclip)"><rect class="scan" x="60" y="98" width="6" height="28" fill="#5DCAA5" fill-opacity=".55"/></g>`,
+    eyes: { y: 112, gap: 30, r: 6, ink: '#5DCAA5', style: 'screen' },
+    mouth: { y: 146, w: 12, ink: '#444441' },
+  },
+  {
+    id: 'dapper', name: 'Dapper', vibe: 'Mustache, top hat, manners', isNew: true,
+    body: `<circle cx="100" cy="116" r="50" fill="#F0997B"/>`,
+    front: `<g class="tophat"><rect x="72" y="64" width="56" height="7" rx="3.5" fill="#2C2C2A"/><rect x="83" y="36" width="34" height="30" rx="3" fill="#2C2C2A"/><rect x="83" y="56" width="34" height="6" fill="#D4537E"/></g>`,
+    eyes: { y: 104, gap: 30, r: 6, ink: '#4A1B0C' },
+    mouth: { y: 142, w: 11, ink: '#4A1B0C' },
+    top: `<path class="stache" d="M100 126 Q88 117 77 123 Q69 129 63 123 Q67 137 82 135 Q94 133 100 129 Q106 133 118 135 Q133 137 137 123 Q131 129 123 123 Q112 117 100 126Z" fill="#4A1B0C"/>
+      <path d="M100 162 L85 154 L85 170Z M100 162 L115 154 L115 170Z" fill="#7F77DD"/><circle cx="100" cy="162" r="4" fill="#534AB7"/>`,
+  },
+];
+
+function charSVG(c) {
+  const rig = `<g class="rig">${c.back || ''}${c.body}${c.front || ''}${c.cheeks ? cheeksSVG(c.cheeks) : ''}${c.eyes ? eyesSVG(c.eyes) : ''}${c.mouth ? mouthSVG(c.mouth) : ''}${c.top || ''}</g>`;
+  return `<svg viewBox="0 0 200 200" aria-hidden="true">
+    <ellipse class="shadow${c.float ? ' fl' : ''}" cx="100" cy="${c.shadowY || 180}" rx="${c.shadowRx || 42}" ry="6" fill="currentColor" fill-opacity=".14"/>
+    ${c.float ? `<g class="floaty">${rig}</g>` : rig}
+    ${OVERLAYS}
+  </svg>`;
+}
+
+const lab = document.getElementById('lab');
+const STORE = 'companion-lab-stars';
+let starred = new Set();
+try { starred = new Set(JSON.parse(localStorage.getItem(STORE) || '[]').filter(id => CHARS.some(c => c.id === id))); } catch {}
+document.getElementById('sub').textContent = `${CHARS.length} characters, 6 moods. Tap a character to poke it. Star the ones you like.`;
+const saveStars = () => { try { localStorage.setItem(STORE, JSON.stringify([...starred])); } catch {} };
+
+lab.innerHTML = CHARS.map(c => `
+  <article class="card${starred.has(c.id) ? ' starred' : ''}" id="c-${c.id}" data-id="${c.id}">
+    <div class="stage" role="button" tabindex="0" aria-label="Poke ${c.name}">${charSVG(c)}</div>
+    <div class="meta">
+      <div><h2 class="name">${c.name}${c.isNew ? '<span class="new">new</span>' : ''}</h2><p class="vibe">${c.vibe}</p></div>
+      <button class="star" aria-pressed="${starred.has(c.id)}" aria-label="Star ${c.name}">${starred.has(c.id) ? '★' : '☆'}</button>
+    </div>
+  </article>`).join('');
+
+// Desync blinks so they don't all blink together
+lab.querySelectorAll('.e-open').forEach(el => { el.style.animationDelay = `-${(Math.random() * 4).toFixed(2)}s`; });
+
+const countEl = document.getElementById('count');
+const updateCount = () => { countEl.textContent = starred.size ? `(${starred.size})` : ''; };
+updateCount();
+
+lab.addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  if (e.target.closest('.star')) {
+    const id = card.dataset.id, btn = card.querySelector('.star');
+    starred.has(id) ? starred.delete(id) : starred.add(id);
+    const on = starred.has(id);
+    card.classList.toggle('starred', on);
+    btn.setAttribute('aria-pressed', on);
+    btn.textContent = on ? '★' : '☆';
+    saveStars(); updateCount();
+  } else if (e.target.closest('.stage')) {
+    poke(card);
+  }
+});
+lab.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('stage')) {
+    e.preventDefault(); poke(e.target.closest('.card'));
+  }
+});
+function poke(card) {
+  card.classList.remove('poke');
+  void card.offsetWidth;
+  card.classList.add('poke');
+  clearTimeout(card._t);
+  card._t = setTimeout(() => card.classList.remove('poke'), 650);
+}
+
+const moodsEl = document.getElementById('moods'), cap = document.getElementById('cap');
+moodsEl.innerHTML = MOODS.map(([k, label], i) =>
+  `<button class="chip" data-k="${k}" aria-pressed="${i === 0}">${label} <kbd>${i + 1}</kbd></button>`).join('');
+function setMood(k) {
+  lab.dataset.mood = k;
+  moodsEl.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
+  cap.textContent = 'Shows when: ' + MOODS.find(m => m[0] === k)[2];
+}
+moodsEl.addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) { stopCycle(); setMood(b.dataset.k); } });
+setMood('idle');
+
+let timer = null;
+const cycleBtn = document.getElementById('cycle');
+function stopCycle() { clearInterval(timer); timer = null; cycleBtn.setAttribute('aria-pressed', 'false'); }
+function toggleCycle() {
+  if (timer) return stopCycle();
+  cycleBtn.setAttribute('aria-pressed', 'true');
+  timer = setInterval(() => {
+    const i = MOODS.findIndex(m => m[0] === lab.dataset.mood);
+    setMood(MOODS[(i + 1) % MOODS.length][0]);
+  }, 2600);
+}
+cycleBtn.addEventListener('click', toggleCycle);
+
+const onlyBtn = document.getElementById('only');
+onlyBtn.addEventListener('click', () => {
+  const on = !lab.classList.contains('only');
+  lab.classList.toggle('only', on);
+  onlyBtn.setAttribute('aria-pressed', on);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea') || e.metaKey || e.ctrlKey) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= MOODS.length) { stopCycle(); setMood(MOODS[n - 1][0]); }
+  if (e.key.toLowerCase() === 'c') toggleCycle();
+});
+</script>
+</body>
+</html>

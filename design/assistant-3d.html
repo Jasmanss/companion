@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Assistant 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{--text:#F2F3F5;--muted:#9096A3;--chip:#14161B;--line:#262A33}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#06070A;color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;display:block;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+header{position:fixed;top:22px;left:22px;right:22px;pointer-events:none}
+h1{margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}
+.vibe{margin:3px 0 0;font-size:14px;color:#C9CDD6}
+.hint{margin:8px 0 0;color:var(--muted);font-size:12px}
+.panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(760px,calc(100% - 24px));background:rgba(14,16,20,.78);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:18px;padding:12px 14px;display:grid;gap:10px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.label{font-size:11px;color:var(--muted);width:70px;flex:none;font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+.chip{font:500 13px Inter,system-ui,sans-serif;color:var(--text);background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+.chip:hover{border-color:#3C4250}
+.chip[aria-pressed=true]{background:var(--text);color:#06070A;border-color:var(--text)}
+.chip kbd{font:inherit;opacity:.45;margin-left:4px;font-size:11px}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;outline-offset:2px}
+.sw[aria-pressed=true]{border-color:var(--text)}
+.cap{font-size:12px;color:var(--muted);margin:0}
+#err{position:fixed;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);font-size:15px}
+#err[hidden]{display:none}
+@media (max-width:560px){.label{width:100%}.hint{display:none}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<header>
+  <h1 id="name">Assistant</h1>
+  <p class="vibe" id="vibe"></p>
+  <p class="hint">Drag to turn · click to tap it · 1–6 mood · ← → assistant</p>
+</header>
+<div class="panel">
+  <div class="row"><span class="label">Assistant</span><div class="row" id="chars"></div></div>
+  <div class="row"><span class="label">State</span><div class="row" id="moods"></div><button class="chip" id="cycle" aria-pressed="false">Cycle <kbd>C</kbd></button></div>
+  <div class="row"><span class="label">Accent</span><div class="row" id="accents"></div></div>
+  <p class="cap" id="cap"></p>
+</div>
+<div id="err" hidden></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const MOODS = [
+  ['idle', 'Idle', 'standing by'],
+  ['listening', 'Listening', 'while you type or talk'],
+  ['thinking', 'Thinking', 'working on your request'],
+  ['talking', 'Talking', 'a reply is coming in'],
+  ['happy', 'Done', 'a task is finished or a goal is hit'],
+  ['sleepy', 'Resting', 'quiet hours, after 10:30pm'],
+];
+const ACCENTS = [
+  ['Ice', '#7CC4FF'], ['Violet', '#9B7CFF'], ['Mint', '#4FE3B5'],
+  ['Amber', '#FFB547'], ['Rose', '#FF6FA5'], ['Pearl', '#E6ECF5'],
+];
+const S = { mood: 'idle', pokeAt: -10, px: 0, py: 0, accent: new THREE.Color(ACCENTS[0][1]) };
+const WHITE = new THREE.Color(1, 1, 1);
+
+// ---------- renderer, scene, camera ----------
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch {
+  const err = document.getElementById('err');
+  err.hidden = false;
+  err.textContent = "This browser couldn't start 3D (WebGL). Try Chrome or Safari.";
+  throw new Error('no webgl');
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1;
+document.body.prepend(renderer.domElement);
+
+function canvasTex(size, draw) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const radial = (rgba) => canvasTex(128, (g, s) => {
+  const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  gr.addColorStop(0, rgba); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, s, s);
+});
+const dotTex = canvasTex(32, (g, s) => { g.fillStyle = '#fff'; g.beginPath(); g.arc(s / 2, s / 2, s / 2 - 1, 0, Math.PI * 2); g.fill(); });
+
+const scene = new THREE.Scene();
+scene.background = canvasTex(512, (g, s) => {
+  const gr = g.createRadialGradient(s / 2, s * 0.42, 0, s / 2, s * 0.42, s * 0.78);
+  gr.addColorStop(0, '#1C2029'); gr.addColorStop(0.55, '#0B0D11'); gr.addColorStop(1, '#040506');
+  g.fillStyle = gr; g.fillRect(0, 0, s, s);
+});
+// Soft studio for reflections: a gradient dome plus two softboxes. The stock
+// room environment has very hot lights that make glossy surfaces bloom.
+function studio() {
+  const env = new THREE.Scene();
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.MeshBasicMaterial({
+    side: THREE.BackSide,
+    map: canvasTex(256, (g, s) => {
+      const gr = g.createLinearGradient(0, 0, 0, s);
+      gr.addColorStop(0, '#8b93a6'); gr.addColorStop(0.5, '#2a2e38'); gr.addColorStop(1, '#07080a');
+      g.fillStyle = gr; g.fillRect(0, 0, s, s);
+    }),
+  }));
+  const box = (r, power, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(power), side: THREE.DoubleSide }));
+    m.position.set(x, y, z);
+    m.lookAt(0, 0, 0);
+    env.add(m);
+  };
+  env.add(dome);
+  box(2.6, 2.2, 5, 6, 6);      // key softbox, up and to the right
+  box(2.2, 1.2, -7, 2, -4);    // rim light behind on the left
+  return new THREE.PMREMGenerator(renderer).fromScene(env, 0.03).texture;
+}
+scene.environment = studio();
+scene.environmentIntensity = 0.9;
+
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+const controls = new OrbitControls(camera, renderer.domElement);
+Object.assign(controls, {
+  enableZoom: false, enablePan: false, enableDamping: true, dampingFactor: 0.08, rotateSpeed: 0.55,
+  minPolarAngle: 1.1, maxPolarAngle: 1.8, minAzimuthAngle: -1.2, maxAzimuthAngle: 1.2,
+});
+
+const hemi = new THREE.HemisphereLight(0xf2f6ff, 0x1a1d26, 0.55);
+const key = new THREE.DirectionalLight(0xffffff, 1.5);
+key.position.set(2.5, 3.5, 3);
+const rim = new THREE.DirectionalLight(0xbcd2ff, 1.2);
+rim.position.set(-3, 2.2, -2.5);
+scene.add(hemi, key, rim);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.45, 1.1);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function fit() {
+  const w = innerWidth, h = innerHeight, portrait = w / h < 0.85;
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  composer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  camera.aspect = w / h;
+  camera.fov = portrait ? 44 : 30;
+  camera.updateProjectionMatrix();
+  const ty = portrait ? -0.45 : -0.1;
+  controls.target.set(0, ty, 0);
+  camera.position.set(0, ty + 0.35, portrait ? 7.4 : 6.6);
+  controls.update();
+}
+addEventListener('resize', fit);
+fit();
+
+// ---------- shared bits ----------
+const ease = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
+// Fake audio levels so listening and talking have something to react to
+const voice = t => Math.min(1, Math.abs(Math.sin(t * 6.3) * Math.sin(t * 2.2 + 1)) * 1.3);
+const speech = t => Math.min(1, (Math.abs(Math.sin(t * 9.1)) * 0.6 + Math.abs(Math.sin(t * 3.7 + 1.3)) * 0.4) * (0.65 + 0.35 * Math.sin(t * 1.1)));
+
+const NOISE = `
+vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+float snoise(vec3 v){
+  const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+  vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+  i=mod289(i);
+  vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+  float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.0*floor(p*ns.z*ns.z);
+  vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+  vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
+  return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}`;
+
+function orbitPoints(count, size) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  const mat = new THREE.PointsMaterial({ size, map: dotTex, alphaTest: 0.5 });
+  return new THREE.Points(geo, mat);
+}
+
+// ---------- Core: liquid glass orb with a living core ----------
+function buildCore() {
+  const group = new THREE.Group();
+  const coreMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uAmp: { value: 0.06 }, uFreq: { value: 1.6 }, uColor: { value: new THREE.Color() }, uGlow: { value: 1.6 } },
+    vertexShader: NOISE + `
+      uniform float uTime, uAmp, uFreq; varying vec3 vN; varying vec3 vV; varying float vD;
+      void main() {
+        float d = snoise(position * uFreq + vec3(0.0, uTime, uTime * 0.7));
+        vD = d;
+        vec4 mv = modelViewMatrix * vec4(position + normal * d * uAmp, 1.0);
+        vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uGlow; varying vec3 vN; varying vec3 vV; varying float vD;
+      void main() {
+        float f = pow(1.0 - max(dot(normalize(vN), normalize(vV)), 0.0), 1.6);
+        gl_FragColor = vec4((uColor * (0.55 + 0.45 * vD + f * 0.9) + f * 0.2) * uGlow, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.42, 128, 96), coreMat);
+  const shellMat = new THREE.MeshPhysicalMaterial({
+    transmission: 1, thickness: 0.5, roughness: 0.05, ior: 1.45, iridescence: 0.6, iridescenceIOR: 1.3,
+    clearcoat: 1, clearcoatRoughness: 0.04, attenuationDistance: 5,
+  });
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.9, 96, 64), shellMat);
+  const points = orbitPoints(180, 0.028);
+  const seeds = Array.from({ length: 180 }, () => ({ r: 0.5 + Math.random() * 0.3, a: Math.random() * Math.PI * 2, y: (Math.random() * 2 - 1) * 0.55, s: 0.5 + Math.random() }));
+  group.add(core, points, shell);
+
+  const st = { amp: 0.06, freq: 1.6, spd: 0.4, glow: 1.6, scale: 1, orbit: 0.3, time: 0 };
+  return {
+    id: 'core', name: 'Core', vibe: 'Liquid glass with a living core', group, hit: shell, glowY: 0,
+    setAccent(c) {
+      coreMat.uniforms.uColor.value.copy(c);
+      shellMat.attenuationColor.copy(c).lerp(WHITE, 0.7);
+      points.material.color.copy(c).lerp(WHITE, 0.5).multiplyScalar(2.2);
+    },
+    level() { return st.glow / 2; },
+    update(t, dt, mood, poke) {
+      const v = voice(t), sp = speech(t);
+      const tg = {
+        idle: { amp: 0.06, freq: 1.6, spd: 0.4, glow: 1.6, scale: 1, orbit: 0.3 },
+        listening: { amp: 0.07 + 0.14 * v, freq: 2, spd: 0.9, glow: 2.1 + 0.6 * v, scale: 1.08, orbit: 0.6 },
+        thinking: { amp: 0.1, freq: 2.6, spd: 1.8, glow: 1.8, scale: 0.95, orbit: 2.4 },
+        talking: { amp: 0.05 + 0.16 * sp, freq: 1.8, spd: 1, glow: 2 + 1.2 * sp, scale: 1 + 0.12 * sp, orbit: 0.8 },
+        happy: { amp: 0.12, freq: 2, spd: 1.2, glow: 3.2, scale: 1.18, orbit: 1.6 },
+        sleepy: { amp: 0.03, freq: 1.2, spd: 0.15, glow: 0.55, scale: 0.8, orbit: 0.08 },
+      }[mood];
+      const fast = mood === 'listening' || mood === 'talking' ? 20 : 5;
+      for (const k in tg) st[k] = ease(st[k], tg[k], k === 'amp' || k === 'glow' || k === 'scale' ? fast : 5, dt);
+      st.time += dt * st.spd;
+      coreMat.uniforms.uTime.value = st.time;
+      coreMat.uniforms.uAmp.value = st.amp + poke * 0.1;
+      coreMat.uniforms.uFreq.value = st.freq;
+      coreMat.uniforms.uGlow.value = st.glow + poke * 1.5;
+      core.scale.setScalar(st.scale * (1 + poke * 0.18));
+      core.rotation.y += dt * st.orbit * 0.4;
+      shell.scale.setScalar(1 + poke * 0.05);
+      const pos = points.geometry.attributes.position;
+      seeds.forEach((p, i) => {
+        p.a += dt * st.orbit * p.s;
+        const rr = Math.sqrt(Math.max(0.04, p.r * p.r - p.y * p.y));
+        pos.setXYZ(i, Math.cos(p.a) * rr, p.y + 0.03 * Math.sin(t + i), Math.sin(p.a) * rr);
+      });
+      pos.needsUpdate = true;
+    },
+  };
+}
+
+// ---------- Unit: sleek robot head with an LED face ----------
+function buildUnit() {
+  const group = new THREE.Group();
+  const head = new THREE.Group();
+  group.add(head);
+  const prof = new THREE.SplineCurve([[0.001, -0.62], [0.45, -0.6], [0.72, -0.42], [0.82, -0.1], [0.8, 0.2], [0.68, 0.48], [0.42, 0.66], [0.001, 0.72]]
+    .map(([x, y]) => new THREE.Vector2(x, y))).getPoints(48);
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(prof, 96),
+    new THREE.MeshPhysicalMaterial({ color: 0xe6e8ec, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.12 }));
+  const VA = 0.845, VB = 0.72, VY = 0.04;
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(1, 72, 48, Math.PI / 2 - 0.95, 1.9, Math.PI / 2 - 0.5, 1.0).scale(VA, VB, VA),
+    new THREE.MeshPhysicalMaterial({ color: 0x07080b, roughness: 0.08, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 }));
+  visor.position.y = VY;
+  head.add(shell, visor);
+
+  // Place a light on the visor at a horizontal angle (yaw) and height angle (pitch)
+  const nrm = new THREE.Vector3(), Z = new THREE.Vector3(0, 0, 1);
+  const onVisor = (obj, yaw, pitch, lift = 0.012) => {
+    const th = Math.PI / 2 - pitch;
+    const x = Math.sin(yaw) * Math.sin(th) * VA, y = Math.cos(th) * VB, z = Math.cos(yaw) * Math.sin(th) * VA;
+    nrm.set(x / (VA * VA), y / (VB * VB), z / (VA * VA)).normalize();
+    obj.position.set(x, y + VY, z).addScaledVector(nrm, lift);
+    obj.quaternion.setFromUnitVectors(Z, nrm);
+    return obj;
+  };
+
+  const led = new THREE.MeshBasicMaterial();
+  const ledGeo = { eye: new THREE.CapsuleGeometry(0.05, 0.1, 8, 16).scale(1, 1, 0.25), arc: new THREE.TorusGeometry(0.07, 0.022, 8, 24, Math.PI), line: new THREE.CapsuleGeometry(0.018, 0.1, 6, 12).rotateZ(Math.PI / 2), bar: new THREE.CapsuleGeometry(0.016, 0.04, 6, 10) };
+  const mk = (g) => { const m = new THREE.Mesh(g, led); head.add(m); return m; };
+  const eyes = [-1, 1].map(() => ({ open: mk(ledGeo.eye), happy: mk(ledGeo.arc), sleep: mk(ledGeo.line) }));
+  const bars = Array.from({ length: 5 }, () => mk(ledGeo.bar));
+  const scan = new THREE.Mesh(new THREE.PlaneGeometry(0.025, 0.42), new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  head.add(scan);
+  const earMat = new THREE.MeshBasicMaterial();
+  for (const side of [-1, 1]) {
+    const ear = new THREE.Group();
+    ear.position.set(0.8 * side, VY, 0);
+    ear.rotation.y = (Math.PI / 2) * side;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.06, 40).rotateX(Math.PI / 2),
+      new THREE.MeshPhysicalMaterial({ color: 0xd9dce2, roughness: 0.3, metalness: 0.6, clearcoat: 1 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.022, 10, 48), earMat);
+    ring.position.z = 0.02;
+    ear.add(cap, ring);
+    head.add(ear);
+  }
+
+  const st = { lx: 0, ly: 0, eye: 1, bright: 3.2, level: 0, ear: 1.8 };
+  let nextBlink = 1.5, blinkAt = -1;
+  return {
+    id: 'unit', name: 'Unit', vibe: 'Sleek robot with an LED face', group, hit: shell, glowY: 0,
+    setAccent(c) { scan.material.color.copy(c).multiplyScalar(2.5); },
+    level() { return st.bright / 3; },
+    update(t, dt, mood, poke) {
+      const c = S.accent;
+      st.lx = ease(st.lx, mood === 'thinking' ? 0.2 : mood === 'sleepy' ? 0 : S.px * 0.16, 8, dt);
+      st.ly = ease(st.ly, mood === 'thinking' ? 0.1 : mood === 'sleepy' ? -0.06 : S.py * 0.08, 8, dt);
+      st.eye = ease(st.eye, mood === 'listening' ? 1.2 : 1, 10, dt);
+      st.bright = ease(st.bright, mood === 'sleepy' ? 0.9 : mood === 'happy' ? 4.4 : 3.2, 5, dt);
+      const lvl = mood === 'talking' ? speech(t) : mood === 'listening' ? voice(t) : 0;
+      st.level = ease(st.level, lvl, 18, dt);
+      st.ear = ease(st.ear, mood === 'sleepy' ? 0.5 : mood === 'thinking' ? 1.8 + 1.2 * Math.sin(t * 8) : mood === 'listening' ? 3.4 : 1.8 + 0.4 * Math.sin(t * 1.5), 8, dt);
+      led.color.copy(c).multiplyScalar(st.bright + poke * 2);
+      earMat.color.copy(c).multiplyScalar(st.ear + poke * 2);
+
+      head.rotation.set(-S.py * 0.18 + (mood === 'sleepy' ? 0.28 : 0), S.px * 0.35 * (mood === 'sleepy' ? 0.3 : 1),
+        mood === 'thinking' ? 0.12 : mood === 'listening' ? -0.08 : 0);
+
+      if (t > nextBlink) { blinkAt = t; nextBlink = t + 2.6 + Math.random() * 3; }
+      const b = (t - blinkAt) / 0.14, blink = b >= 0 && b < 1 ? 1 - 0.9 * Math.sin(b * Math.PI) : 1;
+      const showHappy = mood === 'happy' || poke > 0.05, showSleep = mood === 'sleepy' && !showHappy;
+      eyes.forEach((e, i) => {
+        const side = i ? 1 : -1, yaw = side * 0.27 + st.lx, pitch = 0.08 + st.ly;
+        onVisor(e.open, yaw, pitch).scale.set(st.eye, st.eye * blink, 1);
+        onVisor(e.happy, yaw, pitch - 0.02);
+        onVisor(e.sleep, yaw, pitch - 0.04);
+        e.open.visible = !showHappy && !showSleep;
+        e.happy.visible = showHappy;
+        e.sleep.visible = showSleep;
+      });
+      bars.forEach((bar, i) => {
+        onVisor(bar, (i - 2) * 0.075, -0.2);
+        const h = 0.25 + st.level * 1.9 * (0.55 + 0.45 * Math.sin(t * 13 + i * 1.7));
+        bar.scale.set(1, Math.max(0.25, h), 1);
+        bar.visible = st.level > 0.03;
+      });
+      scan.visible = mood === 'thinking';
+      if (scan.visible) onVisor(scan, Math.sin(t * 2.2) * 0.75, 0.02, 0.015);
+      group.rotation.z = poke * 0.25 * Math.sin(poke * 12);
+    },
+  };
+}
+
+// ---------- Halo: a ring of light that thinks ----------
+function buildHalo() {
+  const group = new THREE.Group();
+  const tilt = new THREE.Group();
+  group.add(tilt);
+  const ringMat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color() }, uHead: { value: 0 }, uGlow: { value: 1.4 }, uTail: { value: 3 } },
+    vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uHead, uGlow, uTail; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() {
+        float hl = exp(-fract(uHead - vUv.x) * uTail);
+        float f = pow(1.0 - max(dot(normalize(vN), normalize(vV)), 0.0), 1.5);
+        gl_FragColor = vec4((uColor * (0.3 + 1.7 * hl) + hl * 0.5 + uColor * f * 0.4) * uGlow, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.07, 32, 220), ringMat);
+  const echoMat = new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
+  const echo = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.012, 8, 160), echoMat);
+  const coreMat = new THREE.MeshBasicMaterial();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.11, 32, 24), coreMat);
+  const points = orbitPoints(90, 0.025);
+  const seeds = Array.from({ length: 90 }, () => ({ a: Math.random() * Math.PI * 2, j: (Math.random() - 0.5) * 0.22, z: (Math.random() - 0.5) * 0.2, s: 0.4 + Math.random() }));
+  tilt.add(ring, echo, core, points);
+
+  const st = { spd: 0.15, tail: 3, glow: 1.4, scale: 1, core: 1.2, tiltX: 0, head: 0, spin: 0 };
+  return {
+    id: 'halo', name: 'Halo', vibe: 'A ring of light that thinks', group, hit: ring, glowY: 0,
+    setAccent(c) {
+      ringMat.uniforms.uColor.value.copy(c);
+      echoMat.color.copy(c).multiplyScalar(2);
+      points.material.color.copy(c).lerp(WHITE, 0.4).multiplyScalar(2);
+    },
+    level() { return st.glow / 2; },
+    update(t, dt, mood, poke) {
+      const v = voice(t), sp = speech(t);
+      const tg = {
+        idle: { spd: 0.15, tail: 3, glow: 1.4, scale: 1 + 0.015 * Math.sin(t * 1.6), core: 1.2, tiltX: 0 },
+        listening: { spd: 0.35, tail: 4, glow: 2 + v, scale: 1 + 0.05 * v, core: 2, tiltX: 0 },
+        thinking: { spd: 1.7, tail: 11, glow: 1.8, scale: 0.97, core: 1.5, tiltX: 0 },
+        talking: { spd: 0.5, tail: 5, glow: 1.7 + 1.1 * sp, scale: 1 + 0.06 * sp, core: 1.8 + sp, tiltX: 0 },
+        happy: { spd: 1, tail: 2.5, glow: 3, scale: 1.1, core: 3, tiltX: 0 },
+        sleepy: { spd: 0.04, tail: 2, glow: 0.4, scale: 0.9, core: 0.4, tiltX: 0.7 },
+      }[mood];
+      const fast = mood === 'listening' || mood === 'talking' ? 20 : 5;
+      for (const k in tg) st[k] = ease(st[k], tg[k], k === 'glow' || k === 'scale' || k === 'core' ? fast : 5, dt);
+      st.head += dt * st.spd;
+      ringMat.uniforms.uHead.value = st.head;
+      ringMat.uniforms.uTail.value = st.tail;
+      ringMat.uniforms.uGlow.value = st.glow + poke * 1.5;
+      coreMat.color.copy(S.accent).lerp(WHITE, 0.6).multiplyScalar(st.core + poke * 2);
+      st.spin = ease(st.spin, mood === 'happy' ? 2.4 : 0, 4, dt);
+      ring.rotation.z += dt * st.spin + poke * dt * 8;
+      tilt.scale.setScalar(st.scale * (1 + poke * 0.1));
+      tilt.rotation.set(st.tiltX - S.py * 0.3, S.px * 0.45 * (mood === 'sleepy' ? 0.3 : 1), 0);
+      core.position.y = 0.04 * Math.sin(t * 2);
+      echo.scale.setScalar(1 + (mood === 'talking' ? 0.28 * sp : 0.1));
+      echoMat.opacity = ease(echoMat.opacity, mood === 'talking' ? 0.55 * sp : mood === 'listening' ? 0.25 * v : 0, 15, dt);
+      const pos = points.geometry.attributes.position;
+      seeds.forEach((p, i) => {
+        p.a += dt * (0.2 + st.spd) * p.s;
+        const r = 0.78 + p.j;
+        pos.setXYZ(i, Math.cos(p.a) * r, Math.sin(p.a) * r, p.z);
+      });
+      pos.needsUpdate = true;
+    },
+  };
+}
+
+const chars = [buildCore(), buildUnit(), buildHalo()];
+chars.forEach(c => { scene.add(c.group); c.setAccent(S.accent); });
+let A = chars[0];
+renderer.compile(scene, camera);
+chars.forEach(c => { c.group.visible = c === A; });
+
+// Ground: a soft shadow plus a glow in the accent color
+const GROUND = -1.15;
+const shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), new THREE.MeshBasicMaterial({ map: radial('rgba(0,0,0,0.85)'), transparent: true, depthWrite: false }));
+const glowMat = new THREE.MeshBasicMaterial({ map: radial('rgba(255,255,255,0.9)'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), glowMat);
+for (const m of [shadow, glow]) { m.rotation.x = -Math.PI / 2; m.position.y = GROUND; scene.add(m); }
+
+// Ripples that burst out when a task is done or it gets tapped
+const rippleGeo = new THREE.TorusGeometry(0.95, 0.014, 8, 140);
+const ripples = [];
+function burst(t) {
+  const m = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.material.color.copy(S.accent).multiplyScalar(2.2);
+  m.userData.t0 = t;
+  m.position.copy(A.group.position);
+  scene.add(m);
+  ripples.push(m);
+}
+
+// ---------- animation ----------
+const clock = new THREE.Clock();
+let hover = 0, lastPoke = -10, lastBurst = -10;
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  const pp = (t - S.pokeAt) / 0.6, poke = pp >= 0 && pp < 1 ? Math.sin(pp * Math.PI) * (1 - pp * 0.5) : 0;
+
+  hover = ease(hover, S.mood === 'sleepy' ? -0.15 : 0, 3, dt);
+  const bob = S.mood === 'sleepy' ? 0.025 * Math.sin(t * 0.8) : 0.07 * Math.sin(t * 1.3);
+  A.group.position.y = hover + bob + (S.mood === 'happy' ? 0.06 * Math.abs(Math.sin(t * 4)) : 0);
+  A.update(t, dt, S.mood, poke);
+
+  if (S.pokeAt !== lastPoke) { lastPoke = S.pokeAt; burst(t); }
+  if (S.mood === 'happy' && t - lastBurst > 1.3) { lastBurst = t; burst(t); }
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const m = ripples[i], age = (t - m.userData.t0) / 0.9;
+    m.scale.setScalar(1 + age * 1.5);
+    m.material.opacity = 0.9 * (1 - age);
+    if (age >= 1) { scene.remove(m); m.material.dispose(); ripples.splice(i, 1); }
+  }
+
+  const lift = A.group.position.y + 1;
+  shadow.scale.setScalar(Math.max(0.4, 1.2 - lift * 0.35));
+  glowMat.color.copy(S.accent).multiplyScalar(0.35 * Math.min(1.6, A.level()));
+  key.intensity = ease(key.intensity, S.mood === 'sleepy' ? 0.6 : 1.5, 3, dt);
+  scene.backgroundIntensity = ease(scene.backgroundIntensity ?? 1, S.mood === 'sleepy' ? 0.5 : 1, 3, dt);
+
+  controls.update();
+  composer.render();
+}
+renderer.setAnimationLoop(frame);
+
+// ---------- input ----------
+addEventListener('pointermove', e => {
+  S.px = (e.clientX / innerWidth) * 2 - 1;
+  S.py = -((e.clientY / innerHeight) * 2 - 1) + 0.1;
+});
+const ray = new THREE.Raycaster(), down = { x: 0, y: 0 };
+renderer.domElement.addEventListener('pointerdown', e => { down.x = e.clientX; down.y = e.clientY; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+  ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+  if (ray.intersectObject(A.hit, true).length) S.pokeAt = clock.elapsedTime;
+});
+
+// ---------- UI ----------
+const cap = document.getElementById('cap');
+const chips = (el, list, onPick, keys) => {
+  el.innerHTML = list.map(([k, label], i) =>
+    `<button class="chip" data-k="${k}" aria-pressed="${i === 0}">${label}${keys ? ` <kbd>${i + 1}</kbd>` : ''}</button>`).join('');
+  el.addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) onPick(b.dataset.k, true); });
+};
+const press = (el, k) => el.querySelectorAll('[data-k]').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
+
+const charsEl = document.getElementById('chars');
+function setChar(id) {
+  A.group.visible = false;
+  A = chars.find(c => c.id === id);
+  A.group.visible = true;
+  press(charsEl, id);
+  document.getElementById('name').textContent = A.name;
+  document.getElementById('vibe').textContent = A.vibe;
+}
+chips(charsEl, chars.map(c => [c.id, c.name]), setChar);
+
+const moodsEl = document.getElementById('moods');
+function setMood(k, fromUser) {
+  if (fromUser) stopCycle();
+  S.mood = k;
+  press(moodsEl, k);
+  cap.textContent = 'Shows when: ' + MOODS.find(m => m[0] === k)[2];
+}
+chips(moodsEl, MOODS, setMood, true);
+
+const accentsEl = document.getElementById('accents');
+accentsEl.innerHTML = ACCENTS.map(([name, hex], i) =>
+  `<button class="sw" data-k="${name}" aria-label="${name}" title="${name}" aria-pressed="${i === 0}" style="background:${hex}"></button>`).join('');
+accentsEl.addEventListener('click', e => {
+  const b = e.target.closest('.sw');
+  if (!b) return;
+  S.accent.set(ACCENTS.find(a => a[0] === b.dataset.k)[1]);
+  chars.forEach(c => c.setAccent(S.accent));
+  press(accentsEl, b.dataset.k);
+});
+
+let timer = null;
+const cycleBtn = document.getElementById('cycle');
+function stopCycle() { clearInterval(timer); timer = null; cycleBtn.setAttribute('aria-pressed', 'false'); }
+function toggleCycle() {
+  if (timer) return stopCycle();
+  cycleBtn.setAttribute('aria-pressed', 'true');
+  timer = setInterval(() => {
+    const i = MOODS.findIndex(m => m[0] === S.mood);
+    setMood(MOODS[(i + 1) % MOODS.length][0]);
+  }, 3000);
+}
+cycleBtn.addEventListener('click', toggleCycle);
+
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= MOODS.length) setMood(MOODS[n - 1][0], true);
+  if (e.key.toLowerCase() === 'c') toggleCycle();
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    const i = chars.indexOf(A) + (e.key === 'ArrowRight' ? 1 : -1);
+    setChar(chars[(i + chars.length) % chars.length].id);
+  }
+});
+
+setChar('core');
+setMood('idle');
+</script>
+<script>
+// If the 3D engine can't load (offline, blocked CDN), say so instead of showing an empty page.
+setTimeout(() => {
+  if (!document.querySelector('canvas')) {
+    const err = document.getElementById('err');
+    err.hidden = false;
+    err.textContent = "Couldn't load the 3D engine. Check your internet connection and reload.";
+  }
+}, 6000);
+</script>
+</body>
+</html>

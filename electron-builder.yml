@@ -1,0 +1,29 @@
+appId: com.jasmansidhu.companion
+productName: Companion
+copyright: Copyright © 2026 Jasman Sidhu
+
+directories:
+  output: dist
+
+# Everything is bundled by electron-vite, so only the build output ships.
+files:
+  - out/**
+  - '!out/smoke.png'
+  - package.json
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  hardenedRuntime: true
+  artifactName: ${productName}-${version}-${arch}-mac.${ext}
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+publish:
+  provider: github
+  releaseType: release
