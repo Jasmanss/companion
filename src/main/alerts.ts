@@ -7,6 +7,7 @@ export interface AlertInput {
   title: string
   detail?: string
   mood?: Mood
+  scope?: string
 }
 
 interface Deps {

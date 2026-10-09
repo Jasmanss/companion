@@ -5,7 +5,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AlertView, ClaudeHookStatus, DockState, Project } from '../shared/types'
 import { Agent } from './agent'
-import { AlertQueue } from './alerts'
+import { AlertQueue, type AlertInput } from './alerts'
 import {
   CLAUDE_SETTINGS_FILE,
   hasCompanionHooks,
@@ -19,6 +19,7 @@ import {
 import { downloadImage } from './fetch-image'
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
+import { MoodBoard } from './moods'
 import { SessionTracker } from './sessions'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
@@ -52,6 +53,8 @@ let tray: TrayStore
 let agent: Agent
 let sessions: SessionTracker
 let alerts: AlertQueue
+const moods = new MoodBoard()
+let moodTimer: ReturnType<typeof setTimeout> | undefined
 let hookServer: HookServer | null = null
 
 function boundsFor(state: DockState): Electron.Rectangle {
@@ -217,6 +220,21 @@ function showAlerts(list: AlertView[]): void {
   updateMenuBar()
 }
 
+/** Every alert goes through here: the queue decides whether it shows, and the face picks up its mood. */
+function raise(input: AlertInput): void {
+  if (!alerts.push(input)) return
+  moods.apply(input.mood, input.scope, Date.now())
+  sendMood()
+}
+
+function sendMood(): void {
+  const now = Date.now()
+  win?.webContents.send('alerts:mood', moods.current(now))
+  clearTimeout(moodTimer)
+  const next = moods.nextChange(now)
+  if (next !== null) moodTimer = setTimeout(sendMood, next - now + 50)
+}
+
 function sendSessions(): void {
   win?.webContents.send('sessions:changed', sessions.list())
   updateMenuBar()
@@ -225,7 +243,7 @@ function sendSessions(): void {
 async function onHookEvent(event: HookPayload): Promise<void> {
   const alert = await sessions.apply(event)
   sendSessions()
-  if (alert) alerts.push(alert)
+  if (alert) raise(alert)
 }
 
 const companionHookCommand = () => hookCommand(app.getPath('userData'))
@@ -411,7 +429,7 @@ app.whenReady().then(async () => {
     emit: (event) => {
       win?.webContents.send('agent:event', event)
       // Peek out when the agent needs a decision; the approval card is in the panel.
-      if (event.type === 'approval') alerts.push({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Companion needs your OK', detail: event.command, mood: 'needs-you' })
+      if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Companion needs your OK', detail: event.command, mood: 'needs-you' })
     },
   })
 

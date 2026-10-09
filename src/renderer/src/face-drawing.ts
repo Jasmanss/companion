@@ -12,15 +12,38 @@ export interface FaceState {
 
 export const initialFace = (): FaceState => ({ open: 1, lookX: 0, lookY: 0, brow: 0, level: 0, blink: 1 })
 
+const CONFETTI = ['#c9bcff', '#7ddc9a', '#ffc46b', '#8ad8ff', '#ff9fc4']
+
 const ease = (a: number, b: number, rate: number, dt: number) => a + (b - a) * (1 - Math.exp(-rate * dt))
 
 export function stepFace(f: FaceState, mood: Mood, t: number, dt: number, pointer: { x: number; y: number }, blinkAt: number): void {
   const speaking = Math.min(1, (Math.abs(Math.sin(t * 9.1)) * 0.6 + Math.abs(Math.sin(t * 3.7 + 1.3)) * 0.4) * (0.65 + 0.35 * Math.sin(t * 1.1)))
-  const look = mood === 'thinking' ? [0.7, -0.6] : mood === 'resting' ? [0, 0.3] : [pointer.x, pointer.y]
+  const look =
+    mood === 'thinking'
+      ? [0.7, -0.6]
+      : mood === 'resting' || mood === 'sleepy'
+        ? [0, 0.35]
+        : mood === 'worried'
+          ? [Math.sin(t * 1.7) * 0.55, 0.15] // darting glances
+          : [pointer.x, pointer.y]
   f.lookX = ease(f.lookX, look[0], 8, dt)
   f.lookY = ease(f.lookY, look[1], 8, dt)
-  f.open = ease(f.open, mood === 'listening' || mood === 'needs-you' ? 1.15 : 1, 10, dt)
-  f.brow = ease(f.brow, mood === 'needs-you' ? 0.5 : mood === 'listening' || mood === 'done' ? 0.35 : mood === 'resting' ? -0.25 : 0, 9, dt)
+  // Sleepy lids droop further now and then.
+  const open = mood === 'sleepy' ? 0.3 - 0.12 * Math.max(0, Math.sin(t * 0.9)) : mood === 'worried' ? 0.85 : mood === 'listening' || mood === 'needs-you' ? 1.15 : 1
+  f.open = ease(f.open, open, mood === 'sleepy' ? 3 : 10, dt)
+  const brow =
+    mood === 'needs-you' || mood === 'celebrating'
+      ? 0.5
+      : mood === 'listening' || mood === 'done'
+        ? 0.35
+        : mood === 'worried'
+          ? 0.3
+          : mood === 'resting'
+            ? -0.25
+            : mood === 'sleepy'
+              ? -0.4
+              : 0
+  f.brow = ease(f.brow, brow, 9, dt)
   f.level = ease(f.level, mood === 'talking' ? speaking : 0, 18, dt)
   const b = (t - blinkAt) / 0.14
   f.blink = b >= 0 && b < 1 ? 1 - 0.9 * Math.sin(b * Math.PI) : 1
@@ -30,8 +53,9 @@ export function stepFace(f: FaceState, mood: Mood, t: number, dt: number, pointe
 export function drawFace(g: CanvasRenderingContext2D, W: number, H: number, f: FaceState, mood: Mood, t: number, color: string): void {
   g.clearRect(0, 0, W, H)
   const u = Math.min(W / 300, H / 230)
+  const bounce = mood === 'celebrating' ? -Math.abs(Math.sin(t * 7)) * 8 * u : 0
   const cx = W / 2 + f.lookX * 14 * u
-  const cy = H * 0.44 + f.lookY * 10 * u
+  const cy = H * 0.44 + f.lookY * 10 * u + bounce
   g.save()
   g.shadowColor = color
   g.shadowBlur = 16 * u
@@ -41,9 +65,10 @@ export function drawFace(g: CanvasRenderingContext2D, W: number, H: number, f: F
   for (const side of [-1, 1]) {
     const ex = cx + side * 58 * u
     g.lineWidth = 12 * u
-    if (mood === 'done') {
+    if (mood === 'done' || mood === 'celebrating') {
+      const r = mood === 'celebrating' ? 27 : 24
       g.beginPath()
-      g.arc(ex, cy + 14 * u, 24 * u, Math.PI * 1.15, Math.PI * 1.85)
+      g.arc(ex, cy + (r - 10) * u, r * u, Math.PI * 1.15, Math.PI * 1.85)
       g.stroke()
     } else if (mood === 'resting') {
       g.beginPath()
@@ -56,8 +81,8 @@ export function drawFace(g: CanvasRenderingContext2D, W: number, H: number, f: F
       g.roundRect(ex - ew / 2, cy - eh / 2, ew, eh, Math.min(ew, eh) / 2)
       g.fill()
     }
-    // Brows: thinking tilts one up for a "hmm"
-    const tilt = mood === 'thinking' ? side * -0.18 : 0
+    // Brows: thinking tilts one up for a "hmm"; worried raises both inner ends.
+    const tilt = mood === 'thinking' ? side * -0.18 : mood === 'worried' ? 0.5 : 0
     const by = cy - 60 * u - (mood === 'thinking' && side < 0 ? 0.45 : f.brow) * 20 * u
     g.lineWidth = 8 * u
     g.beginPath()
@@ -72,10 +97,21 @@ export function drawFace(g: CanvasRenderingContext2D, W: number, H: number, f: F
   if (mood === 'talking') {
     g.ellipse(cx, my + 4 * u, 22 * u, Math.max(5 * u, f.level * 22 * u), 0, 0, Math.PI * 2)
     g.fill()
-  } else if (mood === 'done') {
-    g.moveTo(cx - 32 * u, my - 6 * u)
-    g.quadraticCurveTo(cx, my + 44 * u, cx + 32 * u, my - 6 * u)
+  } else if (mood === 'done' || mood === 'celebrating') {
+    const w = mood === 'celebrating' ? 38 : 32
+    g.moveTo(cx - w * u, my - 6 * u)
+    g.quadraticCurveTo(cx, my + (mood === 'celebrating' ? 60 : 44) * u, cx + w * u, my - 6 * u)
     g.closePath()
+    g.fill()
+  } else if (mood === 'worried') {
+    // A wobbly line.
+    g.moveTo(cx - 28 * u, my + 6 * u)
+    for (let i = 1; i <= 4; i++) g.quadraticCurveTo(cx - 28 * u + (i - 0.5) * 14 * u, my + (i % 2 ? -4 : 14) * u, cx - 28 * u + i * 14 * u, my + 6 * u)
+    g.stroke()
+  } else if (mood === 'sleepy') {
+    // Mostly a small mouth, with a slow yawn now and then.
+    const yawn = Math.max(0, Math.sin(t * 0.55)) ** 6
+    g.ellipse(cx, my + 4 * u, (7 + 7 * yawn) * u, (5 + 16 * yawn) * u, 0, 0, Math.PI * 2)
     g.fill()
   } else if (mood === 'thinking') {
     g.lineWidth = 7 * u
@@ -102,12 +138,40 @@ export function drawFace(g: CanvasRenderingContext2D, W: number, H: number, f: F
       g.fill()
     }
   }
-  if (mood === 'resting') {
-    g.font = `600 ${30 * u}px -apple-system, system-ui, sans-serif`
+  if (mood === 'resting' || mood === 'sleepy') {
+    const speed = mood === 'sleepy' ? 0.25 : 0.4
+    g.font = `600 ${(mood === 'sleepy' ? 36 : 30) * u}px -apple-system, system-ui, sans-serif`
     for (let i = 0; i < 2; i++) {
-      const p = (t * 0.4 + i * 0.5) % 1
+      const p = (t * speed + i * 0.5) % 1
       g.globalAlpha = Math.sin(p * Math.PI)
       g.fillText('z', cx + 96 * u + p * 26 * u, cy - 44 * u - p * 44 * u)
+    }
+  }
+  if (mood === 'worried') {
+    // A sweat drop sliding down beside the brow.
+    const p = (t * 0.6) % 1
+    const dx = cx + 100 * u
+    const dy = cy - 64 * u + p * 34 * u
+    g.globalAlpha = Math.sin(p * Math.PI)
+    g.beginPath()
+    g.moveTo(dx, dy - 16 * u)
+    g.quadraticCurveTo(dx + 11 * u, dy, dx, dy + 8 * u)
+    g.quadraticCurveTo(dx - 11 * u, dy, dx, dy - 16 * u)
+    g.fill()
+  }
+  if (mood === 'celebrating') {
+    // Confetti circling the face.
+    g.shadowBlur = 0
+    for (let i = 0; i < 12; i++) {
+      const a = i * ((Math.PI * 2) / 12) + t * 1.4
+      const r = (112 + 10 * Math.sin(t * 3 + i)) * u
+      g.globalAlpha = 0.9
+      g.fillStyle = CONFETTI[i % CONFETTI.length]
+      g.save()
+      g.translate(cx + Math.cos(a) * r * 1.15, cy + 10 * u + Math.sin(a) * r * 0.8)
+      g.rotate(a * 2 + t * 4)
+      g.fillRect(-5 * u, -2.5 * u, 10 * u, 5 * u)
+      g.restore()
     }
   }
   g.restore()

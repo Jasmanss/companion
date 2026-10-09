@@ -3,6 +3,8 @@ import type { Mood } from '../../shared/types'
 import { drawFace, initialFace, stepFace } from './face-drawing'
 
 const ACCENT = '#c9bcff'
+/** Worried glows warm so a failed build reads at a glance. */
+const COLORS: Partial<Record<Mood, string>> = { worried: '#ffc46b' }
 
 /** The glowing face, redrawn every frame. Eyes follow the pointer while it's over the window. */
 export function Face({ mood, width, height }: { mood: Mood; width: number; height: number }) {
@@ -43,7 +45,7 @@ export function Face({ mood, width, height }: { mood: Mood; width: number; heigh
         nextBlink = t + 2.6 + Math.random() * 3
       }
       stepFace(face, moodRef.current, t, dt, pointer, blinkAt)
-      drawFace(g, width, height, face, moodRef.current, t, ACCENT)
+      drawFace(g, width, height, face, moodRef.current, t, COLORS[moodRef.current] ?? ACCENT)
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)

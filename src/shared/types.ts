@@ -4,8 +4,8 @@
  */
 export type DockState = 'hidden' | 'collapsed' | 'nudge' | 'expanded' | 'viewing'
 
-/** What the character's face shows. */
-export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you'
+/** What the character's face shows. The last three come from real events: a failed build, a deploy or merge, the hour. */
+export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you' | 'worried' | 'celebrating' | 'sleepy'
 
 export interface TrayItem {
   id: string
@@ -63,6 +63,8 @@ export interface AlertView {
   title: string
   detail?: string
   mood?: Mood
+  /** Usually a project path: good news for a scope clears its worried face. */
+  scope?: string
   at: number
 }
 
@@ -142,6 +144,8 @@ export interface CompanionAPI {
   alerts: {
     /** Alerts to show now: one urgent alert, or a batch. */
     onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
+    /** The face's event mood (worried, celebrating, done), or null when nothing's going on. */
+    onMood(cb: (mood: Mood | null) => void): Unsubscribe
   }
   claude: {
     status(): Promise<ClaudeHookStatus>

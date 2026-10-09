@@ -4,6 +4,7 @@ import { ChatLog, Composer, type Entry } from './Chat'
 import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { Nudge } from './Nudge'
+import { isLateNight, pickMood } from './pick-mood'
 import { SessionStrip } from './SessionStrip'
 import { formatHotkey, Settings } from './Settings'
 import { Tray } from './Tray'
@@ -44,8 +45,8 @@ export function App() {
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   const [banner, setBanner] = useState<AlertView | null>(null)
-  const [alertMood, setAlertMood] = useState<Mood | null>(null)
-  const alertMoodTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [eventMood, setEventMood] = useState<Mood | null>(null)
+  const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -60,7 +61,11 @@ export function App() {
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
     const offAlerts = api.alerts.onShow(handleAlerts)
+    const offMood = api.alerts.onMood(setEventMood)
+    const clock = setInterval(() => setLateNight(isLateNight(new Date())), 60_000)
     return () => {
+      offMood()
+      clearInterval(clock)
       offDock()
       offTray()
       offAgent()
@@ -87,11 +92,6 @@ export function App() {
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
     setBanner(list[0] ?? null)
-    const mood = list.find((a) => a.mood)?.mood
-    if (!mood) return
-    clearTimeout(alertMoodTimer.current)
-    setAlertMood(mood)
-    alertMoodTimer.current = setTimeout(() => setAlertMood(null), 8000)
   }
 
   const tuckAway = useCallback(() => {
@@ -249,7 +249,7 @@ export function App() {
   }
 
   const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
-  const mood: Mood = agentMood ?? alertMood ?? (dragOver || typing ? 'listening' : waiting ? 'needs-you' : dock === 'collapsed' ? 'resting' : 'idle')
+  const mood = pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' })
   const noKey = settings?.apiKeySource === 'none'
   const hideKey = settings?.hotkeys.hide ? ` (${formatHotkey(settings.hotkeys.hide)})` : ''
 

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, CompanionAPI, DockState, SessionView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, CompanionAPI, DockState, Mood, SessionView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -55,6 +55,7 @@ const api: CompanionAPI = {
   },
   alerts: {
     onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
+    onMood: (cb) => subscribe<Mood | null>('alerts:mood', cb),
   },
   claude: {
     status: () => ipcRenderer.invoke('claude:status'),
