@@ -11,7 +11,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 describe('findVercelLink', () => {
   it('reads .vercel/project.json, and ignores folders without a valid one', async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'companion-vercel-'))
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-vercel-'))
     try {
       expect(await findVercelLink({ name: 'x', path: dir })).toBeNull()
       await fs.mkdir(path.join(dir, '.vercel'))
@@ -76,7 +76,7 @@ describe('DeployTracker', () => {
 
 describe('DeployWatcher', () => {
   it('does nothing without a token, and reports changes across checks', async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'companion-watch-'))
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-watch-'))
     await fs.mkdir(path.join(dir, '.vercel'))
     await fs.writeFile(path.join(dir, '.vercel', 'project.json'), JSON.stringify({ projectId: 'prj_1', orgId: 'team_2' }))
     try {

@@ -1,4 +1,4 @@
-# Companion
+# Steward
 
 A Mac assistant that lives tucked away at the edge of your screen while you
 code. Pull it out to collect images, research designs, and run commands.
@@ -15,13 +15,13 @@ code. Pull it out to collect images, research designs, and run commands.
   or drag an image toward it and it slides out. Press ⌥⇧ Space (or use the
   menu bar icon) to hide it from the edge entirely and bring it back.
 
-**v1.1: Claude Code does the work. Companion keeps you on top of everything.**
+**v1.1: Claude Code does the work. Steward keeps you on top of everything.**
 
 - **Session hub:** turn on Settings → Connect to Claude Code (it shows the exact
-  change to `~/.claude/settings.json` first). Companion peeks out, without
+  change to `~/.claude/settings.json` first). Steward peeks out, without
   taking focus, when a session needs your approval or input, or finishes, and
   the panel shows every session's state. Hooks post to a local server on
-  127.0.0.1 with a secret token kept in Companion's data folder.
+  127.0.0.1 with a secret token kept in Steward's data folder.
 - **Moods from real events:** worried when a build fails, celebrating when a
   deploy is ready or a PR is merged, sleepy after midnight.
 - **Where you left off:** switching projects, or opening the panel after 2+

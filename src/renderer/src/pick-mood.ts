@@ -1,6 +1,6 @@
 import type { Mood } from '../../shared/types'
 
-/** After midnight and before 5am, Companion is sleepy. */
+/** After midnight and before 5am, Steward is sleepy. */
 export const isLateNight = (now: Date) => now.getHours() < 5
 
 /**

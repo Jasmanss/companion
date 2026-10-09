@@ -17,7 +17,7 @@ describe('git output', () => {
 
 describe('claude session logs', () => {
   it('finds the folder Claude Code uses for a project', () => {
-    expect(claudeProjectDir('/Users/me/Documents/companion', '/Users/me')).toBe('/Users/me/.claude/projects/-Users-me-Documents-companion')
+    expect(claudeProjectDir('/Users/me/Documents/steward', '/Users/me')).toBe('/Users/me/.claude/projects/-Users-me-Documents-steward')
     expect(claudeProjectDir('/Users/me/Library/Application Support/x.y', '/Users/me')).toBe('/Users/me/.claude/projects/-Users-me-Library-Application-Support-x-y')
   })
 

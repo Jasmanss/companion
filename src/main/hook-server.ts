@@ -59,6 +59,17 @@ export class HookServer {
     await fs.writeFile(path.join(this.dir, 'hook-port'), String(this.port))
   }
 
+  /**
+   * Also write the port and token to another folder that exists, for hook commands that still read from there
+   * (ones installed before the rename), so they keep working until they're updated.
+   */
+  async mirrorTo(dir: string): Promise<void> {
+    if (!this.port || !(await fs.stat(dir).then((s) => s.isDirectory(), () => false))) return
+    await fs.writeFile(path.join(dir, 'hook-token'), await loadOrCreateToken(this.dir), { mode: 0o600 })
+    await fs.chmod(path.join(dir, 'hook-token'), 0o600)
+    await fs.writeFile(path.join(dir, 'hook-port'), String(this.port))
+  }
+
   stop(): void {
     this.server?.close()
     this.server = null
@@ -83,7 +94,7 @@ export class HookServer {
     req.on('end', () => {
       if (res.writableEnded) return
       const payload = parseHookPayload(Buffer.concat(chunks).toString('utf8'))
-      // Answer first so the hook (and Claude Code) never waits on Companion.
+      // Answer first so the hook (and Claude Code) never waits on Steward.
       res.writeHead(payload ? 204 : 400).end()
       if (payload) this.onEvent(payload)
     })

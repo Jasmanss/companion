@@ -12,7 +12,7 @@ interface Props {
   onError: (message: string) => void
 }
 
-const api = () => window.companion
+const api = () => window.steward
 
 export function Tray({ items, saveResult, onDragOut, onOpen, onSave, onDismissSave, onError }: Props) {
   const fail = (err: unknown) => onError(err instanceof Error ? err.message : String(err))

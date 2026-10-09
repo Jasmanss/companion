@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { safeStorage } from 'electron'
 import type { Project, SettingsView } from '../shared/types'
+import { decryptLegacySecret } from './migrate'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
@@ -115,6 +116,26 @@ export class SettingsStore {
       }
     }
     return found
+  }
+
+  /**
+   * After the rename, the copied keys are still encrypted for the old app's keychain entry. Re-encrypt each one
+   * for Steward's; any that can't be read stay as they are, and Settings asks for them again. Returns how many moved.
+   */
+  async migrateLegacySecrets(legacyKeychainPassword: string): Promise<number> {
+    let moved = 0
+    for (const kind of Object.keys(this.data.secrets) as SecretKind[]) {
+      const value = this.data.secrets[kind]
+      if (!value) continue
+      try {
+        this.data.secrets[kind] = this.encrypt(decryptLegacySecret(Buffer.from(value, 'base64'), legacyKeychainPassword))
+        moved++
+      } catch {
+        // left as is
+      }
+    }
+    if (moved) await this.save()
+    return moved
   }
 
   private async save(): Promise<void> {

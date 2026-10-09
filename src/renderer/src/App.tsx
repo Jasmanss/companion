@@ -12,7 +12,7 @@ import { formatHotkey, Settings } from './Settings'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
-const api = window.companion
+const api = window.steward
 let nextId = 1
 
 const message = (err: unknown) => (err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(err))
@@ -293,7 +293,7 @@ export function App() {
 
   if (dock === 'collapsed' || dock === 'hidden') {
     return (
-      <button className="peek" data-app onClick={() => api.dock.expand()} title="Companion (⌥ Space)">
+      <button className="peek" data-app onClick={() => api.dock.expand()} title="Steward (⌥ Space)">
         <Face mood={mood} width={50} height={44} />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
@@ -305,7 +305,7 @@ export function App() {
       <header className="panel-head">
         <Face mood={mood} width={64} height={54} />
         <div className="head-text">
-          <span className="name">Companion</span>
+          <span className="name">Steward</span>
           {settings && (
             <select
               className="project-select"

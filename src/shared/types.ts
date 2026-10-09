@@ -96,8 +96,12 @@ export interface DeployStatus {
 }
 
 export interface ClaudeHookStatus {
-  /** All of Companion's hooks are in ~/.claude/settings.json. */
+  /** All of Steward's hooks are in ~/.claude/settings.json, with the current command. */
   connected: boolean
+  /** Some are there but need updating, e.g. still pointing at the data folder from before the rename. */
+  outdated: boolean
+  /** The backup kept from before Steward first changed the settings (file name). */
+  backupFile: string
   serverRunning: boolean
   settingsFile: string
   error?: string
@@ -151,8 +155,8 @@ export type AgentEvent =
 
 type Unsubscribe = () => void
 
-/** The bridge the preload script exposes to the renderer as `window.companion`. */
-export interface CompanionAPI {
+/** The bridge the preload script exposes to the renderer as `window.steward`. */
+export interface StewardAPI {
   dock: {
     expand(): Promise<void>
     collapse(): Promise<void>

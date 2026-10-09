@@ -9,6 +9,6 @@ const out = path.resolve(process.argv[2] ?? 'out/smoke.png')
 
 const child = spawn(electron, ['.'], {
   stdio: 'inherit',
-  env: { ...process.env, COMPANION_SMOKE_OUT: out, ELECTRON_RENDERER_URL: '' },
+  env: { ...process.env, STEWARD_SMOKE_OUT: out, ELECTRON_RENDERER_URL: '' },
 })
 child.on('exit', (code) => process.exit(code ?? 1))

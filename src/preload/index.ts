@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Brief, CompanionAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -7,7 +7,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   return () => ipcRenderer.removeListener(channel, listener)
 }
 
-const api: CompanionAPI = {
+const api: StewardAPI = {
   dock: {
     expand: () => ipcRenderer.invoke('dock:expand'),
     collapse: () => ipcRenderer.invoke('dock:collapse'),
@@ -76,4 +76,4 @@ const api: CompanionAPI = {
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }
 
-contextBridge.exposeInMainWorld('companion', api)
+contextBridge.exposeInMainWorld('steward', api)

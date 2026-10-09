@@ -27,13 +27,13 @@ describe('AlertQueue', () => {
   })
 
   it('batches normal alerts into one showing', () => {
-    queue.push({ key: 'f1', level: 'normal', title: 'companion finished' })
+    queue.push({ key: 'f1', level: 'normal', title: 'steward finished' })
     queue.push({ key: 'f2', level: 'normal', title: 'Portlkit finished' })
-    queue.push({ key: 'f1', level: 'normal', title: 'companion finished' })
+    queue.push({ key: 'f1', level: 'normal', title: 'steward finished' })
     expect(shown).toHaveLength(0)
     vi.advanceTimersByTime(1000)
     expect(shown).toHaveLength(1)
-    expect(shown[0].map((a) => a.title)).toEqual(['companion finished', 'Portlkit finished'])
+    expect(shown[0].map((a) => a.title)).toEqual(['steward finished', 'Portlkit finished'])
   })
 
   it('flushes the batch early on request, and keeps quiet alerts to the history', () => {

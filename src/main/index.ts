@@ -9,13 +9,14 @@ import { AlertQueue, type AlertInput } from './alerts'
 import { AppState } from './app-state'
 import { briefSince, buildBrief, localDate } from './brief'
 import {
+  backupFile,
   CLAUDE_SETTINGS_FILE,
-  hasCompanionHooks,
   hookCommand,
+  hookState,
   hooksPreview,
   readClaudeSettings,
-  withCompanionHooks,
-  withoutCompanionHooks,
+  withStewardHooks,
+  withoutStewardHooks,
   writeClaudeSettings,
 } from './claude-settings'
 import { alwaysAsks } from './commands'
@@ -25,6 +26,7 @@ import { dependabotPRs, findGh, ghRunner, MergeTracker, mergedPRs, type GhRunner
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
 import { whereYouLeftOff } from './left-off'
+import { LEGACY_APP_NAME, markSecretsDone, migrateUserData, readLegacyKeychainPassword, secretsPending } from './migrate'
 import { MoodBoard } from './moods'
 import { SessionTracker } from './sessions'
 import { extensionForMime, TrayStore } from './tray-store'
@@ -41,13 +43,18 @@ const OPEN_HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
 /** Opening the panel after this long away shows where you left off. */
 const AWAY_MS = 2 * 60 * 60 * 1000
 const HIDE_HOTKEYS = ['Alt+Shift+Space', 'Control+Alt+Shift+Space']
-const SMOKE_OUT = process.env.COMPANION_SMOKE_OUT
+const SMOKE_OUT = process.env.STEWARD_SMOKE_OUT
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 // The smoke check runs alongside a normal copy, with its own throwaway data.
-if (SMOKE_OUT) app.setPath('userData', path.join(os.tmpdir(), 'companion-smoke'))
-else if (!app.requestSingleInstanceLock()) app.quit()
+if (SMOKE_OUT) app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
+else {
+  // Electron names the data folder after the app, so the rename gave Steward a new one. Copy the old folder
+  // (LEGACY_APP_NAME) across once, before anything (the instance lock included) creates the new one; the old one stays as a backup.
+  migrateUserData(path.join(app.getPath('appData'), LEGACY_APP_NAME), app.getPath('userData'))
+  if (!app.requestSingleInstanceLock()) app.quit()
+}
 
 let win: BrowserWindow | null = null
 let menuBar: Tray | null = null
@@ -145,12 +152,12 @@ function updateMenuBar(): void {
   menuBar.setTitle(dock === 'hidden' && waiting ? String(waiting) : '')
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Companion', accelerator: hotkeys.open || undefined, registerAccelerator: false, click: () => setDock('expanded') },
+      { label: 'Open Steward', accelerator: hotkeys.open || undefined, registerAccelerator: false, click: () => setDock('expanded') },
       dock === 'hidden'
         ? { label: 'Show at Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
         : { label: 'Hide from Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('hidden') },
       { type: 'separator' },
-      { label: 'Quit Companion', role: 'quit' },
+      { label: 'Quit Steward', role: 'quit' },
     ]),
   )
 }
@@ -207,8 +214,8 @@ function createWindow(): BrowserWindow {
     w.webContents.on('console-message', ({ level, message }) => {
       if (level === 'warning' || level === 'error') console.log(`[renderer ${level}] ${message}`)
     })
-    w.webContents.on('did-fail-load', (_e, code, description, url) => console.error(`[companion] load failed: ${code} ${description} ${url}`))
-    w.webContents.on('render-process-gone', (_e, details) => console.error(`[companion] renderer gone: ${details.reason}`))
+    w.webContents.on('did-fail-load', (_e, code, description, url) => console.error(`[steward] load failed: ${code} ${description} ${url}`))
+    w.webContents.on('render-process-gone', (_e, details) => console.error(`[steward] renderer gone: ${details.reason}`))
   }
 
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -259,7 +266,7 @@ async function showBrief(since: number): Promise<void> {
   win?.webContents.send('brief:show', buildBrief({ now: new Date(), since, deploys: deploys.recent(), sessions: sessions.list(), leftOff, dependabot }))
 }
 
-/** Celebrate PRs merged in your projects while Companion is running. */
+/** Celebrate PRs merged in your projects while Steward is running. */
 async function checkMerges(): Promise<void> {
   if (!gh) return
   for (const project of settings.projects()) {
@@ -330,7 +337,7 @@ function onDeployChanges(changes: DeployChange[]): void {
           note: `${deploy.target ?? 'preview'} deploy${deploy.commit ? `: ${deploy.commit}` : ''}`,
         }),
       )
-      .catch((err: Error) => console.error(`[companion] deploy screenshot failed: ${err.message}`))
+      .catch((err: Error) => console.error(`[steward] deploy screenshot failed: ${err.message}`))
   }
 }
 
@@ -355,12 +362,13 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   if (alert) raise(alert)
 }
 
-const companionHookCommand = () => hookCommand(app.getPath('userData'))
+const stewardHookCommand = () => hookCommand(app.getPath('userData'))
 
 async function claudeStatus(): Promise<ClaudeHookStatus> {
-  const base = { connected: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE }
+  const base = { connected: false, outdated: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE, backupFile: path.basename(await backupFile()) }
   try {
-    return { ...base, connected: hasCompanionHooks(await readClaudeSettings()) }
+    const state = hookState(await readClaudeSettings(), stewardHookCommand())
+    return { ...base, connected: state === 'current', outdated: state === 'outdated' }
   } catch (err) {
     return { ...base, error: (err as Error).message }
   }
@@ -484,15 +492,15 @@ function registerIpc(): void {
     sendSessions()
   })
 
-  // Connecting merges Companion's hooks into ~/.claude/settings.json; the renderer shows the preview first.
+  // Connecting merges Steward's hooks into ~/.claude/settings.json; the renderer shows the preview first.
   ipcMain.handle('claude:status', () => claudeStatus())
-  ipcMain.handle('claude:preview', () => hooksPreview(companionHookCommand()))
+  ipcMain.handle('claude:preview', () => hooksPreview(stewardHookCommand()))
   ipcMain.handle('claude:connect', async () => {
-    await writeClaudeSettings(withCompanionHooks(await readClaudeSettings(), companionHookCommand()))
+    await writeClaudeSettings(withStewardHooks(await readClaudeSettings(), stewardHookCommand()))
     return claudeStatus()
   })
   ipcMain.handle('claude:disconnect', async () => {
-    await writeClaudeSettings(withoutCompanionHooks(await readClaudeSettings()))
+    await writeClaudeSettings(withoutStewardHooks(await readClaudeSettings()))
     return claudeStatus()
   })
 }
@@ -535,6 +543,12 @@ app.whenReady().then(async () => {
   hotkeys = { open: registerHotkey(OPEN_HOTKEYS, toggleDock), hide: registerHotkey(HIDE_HOTKEYS, toggleHidden) }
   settings = new SettingsStore(path.join(userData, 'settings.json'), hotkeys)
   await settings.load()
+  if (secretsPending(userData)) {
+    // The copied keys were encrypted for the old keychain entry: re-encrypt them once. macOS asks to allow this;
+    // if it's denied, the keys simply need entering again in Settings.
+    await readLegacyKeychainPassword().then((password) => settings.migrateLegacySecrets(password), () => 0)
+    markSecretsDone(userData)
+  }
   appState = new AppState(path.join(userData, 'state.json'))
   await appState.load()
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
@@ -556,7 +570,7 @@ app.whenReady().then(async () => {
     emit: (event) => {
       win?.webContents.send('agent:event', event)
       // Peek out when the agent needs a decision; the approval card is in the panel.
-      if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Companion needs your OK', detail: event.command, mood: 'needs-you' })
+      if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Steward needs your OK', detail: event.command, mood: 'needs-you' })
     },
   })
 
@@ -576,13 +590,16 @@ app.whenReady().then(async () => {
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
   else {
     menuBar = new Tray(menuBarIcon())
-    menuBar.setToolTip('Companion')
+    menuBar.setToolTip('Steward')
     updateMenuBar()
     hookServer = new HookServer(userData, (event) => void onHookEvent(event))
     await hookServer.start().catch((err: Error) => {
       hookServer = null
-      console.error(`[companion] hook server failed to start: ${err.message}`)
+      console.error(`[steward] hook server failed to start: ${err.message}`)
     })
+    // Hooks installed before the rename still read the port and token from the old data folder.
+    // Keep that working until they're updated in Settings.
+    if ((await claudeStatus()).outdated) await hookServer?.mirrorTo(path.join(app.getPath('appData'), LEGACY_APP_NAME)).catch(() => {})
     deploys.start()
     const ghPath = findGh()
     gh = ghPath ? ghRunner(ghPath) : null

@@ -9,7 +9,7 @@ const LABEL: Record<SessionState, string> = {
   finished: 'finished',
 }
 
-/** Every Claude Code session Companion has heard from, waiting ones first. */
+/** Every Claude Code session Steward has heard from, waiting ones first. */
 export function SessionStrip({ sessions, onDismiss }: { sessions: SessionView[]; onDismiss: (id: string) => void }) {
   const [openId, setOpenId] = useState<string | null>(null)
   const open = sessions.find((s) => s.id === openId)

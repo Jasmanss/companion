@@ -15,7 +15,7 @@ export async function downloadImage(url: string): Promise<DownloadedImage> {
   const res = await fetch(target, {
     redirect: 'follow',
     signal: AbortSignal.timeout(20_000),
-    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Companion' },
+    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Steward' },
   })
   if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`)
 

@@ -37,7 +37,7 @@ export const HookPayload = z.discriminatedUnion('hook_event_name', [
 ])
 export type HookPayload = z.infer<typeof HookPayload>
 
-/** The hook's JSON body, or null if it isn't one of the events Companion understands. */
+/** The hook's JSON body, or null if it isn't one of the events Steward understands. */
 export function parseHookPayload(body: string): HookPayload | null {
   let json: unknown
   try {

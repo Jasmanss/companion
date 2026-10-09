@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ClaudeHookStatus, DeployStatus, Project, SettingsView } from '../../shared/types'
 
-const api = () => window.companion
+const api = () => window.steward
 
 const MODIFIERS: Record<string, string> = { Control: '⌃', Alt: '⌥', Shift: '⇧', Command: '⌘' }
 
@@ -30,15 +30,17 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
       <h2>Claude Code</h2>
       <p className="muted">
         {status.connected
-          ? 'Connected: Companion peeks out when a session needs you or finishes.'
-          : 'Connect to see every Claude Code session here and get a nudge when one needs you or finishes.'}
-        {!status.serverRunning && ' (The listener isn’t running, so events won’t arrive until Companion restarts.)'}
+          ? 'Connected: Steward peeks out when a session needs you or finishes.'
+          : status.outdated
+            ? 'Your Claude Code hooks were set up before the rename and still read from the old data folder. They work for now; update them so they point at Steward.'
+            : 'Connect to see every Claude Code session here and get a nudge when one needs you or finishes.'}
+        {!status.serverRunning && ' (The listener isn’t running, so events won’t arrive until Steward restarts.)'}
       </p>
       {status.error && <p className="muted small">{status.error}</p>}
       <label className="toggle">
         <input
           type="checkbox"
-          checked={status.connected || preview !== null}
+          checked={status.connected || status.outdated || preview !== null}
           onChange={(e) => {
             if (e.target.checked) api().claude.preview().then(setPreview, fail)
             else api().claude.disconnect().then(setStatus, fail)
@@ -46,11 +48,17 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
         />
         Connect to Claude Code
       </label>
+      {status.outdated && preview === null && (
+        <button className="btn" onClick={() => api().claude.preview().then(setPreview, fail)}>
+          Update hooks
+        </button>
+      )}
       {preview !== null && (
         <div className="hook-preview">
           <p className="muted small">
-            This is merged into <code>{status.settingsFile}</code>. Everything else in it stays as is, the original is backed up to{' '}
-            <code>settings.json.before-companion</code>, and turning this off removes only these entries.
+            This is merged into <code>{status.settingsFile}</code>
+            {status.outdated ? ', replacing the old entries in place' : ''}. Everything else in it stays as is, the original is backed up to{' '}
+            <code>{status.backupFile}</code>, and turning this off removes only these entries.
           </p>
           <pre>{preview}</pre>
           <div className="row">
@@ -65,7 +73,7 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
                   }, fail)
               }
             >
-              Add these hooks
+              {status.outdated ? 'Update these hooks' : 'Add these hooks'}
             </button>
             <button className="btn" onClick={() => setPreview(null)}>
               Cancel

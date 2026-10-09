@@ -6,7 +6,7 @@ import type { Project } from '../shared/types'
 /** Where Homebrew and the installer put gh. Apps opened from Finder don't get a shell PATH. */
 const GH_PATHS = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']
 
-/** The only gh commands Companion runs: read-only, fixed arguments, in a project folder. */
+/** The only gh commands Steward runs: read-only, fixed arguments, in a project folder. */
 export const GH_COMMANDS = {
   dependabot: ['pr', 'list', '--author', 'app/dependabot', '--state', 'open', '--json', 'number,title,url', '--limit', '20'],
   merged: ['pr', 'list', '--state', 'merged', '--json', 'number,title,url,mergedAt', '--limit', '5'],
@@ -42,7 +42,7 @@ export async function dependabotPRs(projects: Project[], gh: GhRunner): Promise<
 
 /**
  * Notices PRs being merged. The first look at a project only takes note of what's there, so only merges
- * that happen while Companion is running are celebrated, once each.
+ * that happen while Steward is running are celebrated, once each.
  */
 export class MergeTracker {
   private seen = new Map<string, Set<number>>()

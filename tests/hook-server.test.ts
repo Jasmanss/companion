@@ -42,7 +42,7 @@ describe('HookServer', () => {
   let events: HookPayload[]
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'companion-hooks-'))
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-hooks-'))
     events = []
     server = new HookServer(dir, (e) => events.push(e))
     await server.start()
@@ -86,5 +86,27 @@ describe('HookServer', () => {
     expect(await post(JSON.stringify({ hook_event_name: 'Stop' }))).toBe(400)
     expect(await post(JSON.stringify({ hook_event_name: 'Stop', session_id: 's1', cwd: '/x' }), { authorization: 'Bearer nope' })).toBe(401)
     expect(events).toHaveLength(0)
+  })
+})
+
+describe('HookServer.mirrorTo', () => {
+  it('writes the port and a private copy of the token where older hook commands look', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-mirror-'))
+    const legacy = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-legacy-'))
+    const server = new HookServer(dir, () => {})
+    try {
+      await server.start()
+      await server.mirrorTo(legacy)
+      expect(await fs.readFile(path.join(legacy, 'hook-port'), 'utf8')).toBe(String(server.port))
+      expect(await fs.readFile(path.join(legacy, 'hook-token'), 'utf8')).toBe(await fs.readFile(path.join(dir, 'hook-token'), 'utf8'))
+      expect((await fs.stat(path.join(legacy, 'hook-token'))).mode & 0o777).toBe(0o600)
+      // A folder that doesn't exist isn't created.
+      await server.mirrorTo(path.join(legacy, 'nope'))
+      expect(await fs.readdir(legacy)).toEqual(['hook-port', 'hook-token'])
+    } finally {
+      server.stop()
+      await fs.rm(dir, { recursive: true, force: true })
+      await fs.rm(legacy, { recursive: true, force: true })
+    }
   })
 })

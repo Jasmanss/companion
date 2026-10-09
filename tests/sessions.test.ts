@@ -7,15 +7,15 @@ import { describePermission, matchProject, SessionTracker } from '../src/main/se
 const LOG = `${os.homedir()}/.claude/projects/x/s1.jsonl`
 
 const projects = [
-  { name: 'companion', path: '/Users/me/Documents/companion' },
+  { name: 'steward', path: '/Users/me/Documents/steward' },
   { name: 'Portlkit', path: '/Users/me/Documents/portlkit' },
   { name: 'docs', path: '/Users/me/Documents/portlkit/docs' },
 ]
 
 describe('matchProject', () => {
   it('matches the folder itself and anything inside it', () => {
-    expect(matchProject('/Users/me/Documents/companion', projects, false)?.name).toBe('companion')
-    expect(matchProject('/Users/me/Documents/companion/src/main/', projects, false)?.name).toBe('companion')
+    expect(matchProject('/Users/me/Documents/steward', projects, false)?.name).toBe('steward')
+    expect(matchProject('/Users/me/Documents/steward/src/main/', projects, false)?.name).toBe('steward')
   })
 
   it('prefers the most specific project', () => {
@@ -24,7 +24,7 @@ describe('matchProject', () => {
   })
 
   it("doesn't match a sibling that only shares a prefix, or a parent", () => {
-    expect(matchProject('/Users/me/Documents/companion-2', projects, false)).toBeNull()
+    expect(matchProject('/Users/me/Documents/steward-2', projects, false)).toBeNull()
     expect(matchProject('/Users/me/Documents', projects, false)).toBeNull()
   })
 

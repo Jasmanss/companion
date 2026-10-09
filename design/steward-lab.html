@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Companion Lab</title>
+<title>Steward Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap">
 <style>
@@ -167,7 +167,7 @@ header p{margin:6px 0 0;color:var(--muted);font-size:15px}
 </head>
 <body>
 <header class="wrap">
-  <h1>Companion Lab</h1>
+  <h1>Steward Lab</h1>
   <p id="sub"></p>
 </header>
 <div class="bar">
@@ -354,7 +354,7 @@ function charSVG(c) {
 }
 
 const lab = document.getElementById('lab');
-const STORE = 'companion-lab-stars';
+const STORE = 'steward-lab-stars';
 let starred = new Set();
 try { starred = new Set(JSON.parse(localStorage.getItem(STORE) || '[]').filter(id => CHARS.some(c => c.id === id))); } catch {}
 document.getElementById('sub').textContent = `${CHARS.length} characters, 6 moods. Tap a character to poke it. Star the ones you like.`;

@@ -1,9 +1,9 @@
-# Companion — Spec (v2: coding assistant)
+# Steward — Spec (v2: coding assistant)
 
-**Claude Code does the work. Companion keeps you on top of everything.**
+**Claude Code does the work. Steward keeps you on top of everything.**
 
-> Working name. Replaces the life-companion idea (archived in
-> `archive/life-companion-spec.md`).
+> The app and the character are both called Steward. It replaces the earlier life-assistant idea
+> (archived in `archive/life-companion-spec.md`).
 
 A Mac desktop assistant that lives tucked away at the edge of the screen. Pull
 it out to collect images, research designs, and run commands while you code.
@@ -98,10 +98,10 @@ The tray survives restarts.
 Built in this order; each one builds on the one before.
 
 1. **Session hub.** When any Claude Code session needs approval or input, or
-   finishes, Companion peeks out ("Portlkit is waiting on you") without taking
+   finishes, Steward peeks out ("Portlkit is waiting on you") without taking
    keyboard focus. The panel shows a strip of every session and its state,
    matched to my projects by folder.
-   - Claude Code hooks send the hook JSON to a local HTTP server in Companion:
+   - Claude Code hooks send the hook JSON to a local HTTP server in Steward:
      bound to 127.0.0.1, secret token (made on first run, kept in the app's data
      folder), every payload validated with zod.
    - Hooks: `PermissionRequest` (needs approval), `Notification` (needs input,
@@ -110,7 +110,7 @@ Built in this order; each one builds on the one before.
      and Stop do, so PermissionRequest is the "needs approval" signal in both.
    - A "Connect to Claude Code" toggle in Settings shows the exact change, then
      merges the hooks into `~/.claude/settings.json` (backup first, never
-     overwrites, turning it off removes only Companion's entries).
+     overwrites, turning it off removes only Steward's entries).
    - The shared alert system lives here: one queue, no duplicates, urgent alerts
      peek out right away, the rest are batched, and nothing repeats.
 2. **Moods from real events.** New faces: worried (build failed), celebrating
@@ -143,7 +143,7 @@ instructions.
 Not picked yet. Explorations live in `design/`:
 - `design/faces-3d.html`: Orb, Screen, Butler bot (all with the shared face)
 - `design/assistant-3d.html`: Core, Unit, Halo (faceless)
-- `design/characters-3d.html`, `design/companion-3d.html`: plush directions
+- `design/characters-3d.html`, `design/steward-3d.html`: plush directions
 
 Leading candidates: **Butler bot** (the tray and approval card fit him
 naturally) and **Screen**.
@@ -173,12 +173,11 @@ naturally) and **Screen**.
 - Windows / Linux
 - Auto-collecting every screenshot I take
 - Figma plugin, cloud sync
-- The old life-companion features (deadlines, gym); the morning brief is back in v1.1 as a work brief
+- The old life-assistant features (deadlines, gym); the morning brief is back in v1.1 as a work brief
 
 ---
 
 ## Open questions
 
-- Name
-- Which character
+- Which character design Steward gets
 - Right edge vs. left, and the hotkey

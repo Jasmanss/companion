@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
-import type { CompanionAPI } from '../../shared/types'
+import type { StewardAPI } from '../../shared/types'
 
 declare global {
   interface Window {
-    companion: CompanionAPI
+    steward: StewardAPI
   }
 }

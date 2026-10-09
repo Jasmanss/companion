@@ -1,6 +1,6 @@
 {
-  "name": "companion",
-  "productName": "Companion",
+  "name": "steward",
+  "productName": "Steward",
   "version": "0.1.0",
   "description": "A desktop assistant that lives at the edge of your screen while you code",
   "main": "./out/main/index.js",

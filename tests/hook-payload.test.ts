@@ -15,7 +15,7 @@ const permissionRequest = {
 }
 
 describe('parseHookPayload', () => {
-  it('keeps the fields Companion uses and drops the rest', () => {
+  it('keeps the fields Steward uses and drops the rest', () => {
     expect(parseHookPayload(JSON.stringify(permissionRequest))).toEqual({
       session_id: 'e3e2c621',
       transcript_path: '/Users/me/.claude/projects/-x/e3e2c621.jsonl',
