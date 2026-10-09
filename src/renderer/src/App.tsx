@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
-import type { AgentEvent, AlertView, DockState, LeftOff, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import type { AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { ChatLog, Composer, type Entry } from './Chat'
 import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
+import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
 import { Nudge } from './Nudge'
 import { isLateNight, pickMood } from './pick-mood'
@@ -48,6 +49,7 @@ export function App() {
   const [banner, setBanner] = useState<AlertView | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
+  const [brief, setBrief] = useState<Brief | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -65,10 +67,16 @@ export function App() {
     const offAlerts = api.alerts.onShow(handleAlerts)
     const offMood = api.alerts.onMood(setEventMood)
     const offLeftOff = api.leftOff.onShow(setLeftOff)
+    // The brief already includes where you left off.
+    const offBrief = api.brief.onShow((b) => {
+      setBrief(b)
+      setLeftOff(null)
+    })
     const clock = setInterval(() => setLateNight(isLateNight(new Date())), 60_000)
     return () => {
       offMood()
       offLeftOff()
+      offBrief()
       clearInterval(clock)
       offDock()
       offTray()
@@ -384,6 +392,7 @@ export function App() {
             onError={showError}
           />
           <div className="body">
+            {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
             {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
             {noKey && (
               <div className="notice">

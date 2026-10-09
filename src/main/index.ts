@@ -7,6 +7,7 @@ import type { AlertView, ClaudeHookStatus, DeployStatus, DockState, Project } fr
 import { Agent } from './agent'
 import { AlertQueue, type AlertInput } from './alerts'
 import { AppState } from './app-state'
+import { briefSince, buildBrief, localDate } from './brief'
 import {
   CLAUDE_SETTINGS_FILE,
   hasCompanionHooks,
@@ -20,6 +21,7 @@ import {
 import { alwaysAsks } from './commands'
 import { DeployWatcher, fetchBuildLog, type DeployChange } from './deploys'
 import { downloadImage } from './fetch-image'
+import { dependabotPRs, findGh, ghRunner, MergeTracker, mergedPRs, type GhRunner } from './github'
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
 import { whereYouLeftOff } from './left-off'
@@ -64,6 +66,8 @@ const moods = new MoodBoard()
 let moodTimer: ReturnType<typeof setTimeout> | undefined
 let hookServer: HookServer | null = null
 let deploys: DeployWatcher
+let gh: GhRunner | null = null
+const merges = new MergeTracker()
 
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
@@ -233,11 +237,39 @@ function showAlerts(list: AlertView[]): void {
   updateMenuBar()
 }
 
-/** Coming back to the panel after a while: show where you left off in the current project. */
+/** The first open each day shows the morning brief; coming back after a while shows where you left off. */
 function onPanelOpened(): void {
   if (!appState) return
+  const today = localDate(new Date())
+  if (appState.lastBriefDate !== today) {
+    const since = briefSince(appState.lastSeenAt, Date.now())
+    void appState.update({ lastBriefDate: today })
+    void showBrief(since)
+    return
+  }
   const project = settings.currentProject()
   if (project && Date.now() - appState.lastSeenAt >= AWAY_MS) showLeftOff(project)
+}
+
+/** Built from a template: deploys, finished sessions, where you left off, and Dependabot PRs. No model call. */
+async function showBrief(since: number): Promise<void> {
+  await deploys.ensureChecked().catch(() => {})
+  const project = settings.currentProject()
+  const [leftOff, dependabot] = await Promise.all([project ? whereYouLeftOff(project) : null, gh ? dependabotPRs(settings.projects(), gh) : null])
+  win?.webContents.send('brief:show', buildBrief({ now: new Date(), since, deploys: deploys.recent(), sessions: sessions.list(), leftOff, dependabot }))
+}
+
+/** Celebrate PRs merged in your projects while Companion is running. */
+async function checkMerges(): Promise<void> {
+  if (!gh) return
+  for (const project of settings.projects()) {
+    const merged = await mergedPRs(project, gh).catch(() => null)
+    if (!merged) continue
+    for (const number of merges.update(project.path, merged)) {
+      const pr = merged.find((m) => m.number === number)
+      raise({ key: `pr-merged:${project.path}:${number}`, level: 'normal', title: `${project.name}: PR #${number} merged`, detail: pr?.title, mood: 'celebrating', scope: project.path })
+    }
+  }
 }
 
 function showLeftOff(project: Project): void {
@@ -552,6 +584,11 @@ app.whenReady().then(async () => {
       console.error(`[companion] hook server failed to start: ${err.message}`)
     })
     deploys.start()
+    const ghPath = findGh()
+    gh = ghPath ? ghRunner(ghPath) : null
+    // The first check only takes note of what's merged already; after that, merges are celebrated.
+    setTimeout(() => void checkMerges(), 20_000)
+    setInterval(() => void checkMerges(), 5 * 60_000)
     // Notice when a session's approval was answered (its log moves on).
     setInterval(() => void sessions.refresh().then((changed) => changed && sendSessions()), 3000)
   }

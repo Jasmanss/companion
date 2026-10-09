@@ -118,6 +118,21 @@ export interface LeftOff {
   claude: { text: string; at: number } | null
 }
 
+/** The morning brief: the first panel open each day. Built from a template, no model call. */
+export interface Brief {
+  greeting: string
+  date: string
+  /** One line, e.g. "2 deploys went out, 1 failed. 3 sessions finished." */
+  summary: string
+  failed: DeployInfo[]
+  ready: DeployInfo[]
+  /** Claude Code sessions that finished since you were last here. */
+  sessions: SessionView[]
+  leftOff: LeftOff | null
+  /** Open Dependabot PRs per project; null when gh isn't installed. */
+  dependabot: { project: string; prs: { number: number; title: string; url: string }[] }[] | null
+}
+
 export interface SaveResult {
   dir: string
   files: string[]
@@ -196,6 +211,9 @@ export interface CompanionAPI {
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */
     onShow(cb: (card: LeftOff) => void): Unsubscribe
+  }
+  brief: {
+    onShow(cb: (brief: Brief) => void): Unsubscribe
   }
   claude: {
     status(): Promise<ClaudeHookStatus>

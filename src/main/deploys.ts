@@ -144,7 +144,8 @@ export class DeployWatcher {
   private upstreams = new Map<string, string>()
   private fastUntil = 0
   private timer: ReturnType<typeof setTimeout> | null = null
-  private running = false
+  private inflight: Promise<void> | null = null
+  private checked = false
   lastError: string | null = null
 
   constructor(private readonly deps: WatcherDeps) {}
@@ -174,30 +175,37 @@ export class DeployWatcher {
     return links.filter((l): l is LinkedProject => l !== null)
   }
 
-  /** One round of checks. Public for tests. */
-  async tick(): Promise<void> {
-    if (this.running) return
-    this.running = true
-    try {
-      const token = this.deps.token()
-      const links = await this.linked()
-      if (!token || links.length === 0) return
-      await this.noticePushes(links)
-      const changes: DeployChange[] = []
-      for (const link of links) {
-        try {
-          const deploys = await listDeployments(link, token, this.deps.fetcher)
-          this.latest.set(link.project.path, deploys)
-          changes.push(...this.tracker.update(link.project.path, deploys))
-          this.lastError = null
-        } catch (err) {
-          this.lastError = (err as Error).message
-        }
+  /** One round of checks; a round already under way is shared rather than doubled. */
+  tick(): Promise<void> {
+    this.inflight ??= this.check().finally(() => {
+      this.inflight = null
+      this.checked = true
+    })
+    return this.inflight
+  }
+
+  /** Make sure at least one round has run, so the brief has deployments to show. */
+  async ensureChecked(): Promise<void> {
+    if (!this.checked) await this.tick()
+  }
+
+  private async check(): Promise<void> {
+    const token = this.deps.token()
+    const links = await this.linked()
+    if (!token || links.length === 0) return
+    await this.noticePushes(links)
+    const changes: DeployChange[] = []
+    for (const link of links) {
+      try {
+        const deploys = await listDeployments(link, token, this.deps.fetcher)
+        this.latest.set(link.project.path, deploys)
+        changes.push(...this.tracker.update(link.project.path, deploys))
+        this.lastError = null
+      } catch (err) {
+        this.lastError = (err as Error).message
       }
-      if (changes.length) this.deps.onChanges(changes)
-    } finally {
-      this.running = false
     }
+    if (changes.length) this.deps.onChanges(changes)
   }
 
   private async noticePushes(links: LinkedProject[]): Promise<void> {

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, CompanionAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Brief, CompanionAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -63,6 +63,9 @@ const api: CompanionAPI = {
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
+  },
+  brief: {
+    onShow: (cb) => subscribe<Brief>('brief:show', cb),
   },
   claude: {
     status: () => ipcRenderer.invoke('claude:status'),

@@ -15,6 +15,26 @@ code. Pull it out to collect images, research designs, and run commands.
   or drag an image toward it and it slides out. Press ⌥⇧ Space (or use the
   menu bar icon) to hide it from the edge entirely and bring it back.
 
+**v1.1: Claude Code does the work. Companion keeps you on top of everything.**
+
+- **Session hub:** turn on Settings → Connect to Claude Code (it shows the exact
+  change to `~/.claude/settings.json` first). Companion peeks out, without
+  taking focus, when a session needs your approval or input, or finishes, and
+  the panel shows every session's state. Hooks post to a local server on
+  127.0.0.1 with a secret token kept in Companion's data folder.
+- **Moods from real events:** worried when a build fails, celebrating when a
+  deploy is ready or a PR is merged, sleepy after midnight.
+- **Where you left off:** switching projects, or opening the panel after 2+
+  hours away, shows the branch, last commits, uncommitted and unpushed changes,
+  and the last thing Claude said there.
+- **Deploy watcher:** add a Vercel token in Settings. Linked projects
+  (`.vercel/project.json`) are checked every minute, more often after a push.
+  A failed build offers "Want me to look?"; a ready one is screenshotted into
+  the tray. Deploys, rollbacks and `git push` always ask first.
+- **Morning brief:** the first open each day: deploys, finished sessions,
+  where you left off, and open Dependabot PRs (with `gh` installed). No model
+  call.
+
 The product spec is in [SPEC.md](SPEC.md); character explorations are in
 [`design/`](design).
 
