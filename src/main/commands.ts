@@ -57,7 +57,18 @@ export function runCommand(
       .filter(Boolean)
       .join(':')
     const shell = existsSync('/bin/zsh') ? '/bin/zsh' : '/bin/sh'
-    const child = spawn(shell, ['-lc', command], { cwd, env: { ...process.env, PATH, FORCE_COLOR: '0' }, signal: opts.signal })
+    // Its own process group, so a timeout or cancel can stop what the command started and not just the shell
+    // (a bare SIGTERM to the shell leaves e.g. `npm test` running and holding the output pipes open).
+    const child = spawn(shell, ['-lc', command], { cwd, env: { ...process.env, PATH, FORCE_COLOR: '0' }, detached: true })
+    const stop = () => {
+      try {
+        process.kill(-child.pid!, 'SIGTERM')
+      } catch {
+        child.kill('SIGTERM')
+      }
+    }
+    if (opts.signal?.aborted) stop()
+    else opts.signal?.addEventListener('abort', stop, { once: true })
 
     let output = ''
     const onData = (data: Buffer) => {
@@ -71,15 +82,17 @@ export function runCommand(
     let timedOut = false
     const timer = setTimeout(() => {
       timedOut = true
-      child.kill('SIGTERM')
+      stop()
     }, opts.timeoutMs ?? 120_000)
 
     child.on('error', (err) => {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', stop)
       resolve({ exitCode: null, output: `${output}\n${err.message}`.trim(), timedOut })
     })
     child.on('close', (code) => {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', stop)
       resolve({ exitCode: code, output, timedOut })
     })
   })

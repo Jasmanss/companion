@@ -35,6 +35,25 @@ describe('runCommand', () => {
     const result = await runCommand('sleep 5', os.tmpdir(), { timeoutMs: 200 })
     expect(result.timedOut).toBe(true)
   })
+
+  it('stops what the command started, not just the shell', async () => {
+    const started = Date.now()
+    const result = await runCommand('sleep 5; echo finished', os.tmpdir(), { timeoutMs: 200 })
+    expect(result.timedOut).toBe(true)
+    expect(result.output).not.toContain('finished')
+    expect(Date.now() - started).toBeLessThan(3000)
+  })
+
+  it('stops the same way when the request is cancelled', async () => {
+    const controller = new AbortController()
+    const started = Date.now()
+    const pending = runCommand('sleep 5; echo finished', os.tmpdir(), { signal: controller.signal })
+    setTimeout(() => controller.abort(), 200)
+    const result = await pending
+    expect(result.exitCode).not.toBe(0)
+    expect(result.output).not.toContain('finished')
+    expect(Date.now() - started).toBeLessThan(3000)
+  })
 })
 
 describe('stripAnsi', () => {
