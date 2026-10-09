@@ -12,10 +12,23 @@ export function normalizeCommand(command: string): string {
   return command.trim().replace(/\s+/g, ' ')
 }
 
+/**
+ * Deploys, rollbacks and pushes (which deploy through Git integrations) always show the approval card,
+ * whatever the allowlist says.
+ */
+export function alwaysAsks(command: string): boolean {
+  const normalized = normalizeCommand(command).toLowerCase()
+  return (
+    /(^|\s)(npx |pnpm dlx |bunx |yarn dlx )?(vercel|vc)(\s|$)/.test(normalized) ||
+    /\b(deploy|deployment|rollback|promote|redeploy)\b/.test(normalized) ||
+    /\bgit\s+push\b/.test(normalized)
+  )
+}
+
 /** Allowlisted commands run without an approval card; only exact, plain commands qualify. */
 export function isAllowlisted(command: string, allowlist: string[]): boolean {
   const normalized = normalizeCommand(command)
-  if (!normalized || SHELL_SYNTAX.test(normalized)) return false
+  if (!normalized || SHELL_SYNTAX.test(normalized) || alwaysAsks(normalized)) return false
   return allowlist.some((entry) => normalizeCommand(entry) === normalized)
 }
 

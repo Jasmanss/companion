@@ -255,6 +255,15 @@ export function App() {
   const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
   const mood = pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' })
   const noKey = settings?.apiKeySource === 'none'
+
+  /** "Want me to look?" and the like: open the panel and ask the agent. */
+  const runAction = (alert: AlertView) => {
+    if (!alert.action) return
+    setBanner(null)
+    void api.dock.expand()
+    if (noKey) return setToast('Add your Anthropic API key in Settings first.')
+    send(alert.action.prompt)
+  }
   const hideKey = settings?.hotkeys.hide ? ` (${formatHotkey(settings.hotkeys.hide)})` : ''
 
   if (dock === 'viewing' && items.length > 0) {
@@ -271,7 +280,7 @@ export function App() {
   }
 
   if (dock === 'nudge') {
-    return <Nudge alerts={nudgeAlerts} mood={mood} onOpen={() => api.dock.expand()} onDismiss={tuckAway} />
+    return <Nudge alerts={nudgeAlerts} mood={mood} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction} />
   }
 
   if (dock === 'collapsed' || dock === 'hidden') {
@@ -339,10 +348,21 @@ export function App() {
 
       <SessionStrip sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
       {banner && (
-        <button className="banner" onClick={() => setBanner(null)}>
+        <div className="banner" role="status" onClick={() => setBanner(null)}>
           <strong>{banner.title}</strong>
           {banner.detail && <span>{banner.detail}</span>}
-        </button>
+          {banner.action && (
+            <button
+              className="chip"
+              onClick={(e) => {
+                e.stopPropagation()
+                runAction(banner)
+              }}
+            >
+              {banner.action.label}
+            </button>
+          )}
+        </div>
       )}
 
       {view === 'settings' && settings ? (

@@ -170,6 +170,13 @@ pre {
   font-size: 12px;
 }
 
+.nudge .nudge-action {
+  align-self: flex-start;
+  margin-top: 4px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .nudge-close {
   position: absolute;
   top: 8px;
@@ -411,6 +418,11 @@ pre {
 .banner span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.banner .chip {
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 /* ---------- tray ---------- */

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { AlertView, ClaudeHookStatus, DockState, Project } from '../shared/types'
+import type { AlertView, ClaudeHookStatus, DeployStatus, DockState, Project } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -17,6 +17,8 @@ import {
   withoutCompanionHooks,
   writeClaudeSettings,
 } from './claude-settings'
+import { alwaysAsks } from './commands'
+import { DeployWatcher, fetchBuildLog, type DeployChange } from './deploys'
 import { downloadImage } from './fetch-image'
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
@@ -61,6 +63,7 @@ let alerts: AlertQueue
 const moods = new MoodBoard()
 let moodTimer: ReturnType<typeof setTimeout> | undefined
 let hookServer: HookServer | null = null
+let deploys: DeployWatcher
 
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
@@ -269,7 +272,52 @@ function sendSessions(): void {
   updateMenuBar()
 }
 
+/** A failed build peeks out worried and offers to look; a ready one is celebrated and screenshotted into the tray. */
+function onDeployChanges(changes: DeployChange[]): void {
+  for (const { kind, deploy } of changes) {
+    if (kind === 'failed') {
+      raise({
+        key: `deploy-failed:${deploy.uid}`,
+        level: 'urgent',
+        title: `${deploy.project} deploy failed`,
+        detail: deploy.errorMessage ?? deploy.commit ?? deploy.branch,
+        mood: 'worried',
+        scope: deploy.projectPath,
+        action: { label: 'Want me to look?', prompt: `The ${deploy.project} deploy ${deploy.uid} failed. Read its build log with deploy_logs and tell me what broke and how to fix it.` },
+      })
+      continue
+    }
+    raise({ key: `deploy-ready:${deploy.uid}`, level: 'normal', title: `${deploy.project} deployed`, detail: deploy.url ?? undefined, mood: 'celebrating', scope: deploy.projectPath })
+    if (!deploy.url) continue
+    const url = `https://${deploy.url}`
+    capturePage(url)
+      .then((shot) =>
+        tray.addBuffer(shot.png, '.png', {
+          name: `${deploy.project}-deploy.png`,
+          source: url,
+          note: `${deploy.target ?? 'preview'} deploy${deploy.commit ? `: ${deploy.commit}` : ''}`,
+        }),
+      )
+      .catch((err: Error) => console.error(`[companion] deploy screenshot failed: ${err.message}`))
+  }
+}
+
+async function deployLogs(projectName: string, deploymentId?: string): Promise<{ deploymentId: string; log: string }> {
+  const token = settings.vercelToken()
+  if (!token) throw new Error('No Vercel token yet. Add one in Settings.')
+  const wanted = projectName.toLowerCase()
+  const link = (await deploys.linked()).find((l) => l.name.toLowerCase() === wanted || l.project.name.toLowerCase() === wanted)
+  if (!link) throw new Error(`${projectName} isn't one of your projects linked to Vercel.`)
+  const ours = deploys.recent().filter((d) => d.projectPath === link.project.path)
+  const id = deploymentId ?? ours.find((d) => d.state === 'ERROR')?.uid ?? ours[0]?.uid
+  if (!id) throw new Error(`No deployments of ${projectName} seen yet.`)
+  return { deploymentId: id, log: await fetchBuildLog(id, link.orgId, token) }
+}
+
 async function onHookEvent(event: HookPayload): Promise<void> {
+  // A session about to push or deploy: check deploys more often for a while.
+  const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
+  if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
   const alert = await sessions.apply(event)
   sendSessions()
   if (alert) raise(alert)
@@ -359,6 +407,19 @@ function registerIpc(): void {
     await settings.setSecret('unsplash', key)
     return settings.view()
   })
+  ipcMain.handle('settings:setVercelToken', async (_e, token: string) => {
+    await settings.setSecret('vercel', token)
+    deploys.boost()
+    return settings.view()
+  })
+  ipcMain.handle(
+    'deploys:status',
+    async (): Promise<DeployStatus> => ({
+      hasToken: Boolean(settings.vercelToken()),
+      linked: (await deploys.linked()).map((l) => l.name),
+      lastError: deploys.lastError,
+    }),
+  )
   ipcMain.handle('settings:addProject', async () => {
     const folder = await pickFolder()
     if (folder) await settings.addProject(folder)
@@ -448,6 +509,7 @@ app.whenReady().then(async () => {
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })
   alerts = new AlertQueue({ show: showAlerts })
+  deploys = new DeployWatcher({ projects: () => settings.projects(), token: () => settings.vercelToken(), onChanges: onDeployChanges })
   agent = new Agent({
     apiKey: () => settings.apiKey(),
     unsplashKey: () => settings.unsplashKey(),
@@ -457,6 +519,8 @@ app.whenReady().then(async () => {
     allowlist: () => settings.allowlist(),
     tray,
     capturePage,
+    deployLogs,
+    onDeployCommand: () => deploys.boost(),
     emit: (event) => {
       win?.webContents.send('agent:event', event)
       // Peek out when the agent needs a decision; the approval card is in the panel.
@@ -487,6 +551,7 @@ app.whenReady().then(async () => {
       hookServer = null
       console.error(`[companion] hook server failed to start: ${err.message}`)
     })
+    deploys.start()
     // Notice when a session's approval was answered (its log moves on).
     setInterval(() => void sessions.refresh().then((changed) => changed && sendSessions()), 3000)
   }
@@ -498,5 +563,6 @@ app.on('second-instance', () => setDock('expanded'))
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   hookServer?.stop()
+  deploys?.stop()
 })
 app.on('window-all-closed', () => app.quit())

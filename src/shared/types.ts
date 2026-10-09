@@ -33,6 +33,7 @@ export interface SettingsView {
   /** Where the Anthropic API key comes from. */
   apiKeySource: 'env' | 'saved' | 'none'
   hasUnsplashKey: boolean
+  hasVercelToken: boolean
   /** Registered global shortcuts in Electron accelerator form; empty when another app has them. */
   hotkeys: { open: string; hide: string }
 }
@@ -65,7 +66,33 @@ export interface AlertView {
   mood?: Mood
   /** Usually a project path: good news for a scope clears its worried face. */
   scope?: string
+  /** An offer like "Want me to look?": accepting opens the panel and sends the prompt to the agent. */
+  action?: { label: string; prompt: string }
   at: number
+}
+
+/** A Vercel deployment of one of your linked projects. */
+export interface DeployInfo {
+  uid: string
+  project: string
+  projectPath: string
+  /** BUILDING, READY, ERROR, CANCELED, QUEUED, … */
+  state: string
+  url: string | null
+  created: number
+  ready?: number
+  target: string | null
+  commit?: string
+  branch?: string
+  inspectorUrl?: string
+  errorMessage?: string
+}
+
+export interface DeployStatus {
+  hasToken: boolean
+  /** Names of your projects linked to Vercel. */
+  linked: string[]
+  lastError: string | null
 }
 
 export interface ClaudeHookStatus {
@@ -144,6 +171,7 @@ export interface CompanionAPI {
     get(): Promise<SettingsView>
     setApiKey(key: string): Promise<SettingsView>
     setUnsplashKey(key: string): Promise<SettingsView>
+    setVercelToken(token: string): Promise<SettingsView>
     addProject(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
@@ -161,6 +189,9 @@ export interface CompanionAPI {
     onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
     /** The face's event mood (worried, celebrating, done), or null when nothing's going on. */
     onMood(cb: (mood: Mood | null) => void): Unsubscribe
+  }
+  deploys: {
+    status(): Promise<DeployStatus>
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */

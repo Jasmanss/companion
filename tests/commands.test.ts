@@ -1,6 +1,6 @@
 import os from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { isAllowlisted, runCommand, stripAnsi } from '../src/main/commands'
+import { alwaysAsks, isAllowlisted, runCommand, stripAnsi } from '../src/main/commands'
 
 describe('isAllowlisted', () => {
   const list = ['git status', 'npm test']
@@ -40,5 +40,20 @@ describe('runCommand', () => {
 describe('stripAnsi', () => {
   it('removes color codes', () => {
     expect(stripAnsi('\u001b[32mok\u001b[0m')).toBe('ok')
+  })
+})
+
+describe('alwaysAsks', () => {
+  it('flags deploys, rollbacks and pushes', () => {
+    for (const cmd of ['vercel', 'vercel --prod', 'npx vercel deploy', 'vc rollback', 'vercel promote dpl_123', 'npm run deploy', 'git push', 'git  push origin main', 'firebase deploy']) {
+      expect(alwaysAsks(cmd), cmd).toBe(true)
+    }
+    for (const cmd of ['git status', 'npm test', 'ls', 'git pull', 'npm run build']) expect(alwaysAsks(cmd), cmd).toBe(false)
+  })
+
+  it('wins over the allowlist', () => {
+    expect(isAllowlisted('vercel --prod', ['vercel --prod'])).toBe(false)
+    expect(isAllowlisted('git push', ['git push'])).toBe(false)
+    expect(isAllowlisted('npm test', ['npm test'])).toBe(true)
   })
 })

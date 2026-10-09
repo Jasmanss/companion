@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ClaudeHookStatus, Project, SettingsView } from '../../shared/types'
+import type { ClaudeHookStatus, DeployStatus, Project, SettingsView } from '../../shared/types'
 
 const api = () => window.companion
 
@@ -80,12 +80,15 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
 export function Settings({ settings, onChange, onError }: { settings: SettingsView; onChange: (s: SettingsView) => void; onError: (message: string) => void }) {
   const [apiKey, setApiKey] = useState('')
   const [unsplashKey, setUnsplashKey] = useState('')
+  const [vercelToken, setVercelToken] = useState('')
+  const [deploys, setDeploys] = useState<DeployStatus | null>(null)
   const [allowlist, setAllowlist] = useState(settings.allowlist.join('\n'))
   const [suggestions, setSuggestions] = useState<Project[]>([])
 
   useEffect(() => {
     api().settings.suggestProjects().then(setSuggestions, () => setSuggestions([]))
-  }, [settings.projects])
+    api().deploys.status().then(setDeploys, () => setDeploys(null))
+  }, [settings.projects, settings.hasVercelToken])
 
   const run = (p: Promise<SettingsView>) => p.then(onChange, (err: unknown) => onError(err instanceof Error ? err.message : String(err)))
 
@@ -165,11 +168,28 @@ export function Settings({ settings, onChange, onError }: { settings: SettingsVi
         )}
       </section>
 
+      <section>
+        <h2>Vercel token (optional)</h2>
+        <p className="muted">
+          {deploys && deploys.linked.length > 0
+            ? `Watches deploys for ${deploys.linked.join(', ')}.`
+            : 'None of your projects are linked to Vercel yet (`vercel link` adds .vercel/project.json).'}{' '}
+          {settings.hasVercelToken ? 'A token is saved in your keychain.' : 'Create a token at vercel.com/account/tokens. Stored encrypted in your keychain.'}
+        </p>
+        {deploys?.lastError && <p className="muted small">{deploys.lastError}</p>}
+        <div className="row">
+          <input type="password" value={vercelToken} placeholder="Vercel token" onChange={(e) => setVercelToken(e.target.value)} aria-label="Vercel token" />
+          <button className="btn" disabled={!vercelToken.trim()} onClick={() => run(api().settings.setVercelToken(vercelToken)).then(() => setVercelToken(''))}>
+            Save
+          </button>
+        </div>
+      </section>
+
       <ClaudeConnect onError={onError} />
 
       <section>
         <h2>Commands that skip approval</h2>
-        <p className="muted">Exact commands only, one per line. Everything else asks first.</p>
+        <p className="muted">Exact commands only, one per line. Everything else asks first, and deploys, rollbacks and git push always do.</p>
         <textarea rows={5} value={allowlist} onChange={(e) => setAllowlist(e.target.value)} aria-label="Command allowlist" />
         <button className="btn" onClick={() => run(api().settings.setAllowlist(allowlist.split('\n')))}>
           Save list

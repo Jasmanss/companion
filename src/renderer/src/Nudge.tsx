@@ -6,7 +6,19 @@ import { CloseIcon } from './icons'
 const STAY_MS = 10_000
 
 /** Peeking out with a message. Never takes focus; a click opens the panel. Tucks back in after a while unless hovered. */
-export function Nudge({ alerts, mood, onOpen, onDismiss }: { alerts: AlertView[]; mood: Mood; onOpen: () => void; onDismiss: () => void }) {
+export function Nudge({
+  alerts,
+  mood,
+  onOpen,
+  onDismiss,
+  onAction,
+}: {
+  alerts: AlertView[]
+  mood: Mood
+  onOpen: () => void
+  onDismiss: () => void
+  onAction: (alert: AlertView) => void
+}) {
   const hovered = useRef(false)
   const lead = alerts[0]
 
@@ -34,6 +46,17 @@ export function Nudge({ alerts, mood, onOpen, onDismiss }: { alerts: AlertView[]
         <span className="nudge-title">{lead.title}</span>
         {lead.detail && <span className="nudge-detail">{lead.detail}</span>}
         {more > 0 && <span className="nudge-more">and {more} more</span>}
+        {lead.action && (
+          <button
+            className="chip nudge-action"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAction(lead)
+            }}
+          >
+            {lead.action.label}
+          </button>
+        )}
       </div>
       <button
         className="nudge-close"

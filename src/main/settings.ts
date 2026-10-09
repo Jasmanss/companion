@@ -6,7 +6,7 @@ import type { Project, SettingsView } from '../shared/types'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
-type SecretKind = 'anthropic' | 'unsplash'
+type SecretKind = 'anthropic' | 'unsplash' | 'vercel'
 
 interface Stored {
   projects: Project[]
@@ -41,6 +41,7 @@ export class SettingsStore {
       allowlist: this.data.allowlist,
       apiKeySource: process.env.ANTHROPIC_API_KEY ? 'env' : this.data.secrets.anthropic ? 'saved' : 'none',
       hasUnsplashKey: Boolean(this.unsplashKey()),
+      hasVercelToken: Boolean(this.vercelToken()),
       hotkeys: this.hotkeys,
     }
   }
@@ -51,6 +52,10 @@ export class SettingsStore {
 
   unsplashKey(): string | undefined {
     return process.env.UNSPLASH_ACCESS_KEY || this.decrypt(this.data.secrets.unsplash)
+  }
+
+  vercelToken(): string | undefined {
+    return process.env.VERCEL_TOKEN || this.decrypt(this.data.secrets.vercel)
   }
 
   async setSecret(kind: SecretKind, value: string): Promise<void> {

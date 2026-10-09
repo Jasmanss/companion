@@ -41,6 +41,7 @@ const api: CompanionAPI = {
     get: () => ipcRenderer.invoke('settings:get'),
     setApiKey: (key) => ipcRenderer.invoke('settings:setApiKey', key),
     setUnsplashKey: (key) => ipcRenderer.invoke('settings:setUnsplashKey', key),
+    setVercelToken: (token) => ipcRenderer.invoke('settings:setVercelToken', token),
     addProject: () => ipcRenderer.invoke('settings:addProject'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
@@ -56,6 +57,9 @@ const api: CompanionAPI = {
   alerts: {
     onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
     onMood: (cb) => subscribe<Mood | null>('alerts:mood', cb),
+  },
+  deploys: {
+    status: () => ipcRenderer.invoke('deploys:status'),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),

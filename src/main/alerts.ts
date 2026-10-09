@@ -8,6 +8,7 @@ export interface AlertInput {
   detail?: string
   mood?: Mood
   scope?: string
+  action?: { label: string; prompt: string }
 }
 
 interface Deps {
