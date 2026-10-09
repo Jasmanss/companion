@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Project, SettingsView } from '../../shared/types'
+import type { ClaudeHookStatus, Project, SettingsView } from '../../shared/types'
 
 const api = () => window.companion
 
@@ -10,6 +10,71 @@ export function formatHotkey(accelerator: string): string {
   const parts = accelerator.split('+')
   const key = parts.pop()
   return `${parts.map((m) => MODIFIERS[m] ?? m).join('')} ${key}`
+}
+
+/** The "Connect to Claude Code" toggle. Connecting always shows the exact change first. */
+function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
+  const [status, setStatus] = useState<ClaudeHookStatus | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const fail = (err: unknown) => onError(err instanceof Error ? err.message : String(err))
+
+  useEffect(() => {
+    api().claude.status().then(setStatus, fail)
+    // Only on mount; fail just reports.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (!status) return null
+  return (
+    <section>
+      <h2>Claude Code</h2>
+      <p className="muted">
+        {status.connected
+          ? 'Connected: Companion peeks out when a session needs you or finishes.'
+          : 'Connect to see every Claude Code session here and get a nudge when one needs you or finishes.'}
+        {!status.serverRunning && ' (The listener isn’t running, so events won’t arrive until Companion restarts.)'}
+      </p>
+      {status.error && <p className="muted small">{status.error}</p>}
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={status.connected || preview !== null}
+          onChange={(e) => {
+            if (e.target.checked) api().claude.preview().then(setPreview, fail)
+            else api().claude.disconnect().then(setStatus, fail)
+          }}
+        />
+        Connect to Claude Code
+      </label>
+      {preview !== null && (
+        <div className="hook-preview">
+          <p className="muted small">
+            This is merged into <code>{status.settingsFile}</code>. Everything else in it stays as is, the original is backed up to{' '}
+            <code>settings.json.before-companion</code>, and turning this off removes only these entries.
+          </p>
+          <pre>{preview}</pre>
+          <div className="row">
+            <button
+              className="btn primary"
+              onClick={() =>
+                api()
+                  .claude.connect()
+                  .then((next) => {
+                    setStatus(next)
+                    setPreview(null)
+                  }, fail)
+              }
+            >
+              Add these hooks
+            </button>
+            <button className="btn" onClick={() => setPreview(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
 }
 
 export function Settings({ settings, onChange, onError }: { settings: SettingsView; onChange: (s: SettingsView) => void; onError: (message: string) => void }) {
@@ -99,6 +164,8 @@ export function Settings({ settings, onChange, onError }: { settings: SettingsVi
           </>
         )}
       </section>
+
+      <ClaudeConnect onError={onError} />
 
       <section>
         <h2>Commands that skip approval</h2>

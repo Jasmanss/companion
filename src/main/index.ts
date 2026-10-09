@@ -3,15 +3,30 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { DockState, Project } from '../shared/types'
+import type { AlertView, ClaudeHookStatus, DockState, Project } from '../shared/types'
 import { Agent } from './agent'
+import { AlertQueue } from './alerts'
+import {
+  CLAUDE_SETTINGS_FILE,
+  hasCompanionHooks,
+  hookCommand,
+  hooksPreview,
+  readClaudeSettings,
+  withCompanionHooks,
+  withoutCompanionHooks,
+  writeClaudeSettings,
+} from './claude-settings'
 import { downloadImage } from './fetch-image'
+import type { HookPayload } from './hook-payload'
+import { HookServer } from './hook-server'
+import { SessionTracker } from './sessions'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
 import { SettingsStore } from './settings'
 
 const PEEK = { width: 56, height: 132 }
+const NUDGE = { width: 340, height: 132 }
 const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
 /** First free one wins. Open toggles the panel; hide takes it off the screen edge and back. */
@@ -35,11 +50,17 @@ let draggingOut = false
 let settings: SettingsStore
 let tray: TrayStore
 let agent: Agent
+let sessions: SessionTracker
+let alerts: AlertQueue
+let hookServer: HookServer | null = null
 
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
   if (state === 'collapsed' || state === 'hidden') {
     return { x: area.x + area.width - PEEK.width, y: area.y + Math.round((area.height - PEEK.height) / 2), ...PEEK }
+  }
+  if (state === 'nudge') {
+    return { x: area.x + area.width - NUDGE.width, y: area.y + Math.round((area.height - NUDGE.height) / 2), ...NUDGE }
   }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
   const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
@@ -54,11 +75,14 @@ function setDock(state: DockState): void {
   updateMenuBar()
   if (state === 'hidden') return win.hide()
   win.setBounds(boundsFor(state), !wasHidden)
-  if (state === 'collapsed') {
-    if (wasHidden) win.showInactive()
+  if (state === 'collapsed' || state === 'nudge') {
+    // Peeking never takes keyboard focus, so it can't interrupt typing.
+    if (!win.isVisible()) win.showInactive()
   } else {
     if (!win.isVisible()) win.show()
     win.focus()
+    // Opening the panel shows any batched alerts now rather than later.
+    alerts?.flush()
   }
 }
 
@@ -96,6 +120,9 @@ function menuBarIcon(): Electron.NativeImage {
 
 function updateMenuBar(): void {
   if (!menuBar) return
+  // While hidden, the menu bar shows how many sessions are waiting on you.
+  const waiting = sessions?.waitingCount() ?? 0
+  menuBar.setTitle(dock === 'hidden' && waiting ? String(waiting) : '')
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Companion', accelerator: hotkeys.open || undefined, registerAccelerator: false, click: () => setDock('expanded') },
@@ -181,6 +208,35 @@ async function withModal<T>(fn: () => Promise<T>): Promise<T> {
 async function pickFolder(): Promise<string | null> {
   const result = await withModal(() => dialog.showOpenDialog(win!, { properties: ['openDirectory'], buttonLabel: 'Add project' }))
   return result.canceled ? null : result.filePaths[0]
+}
+
+/** Alerts that made it through the queue: peek out if tucked away; the open panel shows them itself. */
+function showAlerts(list: AlertView[]): void {
+  win?.webContents.send('alerts:show', list)
+  if (dock === 'collapsed') setDock('nudge')
+  updateMenuBar()
+}
+
+function sendSessions(): void {
+  win?.webContents.send('sessions:changed', sessions.list())
+  updateMenuBar()
+}
+
+async function onHookEvent(event: HookPayload): Promise<void> {
+  const alert = await sessions.apply(event)
+  sendSessions()
+  if (alert) alerts.push(alert)
+}
+
+const companionHookCommand = () => hookCommand(app.getPath('userData'))
+
+async function claudeStatus(): Promise<ClaudeHookStatus> {
+  const base = { connected: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE }
+  try {
+    return { ...base, connected: hasCompanionHooks(await readClaudeSettings()) }
+  } catch (err) {
+    return { ...base, error: (err as Error).message }
+  }
 }
 
 // A plain 16x16 icon for drags whose first file has no preview (e.g. SVG).
@@ -281,6 +337,24 @@ function registerIpc(): void {
   })
   ipcMain.handle('settings:suggestProjects', (): Promise<Project[]> => settings.suggestProjects())
   ipcMain.handle('clipboard:writeText', (_e, text: string) => clipboard.writeText(text))
+
+  ipcMain.handle('sessions:list', () => sessions.list())
+  ipcMain.handle('sessions:dismiss', (_e, id: string) => {
+    sessions.dismiss(id)
+    sendSessions()
+  })
+
+  // Connecting merges Companion's hooks into ~/.claude/settings.json; the renderer shows the preview first.
+  ipcMain.handle('claude:status', () => claudeStatus())
+  ipcMain.handle('claude:preview', () => hooksPreview(companionHookCommand()))
+  ipcMain.handle('claude:connect', async () => {
+    await writeClaudeSettings(withCompanionHooks(await readClaudeSettings(), companionHookCommand()))
+    return claudeStatus()
+  })
+  ipcMain.handle('claude:disconnect', async () => {
+    await writeClaudeSettings(withoutCompanionHooks(await readClaudeSettings()))
+    return claudeStatus()
+  })
 }
 
 function registerHotkey(candidates: string[], action: () => void): string {
@@ -323,6 +397,8 @@ app.whenReady().then(async () => {
   await settings.load()
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
+  sessions = new SessionTracker({ projects: () => settings.projects() })
+  alerts = new AlertQueue({ show: showAlerts })
   agent = new Agent({
     apiKey: () => settings.apiKey(),
     unsplashKey: () => settings.unsplashKey(),
@@ -334,8 +410,8 @@ app.whenReady().then(async () => {
     capturePage,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
-      // Pop the panel open when the agent needs a decision.
-      if (event.type === 'approval') setDock('expanded')
+      // Peek out when the agent needs a decision; the approval card is in the panel.
+      if (event.type === 'approval') alerts.push({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Companion needs your OK', detail: event.command, mood: 'needs-you' })
     },
   })
 
@@ -357,11 +433,21 @@ app.whenReady().then(async () => {
     menuBar = new Tray(menuBarIcon())
     menuBar.setToolTip('Companion')
     updateMenuBar()
+    hookServer = new HookServer(userData, (event) => void onHookEvent(event))
+    await hookServer.start().catch((err: Error) => {
+      hookServer = null
+      console.error(`[companion] hook server failed to start: ${err.message}`)
+    })
+    // Notice when a session's approval was answered (its log moves on).
+    setInterval(() => void sessions.refresh().then((changed) => changed && sendSessions()), 3000)
   }
 
   screen.on('display-metrics-changed', () => win?.setBounds(boundsFor(dock)))
 })
 
 app.on('second-instance', () => setDock('expanded'))
-app.on('will-quit', () => globalShortcut.unregisterAll())
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+  hookServer?.stop()
+})
 app.on('window-all-closed', () => app.quit())

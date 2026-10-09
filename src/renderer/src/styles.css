@@ -124,6 +124,77 @@ pre {
   text-align: center;
 }
 
+/* ---------- nudge (peeking out with a message) ---------- */
+.nudge {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 34px 0 10px;
+  border: 1px solid var(--line);
+  border-right: none;
+  border-radius: 18px 0 0 18px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.nudge.urgent {
+  border-color: var(--accent);
+}
+
+.nudge-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nudge-title {
+  font-weight: 600;
+}
+
+.nudge-detail {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.nudge-more {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.nudge-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.nudge-close:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.nudge-close svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* ---------- panel ---------- */
 .panel {
   position: relative;
@@ -237,6 +308,109 @@ pre {
 .btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ---------- sessions ---------- */
+.sessions {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.session-chips {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.session-chip.on,
+.session-chip:hover {
+  border-color: #454a58;
+}
+
+.session-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.session-chip.needs-approval .session-dot,
+.session-chip.needs-input .session-dot {
+  background: #ffc46b;
+  box-shadow: 0 0 6px #ffc46b;
+}
+
+.session-chip.working .session-dot {
+  background: var(--accent);
+}
+
+.session-chip.finished .session-dot {
+  background: #7ddc9a;
+}
+
+.session-name {
+  font-weight: 600;
+}
+
+.session-state {
+  color: var(--muted);
+}
+
+.session-detail {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.session-detail p {
+  margin: 0 0 6px;
+}
+
+.session-detail-text {
+  user-select: text;
+  word-break: break-word;
+}
+
+.session-cwd {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: rgba(201, 188, 255, 0.07);
+  text-align: left;
+}
+
+.banner span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ---------- tray ---------- */
@@ -633,6 +807,29 @@ pre {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.hook-preview {
+  margin-top: 8px;
+}
+
+.hook-preview pre {
+  max-height: 220px;
+  margin: 6px 0 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #0f1014;
+  overflow: auto;
+  font-size: 11px;
+  user-select: text;
+  white-space: pre;
 }
 
 .suggestions {

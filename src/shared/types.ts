@@ -1,5 +1,8 @@
-/** hidden: off screen entirely · collapsed: the peek at the edge · expanded: the panel · viewing: the large image viewer */
-export type DockState = 'hidden' | 'collapsed' | 'expanded' | 'viewing'
+/**
+ * hidden: off screen entirely · collapsed: the peek at the edge · nudge: peeking out with a message, without focus ·
+ * expanded: the panel · viewing: the large image viewer
+ */
+export type DockState = 'hidden' | 'collapsed' | 'nudge' | 'expanded' | 'viewing'
 
 /** What the character's face shows. */
 export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you'
@@ -32,6 +35,43 @@ export interface SettingsView {
   hasUnsplashKey: boolean
   /** Registered global shortcuts in Electron accelerator form; empty when another app has them. */
   hotkeys: { open: string; hide: string }
+}
+
+/** What a Claude Code session is doing, as far as its hooks have said. */
+export type SessionState = 'working' | 'needs-approval' | 'needs-input' | 'finished'
+
+export interface SessionView {
+  id: string
+  /** The matching project's name, or the folder name. */
+  name: string
+  projectPath: string | null
+  cwd: string
+  state: SessionState
+  /** The command waiting for approval, the question, or the last thing Claude said. */
+  detail?: string
+  updatedAt: number
+}
+
+/** urgent: peek out now · normal: peek out, batched with others · quiet: only shown in the panel */
+export type AlertLevel = 'urgent' | 'normal' | 'quiet'
+
+export interface AlertView {
+  id: number
+  /** Same key, same alert: it's shown once. */
+  key: string
+  level: AlertLevel
+  title: string
+  detail?: string
+  mood?: Mood
+  at: number
+}
+
+export interface ClaudeHookStatus {
+  /** All of Companion's hooks are in ~/.claude/settings.json. */
+  connected: boolean
+  serverRunning: boolean
+  settingsFile: string
+  error?: string
 }
 
 export interface SaveResult {
@@ -93,6 +133,22 @@ export interface CompanionAPI {
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
+  }
+  sessions: {
+    list(): Promise<SessionView[]>
+    dismiss(id: string): Promise<void>
+    onChanged(cb: (sessions: SessionView[]) => void): Unsubscribe
+  }
+  alerts: {
+    /** Alerts to show now: one urgent alert, or a batch. */
+    onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
+  }
+  claude: {
+    status(): Promise<ClaudeHookStatus>
+    /** The exact JSON that connecting adds to ~/.claude/settings.json. */
+    preview(): Promise<string>
+    connect(): Promise<ClaudeHookStatus>
+    disconnect(): Promise<ClaudeHookStatus>
   }
   copyText(text: string): Promise<void>
 }

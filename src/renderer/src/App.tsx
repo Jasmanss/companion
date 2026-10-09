@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
-import type { AgentEvent, DockState, Mood, SaveResult, SettingsView, TrayItem } from '../../shared/types'
+import type { AgentEvent, AlertView, DockState, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { ChatLog, Composer, type Entry } from './Chat'
 import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
+import { Nudge } from './Nudge'
+import { SessionStrip } from './SessionStrip'
 import { formatHotkey, Settings } from './Settings'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
@@ -39,6 +41,11 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null)
   const [viewIndex, setViewIndex] = useState(0)
+  const [sessions, setSessions] = useState<SessionView[]>([])
+  const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
+  const [banner, setBanner] = useState<AlertView | null>(null)
+  const [alertMood, setAlertMood] = useState<Mood | null>(null)
+  const alertMoodTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -47,15 +54,20 @@ export function App() {
   useEffect(() => {
     api.tray.list().then(setItems, showError)
     api.settings.get().then(setSettings, showError)
+    api.sessions.list().then(setSessions, showError)
     const offDock = api.dock.onState(setDock)
     const offTray = api.tray.onChanged(setItems)
     const offAgent = api.agent.onEvent(handleAgentEvent)
+    const offSessions = api.sessions.onChanged(setSessions)
+    const offAlerts = api.alerts.onShow(handleAlerts)
     return () => {
       offDock()
       offTray()
       offAgent()
+      offSessions()
+      offAlerts()
     }
-    // handleAgentEvent only uses state setters, so subscribing once is correct.
+    // The handlers only use state setters and refs, so subscribing once is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -64,6 +76,27 @@ export function App() {
     const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
+
+  useEffect(() => {
+    if (!banner) return
+    const t = setTimeout(() => setBanner(null), 6000)
+    return () => clearTimeout(t)
+  }, [banner])
+
+  /** Alerts the main process let through: the nudge shows them when tucked away, a banner when the panel is open. */
+  function handleAlerts(list: AlertView[]) {
+    setNudgeAlerts(list)
+    setBanner(list[0] ?? null)
+    const mood = list.find((a) => a.mood)?.mood
+    if (!mood) return
+    clearTimeout(alertMoodTimer.current)
+    setAlertMood(mood)
+    alertMoodTimer.current = setTimeout(() => setAlertMood(null), 8000)
+  }
+
+  const tuckAway = useCallback(() => {
+    void api.dock.collapse()
+  }, [])
 
   function handleAgentEvent(event: AgentEvent) {
     switch (event.type) {
@@ -215,7 +248,8 @@ export function App() {
     void api.agent.reset()
   }
 
-  const mood: Mood = agentMood ?? (dragOver || typing ? 'listening' : dock === 'collapsed' ? 'resting' : 'idle')
+  const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
+  const mood: Mood = agentMood ?? alertMood ?? (dragOver || typing ? 'listening' : waiting ? 'needs-you' : dock === 'collapsed' ? 'resting' : 'idle')
   const noKey = settings?.apiKeySource === 'none'
   const hideKey = settings?.hotkeys.hide ? ` (${formatHotkey(settings.hotkeys.hide)})` : ''
 
@@ -230,6 +264,10 @@ export function App() {
         onDragOut={dragOut}
       />
     )
+  }
+
+  if (dock === 'nudge') {
+    return <Nudge alerts={nudgeAlerts} mood={mood} onOpen={() => api.dock.expand()} onDismiss={tuckAway} />
   }
 
   if (dock === 'collapsed' || dock === 'hidden') {
@@ -294,6 +332,14 @@ export function App() {
           </button>
         </div>
       </header>
+
+      <SessionStrip sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
+      {banner && (
+        <button className="banner" onClick={() => setBanner(null)}>
+          <strong>{banner.title}</strong>
+          {banner.detail && <span>{banner.detail}</span>}
+        </button>
+      )}
 
       {view === 'settings' && settings ? (
         <div className="body scroll">

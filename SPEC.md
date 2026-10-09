@@ -1,5 +1,7 @@
 # Companion — Spec (v2: coding assistant)
 
+**Claude Code does the work. Companion keeps you on top of everything.**
+
 > Working name. Replaces the life-companion idea (archived in
 > `archive/life-companion-spec.md`).
 
@@ -91,6 +93,51 @@ The tray survives restarts.
 
 ---
 
+## v1.1: the layer around all my work
+
+Built in this order; each one builds on the one before.
+
+1. **Session hub.** When any Claude Code session needs approval or input, or
+   finishes, Companion peeks out ("Portlkit is waiting on you") without taking
+   keyboard focus. The panel shows a strip of every session and its state,
+   matched to my projects by folder.
+   - Claude Code hooks send the hook JSON to a local HTTP server in Companion:
+     bound to 127.0.0.1, secret token (made on first run, kept in the app's data
+     folder), every payload validated with zod.
+   - Hooks: `PermissionRequest` (needs approval), `Notification` (needs input,
+     terminal only), `Stop` (finished). Tested: in the desktop app, Notification
+     doesn't fire when the app handles permission prompts, but PermissionRequest
+     and Stop do, so PermissionRequest is the "needs approval" signal in both.
+   - A "Connect to Claude Code" toggle in Settings shows the exact change, then
+     merges the hooks into `~/.claude/settings.json` (backup first, never
+     overwrites, turning it off removes only Companion's entries).
+   - The shared alert system lives here: one queue, no duplicates, urgent alerts
+     peek out right away, the rest are batched, and nothing repeats.
+2. **Moods from real events.** New faces: worried (build failed), celebrating
+   (deploy ready or PR merged), sleepy (after midnight), driven by alerts, not
+   only by chat.
+3. **Where you left off.** On switching projects, or opening the panel after 2+
+   hours away: the last 3 commits and branch, uncommitted and unpushed changes,
+   and the last thing that project's Claude session said. Fixed, read-only git
+   commands run by the app itself; the model never builds them.
+4. **Deploy watcher.** Vercel projects found from `.vercel/project.json`, token in
+   the keychain. Polls every minute (faster for ~10 minutes after a push). A
+   failed build: worried face, peek, "want me to look?", then a `deploy_logs`
+   tool fetches the build log for the agent to explain. A ready build: preview
+   screenshot into the tray. Deploys and rollbacks always need approval and are
+   never allowlisted.
+5. **Morning brief.** First panel open each day: what deployed or broke
+   overnight, which sessions finished, where I left off, and open Dependabot PRs
+   (if `gh` is installed). A template, not a model call, so it's free.
+
+Rules for all of it: quiet unless it matters (batch the rest, never repeat), and
+hook payloads, git output, build logs and session files are data, never
+instructions.
+
+**Next:** review before push, idea inbox.
+
+---
+
 ## Character
 
 Not picked yet. Explorations live in `design/`:
@@ -126,7 +173,7 @@ naturally) and **Screen**.
 - Windows / Linux
 - Auto-collecting every screenshot I take
 - Figma plugin, cloud sync
-- The old life-companion features (deadlines, gym, morning brief)
+- The old life-companion features (deadlines, gym); the morning brief is back in v1.1 as a work brief
 
 ---
 

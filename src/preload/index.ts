@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, CompanionAPI, DockState, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, CompanionAPI, DockState, SessionView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -47,6 +47,20 @@ const api: CompanionAPI = {
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
+  },
+  sessions: {
+    list: () => ipcRenderer.invoke('sessions:list'),
+    dismiss: (id) => ipcRenderer.invoke('sessions:dismiss', id),
+    onChanged: (cb) => subscribe<SessionView[]>('sessions:changed', cb),
+  },
+  alerts: {
+    onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
+  },
+  claude: {
+    status: () => ipcRenderer.invoke('claude:status'),
+    preview: () => ipcRenderer.invoke('claude:preview'),
+    connect: () => ipcRenderer.invoke('claude:connect'),
+    disconnect: () => ipcRenderer.invoke('claude:disconnect'),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }
