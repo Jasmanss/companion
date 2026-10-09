@@ -554,6 +554,72 @@ pre {
   padding: 10px 12px;
 }
 
+/* Cards at the top of the chat: where you left off, the morning brief. */
+.card {
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  max-height: 46%;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.card-head strong {
+  color: var(--text);
+}
+
+.card h3 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.card p {
+  margin: 0 0 6px;
+}
+
+.leftoff-status {
+  font-weight: 500;
+}
+
+.leftoff-commits {
+  margin-bottom: 6px !important;
+}
+
+.leftoff-commits code {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.leftoff-claude {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--accent);
+  background: rgba(201, 188, 255, 0.05);
+}
+
+.leftoff-claude p {
+  margin: 2px 0 0;
+}
+
 .notice {
   display: flex;
   align-items: center;

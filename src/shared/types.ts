@@ -76,6 +76,21 @@ export interface ClaudeHookStatus {
   error?: string
 }
 
+/** The "where you left off" card for a project. */
+export interface LeftOff {
+  project: string
+  path: string
+  isGit: boolean
+  branch: string | null
+  /** Newest first: short hash, subject, and how long ago. */
+  commits: { hash: string; subject: string; when: string }[]
+  uncommitted: { count: number; files: string[] }
+  /** Commits not on the upstream yet; null when there's no upstream. */
+  unpushed: number | null
+  /** The last thing that project's Claude session said. */
+  claude: { text: string; at: number } | null
+}
+
 export interface SaveResult {
   dir: string
   files: string[]
@@ -146,6 +161,10 @@ export interface CompanionAPI {
     onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
     /** The face's event mood (worried, celebrating, done), or null when nothing's going on. */
     onMood(cb: (mood: Mood | null) => void): Unsubscribe
+  }
+  leftOff: {
+    /** Shown when you switch projects or come back after 2+ hours. */
+    onShow(cb: (card: LeftOff) => void): Unsubscribe
   }
   claude: {
     status(): Promise<ClaudeHookStatus>

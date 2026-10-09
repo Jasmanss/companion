@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import type { AlertView, ClaudeHookStatus, DockState, Project } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, type AlertInput } from './alerts'
+import { AppState } from './app-state'
 import {
   CLAUDE_SETTINGS_FILE,
   hasCompanionHooks,
@@ -19,6 +20,7 @@ import {
 import { downloadImage } from './fetch-image'
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
+import { whereYouLeftOff } from './left-off'
 import { MoodBoard } from './moods'
 import { SessionTracker } from './sessions'
 import { extensionForMime, TrayStore } from './tray-store'
@@ -32,6 +34,8 @@ const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
 /** First free one wins. Open toggles the panel; hide takes it off the screen edge and back. */
 const OPEN_HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
+/** Opening the panel after this long away shows where you left off. */
+const AWAY_MS = 2 * 60 * 60 * 1000
 const HIDE_HOTKEYS = ['Alt+Shift+Space', 'Control+Alt+Shift+Space']
 const SMOKE_OUT = process.env.COMPANION_SMOKE_OUT
 
@@ -52,6 +56,7 @@ let settings: SettingsStore
 let tray: TrayStore
 let agent: Agent
 let sessions: SessionTracker
+let appState: AppState
 let alerts: AlertQueue
 const moods = new MoodBoard()
 let moodTimer: ReturnType<typeof setTimeout> | undefined
@@ -70,10 +75,15 @@ function boundsFor(state: DockState): Electron.Rectangle {
   return { x: area.x + area.width - width - 8, y: area.y + Math.round((area.height - height) / 2), width, height }
 }
 
+const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
+
 function setDock(state: DockState): void {
   if (!win || dock === state) return
   const wasHidden = dock === 'hidden'
+  const wasOpen = isOpen(dock)
   dock = state
+  if (wasOpen && !isOpen(state)) void appState?.update({ lastSeenAt: Date.now() })
+  if (!wasOpen && isOpen(state)) onPanelOpened()
   win.webContents.send('dock:state', state)
   updateMenuBar()
   if (state === 'hidden') return win.hide()
@@ -220,6 +230,25 @@ function showAlerts(list: AlertView[]): void {
   updateMenuBar()
 }
 
+/** Coming back to the panel after a while: show where you left off in the current project. */
+function onPanelOpened(): void {
+  if (!appState) return
+  const project = settings.currentProject()
+  if (project && Date.now() - appState.lastSeenAt >= AWAY_MS) showLeftOff(project)
+}
+
+function showLeftOff(project: Project): void {
+  void whereYouLeftOff(project).then((card) => win?.webContents.send('leftoff:show', card))
+}
+
+/** Switching projects, from the menu or by asking, shows where you left off there. */
+async function switchProject(projectPath: string | null): Promise<void> {
+  const before = settings.currentProject()?.path ?? null
+  await settings.setCurrentProject(projectPath)
+  const after = settings.currentProject()
+  if (after && after.path !== before) showLeftOff(after)
+}
+
 /** Every alert goes through here: the queue decides whether it shows, and the face picks up its mood. */
 function raise(input: AlertInput): void {
   if (!alerts.push(input)) return
@@ -346,7 +375,7 @@ function registerIpc(): void {
     return settings.view()
   })
   ipcMain.handle('settings:setCurrentProject', async (_e, folder: string | null) => {
-    await settings.setCurrentProject(folder)
+    await switchProject(folder)
     return settings.view()
   })
   ipcMain.handle('settings:setAllowlist', async (_e, list: string[]) => {
@@ -413,6 +442,8 @@ app.whenReady().then(async () => {
   hotkeys = { open: registerHotkey(OPEN_HOTKEYS, toggleDock), hide: registerHotkey(HIDE_HOTKEYS, toggleHidden) }
   settings = new SettingsStore(path.join(userData, 'settings.json'), hotkeys)
   await settings.load()
+  appState = new AppState(path.join(userData, 'state.json'))
+  await appState.load()
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })
@@ -422,7 +453,7 @@ app.whenReady().then(async () => {
     unsplashKey: () => settings.unsplashKey(),
     projects: () => settings.projects(),
     currentProject: () => settings.currentProject(),
-    setCurrentProject: (p) => settings.setCurrentProject(p),
+    setCurrentProject: (p) => switchProject(p),
     allowlist: () => settings.allowlist(),
     tray,
     capturePage,

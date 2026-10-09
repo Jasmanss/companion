@@ -1,18 +1,12 @@
 import { useState } from 'react'
 import type { SessionState, SessionView } from '../../shared/types'
+import { ago } from './LeftOffCard'
 
 const LABEL: Record<SessionState, string> = {
   'needs-approval': 'waiting on you',
   'needs-input': 'needs input',
   working: 'working',
   finished: 'finished',
-}
-
-function ago(at: number): string {
-  const minutes = Math.round((Date.now() - at) / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  return `${Math.round(minutes / 60)}h ago`
 }
 
 /** Every Claude Code session Companion has heard from, waiting ones first. */

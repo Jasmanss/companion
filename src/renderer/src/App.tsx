@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
-import type { AgentEvent, AlertView, DockState, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import type { AgentEvent, AlertView, DockState, LeftOff, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { ChatLog, Composer, type Entry } from './Chat'
 import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
+import { LeftOffCard } from './LeftOffCard'
 import { Nudge } from './Nudge'
 import { isLateNight, pickMood } from './pick-mood'
 import { SessionStrip } from './SessionStrip'
@@ -46,6 +47,7 @@ export function App() {
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   const [banner, setBanner] = useState<AlertView | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
+  const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -62,9 +64,11 @@ export function App() {
     const offSessions = api.sessions.onChanged(setSessions)
     const offAlerts = api.alerts.onShow(handleAlerts)
     const offMood = api.alerts.onMood(setEventMood)
+    const offLeftOff = api.leftOff.onShow(setLeftOff)
     const clock = setInterval(() => setLateNight(isLateNight(new Date())), 60_000)
     return () => {
       offMood()
+      offLeftOff()
       clearInterval(clock)
       offDock()
       offTray()
@@ -360,6 +364,7 @@ export function App() {
             onError={showError}
           />
           <div className="body">
+            {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
             {noKey && (
               <div className="notice">
                 Add your Anthropic API key to start chatting.
