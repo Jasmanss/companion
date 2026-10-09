@@ -3,14 +3,17 @@
 A Mac assistant that lives tucked away at the edge of your screen while you
 code. Pull it out to collect images, research designs, and run commands.
 
-- **Tray:** drop images in from Finder or a browser, or paste them (⌘V). Drag
-  the whole stack back out in one go, or save it into a project and get the
-  code to use them.
-- **Chat:** ask it to find design inspiration (it screenshots real sites into
-  the tray), find photos, or run commands in your project. Commands always
-  show an approval card first unless you've allowlisted them.
+- **Tray:** drop images in from Finder or a browser, or paste them (⌘V). Click
+  one to open the viewer: flip through with ← → or the filmstrip, click to
+  zoom. Drag the whole stack back out in one go, or save it into a project and
+  get the code to use them.
+- **Chat:** ask it to find design inspiration (it screenshots whole pages, or
+  just the section you asked about, into the tray and checks each shot), find
+  photos, or run commands in your project. Commands always show an approval
+  card first unless you've allowlisted them.
 - **Always there:** it peeks out from the right edge. Click it, press ⌥ Space,
-  or drag an image toward it and it slides out.
+  or drag an image toward it and it slides out. Press ⌥⇧ Space (or use the
+  menu bar icon) to hide it from the edge entirely and bring it back.
 
 The product spec is in [SPEC.md](SPEC.md); character explorations are in
 [`design/`](design).
@@ -42,7 +45,7 @@ search. Keys are stored encrypted in your macOS keychain.
 - `src/main`: the edge-docked window, tray storage, saving to projects,
   command runner, settings, and the agent.
 - `src/main/agent.ts`: a streaming tool-use loop on the Claude API
-  (`claude-opus-5-5`) with web search, web fetch, and custom tools for
+  (`claude-sonnet-5-5`) with web search, web fetch, and custom tools for
   screenshots, the tray, image search, and approval-gated commands. Refusals
   fall back to another model automatically (`fallbacks: "default"`).
 - `src/preload`: the small, typed bridge the UI talks through.

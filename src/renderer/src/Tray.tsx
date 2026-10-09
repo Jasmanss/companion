@@ -6,6 +6,7 @@ interface Props {
   items: TrayItem[]
   saveResult: SaveResult | null
   onDragOut: (ids: string[]) => (e: DragEvent) => void
+  onOpen: (index: number) => void
   onSave: () => void
   onDismissSave: () => void
   onError: (message: string) => void
@@ -13,7 +14,7 @@ interface Props {
 
 const api = () => window.companion
 
-export function Tray({ items, saveResult, onDragOut, onSave, onDismissSave, onError }: Props) {
+export function Tray({ items, saveResult, onDragOut, onOpen, onSave, onDismissSave, onError }: Props) {
   const fail = (err: unknown) => onError(err instanceof Error ? err.message : String(err))
   const ids = items.map((item) => item.id)
 
@@ -42,9 +43,9 @@ export function Tray({ items, saveResult, onDragOut, onSave, onDismissSave, onEr
         <p className="tray-empty">Drop images here, paste with ⌘V, or ask me to find some.</p>
       ) : (
         <ul className="tray-grid">
-          {items.map((item) => (
+          {items.map((item, i) => (
             <li key={item.id} className="thumb" title={[item.name, item.note, item.credit, item.source].filter(Boolean).join('\n')}>
-              <img src={`tray://${item.id}`} alt={item.name} draggable onDragStart={onDragOut([item.id])} />
+              <img src={`tray://${item.id}`} alt={item.name} draggable onDragStart={onDragOut([item.id])} onClick={() => onOpen(i)} />
               <button className="thumb-remove" aria-label={`Remove ${item.name}`} onClick={() => api().tray.remove(item.id).catch(fail)}>
                 <CloseIcon />
               </button>

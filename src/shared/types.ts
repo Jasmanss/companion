@@ -1,4 +1,5 @@
-export type DockState = 'collapsed' | 'expanded'
+/** hidden: off screen entirely · collapsed: the peek at the edge · expanded: the panel · viewing: the large image viewer */
+export type DockState = 'hidden' | 'collapsed' | 'expanded' | 'viewing'
 
 /** What the character's face shows. */
 export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you'
@@ -29,7 +30,8 @@ export interface SettingsView {
   /** Where the Anthropic API key comes from. */
   apiKeySource: 'env' | 'saved' | 'none'
   hasUnsplashKey: boolean
-  hotkey: string
+  /** Registered global shortcuts in Electron accelerator form; empty when another app has them. */
+  hotkeys: { open: string; hide: string }
 }
 
 export interface SaveResult {
@@ -55,6 +57,8 @@ export interface CompanionAPI {
   dock: {
     expand(): Promise<void>
     collapse(): Promise<void>
+    hide(): Promise<void>
+    view(): Promise<void>
     setPinned(pinned: boolean): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
   }

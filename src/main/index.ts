@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, nativeImage, net, protocol, screen, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, protocol, screen, shell, Tray } from 'electron'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,7 +13,10 @@ import { SettingsStore } from './settings'
 
 const PEEK = { width: 56, height: 132 }
 const PANEL_WIDTH = 400
-const HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
+const VIEWER_MAX_WIDTH = 1100
+/** First free one wins. Open toggles the panel; hide takes it off the screen edge and back. */
+const OPEN_HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
+const HIDE_HOTKEYS = ['Alt+Shift+Space', 'Control+Alt+Shift+Space']
 const SMOKE_OUT = process.env.COMPANION_SMOKE_OUT
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
@@ -23,6 +26,8 @@ if (SMOKE_OUT) app.setPath('userData', path.join(os.tmpdir(), 'companion-smoke')
 else if (!app.requestSingleInstanceLock()) app.quit()
 
 let win: BrowserWindow | null = null
+let menuBar: Tray | null = null
+let hotkeys = { open: '', hide: '' }
 let dock: DockState = 'collapsed'
 let pinned = false
 let modalOpen = false
@@ -33,28 +38,81 @@ let agent: Agent
 
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
-  if (state === 'collapsed') {
+  if (state === 'collapsed' || state === 'hidden') {
     return { x: area.x + area.width - PEEK.width, y: area.y + Math.round((area.height - PEEK.height) / 2), ...PEEK }
   }
-  const height = Math.min(760, area.height - 48)
-  return { x: area.x + area.width - PANEL_WIDTH - 8, y: area.y + Math.round((area.height - height) / 2), width: PANEL_WIDTH, height }
+  const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
+  const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
+  return { x: area.x + area.width - width - 8, y: area.y + Math.round((area.height - height) / 2), width, height }
 }
 
 function setDock(state: DockState): void {
   if (!win || dock === state) return
+  const wasHidden = dock === 'hidden'
   dock = state
-  win.setBounds(boundsFor(state), true)
-  if (state === 'expanded') win.focus()
   win.webContents.send('dock:state', state)
+  updateMenuBar()
+  if (state === 'hidden') return win.hide()
+  win.setBounds(boundsFor(state), !wasHidden)
+  if (state === 'collapsed') {
+    if (wasHidden) win.showInactive()
+  } else {
+    if (!win.isVisible()) win.show()
+    win.focus()
+  }
 }
 
 function toggleDock(): void {
-  setDock(dock === 'expanded' ? 'collapsed' : 'expanded')
+  setDock(dock === 'expanded' || dock === 'viewing' ? 'collapsed' : 'expanded')
+}
+
+function toggleHidden(): void {
+  setDock(dock === 'hidden' ? 'collapsed' : 'hidden')
+}
+
+/** An 18pt template icon for the menu bar: a rounded screen with two eyes. */
+function menuBarIcon(): Electron.NativeImage {
+  const size = 36 // 18pt at 2x
+  const bitmap = Buffer.alloc(size * size * 4)
+  const coverage = (d: number) => Math.min(1, Math.max(0, 0.5 - d))
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const px = x + 0.5 - size / 2
+      const py = y + 0.5 - size / 2
+      // Rounded rectangle, 28x22 with radius 7.
+      const qx = Math.abs(px) - 14 + 7
+      const qy = Math.abs(py) - 11 + 7
+      const box = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - 7
+      // Eyes are cut out of it.
+      const eye = (cx: number) => (Math.hypot((px - cx) / 2.2, (py + 1) / 3.6) - 1) * 2.2
+      const alpha = coverage(box) * (1 - coverage(Math.min(eye(-5.5), eye(5.5))))
+      bitmap[(y * size + x) * 4 + 3] = Math.round(alpha * 255)
+    }
+  }
+  const image = nativeImage.createFromBitmap(bitmap, { width: size, height: size, scaleFactor: 2 })
+  image.setTemplateImage(true)
+  return image
+}
+
+function updateMenuBar(): void {
+  if (!menuBar) return
+  menuBar.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open Companion', accelerator: hotkeys.open || undefined, registerAccelerator: false, click: () => setDock('expanded') },
+      dock === 'hidden'
+        ? { label: 'Show at Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
+        : { label: 'Hide from Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('hidden') },
+      { type: 'separator' },
+      { label: 'Quit Companion', role: 'quit' },
+    ]),
+  )
 }
 
 function createWindow(): BrowserWindow {
   const w = new BrowserWindow({
     ...boundsFor('collapsed'),
+    // A panel floats over full-screen apps and shows on every Space.
+    type: process.platform === 'darwin' ? 'panel' : undefined,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -76,12 +134,18 @@ function createWindow(): BrowserWindow {
     },
   })
   w.setAlwaysOnTop(true, 'floating')
-  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  w.once('ready-to-show', () => w.showInactive())
+  // The app has no Dock icon (see below), so there's no process type to switch.
+  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  // ready-to-show doesn't always fire for transparent windows, so also show once the page loads.
+  const reveal = () => {
+    if (!w.isDestroyed() && !w.isVisible()) w.showInactive()
+  }
+  w.once('ready-to-show', reveal)
+  w.webContents.once('did-finish-load', reveal)
 
   // Collapse when you click away, unless something still needs the panel open.
   w.on('blur', () => {
-    if (dock === 'expanded' && !pinned && !modalOpen && !draggingOut && !agent.waitingForApproval) setDock('collapsed')
+    if ((dock === 'expanded' || dock === 'viewing') && !pinned && !modalOpen && !draggingOut && !agent.waitingForApproval) setDock('collapsed')
   })
 
   // Links in chat open in the default browser; the window itself never navigates.
@@ -90,6 +154,15 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
   w.webContents.on('will-navigate', (event) => event.preventDefault())
+
+  // In dev, surface renderer problems in the terminal.
+  if (!app.isPackaged) {
+    w.webContents.on('console-message', ({ level, message }) => {
+      if (level === 'warning' || level === 'error') console.log(`[renderer ${level}] ${message}`)
+    })
+    w.webContents.on('did-fail-load', (_e, code, description, url) => console.error(`[companion] load failed: ${code} ${description} ${url}`))
+    w.webContents.on('render-process-gone', (_e, details) => console.error(`[companion] renderer gone: ${details.reason}`))
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void w.loadFile(path.join(__dirname, '../renderer/index.html'))
@@ -116,6 +189,8 @@ const FALLBACK_DRAG_ICON = nativeImage.createFromBitmap(Buffer.alloc(16 * 16 * 4
 function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
+  ipcMain.handle('dock:hide', () => setDock('hidden'))
+  ipcMain.handle('dock:view', () => setDock('viewing'))
   ipcMain.handle('dock:pin', (_e, value: boolean) => {
     pinned = value
   })
@@ -208,8 +283,8 @@ function registerIpc(): void {
   ipcMain.handle('clipboard:writeText', (_e, text: string) => clipboard.writeText(text))
 }
 
-function registerHotkey(): string {
-  for (const key of HOTKEYS) if (globalShortcut.register(key, toggleDock)) return key
+function registerHotkey(candidates: string[], action: () => void): string {
+  for (const key of candidates) if (globalShortcut.register(key, action)) return key
   return ''
 }
 
@@ -223,6 +298,8 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
+      // The peek has to appear on its own, before anything asks for the panel.
+      if (!w.isVisible()) return fail('window never showed')
       setDock('expanded')
       await new Promise((resolve) => setTimeout(resolve, 1500))
       const image = await w.webContents.capturePage()
@@ -241,8 +318,8 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
 
 app.whenReady().then(async () => {
   const userData = app.getPath('userData')
-  const hotkey = registerHotkey()
-  settings = new SettingsStore(path.join(userData, 'settings.json'), hotkey)
+  hotkeys = { open: registerHotkey(OPEN_HOTKEYS, toggleDock), hide: registerHotkey(HIDE_HOTKEYS, toggleHidden) }
+  settings = new SettingsStore(path.join(userData, 'settings.json'), hotkeys)
   await settings.load()
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
@@ -269,9 +346,18 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(item.file).toString())
   })
 
+  // Like other menu bar utilities, no Dock icon: macOS only lets accessory apps float over full-screen apps.
+  // The menu bar icon has Quit.
+  if (process.platform === 'darwin') app.dock?.hide()
+
   registerIpc()
   win = createWindow()
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
+  else {
+    menuBar = new Tray(menuBarIcon())
+    menuBar.setToolTip('Companion')
+    updateMenuBar()
+  }
 
   screen.on('display-metrics-changed', () => win?.setBounds(boundsFor(dock)))
 })

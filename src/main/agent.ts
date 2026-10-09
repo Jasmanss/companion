@@ -4,15 +4,16 @@ import { randomUUID } from 'node:crypto'
 import type { AgentEvent, Mood, Project } from '../shared/types'
 import { isAllowlisted, runCommand, stripAnsi } from './commands'
 import { downloadImage } from './fetch-image'
+import type { Capture, CaptureOptions } from './screenshot'
 import type { TrayStore } from './tray-store'
 
-const MODEL = 'claude-opus-5-5'
+const MODEL = 'claude-sonnet-5-5'
 const MAX_CONTINUATIONS = 5
 
-const BASE_PROMPT = `You are Companion, a desktop assistant that lives at the edge of the user's Mac screen and helps while they code. Talk like a sharp, friendly teammate: short and direct, a few sentences at most, no headings.
+const BASE_PROMPT = `You are Companion, a desktop assistant that lives at the edge of the user's Mac screen and helps while they code. Talk like a sharp, friendly teammate: short and direct, a few sentences at most, no headings. Light Markdown (bold, lists, links, inline code) renders.
 
 You can:
-- Research designs: find real, live sites that fit what the user asks for, then use screenshot_page to put screenshots in their tray, each with a one-line note on what's worth stealing from it.
+- Research designs: find real, live sites that fit what the user asks for, then use screenshot_page to put screenshots in their tray, each with a one-line note on what's worth stealing from it. By default it captures the whole page; when the user wants one part (a bento grid, a pricing table, a footer), pass section with the text of that part's heading so the screenshot is centered on it. You see every screenshot you take: check it shows what the user asked for, and if it doesn't (wrong section, cookie wall, blank), remove it with remove_from_tray and try again or pick another site.
 - Find images: use search_images when it's set up, otherwise web search. Add the actual image files to the tray with add_image_to_tray and record the photographer or source in credit. Prefer sources with clear licenses (Unsplash, Pexels).
 - Run commands in the current project with run_command. The user approves each command before it runs, so propose exactly what you'd type and say why in one line.
 - Switch the current project with set_project, and see what's in the tray with list_tray.
@@ -33,6 +34,11 @@ const AddImageInput = z.object({
 })
 const ScreenshotInput = z.object({
   url: z.url(),
+  section: z
+    .string()
+    .max(120)
+    .optional()
+    .describe('Text of the heading or phrase that starts the section to capture, e.g. "Features". Leave out to capture the whole page.'),
   note: z.string().max(300).optional().describe("One line on what's good about this design"),
 })
 const SearchImagesInput = z.object({
@@ -41,6 +47,7 @@ const SearchImagesInput = z.object({
 })
 const SetProjectInput = z.object({ name: z.string().min(1) })
 const ListTrayInput = z.object({})
+const RemoveFromTrayInput = z.object({ id: z.string().min(1).describe('The tray item id') })
 
 const UnsplashResults = z.object({
   results: z.array(
@@ -66,12 +73,17 @@ function clientTool(name: string, description: string, schema: z.ZodType): Anthr
 const TOOLS: Anthropic.Beta.BetaToolUnion[] = [
   { type: 'web_search_20260209', name: 'web_search', max_uses: 6 },
   { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6 },
-  clientTool('screenshot_page', 'Load a web page and save a screenshot of it to the tray. Use for design research.', ScreenshotInput),
+  clientTool(
+    'screenshot_page',
+    'Load a web page and save a screenshot to the tray: the whole page (long pages are cut off), or just the section that starts at section (up to three screens tall). Returns the screenshot so you can check it.',
+    ScreenshotInput,
+  ),
   clientTool('add_image_to_tray', 'Download an image from a direct image URL into the tray.', AddImageInput),
   clientTool('search_images', 'Search Unsplash for photos. Returns direct image URLs with credits.', SearchImagesInput),
   clientTool('run_command', 'Run a shell command in the current project folder. The user must approve it first unless it is on their allowlist.', RunCommandInput),
   clientTool('set_project', 'Switch the current project by name.', SetProjectInput),
   clientTool('list_tray', "List what's in the image tray.", ListTrayInput),
+  clientTool('remove_from_tray', 'Remove an image you added to the tray in this conversation, e.g. a screenshot that missed.', RemoveFromTrayInput),
 ]
 
 export interface AgentDeps {
@@ -82,7 +94,7 @@ export interface AgentDeps {
   setCurrentProject(path: string): Promise<void>
   allowlist(): string[]
   tray: TrayStore
-  capturePage(url: string): Promise<Buffer>
+  capturePage(url: string, options?: CaptureOptions): Promise<Capture>
   emit(event: AgentEvent): void
 }
 
@@ -93,6 +105,8 @@ export class Agent {
   private approvals = new Map<string, (approved: boolean) => void>()
   /** Unsplash asks apps to ping a download URL when a photo is used. */
   private unsplashDownloads = new Map<string, string>()
+  /** Tray items added during this conversation; the only ones the agent may remove. */
+  private added = new Set<string>()
 
   constructor(private readonly deps: AgentDeps) {}
 
@@ -118,6 +132,7 @@ export class Agent {
   reset(): void {
     this.cancel()
     this.messages = []
+    this.added.clear()
   }
 
   async send(text: string): Promise<void> {
@@ -205,7 +220,7 @@ export class Agent {
   }
 
   private async runTool(block: Anthropic.Beta.BetaToolUseBlock, signal: AbortSignal): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
-    const result = (content: string, isError = false): Anthropic.Beta.BetaToolResultBlockParam => ({
+    const result = (content: Anthropic.Beta.BetaToolResultBlockParam['content'], isError = false): Anthropic.Beta.BetaToolResultBlockParam => ({
       type: 'tool_result',
       tool_use_id: block.id,
       content,
@@ -242,6 +257,10 @@ export class Agent {
         }
         case 'list_tray':
           return parse(ListTrayInput) ? result(this.listTray()) : invalid()
+        case 'remove_from_tray': {
+          const input = parse(RemoveFromTrayInput)
+          return input ? result(await this.removeFromTray(input.id)) : invalid()
+        }
         default:
           return result(`Unknown tool: ${block.name}`, true)
       }
@@ -277,18 +296,30 @@ export class Agent {
     this.activity('Adding an image to the tray')
     const { data, ext, name } = await downloadImage(url)
     const item = await this.deps.tray.addBuffer(data, ext, { name, source: source_page ?? url, note, credit })
+    this.added.add(item.id)
     const track = this.unsplashDownloads.get(url)
     const key = this.deps.unsplashKey()
     if (track && key) void fetch(track, { headers: { Authorization: `Client-ID ${key}` } }).catch(() => {})
-    return `Added ${item.name} to the tray.`
+    return `Added ${item.name} to the tray (id ${item.id}).`
   }
 
-  private async screenshot({ url, note }: z.infer<typeof ScreenshotInput>): Promise<string> {
+  private async screenshot({ url, section, note }: z.infer<typeof ScreenshotInput>): Promise<Anthropic.Beta.BetaToolResultBlockParam['content']> {
     const host = new URL(url).hostname.replace(/^www\./, '')
-    this.activity(`Screenshotting ${host}`)
-    const png = await this.deps.capturePage(url)
-    await this.deps.tray.addBuffer(png, '.png', { name: `${host}.png`, source: url, note })
-    return `Saved a screenshot of ${host} to the tray.`
+    this.activity(section ? `Screenshotting "${section}" on ${host}` : `Screenshotting ${host}`)
+    const capture = await this.deps.capturePage(url, { section })
+    const item = await this.deps.tray.addBuffer(capture.png, '.png', { name: `${host}.png`, source: url, note })
+    this.added.add(item.id)
+    return [
+      { type: 'text', text: `Saved ${capture.description} of ${host} (${capture.width}x${capture.height}) to the tray as id ${item.id}. Here it is, scaled down:` },
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: capture.preview.toString('base64') } },
+    ]
+  }
+
+  private async removeFromTray(id: string): Promise<string> {
+    if (!this.added.has(id)) throw new Error('You can only remove images you added in this conversation.')
+    await this.deps.tray.remove(id)
+    this.added.delete(id)
+    return 'Removed.'
   }
 
   private async searchImages({ query, count }: z.infer<typeof SearchImagesInput>): Promise<string> {
@@ -328,7 +359,7 @@ export class Agent {
   private listTray(): string {
     const items = this.deps.tray.list()
     if (items.length === 0) return 'The tray is empty.'
-    return JSON.stringify(items.map(({ name, source, note, credit }) => ({ name, source, note, credit })))
+    return JSON.stringify(items.map(({ id, name, source, note, credit }) => ({ id, name, source, note, credit })))
   }
 
   private systemPrompt(): string {

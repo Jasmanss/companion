@@ -23,7 +23,7 @@ export class SettingsStore {
 
   constructor(
     private readonly file: string,
-    readonly hotkey: string,
+    readonly hotkeys: SettingsView['hotkeys'],
   ) {}
 
   async load(): Promise<void> {
@@ -41,7 +41,7 @@ export class SettingsStore {
       allowlist: this.data.allowlist,
       apiKeySource: process.env.ANTHROPIC_API_KEY ? 'env' : this.data.secrets.anthropic ? 'saved' : 'none',
       hasUnsplashKey: Boolean(this.unsplashKey()),
-      hotkey: this.hotkey,
+      hotkeys: this.hotkeys,
     }
   }
 

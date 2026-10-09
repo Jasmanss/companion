@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Markdown } from './Markdown'
 
 export type Entry =
   | { kind: 'user'; id: number; text: string }
@@ -8,28 +9,11 @@ export type Entry =
   | { kind: 'output'; id: number; command: string; exitCode: number | null; text: string }
   | { kind: 'error'; id: number; text: string }
 
-const URL_PATTERN = /(https?:\/\/[^\s)]+)/g
-
-/** Plain text with clickable links (they open in the default browser). */
-function Linkified({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(URL_PATTERN).map((part, i) =>
-        i % 2 === 1 ? (
-          <a key={i} href={part} target="_blank" rel="noreferrer">
-            {part}
-          </a>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  )
-}
-
 export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (approvalId: string, approved: boolean) => void }) {
   const end = useRef<HTMLDivElement>(null)
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [entries])
+  useEffect(() => {
+    void end.current?.scrollIntoView({ block: 'end' })
+  }, [entries])
 
   return (
     <div className="log" role="log" aria-live="polite">
@@ -53,9 +37,9 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
             )
           case 'assistant':
             return (
-              <p key={entry.id} className="msg assistant">
-                <Linkified text={entry.text} />
-              </p>
+              <div key={entry.id} className="msg assistant">
+                <Markdown text={entry.text} />
+              </div>
             )
           case 'activity':
             return (

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { AgentEvent, DockState, Mood, SaveResult, SettingsView, TrayItem } from '../../shared/types'
 import { ChatLog, Composer, type Entry } from './Chat'
 import { Face } from './Face'
-import { ChevronRightIcon, GearIcon, PinIcon } from './icons'
-import { Settings } from './Settings'
+import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
+import { formatHotkey, Settings } from './Settings'
 import { Tray } from './Tray'
+import { Viewer } from './Viewer'
 
 const api = window.companion
 let nextId = 1
@@ -37,6 +38,7 @@ export function App() {
   const [pinned, setPinned] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null)
+  const [viewIndex, setViewIndex] = useState(0)
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -140,7 +142,9 @@ export function App() {
       api.tray.dragEnded()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void api.dock.collapse()
+      if (e.key !== 'Escape') return
+      if (dock === 'viewing') void api.dock.expand()
+      else void api.dock.collapse()
     }
     // ⌘V outside the message box adds whatever's on the clipboard: files, an image, or an image link.
     const onPaste = async (e: ClipboardEvent) => {
@@ -201,10 +205,34 @@ export function App() {
     }, showError)
   }
 
+  const openViewer = (index: number) => {
+    setViewIndex(index)
+    void api.dock.view()
+  }
+
+  const newChat = () => {
+    setEntries([])
+    void api.agent.reset()
+  }
+
   const mood: Mood = agentMood ?? (dragOver || typing ? 'listening' : dock === 'collapsed' ? 'resting' : 'idle')
   const noKey = settings?.apiKeySource === 'none'
+  const hideKey = settings?.hotkeys.hide ? ` (${formatHotkey(settings.hotkeys.hide)})` : ''
 
-  if (dock === 'collapsed') {
+  if (dock === 'viewing' && items.length > 0) {
+    return (
+      <Viewer
+        items={items}
+        index={Math.min(viewIndex, items.length - 1)}
+        onIndex={setViewIndex}
+        onClose={() => api.dock.expand()}
+        onRemove={(id) => api.tray.remove(id).catch(showError)}
+        onDragOut={dragOut}
+      />
+    )
+  }
+
+  if (dock === 'collapsed' || dock === 'hidden') {
     return (
       <button className="peek" data-app onClick={() => api.dock.expand()} title="Companion (⌥ Space)">
         <Face mood={mood} width={50} height={44} />
@@ -236,6 +264,9 @@ export function App() {
           )}
         </div>
         <div className="head-actions">
+          <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
+            <NewChatIcon />
+          </button>
           <button
             className={`icon-btn ${pinned ? 'on' : ''}`}
             aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
@@ -255,7 +286,10 @@ export function App() {
           >
             <GearIcon />
           </button>
-          <button className="icon-btn" aria-label="Tuck away" onClick={() => api.dock.collapse()}>
+          <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
+            <HideIcon />
+          </button>
+          <button className="icon-btn" aria-label="Tuck away" title="Tuck away (Esc)" onClick={() => api.dock.collapse()}>
             <ChevronRightIcon />
           </button>
         </div>
@@ -274,22 +308,12 @@ export function App() {
             items={items}
             saveResult={saveResult}
             onDragOut={dragOut}
+            onOpen={openViewer}
             onSave={saveToProject}
             onDismissSave={() => setSaveResult(null)}
             onError={showError}
           />
           <div className="body">
-            {entries.length > 0 && !busy && (
-              <button
-                className="chip quiet new-chat"
-                onClick={() => {
-                  setEntries([])
-                  void api.agent.reset()
-                }}
-              >
-                New chat
-              </button>
-            )}
             {noKey && (
               <div className="notice">
                 Add your Anthropic API key to start chatting.

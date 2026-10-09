@@ -3,6 +3,15 @@ import type { Project, SettingsView } from '../../shared/types'
 
 const api = () => window.companion
 
+const MODIFIERS: Record<string, string> = { Control: '⌃', Alt: '⌥', Shift: '⇧', Command: '⌘' }
+
+/** "Alt+Shift+Space" → "⌥⇧ Space" */
+export function formatHotkey(accelerator: string): string {
+  const parts = accelerator.split('+')
+  const key = parts.pop()
+  return `${parts.map((m) => MODIFIERS[m] ?? m).join('')} ${key}`
+}
+
 export function Settings({ settings, onChange, onError }: { settings: SettingsView; onChange: (s: SettingsView) => void; onError: (message: string) => void }) {
   const [apiKey, setApiKey] = useState('')
   const [unsplashKey, setUnsplashKey] = useState('')
@@ -100,7 +109,16 @@ export function Settings({ settings, onChange, onError }: { settings: SettingsVi
         </button>
       </section>
 
-      <p className="muted small">Shortcut: {settings.hotkey ? settings.hotkey.replace('Alt', '⌥').replace('Control', '⌃').replace(/\+/g, ' ') : 'none (taken by another app)'}</p>
+      <section>
+        <h2>Shortcuts</h2>
+        <p className="muted small">
+          Open the panel: {settings.hotkeys.open ? formatHotkey(settings.hotkeys.open) : 'none (taken by another app)'}
+          <br />
+          Hide from the screen edge and back: {settings.hotkeys.hide ? formatHotkey(settings.hotkeys.hide) : 'none (taken by another app)'}
+          <br />
+          The menu bar icon does both, and quits.
+        </p>
+      </section>
     </div>
   )
 }

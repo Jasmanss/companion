@@ -11,6 +11,8 @@ const api: CompanionAPI = {
   dock: {
     expand: () => ipcRenderer.invoke('dock:expand'),
     collapse: () => ipcRenderer.invoke('dock:collapse'),
+    hide: () => ipcRenderer.invoke('dock:hide'),
+    view: () => ipcRenderer.invoke('dock:view'),
     setPinned: (pinned) => ipcRenderer.invoke('dock:pin', pinned),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
   },
