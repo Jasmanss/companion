@@ -70,7 +70,7 @@ const BY = 0.675 // brows
 const MY = 0.27 // moustache
 const MOUTH_Y = 0.14
 const BOW_Y = -0.02
-const V_Y = -0.42, LAPEL_A = 0.6, COLLAR_Y = -0.06, HIGH_Y = 0.4, HIGH_A = 1.55 // waistcoat neckline
+const V_Y = -0.42, LAPEL_A = 0.6, COLLAR_Y = -0.06, HIGH_Y = 0.24, HIGH_A = 1.6 // waistcoat neckline
 
 const lapelTop = (a) => {
   const t = Math.abs(a)
@@ -93,17 +93,6 @@ function extrude(shape, depth = 0.02, bevel = 0.008) {
   g.translate(0, 0, -depth / 2)
   return g
 }
-/** Keep the part of a convex outline below y = cut (an upper eyelid). */
-function clipBelow(pts, cut) {
-  const out = []
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i], b = pts[(i + 1) % pts.length]
-    const ain = a.y <= cut, bin = b.y <= cut
-    if (ain) out.push(a)
-    if (ain !== bin) { const k = (cut - a.y) / (b.y - a.y); out.push(new THREE.Vector2(a.x + (b.x - a.x) * k, cut)) }
-  }
-  return out
-}
 /** A curved band (closed-eye line, happy arch). Angles in radians, counterclockwise. */
 function bandShape(R, th, a0, a1, cy) {
   const s = new THREE.Shape()
@@ -125,13 +114,16 @@ function eyeShapes() {
     if (pts.length > 1 && pts[0].distanceTo(pts[pts.length - 1]) < 1e-4) pts.pop()
     let top = -1, bot = 1
     for (const p of pts) { top = Math.max(top, p.y); bot = Math.min(bot, p.y) }
-    for (const [lid, k] of Object.entries(LIDS)) {
-      const cut = top - (top - bot) * k
-      const g = extrude(new THREE.Shape(k ? clipBelow(pts, cut) : pts))
-      g.userData.top = cut
-      out[style + ':' + lid] = g
-    }
+    let hw = 0
+    for (const p of pts) hw = Math.max(hw, Math.abs(p.x))
+    const g = extrude(new THREE.Shape(pts))
+    g.userData = { top, bot, hw }
+    out[style] = g
   }
+  // Upper eyelid: a body-coloured sculpted shell, unit height (y from -1 to 0), its lower edge a soft almond curve.
+  const lid = new THREE.Shape()
+  lid.moveTo(-1, -1); lid.quadraticCurveTo(0, -1.3, 1, -1); lid.bezierCurveTo(1.05, -0.3, 0.6, 0.05, 0, 0.05); lid.bezierCurveTo(-0.6, 0.05, -1.05, -0.3, -1, -1)
+  out.lid = new THREE.ExtrudeGeometry(lid, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.1, bevelSegments: 3, curveSegments: 16 })
   out.happy = extrude(bandShape(0.088, 0.036, Math.PI * 0.12, Math.PI * 0.88, -0.045), 0.02, 0.006)
   out.closed = extrude(bandShape(0.12, 0.03, Math.PI * 1.3, Math.PI * 1.7, 0.085), 0.02, 0.006)
   return out
@@ -257,7 +249,7 @@ function glassesGeometry(kind) {
     frame.push(stripTo(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.008, 6, false)))
   } else {
     const half = kind === 'half-moon'
-    const R = half ? 0.135 : 0.138, y = half ? EY - 0.05 : EY
+    const R = half ? 0.135 : 0.138, y = half ? EY - 0.03 : EY
     for (const s of [-1, 1]) {
       const x = s * EX
       frame.push(half ? ring(x, y, R, 0.014, Math.PI, Math.PI) : ring(x, y, R, 0.015))
@@ -324,16 +316,16 @@ function target(o, f) {
     case 'done': {
       // A courteous little bow, then hold a contented nod.
       const k = Math.min(1, age / 1.1), bow = A ? Math.sin(k * Math.PI) * 0.22 : 0
-      o.lean = 0.07 + bow; o.mus = 0.2; o.brow = 0.02; o.hatTip = 0.25 + bow * 1.4; break
+      o.lean = 0.1 + bow; o.mus = 0.2; o.brow = 0.02; o.hatTip = 0.25 + bow * 1.4; break
     }
     case 'needs-you':
       o.tall = 1.05; o.sink = -0.04; o.lean = 0.05; o.brow = 0.075; o.mouth = 0.45; o.call = 1; break
     case 'worried':
       o.lean = -0.07; o.tall = 0.965; o.bSlant = 0.36; o.brow = 0.01; o.mus = -0.3; o.sweat = 1; o.gTilt = -0.08; o.gY = -0.012; break
     case 'celebrating':
-      o.tall = 1.02; o.brow = 0.08; o.mus = 0.3; o.mouth = 0.6; o.hatLift = 0.22; o.confetti = 1; break
+      o.tall = 1.02; o.brow = 0.08; o.mus = 0.3; o.mouth = 0.6; o.hatLift = 0.14; o.confetti = 1; break
     case 'sleepy':
-      o.tilt = 0.07; o.lean = 0.1; o.sink = 0.08; o.tall = 0.97; o.brow = -0.035; o.bSlant = 0.14; o.mus = -0.14; o.zz = 1; o.gY = -0.035; o.gTilt = 0.05; break
+      o.tilt = 0.06; o.lean = 0.05; o.sink = 0.15; o.tall = 0.97; o.brow = -0.035; o.bSlant = 0.14; o.mus = -0.14; o.zz = 1; o.gY = -0.035; o.gTilt = 0.05; break
   }
   return o
 }
@@ -400,13 +392,14 @@ export default {
     const hlGeo = G(new THREE.SphereGeometry(0.02, 10, 8))
     const eyes = [-1, 1].map((s) => {
       const grp = new THREE.Group()
-      const m = new THREE.Mesh(EYE['pills:neutral'], eyeMat)
+      const m = new THREE.Mesh(EYE.pills, eyeMat)
       const hl = new THREE.Mesh(hlGeo, hlMat)
       hl.position.set(0.022, 0.048, 0.022)
       m.add(hl)
-      grp.add(m)
+      const lid = new THREE.Mesh(EYE.lid, bodyMat)
+      grp.add(m, lid)
       body.add(grp)
-      return { s, grp, m, hl }
+      return { s, grp, m, hl, lid }
     })
 
     /* brows + moustache + mouth + cheeks */
@@ -508,6 +501,9 @@ export default {
       for (const m of [bodyMat, coatMat, shirtMat, hatMat, beadMat, zMat, trouserMat]) kit.updateSolid(m, l)
       kit.updateSolid(bowMat, l, { roughness: 0.55 })
       trouserMat.color.copy(p.trousers)
+      // Dark panels: a cool velvet sheen on the waistcoat so it separates from the background.
+      coatMat.sheen = l.dark ? 0.9 : 0.2
+      coatMat.sheenColor.copy(l.dark ? l.tint.glow : WHITE)
       kit.updateSolid(hairMat, l, { roughness: 0.5 })
       kit.updateSolid(shirtMat, l, { roughness: 0.55 })
       // Rich vinyl color: the room environment washes saturated solids toward pastel, so use less of it.
@@ -548,7 +544,7 @@ export default {
         const lo = Y_BOT - 0.08, s = Math.min(1, (frameTop - lo) / (need - lo))
         fit.scale.setScalar(s); fit.position.y = lo * (1 - s)
       } else {
-        fit.scale.setScalar(1); fit.position.y = Math.min(0, frameTop - need)
+        fit.scale.setScalar(1); fit.position.y = Math.min(0, frameTop - need) * 0.6 // in the small tab, let the hat crown crop a little rather than lose the face
       }
     }
     setLook(look)
@@ -557,15 +553,20 @@ export default {
       const x = e.s * EX + f.lookX * 0.045, y = EY - f.lookY * 0.04
       e.grp.position.set(x, y, surfZ(x, y) - 0.002)
       e.grp.rotation.set(0, surfYaw(x, y), 0)
-      const geo = shape === 'happy' || shape === 'closed' ? EYE[shape] : EYE[(EYE[curLook.eyes + ':wide'] ? curLook.eyes : 'pills') + ':' + shape]
-      if (e.m.geometry !== geo) e.m.geometry = geo
       const open = shape !== 'happy' && shape !== 'closed'
+      const geo = open ? EYE[curLook.eyes] ?? EYE.pills : EYE[shape]
+      if (e.m.geometry !== geo) e.m.geometry = geo
       e.hl.visible = open
-      e.m.rotation.z = shape === 'worried' ? -e.s * 0.32 : 0
+      const k = open ? LIDS[shape] : 0
+      e.lid.visible = k > 0
       if (open) {
-        const droop = shape === 'sleepy' ? Math.min(1, 0.55 + f.open * 1.4) : 1
-        e.m.scale.set(shape === 'wide' ? 1.08 : 1, Math.max(0.1, f.blink * droop * (shape === 'wide' ? 1.06 : 1)), 1)
-        e.hl.position.set(0.024, Math.min(0.045, geo.userData.top - 0.035), 0.022)
+        const { top, bot, hw } = geo.userData, wide = shape === 'wide'
+        e.m.scale.set(wide ? 1.08 : 1, Math.max(0.1, f.blink * (wide ? 1.06 : 1)), 1)
+        const lidTop = top + 0.008, cut = top - (top - bot) * k * (shape === 'sleepy' ? Math.min(1.15, 1.3 - f.open) : 1)
+        e.lid.position.set(0, lidTop, 0.006)
+        e.lid.scale.set(hw + 0.014, lidTop - cut, 1)
+        e.lid.rotation.z = shape === 'worried' ? -e.s * 0.32 : 0
+        e.hl.position.set(0.022, Math.min(0.045, cut - 0.03), 0.022)
       } else e.m.scale.set(1, 1, 1)
     }
 
@@ -581,7 +582,7 @@ export default {
       /* posture */
       const sway = A * Math.sin(c * 0.9) * 0.018 * f.wob
       const breathe = A * Math.sin(c * 1.7) * 0.007 * (0.5 + f.wob)
-      base.position.y = f.bounce - pose.sink * (0.6 + 0.4 * P) * (size === 'big' ? 0.4 : 1) // tuck deeper in the small tab
+      base.position.y = f.bounce - pose.sink * (0.6 + 0.4 * P) * (size === 'big' ? 0.4 : hatTop ? 0.45 : 1) // tuck deeper in the small tab (less under a hat)
       base.position.x = f.mood === 'worried' ? A * Math.sin(f.t * 38) * 0.006 * P : 0
       pivot.rotation.x = pose.lean * (0.75 + 0.35 * P) + talk * lvl * 0.035 * A
       pivot.rotation.z = -pose.tilt * (0.75 + 0.35 * P) + sway + talk * A * Math.sin(c * 2.3) * 0.02
@@ -612,8 +613,9 @@ export default {
       mouth.scale.set(0.08 + mo * 0.05, 0.02 + mo * 0.14, 1)
 
       /* hat */
-      hatGrp.rotation.set(-pose.hatTip * 0.6, 0, -0.07 + (f.mood === 'celebrating' ? A * Math.sin(f.t * 6.5) * 0.12 : 0))
-      hatGrp.position.y = Y_TOP - 0.012 + pose.hatLift * (0.6 + 0.4 * P) + pose.hatTip * 0.05
+      const toss = f.mood === 'celebrating' ? Math.min(1, -f.bounce / 0.09) : 0
+      hatGrp.rotation.set(-pose.hatTip * 0.6, pose.hatLift * toss * 2.5, -0.07 - pose.hatLift * 1.6)
+      hatGrp.position.y = Y_TOP - 0.012 + pose.hatLift * (0.35 + 0.65 * toss) + pose.hatTip * 0.05
 
       /* glasses */
       specs.position.y = pose.gY
@@ -636,7 +638,7 @@ export default {
             
           } else if (i === 0) {
             const drip = A ? (f.t * 0.6) % 1 : 0.3
-            x = 0.44; y = 0.7 - drip * 0.08; z = surfZ(0.44, 0.7) + 0.04; s = 0.07 * pose.sweat; sx = 0.78
+            x = 0.4; y = 0.7 - drip * 0.06; z = surfZ(0.4, 0.68) + 0.05; s = 0.085 * pose.sweat; sx = 0.78
           }
           v3.set(x, y, z); s3.set(s * sx, s * (sx < 1 ? 1.35 : 1), s); q.identity()
           beads.setMatrixAt(i, m4.compose(v3, q, s3))
