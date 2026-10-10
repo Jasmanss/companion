@@ -212,8 +212,13 @@ void main() {
   float comet = (1.0 - exp(-cs * 45.0)) * exp(-cs * 2.6) * 2.4 * (1.0 - smoothstep(0.55, 0.98, cs))
               + (1.0 - exp(-cs2 * 45.0)) * exp(-cs2 * 4.0) * 1.1 * (1.0 - smoothstep(0.45, 0.95, cs2));
   ringI += uSwirl * comet;
-  // the comet's light spills into the lens like a swirl of liquid light
-  col += mix(halo, cSoft, 0.35) * uSwirl * comet * 0.3 * exp(-max(0.0, -dr) / 0.14) * step(dr, 0.0);
+  // the comet's light spills into the lens as a soft spiral of liquid light: the inner part lags behind the
+  // ring, heads are wide and soft, and it fades out before the centre so no edges converge there
+  float css = fract(cs + (0.865 - rho) * 0.32);
+  float css2 = fract(css + 0.5);
+  float spill = smoothstep(0.0, 0.16, css) * exp(-css * 3.0) * (1.0 - smoothstep(0.5, 0.95, css))
+              + 0.45 * smoothstep(0.0, 0.16, css2) * exp(-css2 * 4.0) * (1.0 - smoothstep(0.45, 0.9, css2));
+  col += mix(halo, cSoft, 0.35) * uSwirl * spill * 0.55 * exp(-max(0.0, -dr) / 0.1) * step(dr, 0.0) * smoothstep(0.25, 0.7, rho);
   // done: the ring closes clockwise from the top, then glows
   float ac = fract(0.25 - a01);
   float drawn = uSweep > 0.999 ? 1.0 : 1.0 - smoothstep(uSweep - 0.015, uSweep, ac);

@@ -215,7 +215,10 @@ float sdArc(vec2 p, float ap, float ra, float rb) {
   return ((sc.y * p.x > sc.x * p.y) ? length(p - sc * ra) : abs(length(p) - ra)) - rb;
 }
 float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
-float cov(float d) { float aa = fwidth(d) * 0.8 + uSoft; return 1.0 - smoothstep(-aa, aa, d); }
+// pixel size, taken once in uniform control flow: fwidth() inside the face's early-out branch is undefined
+// (quads straddling the branch edge painted stray eye-colored specks)
+float gPx = 0.002;
+float cov(float d) { float aa = gPx * 0.9 + uSoft; return 1.0 - smoothstep(-aa, aa, d); }
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
 
 float eyeSD(vec2 q, float side) {
@@ -286,6 +289,7 @@ void glow(inout vec4 acc, vec3 c, float k) {
 
 void main() {
   vec2 p = vP;
+  gPx = max(fwidth(vP.x), fwidth(vP.y));
   vec4 acc = vec4(0.0);
 
   // contact shadow + caustic (light focused through the drop)
@@ -348,7 +352,7 @@ void main() {
     float heart = cov(length(hd) - hs * 0.45) * headBack;
     glow(acc, uHaloCol, (line * 0.7 + exp(-dot(hd, hd) / (hs * hs * 3.0)) * 0.8 * headBack) * uThink);
     over(acc, uCometCol, max(head, line * (uDark > 0.5 ? 0.9 : 1.0)) * uThink);
-    over(acc, vec3(1.0), heart * uThink * (uDark > 0.5 ? 0.9 : 0.5));
+    over(acc, vec3(1.0), heart * uThink * (uDark > 0.5 ? 0.9 : 0.35));
   }
 
   // eyes and mouth
