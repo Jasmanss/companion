@@ -5,6 +5,7 @@
 //   {
 //     id, name, vibe,                       // vibe: one sentence
 //     eyes: ['pills', 'dots', 'arcs'],      // eye styles it supports (the Eyes control); [] if it has its own
+//     accessories: true,                    // optional: it draws look.hat and look.glasses (the Hat and Glasses controls)
 //     frame: { height: 2.6, y: 0 },         // world units the camera fits vertically, and where it looks
 //     create(ctx) -> instance,
 //   }
@@ -15,7 +16,8 @@
 //     setLook(look),                        // tint, frost, dark or eyes changed (optional: else it's recreated)
 //     dispose(),
 //   }
-//   look = { tint: {key, name, glass, glow, ink, soft} (THREE.Color), frost: 0..1, dark: bool, eyes, size }
+//   look = { tint: {key, name, glass, glow, ink, soft} (THREE.Color), frost: 0..1, dark: bool, eyes, size,
+//            hat: 'none' | 'bowler' | 'top', glasses: 'none' | 'half-moon' | 'round' | 'monocle' }
 //
 // face (read-only for characters; Phase 4 ports step() into face-drawing.ts as stepFace):
 //   mood, moodAge (s since the mood changed), prevMood, t, dt, clock (liquid time: runs faster when lively/worried),
