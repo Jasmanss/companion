@@ -15,6 +15,7 @@ const TAU = Math.PI * 2
 const WARM = new THREE.Color('#ffae5c')
 const WHITE = new THREE.Color(1, 1, 1)
 const DONE_GREEN = new THREE.Color('#5ee0a6')
+const ALERT = new THREE.Color('#ff7a2e')
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v)
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t) }
 
@@ -24,7 +25,7 @@ const VIS = { w: 1.66, h: 0.9, r: 0.38, y: -0.08, zFront: 0.83, depth: 0.22 }
 const BEZ = { m: 0.075 } // bezel margin around the visor
 const MAT_HH = 0.33 // half-height of the LED field on the visor (world)
 // grid per size: rows, dot radius as a fraction of the pitch, eye scale (features grow at small sizes)
-const GRID = { big: { rows: 13, dot: 0.34, k: 1 }, header: { rows: 9, dot: 0.4, k: 1.12 }, peek: { rows: 7, dot: 0.44, k: 1.22 } }
+const GRID = { big: { rows: 13, dot: 0.34, k: 1 }, header: { rows: 9, dot: 0.4, k: 1.2 }, peek: { rows: 7, dot: 0.44, k: 1.38 } }
 
 // Rounded rectangle as explicit points (no duplicated start/end point, which leaves a notch in extrusions).
 function roundRect(shape, w, h, r, seg = 10) {
@@ -117,7 +118,7 @@ const SPARKS = 7
 export default {
   id: 'visor-pro',
   name: 'Visor Pro',
-  vibe: 'A frosted glass helmet with an anodized band and a smoked visor; its eyes are a dot-matrix of warm LEDs.',
+  vibe: 'A frosted glass helmet with an anodized bezel and a smoked visor; its eyes are a dot-matrix of LEDs that glow in your tint.',
   eyes: ['pills', 'dots', 'arcs'],
   frame: { height: 2.6, y: 0.02, header: { height: 2.35, y: 0.02 }, peek: { height: 2.2, y: 0.02 } },
   create({ kit, look, size }) {
@@ -141,7 +142,12 @@ export default {
     const rimMat = keep(kit.rim('#ffffff', { power: 2.2, intensity: 0.6 }))
     const rim = new THREE.Mesh(shellGeo, rimMat)
     rim.scale.setScalar(1.004)
-    head.add(shell, rim)
+    // inverted hull: a hairline darker edge so the pale shell keeps its silhouette on light panels
+    const edgeMat = keep(new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, transparent: true, opacity: 0.2, depthWrite: false }))
+    const edge = new THREE.Mesh(shellGeo, edgeMat)
+    edge.scale.setScalar(size === 'peek' ? 1.035 : size === 'header' ? 1.026 : 1.014)
+    edge.renderOrder = -1
+    head.add(shell, rim, edge)
 
     /* ---- visor module: deep smoked glossy glass (opaque, so the shell refracts it) ---- */
     const visorGeo = keep(new THREE.ExtrudeGeometry(roundRect(new THREE.Shape(), VIS.w, VIS.h, VIS.r), { depth: VIS.depth, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.02, bevelSegments: 3 }))
@@ -159,12 +165,12 @@ export default {
     bShape.holes.push(roundRect(new THREE.Path(), VIS.w + 0.01, VIS.h + 0.01, VIS.r))
     const bezelGeo = keep(new THREE.ExtrudeGeometry(bShape, { depth: 0.42, bevelEnabled: true, bevelThickness: 0.028, bevelSize: 0.024, bevelSegments: 3 }))
     bezelGeo.translate(0, 0, VIS.zFront - 0.42 + 0.012)
-    const metalMat = keep(new THREE.MeshPhysicalMaterial({ metalness: 1, roughness: 0.34, clearcoat: 0.3, clearcoatRoughness: 0.3 }))
+    const metalMat = keep(new THREE.MeshPhysicalMaterial({ metalness: 1, roughness: 0.34, clearcoat: 0.4, clearcoatRoughness: 0.25, anisotropy: 0.6 }))
     const bezel = new THREE.Mesh(bezelGeo, metalMat)
     faceGrp.add(outOfGlass(bezel))
 
     /* ---- Glyph strip: a light line set into the bezel. Off, it reads as a fine seam. ---- */
-    const [gi, go] = size === 'peek' ? [0.016, 0.07] : size === 'header' ? [0.024, 0.062] : [0.033, 0.052] // inner/outer offset from the visor edge
+    const [gi, go] = size === 'peek' ? [0.0, 0.085] : size === 'header' ? [0.012, 0.07] : [0.022, 0.062] // inner/outer offset from the visor edge
     const gShape = roundRect(new THREE.Shape(), VIS.w + go * 2, VIS.h + go * 2, VIS.r + go)
     gShape.holes.push(roundRect(new THREE.Path(), VIS.w + gi * 2, VIS.h + gi * 2, VIS.r + gi))
     const glyphGeo = keep(new THREE.ShapeGeometry(gShape, 24))
@@ -183,25 +189,35 @@ export default {
         }`,
     }))
     const glyph = new THREE.Mesh(glyphGeo, glyphMat)
-    glyph.position.z = VIS.zFront + 0.042
+    glyph.position.z = VIS.zFront + 0.05
     faceGrp.add(outOfGlass(glyph))
+    // a soft light that rides the head of the chase (the thinking swirl), so it reads at peek size too
+    const comet = kit.glowSprite('#ffffff', 0.4, 0.9)
+    keep(comet.material)
+    comet.renderOrder = 5
+    faceGrp.add(comet)
+    const cometSize = size === 'peek' ? 0.75 : size === 'header' ? 0.55 : 0.4
 
     /* ---- ear discs: aluminum with a light ring ---- */
     const earGeo = keep(new THREE.CylinderGeometry(0.34, 0.34, 0.16, 40, 1))
     earGeo.rotateZ(Math.PI / 2)
-    const earCapGeo = keep(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 28, 1))
-    earCapGeo.rotateZ(Math.PI / 2)
+    const earRingGeo = keep(new THREE.TorusGeometry(0.255, 0.022, 8, 40))
+    earRingGeo.rotateY(Math.PI / 2)
+    const earDomeGeo = keep(new THREE.SphereGeometry(0.22, 28, 12, 0, TAU, 0, Math.PI * 0.32))
+    earDomeGeo.rotateZ(-Math.PI / 2)
     const earLightMat = keep(kit.light(look.tint.glow, 1))
-    const ears = [-1, 1].map((s) => {
+    for (const s of [-1, 1]) {
       const g = new THREE.Group()
       const disc = new THREE.Mesh(earGeo, metalMat)
-      const cap = new THREE.Mesh(earCapGeo, earLightMat)
-      cap.position.x = s * 0.08
-      g.add(outOfGlass(disc), outOfGlass(cap))
+      const ring = new THREE.Mesh(earRingGeo, earLightMat)
+      ring.position.x = s * 0.08
+      const dome = new THREE.Mesh(earDomeGeo, metalMat)
+      dome.position.x = s * (0.08 - 0.22 * Math.cos(Math.PI * 0.32))
+      dome.scale.x = s
+      g.add(outOfGlass(disc), outOfGlass(ring), outOfGlass(dome))
       g.position.set(s * (SHELL.a - 0.03), -0.04, -0.04)
       head.add(g)
-      return g
-    })
+    }
 
     /* ---- status LED on the bezel's top edge ---- */
     const ledGeo = keep(new THREE.SphereGeometry(0.03, 12, 8))
@@ -209,6 +225,7 @@ export default {
     const led = new THREE.Mesh(ledGeo, ledMat)
     const ledPos = new THREE.Vector3(0.5, VIS.h / 2 + BEZ.m + 0.1, 0.72)
     led.position.copy(ledPos)
+    led.scale.setScalar(size === 'peek' ? 1.9 : size === 'header' ? 1.5 : 1)
     const ledGlow = kit.glowSprite('#ffffff', 0.3, 0.8)
     keep(ledGlow.material)
     ledGlow.position.copy(ledPos).z += 0.02
@@ -231,7 +248,8 @@ export default {
     const N = dots.length / 2
     const dotR = G.dot * pitchN * S
     const dotGeo = keep(new THREE.CircleGeometry(dotR, size === 'big' ? 14 : 8))
-    const dotMat = keep(new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }))
+    // additive: an unlit LED adds nothing, so it never shows as a dark screen-door grid on the glossy visor
+    const dotMat = keep(new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))
     const ledDots = new THREE.InstancedMesh(dotGeo, dotMat, N)
     const haloGeo = keep(new THREE.PlaneGeometry(1, 1))
     const haloMat = keep(new THREE.MeshBasicMaterial({ map: kit.glowTex, color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
@@ -249,7 +267,8 @@ export default {
     const black = new THREE.Color(0, 0, 0)
     for (let k = 0; k < N; k++) { ledDots.setColorAt(k, black); halos.setColorAt(k, black) }
     halos.renderOrder = 2
-    faceGrp.add(outOfGlass(ledDots), halos)
+    ledDots.renderOrder = 1
+    faceGrp.add(ledDots, halos)
 
     // glossy reflection over the visor, in front of the LEDs
     const glossTex = keep(glossTexture())
@@ -285,7 +304,7 @@ export default {
       glassBase.copy(shellMat.color)
       // anodized: silver nudged toward the tint; graphite is a dark gunmetal
       if (l.tint.key === 'graphite') metalMat.color.set('#6b717c')
-      else metalMat.color.set('#e4e7ec').lerp(l.tint.glow, 0.16)
+      else metalMat.color.set('#cfd4dc').lerp(l.tint.glow, 0.34).lerp(l.tint.ink, 0.08)
       // warm tints read as skin in milky glass: pull them toward clear
       shellMat.color.lerp(WHITE, l.tint.key === 'peach' ? 0.55 : l.tint.key === 'mint' ? 0.2 : 0)
       shellMat.attenuationColor.lerp(WHITE, l.tint.key === 'peach' ? 0.5 : 0)
@@ -295,6 +314,10 @@ export default {
       visorMat.color.set('#05070a').lerp(l.tint.ink, 0.08)
       rimMat.uniforms.intensity.value = l.dark ? 0.45 : 0.75
       glossMat.opacity = l.dark ? 0.32 : 0.5
+      edgeMat.color.copy(l.tint.ink).lerp(l.tint.glass, 0.25)
+      edgeMat.opacity = l.dark ? 0.0 : 0.3
+      edge.visible = !l.dark
+      if (!l.dark) { shellMat.color.multiplyScalar(0.93); glassBase.copy(shellMat.color) }
       sparkMat.blending = l.dark ? THREE.AdditiveBlending : THREE.NormalBlending
       sparkMat.needsUpdate = true
       glyphMat.uniforms.seam.value.copy(metalMat.color).multiplyScalar(l.tint.key === 'graphite' ? 0.35 : 0.42)
@@ -304,24 +327,31 @@ export default {
     /* ---- per-mood face fields ---- */
     let fk = 1 // feature scale for this size
     fk = G.k
-    const EX = 0.62 * Math.min(fk, 1.1), EY = 0.16
+    const EX = 0.62 * Math.min(fk, 1.15), EY = size === 'peek' ? 0.3 : size === 'header' ? 0.22 : 0.16
     // eye: returns signed distance for a dot at (x, y) given the mood and the eye's side
     function eyeSD(mood, x, y, s, f, P) {
-      const ex = s * EX + f.lookX * 0.42, ey = EY - f.lookY * 0.3
+      let ex = s * EX + f.lookX * 0.42, ey = EY - f.lookY * 0.3
+      if (mood === 'thinking') { ex += 0.2; ey += 0.12 }
       const open = Math.max(0.05, f.open * f.blink)
       const style = L.eyes
       const k = fk
       switch (mood) {
-        case 'resting': return sdArc(x, y, ex, ey + 0.2 * k, 0.32 * k, 0.07 * k + pitchN * 0.12, Math.PI * 1.15, Math.PI * 1.85)
-        case 'done': case 'celebrating': {
-          const lift = mood === 'celebrating' ? 0.08 : 0
-          return sdArc(x, y, ex, ey - 0.2 * k + lift, 0.34 * k, 0.085 * k + pitchN * 0.12, Math.PI * 0.12, Math.PI * 0.88)
+        // closed: flat, calm dashes
+        case 'resting': return sdRoundRect(x - ex, y - (ey - 0.1), 0.27 * k, 0.04, 0.04)
+        case 'done': return sdArc(x, y, ex, ey - 0.2 * k, 0.34 * k, 0.085 * k + pitchN * 0.12, Math.PI * 0.12, Math.PI * 0.88)
+        case 'celebrating': {
+          // four-point star eyes that twinkle
+          const tw = f.rm ? 1 : 1 + 0.12 * Math.sin(f.t * 9 + s)
+          const r = 0.3 * k * tw, w = 0.15 * k
+          const dx = Math.abs(x - ex), dy = Math.abs(y - (ey + 0.02))
+          const a = (dx / w + dy / r - 1) * Math.min(w, r) * 0.9, b = (dx / r + dy / w - 1) * Math.min(w, r) * 0.9
+          return Math.min(a, b)
         }
         case 'sleepy': {
-          // heavy lids: a wide low slit, flat on top, sagging outward
-          const hh = 0.2 * k * clamp(open / 0.32, 0.3, 1.2)
-          const d = sdRoundRect(x - ex, y - (ey - 0.12), 0.25 * k, hh, Math.min(0.25 * k, hh))
-          const lid = y - (ey - 0.12 + hh * 0.2 - (x - ex) * s * 0.18)
+          // half-lidded: a flat lid cuts the eye, sagging toward the outside
+          const hh = 0.32 * k
+          const d = sdRoundRect(x - ex, y - (ey - 0.08), 0.27 * k, hh, 0.24 * k)
+          const lid = y - (ey - 0.02 - (x - ex) * s * 0.28)
           return Math.max(d, lid)
         }
         case 'needs-you': {
@@ -329,38 +359,41 @@ export default {
           return Math.hypot(x - ex, (y - ey) / Math.max(0.15, Math.min(1, open))) - r
         }
         case 'worried': {
-          const hw = 0.17 * k, hh = Math.max(0.06, 0.36 * k * open)
-          const d = sdRoundRect(x - ex, y - ey + 0.04, hw, hh, hw)
+          const hw = 0.2 * k, hh = Math.max(0.06, 0.3 * k * open)
+          const d = sdRoundRect(x - ex, y - ey + 0.06, hw, hh, hw)
           // inner corners raised: a lid line slanting down toward the outside
-          const lid = y - (ey + 0.2 * k + (x - ex) * -s * 0.75)
+          const lid = y - (ey + 0.08 * k + (x - ex) * -s * 1.1)
           return Math.max(d, lid)
         }
         default: {
+          const big = mood === 'listening' ? 1.22 : 1
           if (style === 'dots') {
-            const r = 0.27 * k
+            const r = 0.28 * k * big
             return Math.hypot(x - ex, (y - ey) / Math.max(0.2, Math.min(1.15, open))) - r
           }
           if (style === 'arcs') {
-            const r = 0.34 * k, ah = Math.max(0.08, r * Math.min(1.15, open))
+            const r = 0.34 * k * big, ah = Math.max(0.08, r * Math.min(1.15, open))
             const base = ey - ah * 0.45
             return Math.max(Math.hypot((x - ex) / r, (y - base) / ah) * Math.min(r, ah) - Math.min(r, ah), base - y)
           }
-          const hw = 0.2 * k * (mood === 'listening' ? 1.06 : 1), hh = Math.max(0.08, 0.46 * k * open)
+          // soft rounded pills (not bars), bigger while listening
+          const hw = 0.21 * k * big, hh = Math.max(0.08, 0.34 * k * big * open)
           return sdRoundRect(x - ex, y - ey, hw, hh, hw)
         }
       }
     }
     const MY = -0.66
+    // distance to LED brightness, antialiased over most of a dot pitch
+    const soft = (d) => clamp(0.5 - d / (pitchN * 0.75))
     // mouth glyph: returns brightness 0..1 directly (some are patterns, not shapes)
     function mouthB(mood, x, y, f, tt) {
       const p = pitchN, k = fk
-      const soft = (d) => clamp(0.5 - d / (p * 0.75))
       switch (mood) {
         case 'talking': {
           if (Math.abs(x) > 0.62 * k) return 0
           const env = 1 - Math.abs(x) / (0.7 * k)
           const w = 0.5 + 0.5 * Math.sin(x * 9 - tt * 11) * Math.sin(x * 4.3 + tt * 6.1)
-          const h = 0.06 + f.level * (0.18 + 0.28 * w) * env
+          const h = 0.05 + f.level * (0.08 + 0.15 * w) * env
           return soft(Math.abs(y - MY) - h)
         }
         case 'done': return soft(sdArc(x, y, 0, MY + 0.26, 0.3 * k, 0.05 + p * 0.1, Math.PI * 1.2, Math.PI * 1.8))
@@ -370,28 +403,22 @@ export default {
           return soft(d)
         }
         case 'worried': {
-          if (Math.abs(x) > 0.42 * k) return 0
-          const yy = MY + 0.06 * Math.sin(x * 12 + tt * 3)
+          if (Math.abs(x) > 0.36 * k) return 0
+          const yy = MY - 0.04 + 0.07 * Math.sin(x * 13 + tt * 3)
           return soft(Math.abs(y - yy) - 0.04)
         }
         case 'needs-you': return soft(Math.abs(Math.hypot(x, y - MY) - 0.13 * k) - 0.045)
-        case 'listening': {
-          // three dots that pulse in turn: "I'm getting this"
-          let b = 0
-          for (let i = -1; i <= 1; i++) {
-            const a = 0.45 + 0.55 * Math.max(0, Math.sin(tt * 5 - i * 1.1))
-            b = Math.max(b, a * soft(Math.hypot(x - i * 0.26 * k, y - MY) - 0.06))
-          }
-          return b
-        }
+        // a short "hmm" dash, pushed to one side
+        case 'thinking': return soft(sdRoundRect(x + 0.18 * k, y - MY - 0.04, 0.14 * k, 0.035, 0.035))
         case 'sleepy': {
           // a tiny z drifting up in the top right corner
-          const zx = fieldHW - 0.42, zy = 0.42 + ((tt * 0.25) % 1) * 0.25
-          const a = Math.sin(((tt * 0.25) % 1) * Math.PI)
-          const lx = x - zx, ly = y - zy, z = 0.13
+          const z = 0.15 * k * (size === 'peek' ? 1.45 : 1)
+          const zx = fieldHW - z - 0.3, zy = 0.28 + ((tt * 0.25) % 1) * 0.3
+          const a = 0.35 + 0.65 * Math.sin(((tt * 0.25) % 1) * Math.PI)
+          const lx = x - zx, ly = y - zy
           if (Math.abs(lx) > z + p * 0.5 || Math.abs(ly) > z + p * 0.5) return 0
-          const d = Math.min(Math.abs(ly - z), Math.abs(ly + z), Math.abs(lx + ly) / Math.SQRT2) - 0.035
-          return soft(d) * a * 0.8
+          const d = Math.min(Math.abs(ly - z), Math.abs(ly + z), Math.abs(lx + ly) / Math.SQRT2) - 0.04
+          return soft(d) * a
         }
         default: return 0
       }
@@ -406,11 +433,11 @@ export default {
         const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
         const r = h - Math.floor(h)
         const tw = Math.sin(tt * 3 + r * 40)
-        if (size !== 'peek' && r > 0.9 && tw > 0.6 && (Math.abs(y) > 0.62 || Math.abs(x) > 1.15)) b = Math.max(b, (tw - 0.6) * 2.5 * 0.7)
+        if (size !== 'peek' && r > 0.94 && tw > 0.6 && (Math.abs(y) > 0.62 || Math.abs(x) > 1.15)) b = Math.max(b, (tw - 0.6) * 2.5 * 0.7)
       }
       return b
     }
-    const MOOD_GAIN = { resting: 0.5, idle: 0.92, listening: 1.05, thinking: 0.9, talking: 1, done: 1, 'needs-you': 1.15, worried: 0.95, celebrating: 1.12, sleepy: 0.55 }
+    const MOOD_GAIN = { resting: 0.6, idle: 0.92, listening: 1.05, thinking: 0.9, talking: 1, done: 1, 'needs-you': 1.15, worried: 0.95, celebrating: 1.12, sleepy: 0.55 }
 
     let lastMood = null
     const sv = new THREE.Vector3()
@@ -449,7 +476,7 @@ export default {
         eyeCol.copy(L.tint.glow).lerp(WHITE, L.tint.key === 'graphite' ? 0.35 : 0.22)
         eyeCol.lerp(WARM, clamp(f.warm))
         eyeHot.copy(eyeCol).lerp(WHITE, 0.55)
-        offCol.copy(L.tint.glow).multiplyScalar(L.dark ? 0.07 : 0.055)
+        offCol.copy(L.tint.glow).multiplyScalar(size === 'peek' ? 0 : (L.dark ? 0.007 : 0.005) * (size === 'header' ? 0.5 : 1) * (L.tint.key === 'graphite' ? 0.6 : 1))
         let gain = MOOD_GAIN[mood] ?? 1
         if (blend < 1) gain = gain * blend + (MOOD_GAIN[prev] ?? 1) * (1 - blend)
         if (!rm) {
@@ -479,13 +506,16 @@ export default {
         /* status LED and ear lights */
         let sc = eyeCol, si = 0.7, gs = 0.26
         if (mood === 'done') { sc = DONE_GREEN; si = 1 }
-        else if (mood === 'needs-you') { si = 0.9 + 0.6 * (rm ? 1 : 0.5 + 0.5 * Math.sin(t * 6)); gs = 0.62 + (rm ? 0 : 0.12 * Math.sin(t * 6)) }
-        else if (mood === 'resting' || mood === 'sleepy') { si = 0.18 + (rm ? 0 : 0.14 * (0.5 + 0.5 * Math.sin(t * 1.3))); gs = 0.16 }
+        else if (mood === 'needs-you') { sc = ALERT; si = rm ? 1.2 : Math.sin(t * 6) > -0.2 ? 1.3 : 0.25; gs = size === 'big' ? 0.5 : 0.9 }
+        else if (mood === 'resting') { si = 0; gs = 0 }
+        else if (mood === 'sleepy') { si = 0.18 + (rm ? 0 : 0.14 * (0.5 + 0.5 * Math.sin(t * 1.3))); gs = 0.16 }
         else if (mood === 'thinking') { si = rm ? 0.8 : 0.35 + 0.65 * (Math.sin(t * 9) > 0 ? 1 : 0.2) }
         else if (mood === 'celebrating') { tmp.setHSL((t * 0.3) % 1, 0.8, 0.65); sc = tmp; si = 1.1 }
         ledMat.color.copy(sc).multiplyScalar(si * 1.6)
+        if (si < 0.05) ledMat.color.copy(glyphMat.uniforms.seam.value) // off: a dim lens, not a hole
         ledGlow.material.color.copy(sc).multiplyScalar(Math.min(1, si))
-        ledGlow.scale.setScalar(gs)
+        ledGlow.scale.setScalar(Math.max(gs, 1e-4))
+        ledGlow.visible = si > 0
         const earI = mood === 'needs-you' ? si : mood === 'resting' || mood === 'sleepy' ? 0.12 : 0.35
         earLightMat.color.copy(eyeCol).multiplyScalar(earI)
 
@@ -499,17 +529,30 @@ export default {
           switch (mood) {
             case 'resting': case 'sleepy': base = 0; break
             case 'listening': base = 0.3; break
-            case 'thinking': base = 0.04; seg = 1.15; break
+            case 'thinking': base = 0.05; seg = 2.4; u.len.value = 0.3; break
             case 'talking': base = 0.12 + 0.55 * f.level; break
             case 'done': base = 0.42; break
             case 'needs-you': base = 0.8 + 0.5 * pulse; break
             case 'worried': base = 0.3 + (rm ? 0 : 0.14 * Math.sin(t * 2.3)); break
-            case 'celebrating': base = 0.22; seg = 1; u.count.value = 3; u.len.value = 0.55; u.rainbow.value = 1; u.head.value = rm ? 0.15 : t * 0.45; break
+            case 'celebrating': base = 0.5; seg = 1; u.count.value = 3; u.len.value = 0.55; u.rainbow.value = 1; u.head.value = rm ? 0.15 : t * 0.45; break
           }
           const ge = first || rm ? 1 : 1 - Math.exp(-9 * Math.max(f.dt, 0.016))
           u.base.value += (base - u.base.value) * ge
           u.seg.value += (seg - u.seg.value) * ge
-          u.col.value.copy(mood === 'done' ? tmp.copy(eyeCol).lerp(DONE_GREEN, 0.6) : eyeCol)
+          // comet sprite at the chase head (thinking only); the shader parameter is atan(y, 0.55x) around the strip
+          const cw = mood === 'thinking' ? clamp(u.seg.value / 2.4) : 0
+          comet.visible = cw > 0.02
+          if (comet.visible) {
+            const th = (((u.head.value % 1) + 1) % 1) * TAU
+            const dx = Math.cos(th) / 0.55, dy = Math.sin(th)
+            const hw = VIS.w / 2 + 0.045, hh = VIS.h / 2 + 0.045
+            const k2 = Math.min(hw / Math.max(Math.abs(dx), 1e-4), hh / Math.max(Math.abs(dy), 1e-4))
+            comet.position.set(dx * k2, dy * k2, VIS.zFront + 0.07)
+            comet.scale.setScalar(cometSize * cw)
+            comet.material.color.copy(eyeCol).lerp(WHITE, 0.3)
+            comet.material.opacity = L.dark ? 0.95 : 0.85
+          }
+          u.col.value.copy(mood === 'done' ? tmp.copy(eyeCol).lerp(DONE_GREEN, 0.6) : mood === 'needs-you' ? tmp.copy(L.tint.glow).lerp(WHITE, L.dark ? 0.1 : 0) : eyeCol)
         }
 
         /* sparkles */
@@ -518,8 +561,8 @@ export default {
           const s = sparkSeeds[i]
           const life = rm ? 0.5 : (t * 0.7 + s.ph) % 1
           const a = s.a + (rm ? 0 : t * 0.25)
-          const r = s.r + life * 0.25
-          const sz = sp < 0.02 ? 0 : s.s * Math.sin(life * Math.PI) * sp
+          const r = (size === 'big' ? s.r : 0.98) + life * (size === 'big' ? 0.25 : 0.1)
+          const sz = sp < 0.02 ? 0 : s.s * (size === 'big' ? 1 : 1.7) * Math.sin(life * Math.PI) * sp
           m4.makeRotationZ(life * 1.2).scale(sv.setScalar(sz || 1e-4))
           m4.setPosition(Math.cos(a) * r * 1.05, Math.sin(a) * r * 0.82 + 0.05, 0.9)
           sparks.setMatrixAt(i, m4)
