@@ -22,6 +22,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "smoke": "electron-vite build && node scripts/smoke.mjs",
+    "design": "node scripts/design-server.mjs",
     "pack": "electron-vite build && electron-builder --mac --dir",
     "dist": "electron-vite build && electron-builder --mac"
   },

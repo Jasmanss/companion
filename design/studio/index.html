@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<style>
+:root{--bg:#F3F4F7;--card:#FFFFFF;--line:#E2E4EA;--text:#1C1F25;--muted:#596070;--star:#D9870B;--accent:#2F6FEB;--chip:#FFFFFF}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--star:#F5B544;--accent:#7EA8FF;--chip:#1F2127}}
+:root[data-theme="dark"]{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--star:#F5B544;--accent:#7EA8FF;--chip:#1F2127}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif;overflow-x:hidden}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+header.top{padding:32px 0 8px}
+h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.01em}
+header.top p{margin:6px 0 0;color:var(--muted);font-size:15px;max-width:780px}
+header.top a{color:var(--accent)}
+.bar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 0}
+@media (max-width:760px){.bar{position:static}}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row+.row{margin-top:8px}
+.chip{font:700 13px Nunito,system-ui,sans-serif;color:var(--text);background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed=true]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip kbd{font:inherit;opacity:.55;font-size:11px}
+.lbl{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+.sw{width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,.15);flex:none}
+input[type=range]{accent-color:var(--accent);width:120px}
+.cap{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.picks{font-size:13px;color:var(--muted)}.picks b{color:var(--text)}
+main{padding:20px 0 64px}
+
+.bd-light{background:radial-gradient(circle at 18% 28%,#ffc9e4 0,transparent 38%),radial-gradient(circle at 82% 18%,#b9dcff 0,transparent 42%),radial-gradient(circle at 62% 88%,#c8f5cf 0,transparent 40%),repeating-linear-gradient(135deg,rgba(20,30,60,.05) 0 9px,transparent 9px 18px),#eef1f7}
+.bd-dark{background:radial-gradient(circle at 18% 28%,#5a2147 0,transparent 40%),radial-gradient(circle at 82% 18%,#173d6b 0,transparent 44%),radial-gradient(circle at 62% 88%,#174a33 0,transparent 42%),repeating-linear-gradient(135deg,rgba(255,255,255,.04) 0 9px,transparent 9px 18px),#13151c}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,540px),1fr));gap:16px}
+.cards.only .card:not(.starred){display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:12px}
+.card.starred{border-color:var(--star)}
+.stage{border-radius:16px;aspect-ratio:200/150;display:grid;place-items:center;overflow:hidden}
+.stage canvas{width:min(100%,360px);aspect-ratio:200/172;display:block}
+.meta{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-top:10px}
+.name{margin:0;font-size:18px;font-weight:800}
+.vibe{margin:2px 0 0;font-size:13px;color:var(--muted);max-width:400px}
+.star{background:none;border:1px solid var(--line);border-radius:999px;width:34px;height:34px;cursor:pointer;color:var(--muted);font-size:17px;line-height:1;flex:none}
+.card.starred .star{color:var(--star);border-color:var(--star)}
+.err{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#ffe9e9;color:#8a1c1c;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap}
+.ctx{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:flex-end}
+.ctx figure{margin:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.ctx figcaption{font-size:11px;color:var(--muted);font-weight:700}
+.box{border-radius:12px;padding:10px 0 10px 18px;display:flex;align-items:center;justify-content:flex-end}
+.tab{border-radius:14px 0 0 14px;padding:4px 3px 4px 4px;display:grid;place-items:center}
+.tab.light{background:rgba(255,255,255,.55);box-shadow:inset 0 1px 0 #fff,0 6px 16px rgba(30,40,70,.18);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.tab.dark{background:rgba(26,29,37,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 6px 16px rgba(0,0,0,.4);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.head{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:16px;margin:0 10px 0 -8px;font:13px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+.head.light{background:rgba(255,255,255,.6);box-shadow:inset 0 1px 0 #fff,0 10px 24px rgba(30,40,70,.18);backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);color:#0D1015}
+.head.dark{background:rgba(24,27,34,.62);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 10px 24px rgba(0,0,0,.45);backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);color:#F5F7FA}
+.head b{display:block;font-size:14px}
+.head span{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:rgba(18,70,120,.08)}
+.head.dark span{background:rgba(255,255,255,.08)}
+.sheet{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:12px}
+.mt{border:1px solid var(--line);border-radius:12px;padding:4px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font:700 11px Nunito,system-ui;cursor:pointer;background:none;color:var(--text);min-width:0}
+.mt canvas{width:100%;max-width:92px;aspect-ratio:200/172;display:block}
+.mt[aria-pressed=true]{border-color:var(--text)}
+.mt span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.note{font-size:12px;color:var(--muted);margin:8px 2px 0}
+:root[data-rm] *{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+<header class="wrap top">
+  <h1>Character Studio</h1>
+  <p>New 3D directions in real physical glass: light refracts through the body, frost blurs what's inside, and the edges catch light. Each one is shown big, at the real peek size (50×44), in a panel header (64×54), and in all 10 moods. The flat designs are still in the <a href="../glass-lab.html">Glass Lab</a>.</p>
+</header>
+<div class="bar">
+  <div class="wrap">
+    <div class="row" id="moodChips"></div>
+    <div class="row">
+      <span class="lbl">Tint</span><span class="row" id="tintChips" style="gap:6px"></span>
+      <span class="sep"></span>
+      <label class="row" style="gap:6px"><span class="lbl">Frost</span><input type="range" id="frost" min="0" max="100" aria-label="Frost"></label>
+      <span class="sep"></span>
+      <span class="lbl">Eyes</span><span class="row" id="eyeChips" style="gap:6px"></span>
+      <span class="sep"></span>
+      <span class="lbl">Moves</span><span class="row" id="persChips" style="gap:6px"></span>
+    </div>
+    <div class="row">
+      <span class="lbl">Theme</span><span class="row" id="themeChips" style="gap:6px"></span>
+      <button class="chip" id="rmBtn" aria-pressed="false">Reduce motion</button>
+      <button class="chip" id="cycle" aria-pressed="false">Cycle moods <kbd>C</kbd></button>
+      <button class="chip" id="only" aria-pressed="false">Starred only</button>
+      <span class="sep"></span>
+      <span class="picks" id="picks"></span>
+      <button class="chip" id="copyPicks">Copy my picks</button>
+    </div>
+    <p class="cap" id="cap"></p>
+  </div>
+</div>
+<main class="wrap">
+  <div class="cards" id="cards"></div>
+  <p class="note" id="loadNote"></p>
+</main>
+<script type="module">
+import { Studio, MOODS, TINT_KEYS, tint, newFace, step } from './engine.js'
+import { CHARACTERS } from './characters/index.js'
+
+const Q = new URLSearchParams(location.search)
+const KEY = 'steward-studio'
+const S = { mood: 'idle', tint: 'ice', frost: 55, eyes: 'pills', pers: 'calm', theme: 'auto', stars: [] }
+try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')) } catch {}
+for (const k of ['mood', 'tint', 'eyes', 'pers', 'theme']) if (Q.get(k)) S[k] = Q.get(k)
+if (Q.get('frost')) S.frost = +Q.get('frost')
+if (!TINT_KEYS.includes(S.tint)) S.tint = 'ice'
+if (!MOODS.some((m) => m[0] === S.mood)) S.mood = 'idle'
+const FROZEN = Q.has('t') ? +Q.get('t') : null
+let RM = matchMedia('(prefers-reduced-motion: reduce)').matches || Q.get('rm') === '1'
+const save = () => { if (FROZEN !== null) return; try { const { mood, ...rest } = S; localStorage.setItem(KEY, JSON.stringify(rest)) } catch {} }
+const $ = (id) => document.getElementById(id)
+const root = document.documentElement
+const isDark = () => S.theme === 'dark' || (S.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+
+const studio = new Studio()
+window.__studio = studio
+
+/* ---------- load characters (one bad file never breaks the page) ---------- */
+const only = Q.get('only')
+const ids = CHARACTERS.filter((id) => !only || only.split(',').includes(id))
+const defs = []
+const failed = []
+await Promise.all(ids.map(async (id) => {
+  try { const m = await import(`./characters/${id}.js?v=${Date.now()}`); defs.push({ id, def: m.default }) }
+  catch (e) { failed.push({ id, error: String(e && e.stack || e) }) }
+}))
+defs.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id))
+window.__errors = failed.map((f) => `${f.id}: ${f.error}`)
+$('loadNote').textContent = failed.length ? `Couldn't load: ${failed.map((f) => f.id).join(', ')}` : ''
+
+/* ---------- views ---------- */
+const views = []
+const lookFor = (theme, size) => ({ tint: tint(S.tint), frost: S.frost / 100, dark: theme ? theme === 'dark' : isDark(), eyes: S.eyes, size, rm: RM })
+function addView(card, canvas, def, { size, theme = null, mood = null, fps = 60, still = false }) {
+  const v = { card, canvas, ctx: canvas.getContext('2d'), def, size, theme, mood, fps, still, face: newFace((views.length * 0.137) % 1), vis: false, last: 0, st: null, lookKey: '' }
+  canvas._v = v
+  io.observe(canvas)
+  views.push(v)
+  return v
+}
+const io = new IntersectionObserver((es) => es.forEach((e) => { e.target._v.vis = e.isIntersecting }), { rootMargin: '120px' })
+function ensureStage(v) {
+  const look = lookFor(v.theme, v.size)
+  const key = `${look.tint.key}|${look.frost}|${look.dark}|${look.eyes}`
+  if (v.st && key === v.lookKey) return look
+  try {
+    if (v.st && v.st.inst.setLook) {
+      v.st.inst.setLook(look)
+      if (v.st.backdrop) { v.st.scene.remove(v.st.backdrop); v.st.backdrop.geometry.dispose(); v.st.backdrop.material.dispose(); v.st.backdrop = studio.backdrop(look, v.st.camera.position.z); v.st.scene.add(v.st.backdrop) }
+    }
+    else { v.st?.inst.dispose?.(); v.st = studio.stage(v.def, look, v.size) }
+    v.lookKey = key
+  } catch (e) { fail(v, e) }
+  return look
+}
+function fail(v, e) {
+  v.dead = true
+  const box = v.card.querySelector('.err')
+  if (!box.textContent) { box.hidden = false; box.textContent = String(e && e.stack || e).split('\n').slice(0, 4).join('\n') }
+  window.__errors.push(`${v.def.id}: ${e && e.message || e}`)
+  console.error(e)
+}
+const pointer = { x: innerWidth / 2, y: innerHeight / 2 }
+addEventListener('pointermove', (e) => { pointer.x = e.clientX; pointer.y = e.clientY }, { passive: true })
+function drawView(v, t, dt) {
+  const look = ensureStage(v)
+  if (v.dead) return
+  const r = v.canvas.getBoundingClientRect()
+  const ptr = { x: Math.max(-1, Math.min(1, (pointer.x - (r.left + r.width / 2)) / 320)), y: Math.max(-1, Math.min(1, (pointer.y - (r.top + r.height / 2)) / 260)) }
+  try {
+    step(v.face, v.mood || S.mood, t, dt, FROZEN !== null ? { x: 0, y: 0 } : ptr, { pers: S.pers, rm: RM })
+    v.st.inst.update(v.face, look)
+    studio.render(v.st, v.ctx, v.canvas.clientWidth, v.canvas.clientHeight, look.dark)
+  } catch (e) { fail(v, e) }
+}
+/** Mood sheet tiles are stills: settle each mood for a moment, then draw once. */
+function drawStill(v) {
+  ensureStage(v)
+  if (v.dead) return
+  const f = newFace(0.3)
+  const look = lookFor(v.theme, v.size)
+  const T = FROZEN ?? 1.6
+  try {
+    for (let t = 0; t <= T; t += 1 / 30) step(f, v.mood, t, 1 / 30, { x: 0.2, y: 0.1 }, { pers: S.pers, rm: RM })
+    v.st.inst.update(f, look)
+    studio.render(v.st, v.ctx, v.canvas.clientWidth, v.canvas.clientHeight, look.dark)
+    v.drawnKey = v.lookKey + S.pers + RM
+  } catch (e) { fail(v, e) }
+}
+
+let last = performance.now()
+function frame(now) {
+  requestAnimationFrame(frame)
+  if (document.hidden) return
+  const dt = Math.min(0.05, (now - last) / 1000)
+  last = now
+  const t = FROZEN ?? now / 1000
+  for (const v of views) {
+    if (!v.vis || v.dead || !v.canvas.clientWidth) continue
+    if (v.still) {
+      const look = lookFor(v.theme, v.size)
+      const key = `${look.tint.key}|${look.frost}|${look.dark}|${look.eyes}` + S.pers + RM
+      if (v.drawnKey !== key) drawStill(v)
+      continue
+    }
+    const fps = RM ? 6 : v.fps
+    if (FROZEN === null && now - v.last < 1000 / fps - 2) continue
+    const vdt = FROZEN !== null ? 1 / 30 : Math.min(0.1, (now - (v.last || now - 16)) / 1000)
+    v.last = now
+    if (FROZEN !== null && !v.settled) {
+      // Frozen time (for screenshots): settle the mood, then hold.
+      for (let tt = 0; tt < FROZEN; tt += 1 / 30) step(v.face, v.mood || S.mood, tt, 1 / 30, { x: 0, y: 0 }, { pers: S.pers, rm: RM })
+      v.settled = true
+    }
+    drawView(v, t, vdt)
+  }
+  void dt
+}
+
+/* ---------- cards ---------- */
+const cards = $('cards')
+cards.innerHTML = defs.map(({ id, def }) => `
+  <article class="card" data-id="${id}">
+    <div class="stage bd-auto"><canvas class="big" aria-label="${esc(def.name)}"></canvas></div>
+    <div class="meta"><div><h2 class="name">${esc(def.name)}</h2><p class="vibe">${esc(def.vibe || '')}</p></div><button class="star" aria-pressed="false" aria-label="Star ${esc(def.name)}">☆</button></div>
+    <pre class="err" hidden></pre>
+    <div class="ctx">
+      <figure><div class="box bd-light"><div class="tab light"><canvas data-size="peek" data-theme="light" style="width:50px;height:44px"></canvas></div></div><figcaption>Peek, light</figcaption></figure>
+      <figure><div class="box bd-dark"><div class="tab dark"><canvas data-size="peek" data-theme="dark" style="width:50px;height:44px"></canvas></div></div><figcaption>Peek, dark</figcaption></figure>
+      <figure><div class="box bd-light" style="padding-left:16px"><div class="head light"><canvas data-size="header" data-theme="light" style="width:64px;height:54px"></canvas><div><b>Steward</b><span>haven › page.tsx</span></div></div></div><figcaption>Panel header, light</figcaption></figure>
+      <figure><div class="box bd-dark" style="padding-left:16px"><div class="head dark"><canvas data-size="header" data-theme="dark" style="width:64px;height:54px"></canvas><div><b>Steward</b><span>haven › page.tsx</span></div></div></div><figcaption>Panel header, dark</figcaption></figure>
+    </div>
+    <div class="sheet">${MOODS.map(([k, l]) => `<button class="mt bd-auto" data-mood="${k}" aria-pressed="false"><canvas></canvas><span>${l}</span></button>`).join('')}</div>
+    ${def.eyes && def.eyes.length < 3 ? `<p class="note">Eyes: ${def.eyes.length ? def.eyes.join(', ') + ' only' : 'its own style, the Eyes control does not apply'}.</p>` : ''}
+  </article>`).join('')
+for (const { id, def } of defs) {
+  const card = cards.querySelector(`.card[data-id="${id}"]`)
+  addView(card, card.querySelector('canvas.big'), def, { size: 'big', fps: 60 })
+  card.querySelectorAll('canvas[data-size]').forEach((c) => addView(card, c, def, { size: c.dataset.size, theme: c.dataset.theme, fps: 30 }))
+  card.querySelectorAll('.mt').forEach((b) => addView(card, b.querySelector('canvas'), def, { size: 'big', mood: b.dataset.mood, still: true }))
+}
+
+/* ---------- controls ---------- */
+function seg(el, items, cur, onPick, render = ([, l]) => l) {
+  el.innerHTML = items.map((it) => `<button class="chip" data-k="${it[0]}" aria-pressed="${it[0] === cur}">${render(it)}</button>`).join('')
+  el.onclick = (e) => { const b = e.target.closest('button'); if (b) onPick(b.dataset.k) }
+}
+function setMood(m) {
+  S.mood = m
+  $('moodChips').querySelectorAll('.chip').forEach((b) => b.setAttribute('aria-pressed', b.dataset.k === m))
+  document.querySelectorAll('.mt').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mood === m))
+  $('cap').textContent = 'Shows when: ' + MOODS.find((x) => x[0] === m)[2]
+}
+$('moodChips').innerHTML = MOODS.map(([k, l], i) => `<button class="chip" data-k="${k}">${l} <kbd>${(i + 1) % 10}</kbd></button>`).join('')
+$('moodChips').onclick = (e) => { const b = e.target.closest('.chip'); if (b) { stopCycle(); setMood(b.dataset.k) } }
+cards.addEventListener('click', (e) => {
+  const card = e.target.closest('.card'); if (!card) return
+  if (e.target.closest('.star')) { const id = card.dataset.id; S.stars = S.stars.includes(id) ? S.stars.filter((x) => x !== id) : [...S.stars, id]; changed() }
+  const mt = e.target.closest('.mt'); if (mt) { stopCycle(); setMood(mt.dataset.mood) }
+})
+function render() {
+  root.toggleAttribute('data-rm', RM)
+  if (S.theme === 'auto') root.removeAttribute('data-theme'); else root.dataset.theme = S.theme
+  document.querySelectorAll('.bd-auto').forEach((el) => { el.classList.toggle('bd-dark', isDark()); el.classList.toggle('bd-light', !isDark()) })
+  seg($('tintChips'), TINT_KEYS.map((k) => [k, tint(k).name]), S.tint, (k) => { S.tint = k; changed() }, ([k, l]) => `<span class="sw" style="background:${tint(k).hex.glass}"></span>${l}`)
+  seg($('eyeChips'), [['pills', 'Pills'], ['dots', 'Dots'], ['arcs', 'Arcs']], S.eyes, (k) => { S.eyes = k; changed() })
+  seg($('persChips'), [['calm', 'Calm'], ['lively', 'Lively']], S.pers, (k) => { S.pers = k; changed() })
+  seg($('themeChips'), [['auto', 'Match Mac'], ['light', 'Light'], ['dark', 'Dark']], S.theme, (k) => { S.theme = k; changed() })
+  $('frost').value = S.frost
+  $('rmBtn').setAttribute('aria-pressed', RM)
+  cards.querySelectorAll('.card').forEach((card) => {
+    const on = S.stars.includes(card.dataset.id)
+    card.classList.toggle('starred', on)
+    const b = card.querySelector('.star'); b.textContent = on ? '★' : '☆'; b.setAttribute('aria-pressed', on)
+  })
+  const names = S.stars.map((id) => defs.find((d) => d.id === id)?.def.name).filter(Boolean)
+  $('picks').innerHTML = `Starred <b>${names.length ? esc(names.join(', ')) : 'none yet'}</b>`
+}
+function changed() { save(); render() }
+$('frost').oninput = (e) => { S.frost = +e.target.value; changed() }
+$('rmBtn').onclick = () => { RM = !RM; render() }
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', render)
+let cycleT = null
+function stopCycle() { clearInterval(cycleT); cycleT = null; $('cycle').setAttribute('aria-pressed', 'false') }
+$('cycle').onclick = () => {
+  if (cycleT) return stopCycle()
+  $('cycle').setAttribute('aria-pressed', 'true')
+  cycleT = setInterval(() => { const i = MOODS.findIndex((m) => m[0] === S.mood); setMood(MOODS[(i + 1) % MOODS.length][0]) }, 2600)
+}
+$('only').onclick = () => { const on = !cards.classList.contains('only'); cards.classList.toggle('only', on); $('only').setAttribute('aria-pressed', on) }
+$('copyPicks').onclick = async () => {
+  let lab = {}
+  try { lab = JSON.parse(localStorage.getItem('steward-glass-lab') || '{}') } catch {}
+  const names = S.stars.map((id) => defs.find((d) => d.id === id)?.def.name).filter(Boolean)
+  const txt = `Studio starred: ${names.join(', ') || 'none'}. Glass Lab: default ${lab.def || 'droplet'}, starred ${(lab.stars || []).join(', ') || 'none'}. Tint ${S.tint}, frost ${S.frost}%, eyes ${S.eyes}, ${S.pers}.`
+  try { await navigator.clipboard.writeText(txt); $('copyPicks').textContent = 'Copied' } catch { prompt('Copy your picks:', txt) }
+  setTimeout(() => { $('copyPicks').textContent = 'Copy my picks' }, 1600)
+}
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return
+  if (/^[0-9]$/.test(e.key)) { stopCycle(); setMood(MOODS[(+e.key + 9) % 10][0]) }
+  if (e.key.toLowerCase() === 'c') $('cycle').click()
+})
+
+render()
+setMood(S.mood)
+requestAnimationFrame(frame)
+window.__ready = true
+</script>
+</body>
+</html>
