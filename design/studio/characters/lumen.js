@@ -33,7 +33,7 @@ float lmField(vec3 p) {
   w *= smoothstep(0.0, 0.3, rad);
   w += sin(y * 4.3 - t * 1.6) * 0.35;
   float body = smoothstep(1.12, 0.45, y);
-  float D = w * uWob * 0.024 * body;
+  float D = w * uWob * 0.019 * body * (0.55 + 0.45 * smoothstep(-1.15, -0.6, y));
   vec3 dir = normalize(p - vec3(0.0, -0.3, 0.0) + vec3(0.0, 0.0, 1e-4));
   float d = acos(clamp(dot(dir, vec3(0.0, -0.33, 0.944)), -1.0, 1.0));
   D += sin(d * 13.0 - t * 7.5) * smoothstep(0.08, 0.32, d) * exp(-d * 0.7) * uRip * 0.016 * body;
@@ -163,6 +163,7 @@ void main() {
 /* ---------------- face: crisp eyes, mouth, beacon, sparkles, shadow ---------------- */
 const FACE_FRAG = /* glsl */ `
 uniform vec3 uEyeCol;
+uniform vec3 uEyeEdge;
 uniform vec3 uHaloCol;
 uniform float uHaloA;
 uniform float uHaloK;
@@ -311,8 +312,8 @@ void main() {
   if (uBeacon > 0.001) {
     vec2 b = p - uTip;
     float rr = 0.1 + uBeat * 0.42;
-    float ring = exp(-pow((length(b) - rr) / (0.025 * uStroke), 2.0)) * (1.0 - uBeat) * (1.0 - uBeat);
-    glow(acc, uBeaconCol, ring * uBeacon * 1.1);
+    float ring = exp(-pow((length(b) - rr) / (0.018 * uStroke), 2.0)) * (1.0 - uBeat) * (1.0 - uBeat);
+    glow(acc, uBeaconCol, ring * uBeacon * 0.85);
     float dot0 = cov(length(b) - 0.075 * uDotK * (1.0 + 0.1 * sin(uBeat * 6.2831)));
     glow(acc, uBeaconCol, exp(-dot(b, b) * 60.0) * uBeacon * 0.8);
     over(acc, uDark > 0.5 ? mix(uBeaconCol, vec3(1.0), 0.55) : uBeaconCol, dot0 * uBeacon);
@@ -347,7 +348,11 @@ void main() {
   float m = mouthA(p);
   float faceA = max(eyeA, m);
   glow(acc, uHaloCol, exp(-max(d, 0.0) * uHaloK) * uHaloA * (1.0 - faceA));
-  over(acc, uEyeCol, faceA);
+  // eyes of light: a brighter heart, a deeper edge
+  float heart = smoothstep(0.0, uEye.x * 0.34, -d);
+  vec3 ec = mix(uEyeEdge, uEyeCol, heart);
+  ec = mix(ec, mix(uEyeEdge, uEyeCol, 0.4), step(eyeA, m - 0.001));
+  over(acc, ec, faceA);
 
   gl_FragColor = acc;
 }
@@ -389,6 +394,7 @@ function dropProfile(n) {
 
 const DEV = new URLSearchParams(typeof location !== 'undefined' ? location.search : '')
 const dev = (k, d) => (DEV.has(k) ? +DEV.get(k) : d)
+const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 const ease = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt))
 
 export default {
@@ -485,7 +491,7 @@ export default {
     // face overlay (after the glass)
     const eyeK = small ? 1.22 : size === 'header' ? 1.1 : 1
     const fu = {
-      uEyeCol: { value: new THREE.Color() }, uHaloCol: { value: new THREE.Color() }, uHaloA: { value: 0.8 }, uHaloK: { value: 11 }, uDark: { value: 0 },
+      uEyeCol: { value: new THREE.Color() }, uEyeEdge: { value: new THREE.Color() }, uHaloCol: { value: new THREE.Color() }, uHaloA: { value: 0.8 }, uHaloK: { value: 11 }, uDark: { value: 0 },
       uFace: { value: new THREE.Vector2(0, -0.24) }, uSep: { value: 0.62 * (small ? 1.06 : 1) }, uEye: { value: new THREE.Vector2(0.19 * eyeK, 0.36 * eyeK) },
       uOpen: { value: 1 }, uStyle: { value: 0 }, uHappy: { value: 0 }, uClosed: { value: 0 }, uLid: { value: 0 }, uSad: { value: 0 }, uTilt: { value: 0 }, uRot: { value: 0 },
       uSoft: { value: 0 }, uStroke: { value: small ? 1.35 : 1 },
@@ -514,7 +520,7 @@ export default {
 
     // colors
     const C = {
-      eye: new THREE.Color(), eyeWarm: new THREE.Color(), halo: new THREE.Color(), core: new THREE.Color(), beacon: new THREE.Color(),
+      eye: new THREE.Color(), eyeEdge: new THREE.Color(), eyeWarm: new THREE.Color(), eyeWarmEdge: new THREE.Color(), halo: new THREE.Color(), core: new THREE.Color(), beacon: new THREE.Color(),
       spark: new THREE.Color(), rim: new THREE.Color(), shadow: new THREE.Color(), caustic: new THREE.Color(),
     }
     const tmp = new THREE.Color()
@@ -527,16 +533,23 @@ export default {
       baseColor.copy(glass.color)
       baseAtt.copy(glass.attenuationColor)
       if (l.dark) {
-        C.eye.copy(WHITE).lerp(tn.glow, 0.28)
-        C.eyeWarm.copy(WHITE).lerp(WARM, 0.75)
+        C.eye.copy(WHITE).lerp(tn.glow, 0.14)
+        C.eyeEdge.copy(WHITE).lerp(tn.glow, 0.5)
+        C.eyeWarm.copy(WHITE).lerp(WARM, 0.6)
+        C.eyeWarmEdge.copy(WARM).lerp(WHITE, 0.15)
         C.halo.copy(tn.glow)
         C.spark.copy(WHITE).lerp(tn.glow, 0.45)
         C.beacon.copy(tn.glow).lerp(WHITE, 0.25)
         C.shadow.set('#000000')
         C.caustic.copy(tn.glow)
       } else {
-        C.eye.copy(tn.glow).lerp(tn.ink, 0.6)
-        C.eyeWarm.copy(WARM_INK)
+        // deep enough to read on the pale glass: darken toward ink until it clears a contrast target
+        const target = lum(tn.glass) * 0.21
+        let k = 0.55
+        while (k < 0.92 && lum(C.eye.copy(tn.glow).lerp(tn.ink, k)) > target) k += 0.04
+        C.eyeEdge.copy(tn.glow).lerp(tn.ink, Math.min(1, k + 0.08))
+        C.eyeWarm.copy(WARM_INK).lerp(WARM, 0.25)
+        C.eyeWarmEdge.copy(WARM_INK).lerp(new THREE.Color('#5a2408'), 0.3)
         C.halo.copy(tn.glow)
         C.spark.copy(tn.glow).lerp(tn.ink, 0.3)
         C.beacon.copy(tn.glow).lerp(tn.ink, 0.2)
@@ -652,6 +665,8 @@ export default {
         // colors (warm when worried)
         tmp.copy(C.eye).lerp(C.eyeWarm, f.warm)
         srgb(fu.uEyeCol.value, tmp)
+        tmp.copy(C.eyeEdge).lerp(C.eyeWarmEdge, f.warm)
+        srgb(fu.uEyeEdge.value, tmp)
         tmp.copy(C.halo).lerp(WARM, f.warm)
         srgb(fu.uHaloCol.value, tmp)
         rimMat.uniforms.uCol.value.copy(C.rim).lerp(WARM, f.warm * 0.7).convertLinearToSRGB()

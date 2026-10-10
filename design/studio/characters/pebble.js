@@ -33,10 +33,10 @@ const MP = {
   sleepy: { ring: 0.05, glow: 0.6, happy: 0, closed: 0, droop: 1, worry: 0, alert: 0, talk: 0, celeb: 0, done: 0, listen: 0, lean: 0.7, aura: 0, dim: 0.8 },
 }
 const KEYS = Object.keys(MP.idle)
-const LENS_DESAT = { ice: 0.08, lilac: 0.15, mint: 0.35, peach: 0.85, graphite: 0 }
+const LENS_DESAT = { ice: 0.08, lilac: 0.15, mint: 0.35, peach: 1, graphite: 0 }
 // how much the eye light is pulled toward white (warm glows read as skin when saturated)
-const EYE_WHITE = { ice: 0.62, lilac: 0.62, mint: 0.6, peach: 0.78, graphite: 0.62 }
-const HALO_SOFTEN = { ice: 0, lilac: 0, mint: 0.1, peach: 0.4, graphite: 0 }
+const EYE_WHITE = { ice: 0.62, lilac: 0.62, mint: 0.6, peach: 0.84, graphite: 0.62 }
+const HALO_SOFTEN = { ice: 0, lilac: 0, mint: 0.1, peach: 0.55, graphite: 0 }
 
 /* ---------------- geometry: a superellipsoid lozenge with analytic normals ---------------- */
 // |x/a|^n + |y/b|^n, raised to m/n, plus |z/c|^m = 1. n squares the outline, m flattens the faces.
@@ -252,8 +252,8 @@ void main() {
 
   // ---- voice light (talking): a small pill that breathes with the reply
   vec2 mq = p - vec2(uLook.x * 0.7, uEyePos.y - uEyeSize.y * 1.95 + uLook.y * 0.6);
-  float mw = mix(0.028, 0.042, uSmall) + uLevel * mix(0.07, 0.08, uSmall);
-  float mh = mix(0.018, 0.028, uSmall) + uLevel * mix(0.022, 0.026, uSmall);
+  float mw = mix(0.03, 0.044, uSmall) + uLevel * mix(0.085, 0.09, uSmall);
+  float mh = mix(0.02, 0.03, uSmall) + uLevel * mix(0.03, 0.032, uSmall);
   float dm = sdRoundBox(mq, vec2(mw, mh), mh);
   float mcore = 1.0 - smoothstep(-aa, aa, dm);
   col += halo * exp(-max(dm, 0.0) / 0.04) * 0.25 * uTalk * (0.4 + uLevel);
@@ -316,10 +316,11 @@ export default {
             float rip = uRip * (0.03 + 0.06 * uLevel) * fr * sin(r * 10.0 - uT * 7.5) * (1.0 - smoothstep(0.5, 1.15, r)) * smoothstep(0.1, 0.4, r);
             float sw = uSwirl * 0.035 * fr * smoothstep(0.25, 0.7, r) * sin(2.0 * ang + r * 4.0 - uT * 2.4);
             vec2 wob = uWob * 0.07 * vec2(sin(lp.y * 2.1 + uT * 1.05), cos(lp.x * 1.7 - uT * 0.85));
-            objectNormal = normalize(objectNormal + vec3(radial * rip + tang * sw + wob, 0.0));
             vec2 wq = lp.xy / uWinA;
             float wr = pow(pow(abs(wq.x), 2.25) + pow(abs(wq.y), 2.25), 1.0 / 2.25);
             vWin = smoothstep(0.35, 0.75, normal.z) * (1.0 - smoothstep(0.82, 1.0, wr));
+            // the liquid moves the body more than the face window, so the face never smears
+            objectNormal = normalize(objectNormal + vec3((radial * rip + tang * sw + wob) * (1.0 - 0.6 * vWin), 0.0));
             vNear = (1.0 - smoothstep(0.8, 1.5, wr)) * (0.3 + 0.7 * smoothstep(-0.3, 0.6, normal.z));
           }`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -327,7 +328,7 @@ export default {
       sh.fragmentShader = 'uniform float uWinRough; uniform vec3 uCaustic, uInner; varying float vWin; varying float vNear;\n' + sh.fragmentShader
         // thicker toward the silhouette: edges absorb more tint and bend more light, like a real lens
         .replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment.replace('material.thickness = thickness;',
-          'material.thickness = thickness * (0.45 + 2.2 * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 1.6));'))
+          'material.thickness = thickness * (0.45 + 2.2 * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 1.6)) * (1.0 - 0.55 * vWin);'))
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
           roughnessFactor *= mix(1.0, uWinRough, vWin);`)
         // light gathering in the lower edge of the glass, the way a lens focuses light
@@ -358,7 +359,7 @@ export default {
       uSweep: { value: 1 }, uListen: { value: 0 }, uCeleb: { value: 0 }, uSmall: { value: small ? 1 : 0 }, uFrost: { value: look.frost },
       uEgg: { value: SH.egg }, uN: { value: SH.n }, uDim: { value: 1 }, uDark: { value: look.dark ? 1 : 0 },
       uLook: { value: new THREE.Vector2() }, uA: { value: new THREE.Vector2(LA.a, LA.b) },
-      uEyePos: { value: new THREE.Vector2(0.28 * (tiny ? 1.05 : 1), 0.065) },
+      uEyePos: { value: new THREE.Vector2(0.3 * (tiny ? 1.04 : 1), 0.06) },
       uEyeSize: { value: new THREE.Vector2(eyeW, eyeH) },
       cBase: { value: new THREE.Color() }, cCore: { value: new THREE.Color() }, cHalo: { value: new THREE.Color() },
       cSoft: { value: new THREE.Color() }, cWarm: { value: WARM.clone() },
@@ -410,6 +411,8 @@ export default {
       shellMat.thickness = 0.5
       // a little more body colour than the kit default, so the stone reads as tinted glass, not white plastic
       shellMat.attenuationDistance = l.dark ? 1.2 : 0.62 + 0.3 * (1 - l.frost)
+      // warm tints in dark mode read as skin when saturated: keep the body closer to clear glass
+      if (tn.key === 'peach') shellMat.color.lerp(WHITE, l.dark ? 0.45 : 0.2)
       glassBase.copy(shellMat.color)
       attBase.copy(shellMat.attenuationColor)
       U.uWinRough.value = 0.16
@@ -419,7 +422,7 @@ export default {
       const lb = L.cBase.value.copy(tn.ink).multiplyScalar(l.dark ? 0.34 : 0.42)
       const desat = LENS_DESAT[tn.key] ?? 0.2
       const lum = 0.2126 * lb.r + 0.7152 * lb.g + 0.0722 * lb.b
-      lb.lerp(tmpA.setRGB(lum, lum, lum * 1.15), desat).multiplyScalar(1 - 0.25 * desat)
+      lb.lerp(tmpA.setRGB(lum, lum * 1.05, lum * 1.3), desat).multiplyScalar(1 - 0.25 * desat)
       if (tn.key === 'graphite') lb.multiplyScalar(0.8)
       L.cHalo.value.copy(tn.glow).lerp(tn.soft, HALO_SOFTEN[tn.key] ?? 0)
       L.cCore.value.copy(tn.glow).lerp(WHITE, EYE_WHITE[tn.key] ?? 0.62).multiplyScalar(1.55)
