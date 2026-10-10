@@ -1,12 +1,15 @@
-// Cloche: the butler as a silver-service cloche. A tinted enamel-on-silver dome is the head (the face sits on its
-// front), a faceted crystal knob is its tiny hat (the one glass detail), and it sits on a polished platter. The lid
-// is the expression: it stays shut when resting, lifts a crack to listen, chatters while talking (light flashes from
-// underneath like a mouth), tips up with a flourish when done, tilts up over a glowing approval card when it needs
-// you, rattles with amber light when worried and pops when celebrating. Steam curls from the knob while thinking.
+// Cloche: the butler as a silver-service cloche. A tint-plated silver bell is the head (the face sits on its front), a
+// cut-crystal stopper is its knob (the one glass detail), and it sits level on a gadrooned salver. The lid is the
+// expression: shut when resting, tipped up a crack and leaning in to listen, chattering with a slit of light while
+// talking, tipped up with a gold glow when done, swung up on one side over an accent approval card when it needs you,
+// rattling with amber light (and an amber crystal) when worried, popping when celebrating and slid askew when sleepy.
+// Steam curls from the knob while thinking, under one raised brow. Peach plates as copper, graphite as black chrome.
+// Accessories: glasses (monocle suits it best, then half-moon and round) and a tiny bowler or top hat balanced on the
+// crystal knob, which always stays visible.
 //
 // Layers:
-// - lid (dome, rolled lip, inner glow shell, knob, face, glasses, hat) hinges at the back of the rim; the platter,
-//   card, light pool and point light stay put.
+// - lid (dome, rolled lip, beaded band, inner glow shell, knob, face, glasses, hat) hinges at the back of the rim and
+//   tips sideways on one edge of the rim; the platter, card, light pool and point light stay put.
 // - the inner shell is self-lit: dim when shut, glowing when the lid opens, so any gap reads as light from beneath.
 // - poses are a pure function of the face (mood, prevMood, moodAge, t, level), blended over 0.45 s, so the mood
 //   sheet stills match the live views.
@@ -14,15 +17,16 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 const R = 0.9 // dome radius at the rim
-const H = 1.1 // dome height
+const H = 1.22 // dome height: a bell, taller than a hemisphere
 const N = 2.35 // superellipse exponent: a little shouldered, like a real cloche
 const Y0 = -0.79 // dome base (platter well)
 const HINGE = R * 0.96 // the lid hinges at the back of the rim
-const EYE_Y = 0.5, EYE_PHI = 0.29
-const MOUTH_Y = 0.27
+const EYE_Y = 0.56, EYE_PHI = 0.29
+const MOUTH_Y = 0.31
 const AMBER = new THREE.Color('#ffa24a')
 const WHITE = new THREE.Color(1, 1, 1)
 const GOLDISH = new THREE.Color('#e8c27a')
+const DONE_GOLD = new THREE.Color('#f4e2a0')
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
 const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x) }
@@ -49,6 +53,21 @@ function domeProfile(scale = 1, steps = 40) {
   return pts
 }
 
+/** A torus whose tube swells into beads: gadrooned silver. */
+function beaded(radius, tube, beads, segs) {
+  const geo = new THREE.TorusGeometry(radius, tube, 10, segs)
+  const pos = geo.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i)
+    const u = Math.atan2(v.y, v.x)
+    c.set(Math.cos(u) * radius, Math.sin(u) * radius, 0)
+    v.sub(c).multiplyScalar(0.75 + 0.45 * Math.abs(Math.sin(u * beads))).add(c)
+    pos.setXYZ(i, v.x, v.y, v.z)
+  }
+  geo.computeVertexNormals()
+  return geo
+}
+
 function canvasTex(w, h, paint) {
   const c = document.createElement('canvas')
   c.width = w
@@ -60,10 +79,11 @@ function canvasTex(w, h, paint) {
 }
 
 /* ---------------- poses ---------------- */
-// lift/tilt/roll: the lid (world units / radians, tilt lifts the front). lean/nod: the whole cloche. glow: light under
+// lift/tilt: the lid (world units / radians, tilt lifts the front). lean/roll: the lid tips sideways on one edge of its rim
+// (the platter always stays level). gold: done's warmer light. glow: light under
 // the lid; warm: amber; card: the approval note; steam; zz; knob: the crystal lights up; glint; eye: 'open' | 'up'
 // (happy, closed) | 'down' (resting, closed); mouth: 'smile' | 'o' | 'talk' | 'frown' | 'none'; smile: size; slant.
-const KEYS = ['browY', 'browL', 'browR', 'lift', 'tilt', 'roll', 'lean', 'nod', 'squash', 'glow', 'warm', 'card', 'steam', 'zz', 'knob', 'glint', 'smile', 'slant', 'oSize']
+const KEYS = ['browY', 'browL', 'browR', 'mrot', 'calm', 'gold', 'lift', 'tilt', 'roll', 'lean', 'squash', 'glow', 'warm', 'card', 'steam', 'zz', 'knob', 'glint', 'smile', 'slant', 'oSize']
 function pose(o, mood, f, age) {
   const t = f.rm ? 1.3 : f.t, A = f.rm ? 0 : f.P, lv = f.level
   for (const k of KEYS) o[k] = 0
@@ -79,10 +99,11 @@ function pose(o, mood, f, age) {
     case 'idle':
       o.roll = Math.sin(t * 0.7) * 0.012 * A
       o.lift = 0.004 + breathe * 0.004
+      o.smile = 0.5; o.mrot = 0.2 // a dry half-smile
       break
     case 'listening':
       // leans in, lid lifted a crack: a sliver of light, peeking
-      o.lift = 0.07 + Math.sin(t * 2.2) * 0.008 * A; o.tilt = 0.12; o.lean = 0.1; o.glow = 0.55; o.browY = 0.05
+      o.lift = 0.04 + Math.sin(t * 2.2) * 0.006 * A; o.tilt = 0.08; o.lean = 0.13; o.glow = 0.6; o.browY = 0.04
       o.mouth = 'o'; o.oSize = 0.55
       break
     case 'thinking':
@@ -90,7 +111,7 @@ function pose(o, mood, f, age) {
       o.mouth = 'o'; o.oSize = 0.5
       break
     case 'talking':
-      o.lift = 0.015 + lv * 0.085; o.tilt = lv * 0.13; o.glow = 0.2 + lv * 0.75
+      o.lift = 0.055 + lv * 0.1; o.tilt = 0.05 + lv * 0.15; o.glow = 0.75 + lv * 0.25
       o.roll = Math.sin(t * 1.3) * 0.02 * A
       o.mouth = 'talk'
       break
@@ -98,14 +119,14 @@ function pose(o, mood, f, age) {
       // the flourish: up with a little twist, then settle into a held, proud lift
       const k = f.rm ? 1 : smooth(age / 0.35), s = f.rm ? 1 : smooth((age - 0.45) / 0.9)
       o.lift = mix(0.3 * k, 0.1, s); o.tilt = mix(0.42 * k, 0.2, s); o.roll = mix(0.14 * k, 0.03, s)
-      o.glow = 0.8; o.glint = s; o.eye = 'up'; o.smile = 1; o.browY = 0.03
+      o.glow = 0.8; o.gold = 1; o.glint = s; o.eye = 'up'; o.smile = 1; o.browY = 0.03
       break
     }
     case 'needs-you': {
       const pulse = 0.5 + 0.5 * Math.sin(t * 4.2)
-      o.lift = 0.17 + pulse * 0.02 * A; o.tilt = 0.3 + pulse * 0.03 * A; o.roll = 0.04
+      o.lift = 0.05; o.tilt = 0.2 + pulse * 0.03 * A; o.lean = -0.36 - pulse * 0.03 * A; o.calm = 1
       o.glow = 1; o.card = f.rm ? 1 : smooth(age / 0.5); o.knob = 0.7 + pulse * 0.3; o.browY = 0.07
-      o.mouth = 'o'; o.oSize = 0.8
+      o.mouth = 'smile'; o.smile = 0.6
       break
     }
     case 'worried': {
@@ -119,12 +140,12 @@ function pose(o, mood, f, age) {
     }
     case 'celebrating': {
       const pop = Math.abs(Math.sin(t * 6.5 - 0.7))
-      o.lift = 0.12 + pop * (0.1 + 0.08 * A); o.tilt = 0.14 + pop * 0.12; o.roll = Math.sin(t * 3.25) * 0.08 * A
+      o.lift = 0.1 + pop * (0.1 + 0.07 * A); o.tilt = 0.14 + pop * 0.12; o.roll = Math.sin(t * 3.25) * 0.08 * A
       o.glow = 1; o.eye = 'up'; o.smile = 1.15; o.browY = 0.06
       break
     }
     case 'sleepy':
-      o.lean = 0.11 + Math.sin(t * 0.45) * 0.03 * A; o.nod = 0.07 + Math.sin(t * 0.45) * 0.03 * A
+      o.lean = 0.2 + Math.sin(t * 0.45) * 0.03 * A // the lid slides askew like a nightcap
       o.squash = 0.02; o.zz = 1; o.browY = -0.035; o.mouth = 'o'; o.oSize = 0.45
       break
   }
@@ -138,7 +159,7 @@ export default {
   style: 'solid',
   eyes: ['pills', 'dots'],
   accessories: true,
-  frame: { height: 2.6, y: -0.02, header: { height: 2.15, y: 0.06 }, peek: { height: 2.08, y: 0.1 } },
+  frame: { height: 2.6, y: 0.06, header: { height: 2.25, y: 0.08 }, peek: { height: 2.04, y: 0.02 } },
   create({ kit, look, size }) {
     const small = size === 'peek' ? 1.25 : size === 'header' ? 1.12 : 1
     const seg = size === 'big' ? 1 : 0.6
@@ -146,29 +167,18 @@ export default {
     const keep = (x) => (own.push(x), x)
 
     const object = new THREE.Group()
-    const rig = new THREE.Group() // lean and nod (platter included)
+    const rig = new THREE.Group()
     object.add(rig)
 
     /* platter */
     const platterPts = [[0, -0.8], [0.88, -0.8], [1.0, -0.78], [1.12, -0.73], [1.18, -0.71], [1.205, -0.73], [1.19, -0.765],
-      [1.1, -0.805], [0.9, -0.845], [0.6, -0.86], [0.56, -0.94], [0, -0.94]].map(([x, y]) => new THREE.Vector2(x, y)).reverse()
+      [1.1, -0.805], [0.9, -0.845], [0.6, -0.86], [0.56, -0.94], [0, -0.94]].map(([x, y]) => new THREE.Vector2(x * 0.93, y)).reverse()
     const platterGeo = keep(new THREE.LatheGeometry(platterPts, Math.round(72 * seg)))
     const platterMat = keep(new THREE.MeshPhysicalMaterial({ metalness: 0.9, roughness: 0.22, clearcoat: 0.5, clearcoatRoughness: 0.2 }))
     const platter = new THREE.Mesh(platterGeo, platterMat)
     rig.add(platter)
     // gadrooned edge: a beaded silver rim, the classic salver detail
-    const gadGeo = keep(new THREE.TorusGeometry(1.19, 0.034, 10, Math.round(220 * seg)))
-    {
-      const pos = gadGeo.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3()
-      for (let i = 0; i < pos.count; i++) {
-        v.fromBufferAttribute(pos, i)
-        const u = Math.atan2(v.y, v.x)
-        c.set(Math.cos(u) * 1.19, Math.sin(u) * 1.19, 0)
-        v.sub(c).multiplyScalar(0.75 + 0.45 * Math.abs(Math.sin(u * 30))).add(c)
-        pos.setXYZ(i, v.x, v.y, v.z)
-      }
-      gadGeo.computeVertexNormals()
-    }
+    const gadGeo = keep(beaded(1.107, 0.034, 30, Math.round(220 * seg)))
     const gadroon = new THREE.Mesh(gadGeo, platterMat)
     gadroon.rotation.x = Math.PI / 2
     gadroon.position.y = -0.725
@@ -196,33 +206,29 @@ export default {
     under.position.set(0, Y0 + 0.3, 0.35)
     rig.add(under)
 
-    // the approval card, revealed under the lid
-    const cardTex = keep(canvasTex(128, 168, (g, w, h) => {
-      g.fillStyle = '#fbf8f1'; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 14); g.fill()
-      g.fillStyle = 'rgba(40,46,60,.22)'
-      for (const [y, ww] of [[96, 78], [116, 92], [136, 60]]) { g.beginPath(); g.roundRect((w - ww) / 2, y, ww, 9, 4.5); g.fill() }
-      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(w / 2, 50, 30, 0, Math.PI * 2); g.fill()
+    // the approval card, revealed under the lid: a bold accent card with a check (tinted via the material colour)
+    const cardTex = keep(canvasTex(160, 120, (g, w, h) => {
+      g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect(3, 3, w - 6, h - 6, 16); g.fill()
+      g.strokeStyle = '#1b1e26'; g.lineWidth = 15; g.lineCap = g.lineJoin = 'round'
+      g.beginPath(); g.moveTo(50, 62); g.lineTo(72, 84); g.lineTo(112, 38); g.stroke()
     }))
-    const cardMat = keep(new THREE.MeshPhysicalMaterial({ map: cardTex, roughness: 0.6, sheen: 0.4 }))
-    const cardGeo = keep(new THREE.BoxGeometry(0.42, 0.55, 0.02))
-    const card = new THREE.Mesh(cardGeo, cardMat)
+    const cardMat = keep(new THREE.MeshBasicMaterial({ map: cardTex, toneMapped: false }))
+    const card = new THREE.Mesh(keep(new THREE.PlaneGeometry(0.5, 0.375)), cardMat)
     rig.add(card)
-    const sealMat = keep(kit.light(look.tint.glow, 1.4))
-    const seal = new THREE.Mesh(keep(new THREE.CircleGeometry(0.075, 24)), sealMat)
-    seal.position.set(0, 0.11, 0.0115)
-    card.add(seal)
 
     /* lid */
     const lidPivot = new THREE.Group()
     lidPivot.position.set(0, Y0, -HINGE)
     rig.add(lidPivot)
+    const lidSide = new THREE.Group() // tips the lid sideways on one edge of the rim
+    lidSide.position.z = HINGE
+    lidPivot.add(lidSide)
     const lid = new THREE.Group()
-    lid.position.z = HINGE
-    lidPivot.add(lid)
+    lidSide.add(lid)
 
     const bodyColor = new THREE.Color()
     const domeGeo = keep(new THREE.LatheGeometry(domeProfile(), Math.round(80 * seg)))
-    const domeMat = keep(kit.solid('#ffffff', look, { metalness: 0.12, sheen: 0.25 }))
+    const domeMat = keep(kit.solid('#ffffff', look, { sheen: 0 }))
     const dome = new THREE.Mesh(domeGeo, domeMat)
     lid.add(dome)
     const rimMat = keep(kit.rim('#ffffff', { power: 2.6, intensity: 0.5 }))
@@ -262,7 +268,7 @@ export default {
     const eyeMat = keep(kit.solid('#16181e', look, { roughness: 0.3, clearcoat: 0.5, sheen: 0 }))
     const eyeLightMat = keep(kit.light('#f2f6ff', 1.25))
     const pillGeo = keep(new THREE.CapsuleGeometry(0.078, 0.17, 6, 16))
-    const dotGeo = keep(new THREE.SphereGeometry(0.11, 20, 14))
+    const dotGeo = keep(new THREE.SphereGeometry(0.088, 20, 14))
     const arcGeo = keep(new THREE.TorusGeometry(0.1, 0.034, 8, 24, Math.PI * 0.8))
     const eyes = [-1, 1].map((s) => {
       const g = new THREE.Group()
@@ -282,7 +288,7 @@ export default {
     const browGeo = keep(new THREE.CapsuleGeometry(0.026, 0.13, 4, 10).rotateZ(Math.PI / 2))
     const brows = [-1, 1].map((s) => { const g = new THREE.Group(); const m = new THREE.Mesh(browGeo, eyeMat); m.scale.z = 0.5; g.add(m); g.scale.setScalar(small); lid.add(g); return { s, g, m } })
     // an engraved silver band above the rim, the way a real cloche is finished
-    const band = new THREE.Mesh(keep(new THREE.TorusGeometry(domeR(0.13) + 0.004, 0.014, 6, Math.round(80 * seg))), lipMat)
+    const band = new THREE.Mesh(keep(beaded(domeR(0.13) + 0.006, 0.02, 48, Math.round(200 * seg))), lipMat)
     band.rotation.x = Math.PI / 2
     band.position.y = 0.13
     lid.add(band)
@@ -316,9 +322,10 @@ export default {
     const confGeo = keep(new THREE.BufferGeometry())
     confGeo.setAttribute('position', new THREE.BufferAttribute(confPos, 3))
     confGeo.setAttribute('color', new THREE.BufferAttribute(confCol, 3))
-    const confMat = keep(new THREE.PointsMaterial({ map: starTex, size: 0.2 * small, vertexColors: true, transparent: true, depthWrite: false, alphaTest: 0.05 }))
+    const confMat = keep(new THREE.PointsMaterial({ map: starTex, size: size === 'big' ? 0.2 : 0.15, vertexColors: true, transparent: true, depthWrite: false, alphaTest: 0.05 }))
     const confetti = new THREE.Points(confGeo, confMat)
     confetti.frustumCulled = false
+    confGeo.setDrawRange(0, size === 'big' ? CONF : 10)
     rig.add(confetti)
     const seeds = Array.from({ length: CONF }, (_, i) => { const h = (k) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x) }; return [h(1), h(2), h(3), h(4)] })
     const glintMat = keep(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthWrite: false, color: 0xffffff }))
@@ -332,8 +339,10 @@ export default {
     const hatBand = new THREE.Mesh(undefined, bandMat)
     const hat = new THREE.Group()
     hat.add(hatBody, hatBand)
-    hat.position.set(0.04, H - 0.03, 0)
-    hat.rotation.z = -0.14
+    // a tiny hat balanced on the crystal knob, never replacing it
+    hat.position.set(0.02, H + 0.46, 0)
+    hat.rotation.z = -0.16
+    hat.scale.setScalar(0.62)
     lid.add(hat)
     const frameMat = keep(new THREE.MeshPhysicalMaterial({ color: GOLDISH, metalness: 1, roughness: 0.25 }))
     const frames = new THREE.Mesh(undefined, frameMat)
@@ -345,7 +354,7 @@ export default {
       tmpObj.updateMatrix()
       return geo.applyMatrix4(tmpObj.matrix)
     }
-    let accKey = ''
+    let accKey = '', browLift = 0
     function buildAccessories(l) {
       const key = l.hat + '|' + l.glasses
       if (key === accKey) return
@@ -365,7 +374,7 @@ export default {
         hatBand.geometry = new THREE.CylinderGeometry(0.205, 0.203, 0.08, 32, 1, true).translate(0, 0.06, 0)
       }
       hat.visible = l.hat === 'bowler' || l.hat === 'top'
-      knob.visible = collar.visible = !hat.visible
+      browLift = l.glasses === 'round' ? 0.05 : 0 // clear the frames
       const parts = []
       const ring = (r, arc = Math.PI * 2, start = 0) => new THREE.TorusGeometry(r, 0.016, 8, 40, arc).rotateZ(start)
       const ey = EYE_Y
@@ -400,15 +409,18 @@ export default {
     const knobBase = new THREE.Color(), knobAtt = new THREE.Color(), glowCol = new THREE.Color(), interior = new THREE.Color(), eyeIsLight = { v: false }
     function setLook(l) {
       const tn = l.tint
-      if (tn.key === 'graphite') bodyColor.copy(tn.ink).lerp(tn.glass, 0.07)
-      else bodyColor.copy(tn.glow).lerp(tn.ink, 0.2)
+      // tinted silver plate: the tint colours the metal, so the env reflections stay metallic
+      if (tn.key === 'graphite') bodyColor.set('#3a3f49')
+      else if (tn.key === 'peach') bodyColor.copy(tn.glow).lerp(tn.ink, 0.28) // copper, not skin
+      else bodyColor.copy(tn.glow).lerp(tn.glass, 0.35)
       domeMat.color.copy(bodyColor)
-      kit.updateSolid(domeMat, l)
-      domeMat.metalness = 0.12
-      domeMat.envMapIntensity *= 0.7
+      kit.updateSolid(domeMat, l, { roughness: 0.22 + 0.3 * l.frost, clearcoat: 0.6 * (1 - l.frost) })
+      domeMat.metalness = 0.82
+      domeMat.sheen = 0
+      domeMat.envMapIntensity = l.dark ? 1.2 : 0.95
       platterMat.color.set('#c3c8d2').lerp(tn.glass, 0.2)
       lipMat.color.set('#dfe3ea').lerp(tn.glass, 0.35)
-      interior.copy(bodyColor).multiplyScalar(0.35)
+      interior.copy(bodyColor).multiplyScalar(0.25)
       glowCol.copy(tn.glow).lerp(WHITE, 0.35)
       eyeIsLight.v = tn.key === 'graphite'
       eyeMat.color.set(eyeIsLight.v ? '#f1f4fb' : '#16181e')
@@ -417,16 +429,17 @@ export default {
       eyeMat.envMapIntensity = 0.08
       eyeMat.emissive.set(eyeIsLight.v ? '#cfd8ea' : '#000000')
       kit.updateGlass(knobMat, l, { roughness: 0.05, attenuationDistance: 0.6 })
+      knobMat.color.lerp(tn.glow, 0.3); knobMat.attenuationColor.copy(tn.glow)
       knobBase.copy(knobMat.color); knobAtt.copy(knobMat.attenuationColor)
-      puffMat.color.copy(tn.soft).lerp(WHITE, l.dark ? 0.6 : 0.15)
+      puffMat.color.copy(tn.soft).lerp(l.dark ? WHITE : tn.glow, l.dark ? 0.6 : 0.25)
       kit.updateSolid(puffMat, l, { roughness: 0.7, clearcoat: 0 })
       hatMat.color.set(tn.key === 'graphite' ? '#121318' : '#24262d')
       kit.updateSolid(hatMat, l, { roughness: 0.45 })
       bandMat.color.copy(tn.glow).lerp(tn.ink, 0.35)
       kit.updateSolid(bandMat, l, { roughness: 0.4 })
-      zMat.color.copy(l.dark ? tn.soft : tn.ink)
+      zMat.color.copy(tn.glow).lerp(l.dark ? WHITE : tn.ink, 0.3)
       knobGlow.material.color.copy(tn.glow)
-      sealMat.color.copy(tn.glow).multiplyScalar(1.4)
+      cardMat.color.copy(tn.glow).multiplyScalar(1.15)
       for (let i = 0; i < CONF; i++) {
         const c = [tn.glow, GOLDISH, WHITE, tn.soft, AMBER][i % 5]
         confCol[i * 3] = c.r; confCol[i * 3 + 1] = c.g; confCol[i * 3 + 2] = c.b
@@ -454,16 +467,18 @@ export default {
         const t = f.rm ? 1.3 : f.t
 
         object.position.y = f.bounce
-        rig.rotation.z = cur.lean
-        rig.rotation.x = cur.nod
-        lidPivot.position.y = Y0 + Math.max(0, cur.lift)
-        lidPivot.rotation.set(-cur.tilt, 0, cur.roll)
+        lidPivot.position.y = Y0 + Math.max(0, cur.lift) * (size === 'peek' ? 0.72 : 1) // the peek frame is tight
+        lidPivot.rotation.x = -cur.tilt
+        const side = cur.lean + cur.roll, sg = side < 0 ? -1 : 1
+        lidSide.position.x = -sg * R
+        lid.position.x = sg * R
+        lidSide.rotation.z = side
         lid.scale.set(1 + cur.squash * 0.5, 1 - cur.squash, 1 + cur.squash * 0.5)
 
         // light from beneath
         const open = clamp(cur.lift * 6 + cur.tilt * 2.2)
         const g = cur.glow * (0.35 + 0.65 * open)
-        lightCol.copy(glowCol).lerp(AMBER, cur.warm)
+        lightCol.copy(glowCol).lerp(DONE_GOLD, cur.gold * 0.7).lerp(AMBER, cur.warm)
         innerMat.color.copy(interior).lerp(lightCol, clamp(g * 1.1)).multiplyScalar(1 + g * 0.6)
         under.color.copy(lightCol)
         under.intensity = g * 3.2
@@ -479,8 +494,8 @@ export default {
 
         // card
         card.visible = cur.card > 0.01
-        card.position.set(0, Y0 + 0.02 + cur.card * 0.27, 0.28)
-        card.rotation.set(-0.18, 0, 0.06)
+        card.position.set(-0.22, Y0 + 0.04 + cur.card * 0.24, 0.5)
+        card.rotation.set(-0.12, 0.1, 0.1)
         card.scale.setScalar(0.6 + 0.4 * cur.card)
 
         // eyes
@@ -495,7 +510,7 @@ export default {
             e.arc.position.y = cur.eye === 'up' ? -0.04 : 0.03
             e.arc.scale.set(1, 1, 0.6)
           } else {
-            const op = Math.max(0.12, f.open * f.blink)
+            const op = Math.max(0.12, mix(f.open, Math.min(1, f.open), cur.calm) * f.blink)
             const dots = lk.eyes === 'dots'
             e.open.scale.set(1, dots ? Math.min(1.1, op) : op, 0.45)
           }
@@ -505,7 +520,7 @@ export default {
         // brows: a butler's eyebrow does a lot of the work
         for (const b of brows) {
           const own1 = b.s > 0 ? cur.browR : cur.browL
-          place(b.g, b.s * (EYE_PHI + 0.02) + lx * 0.8, EYE_Y + 0.19 + cur.browY + own1 + ly * 0.5, 0.01)
+          place(b.g, b.s * (EYE_PHI + 0.02) + lx * 0.8, EYE_Y + 0.165 + browLift + cur.browY + own1 + ly * 0.5, 0.01)
           b.g.rotateZ(b.s * (-cur.slant * 0.42 - own1 * 2.5) + (cur.eye === 'up' ? b.s * -0.12 : 0))
         }
 
@@ -513,9 +528,9 @@ export default {
         place(mouth, lx * 0.6, MOUTH_Y + ly * 0.6, 0.008)
         mouthO.visible = cur.mouth === 'o' || cur.mouth === 'talk'
         mouthArc.visible = cur.mouth === 'smile' || cur.mouth === 'frown'
-        if (cur.mouth === 'talk') mouthO.scale.set(1.3, 0.3 + f.level * 1.25, 0.4)
+        if (cur.mouth === 'talk') mouthO.scale.set(1.35, 0.55 + f.level * 1.1, 0.4)
         else if (cur.mouth === 'o') mouthO.scale.set(0.8 * cur.oSize, 0.95 * cur.oSize, 0.4)
-        if (cur.mouth === 'smile') { mouthArc.rotation.z = Math.PI * 1.15; mouthArc.position.y = 0.03; mouthArc.scale.set(cur.smile, cur.smile, 0.6) }
+        if (cur.mouth === 'smile') { mouthArc.rotation.z = Math.PI * 1.15 + cur.mrot; mouthArc.position.y = 0.03; mouthArc.scale.set(cur.smile, cur.smile, 0.6) }
         else if (cur.mouth === 'frown') { mouthArc.rotation.z = Math.PI * 0.15; mouthArc.position.y = -0.04; mouthArc.scale.set(0.8, 0.6, 0.6) }
 
         // steam: three puffs rising from the knob, drifting right
@@ -529,12 +544,12 @@ export default {
         // zz
         const zp = ((t * 0.22) % 1 + 1) % 1
         zz.visible = cur.zz > 0.02
-        zz.position.set(0.55 + zp * 0.3, 0.45 + zp * 0.55, 0.3)
-        zz.scale.setScalar((0.16 + zp * 0.14) * small)
+        zz.position.set(0.5 + zp * 0.3, 0.35 + zp * 0.5, 0.3)
+        zz.scale.setScalar((0.26 + zp * 0.2) * small)
         zMat.opacity = Math.sin(zp * Math.PI) * cur.zz
 
         // glint on the knob when done
-        glint.visible = cur.glint > 0.02 && knob.visible
+        glint.visible = cur.glint > 0.02
         glint.position.set(0.11, H + 0.36, 0.1)
         glint.scale.setScalar(0.22 * cur.glint * (0.75 + 0.25 * Math.sin(t * 5)) * small)
         glintMat.rotation = t * 0.6
@@ -548,9 +563,10 @@ export default {
             const p = ((t * (0.55 + a * 0.25) + d) % 1 + 1) % 1
             const ang = (b - 0.5) * 2.8
             const v = 1.6 + c * 0.9
-            confPos[i * 3] = Math.sin(ang) * v * p * 0.9
+            const sx = i % 2 ? 1 : -1
+            confPos[i * 3] = sx * (R * 0.72 + Math.abs(Math.sin(ang)) * v * p * 0.75)
             confPos[i * 3 + 1] = Y0 + 0.25 + Math.cos(ang) * v * p * 1.25 - p * p * 1.6
-            confPos[i * 3 + 2] = 0.95 + (c - 0.5) * 0.5
+            confPos[i * 3 + 2] = 0.2 + (c - 0.5) * 0.4
           }
           confGeo.attributes.position.needsUpdate = true
           confMat.opacity = sp
