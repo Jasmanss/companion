@@ -19,11 +19,11 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 
 /* ---------------- shape ---------------- */
 // Profiles as (radius, y), bottom to top. The head is a little wider than the collar, so a soft neck line reads.
-const BODY_PTS = [[0, -1.13], [0.33, -1.11], [0.53, -1.01], [0.625, -0.8], [0.645, -0.55], [0.62, -0.26], [0.565, 0], [0.5, 0.23], [0.445, 0.4], [0.37, 0.52], [0.2, 0.6], [0, 0.62]]
-const HEAD_PTS = [[0, 0.26], [0.25, 0.29], [0.4, 0.38], [0.47, 0.54], [0.49, 0.71], [0.465, 0.89], [0.385, 1.03], [0.22, 1.125], [0, 1.155]]
+const BODY_PTS = [[0, -1.13], [0.34, -1.11], [0.55, -1.0], [0.645, -0.78], [0.655, -0.55], [0.62, -0.27], [0.55, -0.02], [0.48, 0.2], [0.42, 0.36], [0.36, 0.48], [0.2, 0.57], [0, 0.59]]
+const HEAD_PTS = [[0, 0.3], [0.22, 0.32], [0.355, 0.4], [0.42, 0.55], [0.437, 0.7], [0.418, 0.87], [0.35, 1.0], [0.2, 1.09], [0, 1.115]]
 const NECK = 0.4 // head pivot height
-const EYE_X = 0.152, EYE_Y = 0.75
-const BEAK_Y = 0.615
+const EYE_X = 0.13, EYE_Y = 0.725
+const BEAK_Y = 0.6
 
 function profile(pts, n) {
   const curve = new THREE.SplineCurve(pts.map(([r, y]) => new V2(r, y)))
@@ -59,20 +59,20 @@ function shirtHalfWidth(y) {
 function shirtSD(x, y) { const hw = shirtHalfWidth(y); return hw < 0 ? 1 : Math.abs(x) - hw }
 // Face: two lobes round the eyes melting into a white chin; a dark widow's peak comes down between the eyes.
 function faceSD(x, y) {
-  const lobe = Math.min(sdEllipse(x, y, -0.15, 0.735, 0.175, 0.2), sdEllipse(x, y, 0.15, 0.735, 0.175, 0.2))
-  const chin = sdEllipse(x, y, 0, 0.5, 0.29, 0.21)
+  const lobe = Math.min(sdEllipse(x, y, -0.13, 0.715, 0.155, 0.175), sdEllipse(x, y, 0.13, 0.715, 0.155, 0.175))
+  const chin = sdEllipse(x, y, 0, 0.5, 0.25, 0.19)
   let d = smin(lobe, chin, 0.08)
-  const peak = (0.815 + Math.abs(x) * 1.5) - y // > 0 below the widow's peak line
+  const peak = (0.8 + Math.abs(x) * 1.5) - y // > 0 below the widow's peak line
   d = Math.max(d, -peak + 0.0)
   return d
 }
 
-function paint(canvas, P, sdf, cols, lapel) {
+function paint(canvas, P, sdf, cols, lapel, patch = false) {
   const W = canvas.width, H = canvas.height
   const g = canvas.getContext('2d')
   const img = g.createImageData(W, H)
   const d = img.data
-  const [dr, dg, db] = cols.dark, [wr, wg, wb] = cols.white, [lr, lg, lb] = cols.lapel
+  const [dr, dg, db] = cols.dark, [wr, wg, wb] = cols.white, [lr, lg, lb] = cols.lapel, [pr, pg, pb] = cols.patch
   for (let j = 0; j < H; j++) {
     const v = 1 - (j + 0.5) / H
     const fi = v * P.n, i0 = Math.floor(fi), i1 = Math.min(P.n, i0 + 1), ft = fi - i0
@@ -90,6 +90,12 @@ function paint(canvas, P, sdf, cols, lapel) {
           const k = (1 - smooth(0.05, 0.09, s)) * smooth(-0.42, -0.1, y) * 0.9
           R += (lr - R) * k; G += (lg - G) * k; B += (lb - B) * k
         }
+        if (patch) {
+          // a soft gold patch at the jaw, like an emperor penguin's (a signature accent)
+          const ps = sdEllipse(Math.abs(x), y, 0.33, 0.47, 0.085, 0.12)
+          const k = clamp(0.5 - ps / 0.03, 0, 1) * 0.95
+          R += (pr - R) * k; G += (pg - G) * k; B += (pb - B) * k
+        }
         const c = clamp(0.5 - s / aa, 0, 1) * smooth(0, 0.08, front)
         R += (wr - R) * c; G += (wg - G) * c; B += (wb - B) * c
       }
@@ -105,10 +111,10 @@ const tmpC = new THREE.Color(), tmpE = new THREE.Color(), WHITE = new THREE.Colo
 function palette(look) {
   const tn = look.tint
   const graphite = tn.key === 'graphite'
-  const body = graphite ? new THREE.Color('#121317') : tn.ink.clone().multiplyScalar(0.34)
+  const body = graphite ? new THREE.Color('#121317') : tn.ink.clone().multiplyScalar(0.24)
   const lapel = graphite ? new THREE.Color('#22252c') : body.clone().lerp(tn.glow, 0.05).multiplyScalar(1.3)
   const shirt = new THREE.Color('#f6f4ef').lerp(tn.soft, 0.1)
-  const bow = graphite ? new THREE.Color('#121317') : tn.ink.clone().lerp(tn.glow, 0.22)
+  const bow = graphite ? new THREE.Color('#0e0f12') : body.clone().multiplyScalar(0.55)
   const beak = new THREE.Color('#e3a04e')
   return { body, lapel, shirt, bow, beak, graphite }
 }
@@ -122,9 +128,9 @@ function flipperGeometry() {
     let x = p.getX(i), y = p.getY(i), z = p.getZ(i)
     const t = (1 - y) / 2 // 0 at the shoulder, 1 at the tip
     const taper = 1 - 0.42 * t * t
-    x *= 0.105 * taper; z *= 0.042 * (1 - 0.3 * t); y *= 0.36
+    x *= 0.12 * taper; z *= 0.055 * (1 - 0.3 * t); y *= 0.41
     x += 0.035 * t * t // a gentle outward curl at the tip
-    p.setXYZ(i, x, y - 0.33, z)
+    p.setXYZ(i, x, y - 0.38, z)
   }
   g.computeVertexNormals()
   return g
@@ -145,12 +151,25 @@ function bowGeometry() {
 function trayGeometry() {
   const tray = new THREE.LatheGeometry([[0, 0], [0.17, 0], [0.2, 0.012], [0.215, 0.03], [0.205, 0.034], [0.185, 0.016], [0, 0.014]].map(([x, y]) => new V2(x, y)), 40)
   const dome = new THREE.SphereGeometry(0.115, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2)
-  dome.scale(1, 0.85, 1); dome.translate(0, 0.016, 0)
-  const knob = new THREE.SphereGeometry(0.022, 12, 8); knob.translate(0, 0.122, 0)
+  dome.scale(1, 1.15, 1); dome.translate(0, 0.016, 0)
+  const knob = new THREE.SphereGeometry(0.022, 12, 8); knob.translate(0, 0.152, 0)
   return mergeGeometries([tray.toNonIndexed(), dome.toNonIndexed(), knob.toNonIndexed()])
 }
 function feetGeometry() {
   const parts = [-1, 1].map((s) => { const g = new THREE.SphereGeometry(1, 20, 12); g.scale(0.13, 0.05, 0.17); g.rotateY(s * 0.25); g.translate(s * 0.19, -1.1, 0.33); return g })
+  return mergeGeometries(parts)
+}
+/** Two tailcoat tails behind the feet, splayed so they show in silhouette. */
+function tailsGeometry() {
+  const parts = [-1, 1].map((s) => {
+    const g = new THREE.ConeGeometry(0.15, 0.66, 20)
+    g.scale(1, 1, 0.35)
+    g.rotateX(Math.PI) // point down
+    g.rotateZ(s * 0.62)
+    g.rotateX(-0.2)
+    g.translate(s * 0.46, -0.92, -0.3)
+    return g.toNonIndexed()
+  })
   return mergeGeometries(parts)
 }
 function studsGeometry() {
@@ -178,11 +197,11 @@ function glassesGeometry(kind) {
   const T = 0.009
   const place = (g, s, y, dz) => { g.rotateY(s * yawAt(EYE_X, y) * 0.75); g.translate(s * EYE_X, y, headZ(EYE_X, y) + dz); return g }
   const temple = (s, y) => {
-    const a = new THREE.Vector3(s * (EYE_X + 0.105), y, headZ(EYE_X + 0.105, y) + 0.03)
-    frame.push(rod(a, new THREE.Vector3(s * 0.46, y + 0.02, 0.0), T * 0.8))
+    const a = new THREE.Vector3(s * (EYE_X + 0.09), y, headZ(EYE_X + 0.09, y) + 0.04)
+    frame.push(rod(a, new THREE.Vector3(s * 0.42, y + 0.02, 0.0), T * 0.8))
   }
   if (kind === 'round') {
-    const r = 0.105
+    const r = 0.088
     for (const s of [-1, 1]) {
       frame.push(place(ring(r, T), s, EYE_Y, 0.05))
       lens.push(place(new THREE.CircleGeometry(r, 32), s, EYE_Y, 0.047))
@@ -191,7 +210,7 @@ function glassesGeometry(kind) {
     const br = EYE_X - r
     frame.push(ring(br, T * 0.9, Math.PI * 0.8, Math.PI * 0.1).translate(0, EYE_Y + 0.0, headZ(0, EYE_Y) + 0.05))
   } else if (kind === 'half-moon') {
-    const r = 0.1, y = EYE_Y - 0.05
+    const r = 0.085, y = EYE_Y - 0.04
     for (const s of [-1, 1]) {
       frame.push(place(ring(r, T, Math.PI, Math.PI), s, y, 0.05))
       const bar = new THREE.CylinderGeometry(T, T, r * 2, 6)
@@ -203,7 +222,7 @@ function glassesGeometry(kind) {
     const br = EYE_X - r
     frame.push(ring(br, T * 0.9, Math.PI * 0.8, Math.PI * 0.1).translate(0, y - 0.01, headZ(0, y) + 0.05))
   } else if (kind === 'monocle') {
-    const r = 0.112, s = 1
+    const r = 0.095, s = 1
     frame.push(place(ring(r, T * 1.2), s, EYE_Y, 0.05))
     lens.push(place(new THREE.CircleGeometry(r, 32), s, EYE_Y, 0.047))
     // a fine chain from the rim down past the cheek to the collar
@@ -277,8 +296,9 @@ function zzTexture() {
 /* ---------------- moods → pose targets ---------------- */
 // lean (pitch from the feet), sway (roll), sink, nod/tilt/yaw (head), La/Lb, Ra/Rb (flipper out/forward, screen left /
 // right), tray, card, dots, zz, sweat, aura, beak, lid (upper-lid cover), slant (worried brows), happy (∩), closed (∪), eyeS
-const KEYS = ['lean', 'sway', 'sink', 'nod', 'tilt', 'yaw', 'La', 'Lb', 'Lz', 'Ra', 'Rb', 'Rz', 'tray', 'card', 'dots', 'zz', 'sweat', 'aura', 'beak', 'lid', 'slant', 'happy', 'closed', 'eyeS', 'confetti', 'bead']
-const REST = { lean: 0, sway: 0, sink: 0, nod: 0, tilt: 0, yaw: 0, La: 0.3, Lb: 0.05, Lz: 0, Ra: 0.3, Rb: 0.05, Rz: 0, tray: 0, card: 0, dots: 0, zz: 0, sweat: 0, aura: 0, beak: 0, lid: 0, slant: 0, happy: 0, closed: 0, eyeS: 1, confetti: 0, bead: 0 }
+const KEYS = ['lean', 'sway', 'sink', 'hunch', 'nod', 'tilt', 'yaw', 'La', 'Lb', 'Lz', 'Ra', 'Rb', 'Rz', 'tray', 'card', 'dots', 'zz', 'sweat', 'aura', 'beak', 'lid', 'slant', 'happy', 'closed', 'eyeS', 'confetti', 'bead']
+// At rest: chest out, chin a touch up, lids a little heavy (composed, dry).
+const REST = { lean: -0.025, sway: 0, sink: 0, hunch: 0, nod: -0.04, tilt: 0, yaw: 0, La: 0.36, Lb: 0.05, Lz: 0, Ra: 0.36, Rb: 0.05, Rz: 0, tray: 0, card: 0, dots: 0, zz: 0, sweat: 0, aura: 0, beak: 0, lid: 0.16, slant: 0, happy: 0, closed: 0, eyeS: 1, confetti: 0, bead: 0 }
 
 function targets(o, f) {
   Object.assign(o, REST)
@@ -286,55 +306,56 @@ function targets(o, f) {
   const t = f.t, age = f.moodAge
   switch (f.mood) {
     case 'resting':
-      o.sink = 1; o.nod = 0.16; o.closed = 1
-      o.La = 0.14; o.Lb = -0.3; o.Ra = 0.14; o.Rb = -0.3
+      // tucked in: settled low, head down into the shoulders, leaning on the screen edge, eyes shut
+      o.sink = 1; o.hunch = 1; o.nod = 0.24; o.sway = 0.06; o.closed = 1; o.lean = 0.02
+      o.La = 0.14; o.Lb = -0.2; o.Ra = 0.14; o.Rb = -0.2
       break
     case 'idle':
       o.Ra = 2.45; o.Rb = 0.15; o.tray = 1; o.tilt = -0.04
-      o.La = 0.28
       break
     case 'listening':
-      // leaning in, a flipper cupped to the ear
-      o.lean = 0.07; o.tilt = -0.17; o.nod = 0.05; o.eyeS = 1.12
-      o.La = 2.85; o.Lb = -0.55; o.Lz = 0.1; o.Ra = 0.22; o.Rb = -0.5; o.bead = 1
+      // leaning in, head tilted into a flipper cupped at the ear, lids up, the bead glowing
+      o.lean = 0.08; o.tilt = -0.24; o.nod = 0.04; o.eyeS = 1.1; o.lid = 0
+      o.La = 2.8; o.Lb = -0.6; o.Lz = 0.1; o.Ra = 0.22; o.Rb = -0.4; o.bead = 1
       break
     case 'thinking': {
       // flipper to the chin, tapping
       o.La = -0.62; o.Lb = 2.38 - Math.max(0, Math.sin(t * 5.5)) * 0.08 * A; o.Lz = 0.2; o.dots = 1
-      o.nod = -0.05; o.tilt = -0.1; o.yaw = 0.1
+      o.nod = -0.1; o.tilt = -0.1; o.yaw = 0.1; o.lid = 0.1
       break
     }
     case 'talking':
-      o.beak = f.level
-      o.Ra = 0.75 + Math.sin(t * 2.3) * 0.12 * A; o.Rb = 0.6 + Math.sin(t * 1.7) * 0.1 * A
-      o.nod = -f.level * 0.05 * Math.min(1, A); o.tilt = Math.sin(t * 0.9) * 0.04 * A
+      // beak open, a palm-up flipper at chest height, leaning in a little
+      o.beak = 0.3 + f.level * 0.7; o.lean = 0.05; o.lid = 0.12
+      o.Ra = 1.15 + Math.sin(t * 2.3) * 0.1 * A; o.Rb = 0.85 + Math.sin(t * 1.7) * 0.08 * A; o.Rz = 0.08
+      o.nod = -f.level * 0.06 * Math.min(1, A + 0.3); o.tilt = Math.sin(t * 0.9) * 0.04 * A
       break
     case 'done': {
-      // a courteous bow, then a contented hold
-      const bow = f.rm ? 0.6 : Math.sin(Math.PI * clamp(age / 1.3, 0, 1)) * 0.7 + 0.6 * smooth(0.5, 1.3, age)
-      o.lean = 0.07 + bow * 0.2; o.nod = 0.06 + bow * 0.12; o.happy = 1
-      o.Ra = 0.32; o.Rb = -0.7; o.La = 0.32; o.Lb = -0.7
+      // a deep, courteous bow with the flippers swept back, then a contented, slightly bowed hold
+      const bow = f.rm ? 0.75 : Math.sin(Math.PI * clamp(age / 1.4, 0, 1)) * 0.35 + 0.75 * smooth(0.4, 1.2, age)
+      o.lean = bow * 0.42; o.nod = bow * 0.3; o.happy = 1
+      o.Ra = 0.42; o.Rb = -0.9; o.La = 0.42; o.Lb = -0.9
       break
     }
     case 'needs-you':
-      o.La = 2.55; o.Lb = 0.25; o.card = 1; o.eyeS = 1.12; o.lean = 0.04; o.tilt = 0.07
-      o.Ra = 0.32
+      o.La = 2.55; o.Lb = 0.25; o.card = 1; o.eyeS = 1.12; o.lean = 0.04; o.tilt = 0.07; o.lid = 0
       break
     case 'worried':
-      o.slant = 1; o.lid = 0.12; o.sweat = 1; o.aura = 1; o.lean = -0.04
-      o.La = 0.62 + Math.sin(t * 6) * 0.07 * A; o.Lb = 0.35; o.Ra = 0.62 - Math.sin(t * 6) * 0.07 * A; o.Rb = 0.35
-      o.sway = Math.sin(t * 2.2) * 0.02 * A; o.nod = 0.05
+      // shoulders up, head down, flippers wrung in front, brows up in the middle, an amber halo
+      o.slant = 1; o.lid = 0.18; o.sweat = 1; o.aura = 1; o.hunch = 1; o.nod = 0.1
+      o.La = 0.1 + Math.sin(t * 6) * 0.05 * A; o.Lb = 0.62; o.Lz = 0.18; o.Ra = 0.1 - Math.sin(t * 6) * 0.05 * A; o.Rb = 0.62; o.Rz = 0.18
+      o.sway = Math.sin(t * 2.2) * 0.02 * A
       break
     case 'celebrating': {
       const flap = Math.sin(t * 13) * 0.32 * Math.min(1.4, A)
       o.La = 2.25 + flap; o.Lb = 0.15; o.Ra = 2.25 - flap; o.Rb = 0.15
-      o.happy = 1; o.beak = 0.55; o.confetti = 1; o.nod = -0.08; o.aura = 0
+      o.happy = 1; o.beak = 0.6; o.confetti = 1; o.nod = -0.1
       break
     }
     case 'sleepy':
-      o.lid = 0.6; o.sink = 0.6; o.zz = 1
+      o.lid = 0.62; o.sink = 0.6; o.hunch = 0.5; o.zz = 1
       o.nod = 0.2 + Math.sin(t * 0.8) * 0.06 * A; o.tilt = 0.14 + Math.sin(t * 0.55) * 0.05 * A
-      o.La = 0.12; o.Lb = 0.1; o.Ra = 0.12; o.Rb = 0.1
+      o.La = 0.18; o.Lb = 0.1; o.Ra = 0.18; o.Rb = 0.1
       break
   }
   return o
@@ -383,11 +404,12 @@ export default {
     headG.add(head, headRim)
 
     /* eyes: glossy black beads, with white upper lids and closed-eye arcs */
-    const eyeMat = M(new THREE.MeshPhysicalMaterial({ color: '#0b0c10', roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.3 }))
+    const eyeMat = M(new THREE.MeshPhysicalMaterial({ color: '#0b0c10', roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: 1.1 }))
     const lidMat = M(kit.solid('#ffffff', look))
     const eyeGeo = G(new THREE.SphereGeometry(1, 28, 18))
     const lidGeo = G(new THREE.CircleGeometry(1, 28, 0, Math.PI))
-    const arcGeo = G(new THREE.TorusGeometry(0.062, 0.017, 8, 28, Math.PI))
+    const lashGeo = G(new THREE.BoxGeometry(1.7, 0.07, 0.02))
+    const arcGeo = G(new THREE.TorusGeometry(0.048, 0.014, 8, 28, Math.PI))
     const eyes = [-1, 1].map((s) => {
       const g = new THREE.Group()
       const z = headZ(EYE_X, EYE_Y)
@@ -396,6 +418,8 @@ export default {
       const ball = new THREE.Mesh(eyeGeo, eyeMat)
       const lid = new THREE.Mesh(lidGeo, lidMat)
       const arc = new THREE.Mesh(arcGeo, eyeMat)
+      const lash = new THREE.Mesh(lashGeo, eyeMat)
+      lid.add(lash)
       arc.scale.z = 0.6
       g.add(ball, lid, arc)
       headG.add(g)
@@ -412,18 +436,18 @@ export default {
     const upper = new THREE.Mesh(upperGeo, beakMat)
     const lower = new THREE.Mesh(lowerGeo, beakMat)
     const mouthGeo = G(new THREE.SphereGeometry(0.062, 16, 10)); mouthGeo.scale(1, 0.75, 0.8); mouthGeo.translate(0, -0.012, 0.04)
-    const mouth = new THREE.Mesh(mouthGeo, M(new THREE.MeshStandardMaterial({ color: '#3a1712', roughness: 0.6 })))
+    const mouth = new THREE.Mesh(mouthGeo, M(new THREE.MeshStandardMaterial({ color: '#8a2c2a', roughness: 0.5 })))
     beak.add(upper, lower, mouth)
     headG.add(beak)
 
     /* bow tie with a glass bead at the knot; shirt studs */
     const bowMat = M(kit.solid('#3060a0', look, { sheen: 0.25, sheenRoughness: 0.4 }))
     const bow = new THREE.Mesh(G(bowGeometry()), bowMat)
-    bow.position.set(0, 0.405, bodyZ(0, 0.405) + 0.035)
+    bow.position.set(0, 0.42, bodyZ(0, 0.42) + 0.04)
     bow.rotation.x = -0.12
     const glassMat = M(kit.glass(look, { thickness: 0.12, roughness: 0.04, attenuationDistance: 0.6 }))
-    const bead = new THREE.Mesh(G(new THREE.SphereGeometry(0.036, 24, 16)), glassMat)
-    bead.position.set(0, 0.405, bodyZ(0, 0.405) + 0.07)
+    const bead = new THREE.Mesh(G(new THREE.SphereGeometry(0.05, 24, 16)), glassMat)
+    bead.position.set(0, 0.42, bodyZ(0, 0.42) + 0.08)
     const studMat = M(kit.solid('#1a1c22', look, { roughness: 0.2, clearcoat: 1 }))
     const studs = new THREE.Mesh(G(studsGeometry()), studMat)
     bodyG.add(bow, bead, studs)
@@ -441,12 +465,13 @@ export default {
       return { p, m, s }
     })
     const feet = new THREE.Mesh(G(feetGeometry()), beakMat)
-    bodyG.add(feet)
+    const tails = new THREE.Mesh(G(tailsGeometry()), flipMat)
+    bodyG.add(feet, tails)
 
     /* silver tray with a cloche (idle, screen-right flipper) */
     const silver = M(new THREE.MeshStandardMaterial({ color: '#d9dde4', metalness: 1, roughness: 0.22 }))
     const tray = new THREE.Mesh(G(trayGeometry()), silver)
-    const trayHold = new THREE.Group(); trayHold.position.y = -0.66
+    const trayHold = new THREE.Group(); trayHold.position.y = -0.76
     trayHold.add(tray)
     flippers[1].p.add(trayHold)
 
@@ -455,7 +480,7 @@ export default {
     const cardTex = new THREE.CanvasTexture(cardCanvas); cardTex.colorSpace = THREE.SRGBColorSpace; texs.push(cardTex)
     const cardMat = M(new THREE.MeshBasicMaterial({ map: cardTex, transparent: true, toneMapped: false }))
     const card = new THREE.Mesh(G(new THREE.PlaneGeometry(0.5, 0.344)), cardMat)
-    const cardHold = new THREE.Group(); cardHold.position.y = -0.74
+    const cardHold = new THREE.Group(); cardHold.position.y = -0.82
     const cardGlow = kit.glowSprite(look.tint.glow, 0.9, 0.7); mats.push(cardGlow.material)
     cardGlow.position.z = -0.02
     cardHold.add(cardGlow, card)
@@ -471,7 +496,7 @@ export default {
     const zzTex = zzTexture(); texs.push(zzTex)
     const zz = new THREE.Sprite(M(new THREE.SpriteMaterial({ map: zzTex, transparent: true, depthWrite: false })))
     fx.add(zz)
-    const sweatGeo = G(new THREE.SphereGeometry(1, 16, 12))
+    const sweatGeo = G(new THREE.SphereGeometry(1.5, 16, 12))
     { const p = sweatGeo.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const k = y > 0 ? 1 - y * 0.75 : 1; p.setXYZ(i, p.getX(i) * k * 0.028, y * 0.042, p.getZ(i) * k * 0.02) } sweatGeo.computeVertexNormals() }
     const sweat = new THREE.Mesh(sweatGeo, M(new THREE.MeshPhysicalMaterial({ color: '#cfe8ff', roughness: 0.05, clearcoat: 1, emissive: '#5a8ab8', emissiveIntensity: 0.25 })))
     headG.add(sweat)
@@ -479,6 +504,10 @@ export default {
     aura.material.blending = THREE.NormalBlending
     aura.position.set(0, 0.72, -0.5)
     fx.add(aura)
+    const ringMat = M(new THREE.MeshBasicMaterial({ color: WARM, transparent: true, toneMapped: false, depthWrite: false }))
+    const ring = new THREE.Mesh(G(new THREE.TorusGeometry(0.6, 0.022, 8, 64)), ringMat)
+    ring.position.set(0, 0.74, -0.35)
+    fx.add(ring)
     const CONF = 22
     const confMat = M(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped: false }))
     const confetti = new THREE.InstancedMesh(G(new THREE.PlaneGeometry(0.13, 0.075)), confMat, CONF)
@@ -498,7 +527,7 @@ export default {
     const hat = new THREE.Group()
     const hatBody = new THREE.Mesh(undefined, hatMat), hatBand = new THREE.Mesh(undefined, bandMat)
     hat.add(hatBody, hatBand)
-    hat.position.set(0.02, 1.02, -0.02)
+    hat.position.set(0.02, 0.98, -0.02)
     hat.rotation.set(-0.1, 0, -0.1)
     headG.add(hat)
     let hatKind = null, specKind = null, hatTop = 0
@@ -510,9 +539,9 @@ export default {
     function setLook(l) {
       cur = l
       const pal = palette(l)
-      const cols = { dark: rgb(pal.body), white: rgb(pal.shirt), lapel: rgb(pal.lapel) }
-      paint(bodyCanvas, BODY, shirtSD, cols, true)
-      paint(headCanvas, HEAD, faceSD, cols, false)
+      const cols = { dark: rgb(pal.body), white: rgb(pal.shirt), lapel: rgb(pal.lapel), patch: rgb(pal.beak) }
+      paint(bodyCanvas, BODY, shirtSD, cols, false)
+      paint(headCanvas, HEAD, faceSD, cols, false, true)
       bodyTex.needsUpdate = headTex.needsUpdate = true
       for (const m of [bodyMat, headMat, lidMat, beakMat, bowMat, flipMat, hatMat, bandMat]) kit.updateSolid(m, l)
       kit.updateSolid(studMat, l, { roughness: 0.2, clearcoat: 1 })
@@ -522,20 +551,21 @@ export default {
       flipMat.color.copy(pal.body)
       beakMat.color.copy(pal.beak)
       bowMat.color.copy(pal.bow)
-      bowMat.sheenColor.copy(pal.graphite ? new THREE.Color('#8a90a0') : l.tint.glow)
+      bowMat.sheen = 0.6; bowMat.sheenRoughness = 0.3; bowMat.sheenColor.copy(l.tint.soft).multiplyScalar(0.4)
       hatMat.color.copy(pal.graphite ? new THREE.Color('#121317') : pal.body.clone().multiplyScalar(0.7))
       bandMat.color.copy(pal.bow)
-      kit.updateGlass(glassMat, l, { thickness: 0.12, roughness: 0.04, attenuationDistance: 0.6 })
-      glassMat.color.lerp(new THREE.Color(1, 1, 1), 0.5)
+      // near-clear glass, so lenses don't recolor the eyes; the bead's tint comes from its inner light
+      kit.updateGlass(glassMat, l, { thickness: 0.12, roughness: 0.04, attenuationDistance: 4 })
+      glassMat.color.lerp(WHITE, 0.85)
       rimMat.uniforms.color.value.copy(l.tint.soft).lerp(new THREE.Color(1, 1, 1), 0.4)
-      rimMat.uniforms.intensity.value = l.dark ? 0.38 : 0.26; rimMat.uniforms.power.value = 3.2
+      rimMat.uniforms.intensity.value = l.dark ? 0.55 : 0.26; rimMat.uniforms.power.value = 3.2
       dotMat.color.copy(l.tint.glow).lerp(l.tint.ink, l.dark ? 0 : pal.graphite ? 0.55 : 0.2).multiplyScalar(l.dark ? 1.5 : 1.15)
       cardGlow.material.color.copy(l.tint.glow)
       zz.material.color.copy(l.dark ? l.tint.soft : l.tint.ink)
       drawCard(cardCanvas, l); cardTex.needsUpdate = true
       // eyes
       const dots_ = l.eyes === 'dots'
-      for (const e of eyes) e.ball.userData.base = dots_ ? [0.07, 0.074, 0.032] : [0.06, 0.088, 0.03]
+      for (const e of eyes) e.ball.userData.base = dots_ ? [0.05, 0.053, 0.026] : [0.043, 0.063, 0.024]
       // accessories
       if (specKind !== l.glasses) {
         specKind = l.glasses
@@ -555,7 +585,7 @@ export default {
         hatTop = h ? h.top : 0
       }
       // keep a hat inside the frame
-      const top = hatTop ? 1.02 + hatTop + 0.02 : 1.17
+      const top = hatTop ? 0.98 + hatTop + 0.02 : 1.13
       if (size === 'big') {
         const s = Math.min(1, (1.24 + 1.13) / (top + 1.13))
         fit.scale.setScalar(s); fit.position.y = -1.13 * (1 - s)
@@ -585,7 +615,8 @@ export default {
         leanP.rotation.x = p.lean
         leanP.rotation.z = p.sway
         bodyG.position.y = 1.1 - p.sink * 0.04
-        bodyG.scale.set(1 + p.sink * 0.02 + breathe * 0.5, 1 - p.sink * 0.035 + breathe, 1 + p.sink * 0.02)
+        bodyG.scale.set(1 + p.sink * 0.04 + breathe * 0.5, 1 - p.sink * 0.08 + breathe, 1 + p.sink * 0.04)
+        neck.position.y = NECK - p.hunch * 0.05
         neck.rotation.set(p.nod, p.yaw, -p.tilt)
 
         // flippers: out angle (a) then forward (b)
@@ -597,7 +628,8 @@ export default {
         trayHold.visible = p.tray > 0.03
         trayHold.scale.setScalar(Math.max(0.001, p.tray))
         trayHold.rotation.set(p.Rb, 0, -p.Ra, 'ZYX')
-        tray.rotation.y = 0.4
+        tray.rotation.set(0.32, 0.4, 0)
+        tray.scale.setScalar(1.45)
         cardHold.visible = p.card > 0.03
         cardHold.scale.setScalar(Math.max(0.001, p.card))
         cardHold.rotation.set(p.Lb, 0, p.La, 'ZYX')
@@ -645,21 +677,27 @@ export default {
         zz.visible = p.zz > 0.03
         if (zz.visible) {
           const k = f.rm ? 0.5 : (f.t * 0.35) % 1
-          zz.position.set(0.48 + k * 0.12, 1.0 + k * 0.18, 0.2)
-          zz.scale.setScalar(0.42 * p.zz)
+          zz.position.set(0.6 + k * 0.12, 1.0 + k * 0.16, 0.2)
+          zz.scale.setScalar(0.52 * p.zz)
           zz.material.opacity = p.zz * (f.rm ? 0.9 : Math.sin(Math.PI * k) * 0.95)
         }
         // worried: a sweat bead and a warm halo
         sweat.visible = p.sweat > 0.05
         if (sweat.visible) {
           const k = f.rm ? 0.3 : (f.t * 0.6) % 1
-          sweat.position.set(0.37, 0.9 - k * 0.1, headZ(0.37, 0.9) + 0.03)
+          sweat.position.set(0.47, 0.98 - k * 0.12, 0.12)
           sweat.scale.setScalar(p.sweat)
         }
         // the glass bead at the knot: a soft tint light while listening, amber when worried
-        glassMat.emissive.copy(cur.tint.glow).multiplyScalar(p.bead * 0.8).add(tmpE.copy(WARM).multiplyScalar(p.aura * 0.9))
+        glassMat.emissive.copy(cur.tint.glow).multiplyScalar(0.3 + p.bead * 0.9).add(tmpE.copy(WARM).multiplyScalar(p.aura * 0.9))
         aura.material.opacity = 0.75 * p.aura * (f.rm ? 1 : 0.8 + 0.2 * Math.sin(f.t * 3))
         aura.visible = p.aura > 0.02
+        ring.visible = aura.visible
+        if (ring.visible) {
+          const k = f.rm ? 0 : (f.t * 0.9) % 1
+          ring.scale.setScalar(0.92 + 0.08 * Math.sin(f.t * 4) * (f.rm ? 0 : 1))
+          ringMat.opacity = p.aura * (0.85 - 0.25 * k)
+        }
         rimMat.uniforms.color.value.copy(cur.tint.soft).lerp(WHITE, 0.4).lerp(WARM, f.warm * 0.85)
 
         // confetti
@@ -670,7 +708,7 @@ export default {
             const k = f.rm ? (i / CONF) : ((f.t * 0.45 + (seed % 1)) % 1)
             const ang = (i / CONF) * Math.PI * 2
             const rad = 0.75 + 0.35 * ((seed * 3.1) % 1)
-            dummy.position.set(Math.cos(ang) * rad, 1.2 - k * 1.5 + Math.sin(ang) * 0.12, 0.2 + Math.sin(ang) * 0.4)
+            dummy.position.set(Math.cos(ang) * rad * 1.15, 1.2 - k * 1.5 + Math.sin(ang) * 0.12, -0.15 + Math.sin(ang) * 0.3)
             dummy.rotation.set(f.t * 3 + i, f.t * 2.2 + i * 0.7, i)
             dummy.scale.setScalar(p.confetti * Math.sin(Math.PI * Math.min(1, k * 1.15)))
             dummy.updateMatrix()
