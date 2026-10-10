@@ -176,6 +176,7 @@ uniform float uStyle;
 uniform float uHappy;
 uniform float uClosed;
 uniform float uLid;
+uniform float uSquint;
 uniform float uSad;
 uniform float uTilt;
 uniform float uRot;
@@ -239,7 +240,7 @@ float eyeSD(vec2 q, float side) {
     ext = mix(0.55, 0.45, uSad) * ah;
   }
   // lids: a straight edge from above; tilt > 0 raises the inner corners (worried), < 0 droops the outer ones
-  float lidY = ext - uLid * 2.0 * ext + uTilt * (-side) * q.x;
+  float lidY = ext - (uLid + uSquint * step(side, 0.0)) * 2.0 * ext + uTilt * (-side) * q.x;
   d = max(d, q.y - lidY);
   float sw = w * 0.16 * uStroke;
   float dH = sdArc(q - vec2(0.0, -0.42 * w), 1.12, 0.7 * w, sw);
@@ -364,7 +365,7 @@ const MOOD = {
   resting: { happy: 0, closed: 1, lid: 0, tilt: 0, rot: 0, core: 0.4, halo: 0.55, beacon: 0, smile: 0.8, m: [0, 0, 0, 0, 0, 0], squash: -0.035, lean: 0, pitch: 0.05, sleep: 0 },
   idle: { happy: 0, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.62, halo: 0.75, beacon: 0, smile: 0.75, m: [1, 0, 0, 0, 0, 0], squash: 0, lean: 0, pitch: 0, sleep: 0 },
   listening: { happy: 0, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.8, halo: 0.9, beacon: 0, smile: 0.6, m: [0, 0, 0, 0, 0, 0], squash: 0.025, lean: -0.1, pitch: 0.1, sleep: 0 },
-  thinking: { happy: 0, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.55, halo: 0.8, beacon: 0, smile: 0.7, m: [0, 0, 0, 0, 0, 1], squash: 0.01, lean: -0.05, pitch: -0.04, sleep: 0 },
+  thinking: { squint: 0.22, happy: 0, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.55, halo: 0.8, beacon: 0, smile: 0.7, m: [0, 0, 0, 0, 0, 1], squash: 0.01, lean: -0.05, pitch: -0.04, sleep: 0 },
   talking: { happy: 0, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.72, halo: 0.85, beacon: 0, smile: 0.7, m: [0, 0, 1, 0, 0, 0], squash: 0, lean: 0, pitch: 0, sleep: 0 },
   done: { happy: 1, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.85, halo: 0.9, beacon: 0, smile: 1.1, m: [1, 0, 0, 0, 0, 0], squash: 0, lean: 0.03, pitch: 0, sleep: 0 },
   'needs-you': { happy: 0, closed: 0, lid: 0, tilt: 0, rot: 0, core: 0.85, halo: 1, beacon: 1, smile: 0.7, m: [0, 0, 0, 1, 0, 0], squash: 0.04, lean: 0, pitch: 0.04, sleep: 0 },
@@ -372,7 +373,7 @@ const MOOD = {
   celebrating: { happy: 1, closed: 0, lid: 0, tilt: 0, rot: 0, core: 1, halo: 1, beacon: 0, smile: 1, m: [0, 1, 0, 0, 0, 0], squash: 0, lean: 0, pitch: 0, sleep: 0 },
   sleepy: { happy: 0, closed: 0, lid: 0, tilt: 0.1, rot: 0, core: 0.32, halo: 0.5, beacon: 0, smile: 0.7, m: [0, 0, 0, 0, 0, 0], squash: -0.03, lean: 0.1, pitch: 0.06, sleep: 1 },
 }
-const KEYS = ['sad', 'happy', 'closed', 'lid', 'tilt', 'rot', 'core', 'halo', 'beacon', 'smile', 'squash', 'lean', 'pitch', 'sleep']
+const KEYS = ['squint', 'sad', 'happy', 'closed', 'lid', 'tilt', 'rot', 'core', 'halo', 'beacon', 'smile', 'squash', 'lean', 'pitch', 'sleep']
 
 // sparkle positions around the drop: x, y, size, phase (content space, body centered at 0)
 const SPARKS = [
@@ -493,11 +494,11 @@ export default {
     const fu = {
       uEyeCol: { value: new THREE.Color() }, uEyeEdge: { value: new THREE.Color() }, uHaloCol: { value: new THREE.Color() }, uHaloA: { value: 0.8 }, uHaloK: { value: 11 }, uDark: { value: 0 },
       uFace: { value: new THREE.Vector2(0, -0.24) }, uSep: { value: 0.62 * (small ? 1.06 : 1) }, uEye: { value: new THREE.Vector2(0.19 * eyeK, 0.36 * eyeK) },
-      uOpen: { value: 1 }, uStyle: { value: 0 }, uHappy: { value: 0 }, uClosed: { value: 0 }, uLid: { value: 0 }, uSad: { value: 0 }, uTilt: { value: 0 }, uRot: { value: 0 },
+      uOpen: { value: 1 }, uStyle: { value: 0 }, uHappy: { value: 0 }, uClosed: { value: 0 }, uLid: { value: 0 }, uSquint: { value: 0 }, uSad: { value: 0 }, uTilt: { value: 0 }, uRot: { value: 0 },
       uSoft: { value: 0 }, uStroke: { value: small ? 1.35 : 1 },
       uMouth: { value: new THREE.Vector2(0, -0.62) }, uMW: { value: 0.25 * (small ? 1.3 : eyeK) }, uM: { value: [0, 0, 0, 0, 0, 0] },
       uSmile: { value: 0.8 }, uLevel: { value: 0 },
-      uBeacon: { value: 0 }, uBeat: { value: 0 }, uBeaconCol: { value: new THREE.Color() }, uTip: { value: new THREE.Vector2(0, 0.56) }, uDotK: { value: small ? 1.25 : 1 },
+      uBeacon: { value: 0 }, uBeat: { value: 0 }, uBeaconCol: { value: new THREE.Color() }, uTip: { value: new THREE.Vector2(0, 0.56) }, uDotK: { value: small ? 1.6 : size === 'header' ? 1.25 : 1 },
       uSpark: { value: 0 }, uT: { value: 0 }, uSpk: { value: SPARKS.map((s) => new THREE.Vector4(...s)) }, uSparkCol: { value: new THREE.Color() },
       uThink: { value: 0 }, uOrbit: { value: 0 }, uCometCol: { value: new THREE.Color() },
       uShadow: { value: 1 }, uShadowY: { value: -B - 0.04 }, uShadowCol: { value: new THREE.Color() }, uCausticCol: { value: new THREE.Color() },
@@ -552,7 +553,7 @@ export default {
         C.eyeWarmEdge.copy(WARM_INK).lerp(new THREE.Color('#5a2408'), 0.3)
         C.halo.copy(tn.glow)
         C.spark.copy(tn.glow).lerp(tn.ink, 0.3)
-        C.beacon.copy(tn.glow).lerp(tn.ink, 0.2)
+        C.beacon.copy(tn.glow).lerp(tn.ink, 0.45)
         C.shadow.copy(tn.ink).lerp(new THREE.Color(0.02, 0.03, 0.06), 0.4)
         C.caustic.copy(tn.glow)
       }
@@ -638,7 +639,7 @@ export default {
         glass.iridescence = 0.25 + f.spark * 0.55
 
         // face
-        const lx = f.lookX * 0.085, ly = -f.lookY * 0.07
+        const lx = f.lookX * 0.11, ly = -f.lookY * 0.09
         fu.uFace.value.set(lx, -0.24 + ly)
         fu.uMouth.value.set(lx * 0.8, -0.62 + ly * 0.8)
         const openShape = (f.open + (1 - f.open) * S.sleep) * f.blink
@@ -646,6 +647,7 @@ export default {
         fu.uLid.value = S.lid + S.sleep * Math.max(0, 1 - f.open) * 0.82
         fu.uTilt.value = S.tilt
         fu.uSad.value = S.sad
+        fu.uSquint.value = S.squint
         fu.uRot.value = S.rot
         fu.uHappy.value = S.happy
         fu.uClosed.value = S.closed

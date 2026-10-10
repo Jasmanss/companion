@@ -141,7 +141,7 @@ float eye(vec2 p, float s) {
   }
   // upper lid: comes down from the top; slants down at the outer corner when droopy or worried
   // sleepy lids rest half way down, flat across the top
-  float open = clamp(mix(uOpen, 0.3 + uOpen * 0.75, uDroop), 0.0, 1.0);
+  float open = clamp(mix(uOpen, 0.2 + uOpen * 0.7, uDroop), 0.0, 1.0);
   float lid = mix(bot + w * 0.42, top + 0.02, open);
   lid -= s * q.x * (0.08 * uDroop + 0.55 * uWorry);
   d = smax(d, q.y - lid, w * 0.35);
