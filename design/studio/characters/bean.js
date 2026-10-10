@@ -65,18 +65,26 @@ function shellGeometry(off, a0, a1, yLo, topFn, cols, rows) {
 }
 
 /* ---------------- face layout ---------------- */
-const EX = 0.235, EY = 0.5 // eyes
-const BY = 0.72 // brows
+const EX = 0.22, EY = 0.5 // eyes
+const BY = 0.675 // brows
 const MY = 0.27 // moustache
 const MOUTH_Y = 0.14
 const BOW_Y = -0.02
-const V_Y = -0.42, LAPEL_A = 0.6, COLLAR_Y = -0.06, BACK_Y = 0.12 // waistcoat neckline
+const V_Y = -0.42, LAPEL_A = 0.6, COLLAR_Y = -0.06, HIGH_Y = 0.24, HIGH_A = 1.6 // waistcoat neckline
 
 const lapelTop = (a) => {
   const t = Math.abs(a)
   if (t < LAPEL_A) return V_Y + (COLLAR_Y - V_Y) * Math.pow(t / LAPEL_A, 1.05)
-  const k = Math.min(1, (t - LAPEL_A) / (Math.PI - LAPEL_A))
-  return COLLAR_Y + (BACK_Y - COLLAR_Y) * k * k * (3 - 2 * k)
+  // A high shawl collar: from the V it sweeps up the sides and stays high around the back.
+  const k = Math.min(1, (t - LAPEL_A) / (HIGH_A - LAPEL_A))
+  return COLLAR_Y + (HIGH_Y - COLLAR_Y) * k * k * (3 - 2 * k)
+}
+/** Waistcoat hem: two points below the buttons, a notch between them, higher at the sides and back. */
+const hemY = (a) => {
+  const t = Math.abs(a)
+  if (t < 0.2) return -0.86 - 0.09 * (t / 0.2)
+  if (t < 0.55) return -0.95 + 0.17 * THREE.MathUtils.smoothstep(t, 0.2, 0.55)
+  return -0.78
 }
 
 /* ---------------- small geometry helpers ---------------- */
@@ -85,52 +93,73 @@ function extrude(shape, depth = 0.02, bevel = 0.008) {
   g.translate(0, 0, -depth / 2)
   return g
 }
+/** A curved band (closed-eye line, happy arch). Angles in radians, counterclockwise. */
+function bandShape(R, th, a0, a1, cy) {
+  const s = new THREE.Shape()
+  s.absarc(0, cy, R, a0, a1, false)
+  s.absarc(0, cy, R - th, a1, a0, true)
+  s.closePath()
+  return s
+}
+// Upper-lid levels: the neutral face wears a heavy, slightly bored lid; listening and needs-you open wide.
+const LIDS = { wide: 0, neutral: 0.3, worried: 0.32, sleepy: 0.6 }
 function eyeShapes() {
   const pill = new THREE.Shape()
-  { const w = 0.115, h = 0.205, r = w / 2; pill.moveTo(-r, -h / 2 + r); pill.lineTo(-r, h / 2 - r); pill.absarc(0, h / 2 - r, r, Math.PI, 0, true); pill.lineTo(r, -h / 2 + r); pill.absarc(0, -h / 2 + r, r, 0, Math.PI, true) }
-  const dot = new THREE.Shape(); dot.absellipse(0, 0, 0.078, 0.084, 0, Math.PI * 2)
-  const arcs = new THREE.Shape(); arcs.absellipse(0, -0.035, 0.09, 0.105, 0, Math.PI); arcs.closePath()
-  const band = (up) => {
-    const s = new THREE.Shape(), ro = 0.085, ri = 0.047
-    if (up) { s.absarc(0, -0.03, ro, 0, Math.PI, false); s.absarc(0, -0.03, ri, Math.PI, 0, true) } else { s.absarc(0, 0.035, ro, Math.PI, Math.PI * 2, false); s.absarc(0, 0.035, ri, Math.PI * 2, Math.PI, true) }
-    return s
+  { const w = 0.11, h = 0.2, r = w / 2; pill.moveTo(-r, -h / 2 + r); pill.lineTo(-r, h / 2 - r); pill.absarc(0, h / 2 - r, r, Math.PI, 0, true); pill.lineTo(r, -h / 2 + r); pill.absarc(0, -h / 2 + r, r, 0, Math.PI, true) }
+  const dot = new THREE.Shape(); dot.absellipse(0, 0, 0.08, 0.086, 0, Math.PI * 2)
+  const arcs = new THREE.Shape(); arcs.absellipse(0, -0.04, 0.09, 0.12, 0, Math.PI); arcs.closePath()
+  const out = {}
+  for (const [style, shape] of Object.entries({ pills: pill, dots: dot, arcs })) {
+    const pts = shape.getPoints(24)
+    if (pts.length > 1 && pts[0].distanceTo(pts[pts.length - 1]) < 1e-4) pts.pop()
+    let top = -1, bot = 1
+    for (const p of pts) { top = Math.max(top, p.y); bot = Math.min(bot, p.y) }
+    let hw = 0
+    for (const p of pts) hw = Math.max(hw, Math.abs(p.x))
+    const g = extrude(new THREE.Shape(pts))
+    g.userData = { top, bot, hw }
+    out[style] = g
   }
-  const lid = new THREE.Shape(); lid.absellipse(0, 0.02, 0.085, 0.1, Math.PI, Math.PI * 2); lid.closePath()
-  return {
-    pills: extrude(pill), dots: extrude(dot), arcs: extrude(arcs),
-    happy: extrude(band(true), 0.02, 0.006), closed: extrude(band(false), 0.02, 0.006), lid: extrude(lid),
-  }
+  // Upper eyelid: a body-coloured sculpted shell, unit height (y from -1 to 0), its lower edge a soft almond curve.
+  const lid = new THREE.Shape()
+  lid.moveTo(-1, -1); lid.quadraticCurveTo(0, -1.3, 1, -1); lid.bezierCurveTo(1.05, -0.3, 0.6, 0.05, 0, 0.05); lid.bezierCurveTo(-0.6, 0.05, -1.05, -0.3, -1, -1)
+  out.lid = new THREE.ExtrudeGeometry(lid, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.1, bevelSegments: 3, curveSegments: 16 })
+  out.happy = extrude(bandShape(0.088, 0.036, Math.PI * 0.12, Math.PI * 0.88, -0.045), 0.02, 0.006)
+  out.closed = extrude(bandShape(0.12, 0.03, Math.PI * 1.3, Math.PI * 1.7, 0.085), 0.02, 0.006)
+  return out
 }
-/** A capsule bent into a soft arch: brows. */
-function browGeometry() {
-  const g = new THREE.CapsuleGeometry(0.036, 0.17, 4, 10)
-  g.rotateZ(Math.PI / 2)
-  const p = g.attributes.position
-  for (let i = 0; i < p.count; i++) { const x = p.getX(i); p.setY(i, p.getY(i) - 2.4 * x * x); p.setZ(i, p.getZ(i) * 0.6) }
-  g.computeVertexNormals()
+/**
+ * A tube whose radius follows radFn(t); both ends close to a point, so no open holes. flatZ squashes it against the face.
+ */
+function taperTube(curve, radFn, flatZ = 0.62, TS = 56, RS = 12) {
+  const g = new THREE.TubeGeometry(curve, TS, 1, RS, false)
+  const p = g.attributes.position, n = g.attributes.normal, c = new THREE.Vector3()
+  for (let i = 0; i <= TS; i++) {
+    const t = i / TS
+    curve.getPointAt(t, c)
+    const rad = radFn(t) * Math.sqrt(Math.min(1, t / 0.05, (1 - t) / 0.05)) + 0.0005
+    for (let j = 0; j <= RS; j++) {
+      const v = i * (RS + 1) + j
+      p.setXYZ(v, c.x + (p.getX(v) - c.x) * rad, c.y + (p.getY(v) - c.y) * rad, c.z + (p.getZ(v) - c.z) * rad * flatZ)
+      const nz = n.getZ(v) / flatZ, l = Math.hypot(n.getX(v), n.getY(v), nz)
+      n.setXYZ(v, n.getX(v) / l, n.getY(v) / l, nz / l)
+    }
+  }
+  g.deleteAttribute('uv')
   return g
+}
+/** A tapered brow: full at the inner end, thinning to a point at the outer end, with a slight lift. */
+function browGeometry(s) {
+  const pts = [[-0.1, -0.012], [-0.04, 0.012], [0.03, 0.02], [0.105, 0.002]]
+  const curve = new THREE.CatmullRomCurve3(pts.map(([x, y]) => new THREE.Vector3(x * s, y, 0)))
+  return taperTube(curve, (t) => 0.036 * (1 - 0.6 * t), 0.55, 28, 10)
 }
 /** One half of a handlebar moustache: a tapered tube that follows the face and curls up at the tip. */
 function moustacheGeometry(sign) {
   const z0 = surfZ(0, MY)
   const pts = [[-0.05, 0.015], [0.05, 0.004], [0.14, -0.014], [0.22, -0.016], [0.285, 0.008], [0.32, 0.05], [0.305, 0.088], [0.272, 0.09]]
   const curve = new THREE.CatmullRomCurve3(pts.map(([x, y]) => new THREE.Vector3(x * sign, y, surfZ(Math.min(x, 0.6), MY + y) - z0 + 0.01)))
-  const TS = 56, RS = 12
-  const g = new THREE.TubeGeometry(curve, TS, 1, RS, false)
-  const p = g.attributes.position, n = g.attributes.normal, c = new THREE.Vector3()
-  for (let i = 0; i <= TS; i++) {
-    const t = i / TS
-    curve.getPointAt(t, c)
-    const k = THREE.MathUtils.smoothstep(t, 0.08, 1)
-    const rad = 0.062 * (1 - 0.84 * Math.pow(k, 0.8))
-    for (let j = 0; j <= RS; j++) {
-      const v = i * (RS + 1) + j
-      p.setXYZ(v, c.x + (p.getX(v) - c.x) * rad, c.y + (p.getY(v) - c.y) * rad * 1.05, c.z + (p.getZ(v) - c.z) * rad * 0.62)
-      const nz = n.getZ(v) / 0.62, l = Math.hypot(n.getX(v), n.getY(v), nz)
-      n.setXYZ(v, n.getX(v) / l, n.getY(v) / l, nz / l)
-    }
-  }
-  return g
+  return taperTube(curve, (t) => 0.062 * (1 - 0.84 * Math.pow(THREE.MathUtils.smoothstep(t, 0.08, 1), 0.8)), 0.62)
 }
 /** Bow tie: two soft wings and a knot. */
 function bowGeometry() {
@@ -153,7 +182,7 @@ function bowGeometry() {
 /** Brass: two buttons and a watch chain across the waistcoat. */
 function brassGeometry() {
   const parts = []
-  for (const y of [-0.56, -0.76]) {
+  for (const y of [-0.5, -0.63, -0.76]) {
     const b = new THREE.SphereGeometry(0.038, 16, 10)
     b.scale(1, 1, 0.45)
     b.rotateY(0)
@@ -162,7 +191,7 @@ function brassGeometry() {
   }
   const chain = []
   for (let i = 0; i <= 10; i++) {
-    const t = i / 10, x = 0.02 + t * 0.4, y = -0.56 - Math.sin(t * Math.PI) * 0.11 + t * -0.06
+    const t = i / 10, x = 0.02 + t * 0.4, y = -0.63 - Math.sin(t * Math.PI) * 0.1 + t * 0.02
     chain.push(new THREE.Vector3(x, y, surfZ(x, y) + 0.028))
   }
   const ch = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(chain), 40, 0.011, 6, false)
@@ -220,7 +249,7 @@ function glassesGeometry(kind) {
     frame.push(stripTo(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.008, 6, false)))
   } else {
     const half = kind === 'half-moon'
-    const R = half ? 0.135 : 0.138, y = half ? EY - 0.05 : EY
+    const R = half ? 0.135 : 0.138, y = half ? EY - 0.03 : EY
     for (const s of [-1, 1]) {
       const x = s * EX
       frame.push(half ? ring(x, y, R, 0.014, Math.PI, Math.PI) : ring(x, y, R, 0.015))
@@ -247,20 +276,21 @@ function zGeometry() {
 
 /* ---------------- colors ---------------- */
 const NAVY = new THREE.Color('#1b2233')
-const ACCENT = { ice: '#9c2236', lilac: '#9c2236', mint: '#9c2236', peach: '#1f3f66', graphite: '#b02a3e' }
+const ACCENT = { ice: '#7a1a2a', lilac: '#6e1a2a', mint: '#7a1a2a', peach: '#1f3f66', graphite: '#8a1f30' }
 function palette(look) {
   const tn = look.tint, g = tn.key === 'graphite'
   const body = g ? tn.ink.clone().lerp(tn.glass, 0.16) : tn.glow.clone().lerp(tn.ink, 0.5).lerp(tn.glass, 0.1)
   const coat = g ? tn.ink.clone().multiplyScalar(0.5) : tn.ink.clone().lerp(NAVY, 0.5).multiplyScalar(0.8)
   return {
     body, coat,
-    shirt: new THREE.Color('#f6f1e7'),
+    shirt: new THREE.Color(g ? '#c4c8cf' : '#f3eee3'),
+    trousers: g ? new THREE.Color('#2e3239') : tn.ink.clone().lerp(NAVY, 0.7).multiplyScalar(0.45),
     accent: new THREE.Color(ACCENT[tn.key] ?? ACCENT.ice),
-    hair: new THREE.Color(g ? '#dcd8cf' : '#2c211c'),
+    hair: new THREE.Color(g ? '#e4e0d8' : '#2c211c'),
     eye: new THREE.Color('#121318'),
     eyeLit: false,
     hat: g ? new THREE.Color('#121418') : tn.ink.clone().multiplyScalar(0.42),
-    signal: g ? new THREE.Color('#8ab8ff') : tn.glow.clone(),
+    signal: look.dark ? tn.soft.clone() : g ? new THREE.Color('#3a4150') : tn.ink.clone().lerp(NAVY, 0.3),
   }
 }
 
@@ -274,28 +304,28 @@ function target(o, f) {
   const A = f.rm ? 0 : 1, age = f.moodAge
   switch (f.mood) {
     case 'resting':
-      o.sink = 0.2; o.tall = 0.96; o.lean = -0.05; o.tilt = -0.12; o.brow = -0.03; o.mus = -0.02; o.gY = -0.015; break
+      o.sink = 0.3; o.tall = 0.96; o.lean = -0.05; o.tilt = -0.1; o.brow = -0.03; o.mus = -0.02; o.gY = -0.015; break
     case 'idle':
-      o.mus = 0.06; break
+      o.mus = 0.06; o.bL = 0.018; break
     case 'listening':
-      o.lean = 0.12; o.tilt = 0.14; o.tall = 1.02; o.brow = 0.035; o.bR = 0.035; o.mus = 0.08; break
+      o.lean = 0.05; o.tilt = 0.14; o.tall = 1.02; o.brow = 0.02; o.bR = 0.07; o.mus = 0.08; break
     case 'thinking':
       o.tilt = -0.07; o.bR = 0.07; o.bL = -0.025; o.musR = 0.2; o.musL = -0.06; o.think = 1; o.gTilt = 0.03; break
     case 'talking':
-      o.lean = 0.03; o.mus = 0.08; break
+      o.lean = 0.04; o.mus = 0.1; o.brow = 0.03; break
     case 'done': {
       // A courteous little bow, then hold a contented nod.
       const k = Math.min(1, age / 1.1), bow = A ? Math.sin(k * Math.PI) * 0.22 : 0
-      o.lean = 0.07 + bow; o.mus = 0.2; o.cheek = 1; o.brow = 0.02; o.hatTip = 0.25 + bow * 1.4; break
+      o.lean = 0.1 + bow; o.mus = 0.2; o.brow = 0.02; o.hatTip = 0.25 + bow * 1.4; break
     }
     case 'needs-you':
       o.tall = 1.05; o.sink = -0.04; o.lean = 0.05; o.brow = 0.075; o.mouth = 0.45; o.call = 1; break
     case 'worried':
       o.lean = -0.07; o.tall = 0.965; o.bSlant = 0.36; o.brow = 0.01; o.mus = -0.3; o.sweat = 1; o.gTilt = -0.08; o.gY = -0.012; break
     case 'celebrating':
-      o.tall = 1.02; o.brow = 0.08; o.mus = 0.26; o.mouth = 0.55; o.cheek = 1; o.hatLift = 0.22; o.confetti = 1; break
+      o.tall = 1.02; o.brow = 0.08; o.mus = 0.3; o.mouth = 0.6; o.hatLift = 0.14; o.confetti = 1; break
     case 'sleepy':
-      o.tilt = 0.16; o.lean = 0.16; o.sink = 0.08; o.tall = 0.97; o.brow = -0.035; o.bSlant = 0.14; o.mus = -0.14; o.zz = 1; o.gY = -0.035; o.gTilt = 0.05; break
+      o.tilt = 0.06; o.lean = 0.05; o.sink = 0.15; o.tall = 0.97; o.brow = -0.035; o.bSlant = 0.14; o.mus = -0.14; o.zz = 1; o.gY = -0.035; o.gTilt = 0.05; break
   }
   return o
 }
@@ -333,7 +363,9 @@ export default {
     const rim = new THREE.Mesh(bodyGeo, rimMat)
     rim.scale.setScalar(1.006)
     const coatMat = M(kit.solid(pal.coat, look, { sheen: 0.2 }))
-    const coat = new THREE.Mesh(G(shellGeometry(0.032, -Math.PI, Math.PI, Y_BOT, lapelTop, 144, 40)), coatMat)
+    const coat = new THREE.Mesh(G(shellGeometry(0.032, -Math.PI, Math.PI, hemY, lapelTop, 160, 36)), coatMat)
+    const trouserMat = M(kit.solid(pal.trousers, look, { sheen: 0.15 }))
+    const trousers = new THREE.Mesh(G(shellGeometry(0.016, -Math.PI, Math.PI, Y_BOT, () => -0.7, 96, 18)), trouserMat)
     const shirtMat = M(kit.solid(pal.shirt, look, { roughness: 0.55 }))
     const shirt = new THREE.Mesh(G(shellGeometry(0.011, -0.72, 0.72, V_Y - 0.1, (a) => 0.06 + 0.1 * (a / 0.72) ** 2, 40, 12)), shirtMat)
     // A rolled collar along the waistcoat's neckline: the crisp, sculpted edge that makes it tailoring, not paint.
@@ -344,13 +376,13 @@ export default {
     }
     const roll = new THREE.Mesh(G(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rollPts, true), 240, 0.026, 8, true)), coatMat)
     body.add(roll)
-    const bowMat = M(kit.solid(pal.accent, look, { sheen: 0.15 }))
+    const bowMat = M(kit.solid(pal.accent, look, { sheen: 0.45, sheenRoughness: 0.4, roughness: 0.55 }))
     const bow = new THREE.Mesh(G(bowGeometry()), bowMat)
     bow.scale.setScalar(1.3)
     bow.position.set(0, BOW_Y, surfZ(0, BOW_Y) + 0.035)
     const brassMat = M(new THREE.MeshPhysicalMaterial({ color: '#d6a54c', metalness: 1, roughness: 0.3, clearcoat: 0.6 }))
     const brass = new THREE.Mesh(G(brassGeometry()), brassMat)
-    body.add(bodyMesh, rim, coat, shirt, bow, brass)
+    body.add(bodyMesh, rim, coat, trousers, shirt, bow, brass)
 
     /* eyes */
     const EYE = eyeShapes()
@@ -364,15 +396,16 @@ export default {
       const hl = new THREE.Mesh(hlGeo, hlMat)
       hl.position.set(0.022, 0.048, 0.022)
       m.add(hl)
-      grp.add(m)
+      const lid = new THREE.Mesh(EYE.lid, bodyMat)
+      grp.add(m, lid)
       body.add(grp)
-      return { s, grp, m, hl }
+      return { s, grp, m, hl, lid }
     })
 
     /* brows + moustache + mouth + cheeks */
     const hairMat = M(kit.solid(pal.hair, look, { roughness: 0.5, sheen: 0.1 }))
-    const browGeo = G(browGeometry())
     const brows = [-1, 1].map((s) => {
+      const browGeo = G(browGeometry(s))
       const grp = new THREE.Group()
       grp.position.set(s * EX, BY, surfZ(s * EX, BY) + 0.012)
       grp.rotation.y = surfYaw(s * EX, BY)
@@ -394,10 +427,6 @@ export default {
     const mouth = new THREE.Mesh(mouthGeo, mouthMat)
     mouth.position.set(0, MOUTH_Y + 0.06, surfZ(0, MOUTH_Y) - 0.004)
     body.add(mouth)
-    const cheekMat = M(new THREE.MeshStandardMaterial({ color: '#ff7f86', roughness: 0.6, transparent: true, opacity: 0, depthWrite: false }))
-    const cheekParts = [-1, 1].map((s) => { const g = new THREE.SphereGeometry(1, 16, 10); g.scale(0.075, 0.045, 0.012); g.deleteAttribute('uv'); return placeOnFace(g, s * 0.4, 0.33, 0.004) })
-    const cheeks = new THREE.Mesh(G(mergeGeometries(cheekParts)), cheekMat)
-    body.add(cheeks)
 
     /* props: thinking beads / call bead / sweat, z's, confetti */
     const beadMat = M(kit.solid('#ffffff', look, { roughness: 0.3 }))
@@ -406,6 +435,17 @@ export default {
     for (let i = 0; i < 3; i++) beads.setColorAt(i, pal.signal)
     beads.frustumCulled = false
     body.add(beads)
+    // Needs you: a bold call badge (red disc, white "!") drawn on a canvas.
+    const bc = document.createElement('canvas')
+    bc.width = bc.height = 128
+    { const g = bc.getContext('2d'); g.fillStyle = '#ffffff'; g.beginPath(); g.arc(64, 64, 62, 0, 7); g.fill(); g.fillStyle = '#ff3b4f'; g.beginPath(); g.arc(64, 64, 52, 0, 7); g.fill()
+      g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect(55, 26, 18, 50, 9); g.fill(); g.beginPath(); g.arc(64, 94, 10, 0, 7); g.fill() }
+    const badgeTex = new THREE.CanvasTexture(bc)
+    badgeTex.colorSpace = THREE.SRGBColorSpace
+    texs.push(badgeTex)
+    const badge = new THREE.Sprite(M(new THREE.SpriteMaterial({ map: badgeTex, toneMapped: false })))
+    badge.position.set(0.6, 0.78, 0.36)
+    body.add(badge)
     const glow = kit.glowSprite(pal.signal, 0.6, 0)
     mats.push(glow.material)
     body.add(glow)
@@ -414,9 +454,9 @@ export default {
     zs.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     zs.frustumCulled = false
     body.add(zs)
-    const NC = 26
+    const NC = 14
     const confMat = M(new THREE.MeshStandardMaterial({ roughness: 0.45, side: THREE.DoubleSide }))
-    const confetti = new THREE.InstancedMesh(G(new THREE.PlaneGeometry(0.12, 0.065)), confMat, NC)
+    const confetti = new THREE.InstancedMesh(G(new THREE.PlaneGeometry(0.16, 0.085)), confMat, NC)
     confetti.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     confetti.frustumCulled = false
     const CONF = Array.from({ length: NC }, (_, i) => {
@@ -458,17 +498,23 @@ export default {
       Object.assign(pal, p)
       bodyMat.color.copy(p.body); coatMat.color.copy(p.coat); shirtMat.color.copy(p.shirt); bowMat.color.copy(p.accent)
       hairMat.color.copy(p.hair); hatMat.color.copy(p.hat)
-      for (const m of [bodyMat, coatMat, shirtMat, bowMat, hatMat, beadMat, zMat]) kit.updateSolid(m, l)
+      for (const m of [bodyMat, coatMat, shirtMat, hatMat, beadMat, zMat, trouserMat]) kit.updateSolid(m, l)
+      kit.updateSolid(bowMat, l, { roughness: 0.55 })
+      trouserMat.color.copy(p.trousers)
+      // Dark panels: a cool velvet sheen on the waistcoat so it separates from the background.
+      coatMat.sheen = l.dark ? 0.9 : 0.2
+      coatMat.sheenColor.copy(l.dark ? l.tint.glow : WHITE)
       kit.updateSolid(hairMat, l, { roughness: 0.5 })
       kit.updateSolid(shirtMat, l, { roughness: 0.55 })
       // Rich vinyl color: the room environment washes saturated solids toward pastel, so use less of it.
-      for (const m of [bodyMat, coatMat, shirtMat, bowMat, hatMat, beadMat, zMat, hairMat]) m.envMapIntensity *= 0.55
+      for (const m of [bodyMat, coatMat, shirtMat, bowMat, hatMat, beadMat, zMat, hairMat, trouserMat]) m.envMapIntensity *= 0.55
       eyeMat.color.copy(p.eye)
       eyeMat.emissive.copy(p.eyeLit ? p.eye : new THREE.Color(0)).multiplyScalar(p.eyeLit ? 0.55 : 0)
       kit.updateGlass(lensMat, l, { roughness: 0.04 + 0.1 * l.frost, attenuationDistance: 3 })
       lensMat.color.setRGB(1, 1, 1).lerp(l.tint.glass, 0.25)
       rimMat.uniforms.color.value.copy(l.dark ? l.tint.glow : new THREE.Color('#ffffff'))
       rimMat.uniforms.intensity.value = l.dark ? 0.55 : 0.32
+      zMat.color.copy(l.dark ? l.tint.soft : l.tint.ink.clone().lerp(l.tint.glow, 0.35))
       for (let i = 0; i < 3; i++) beads.setColorAt(i, p.signal)
       beads.instanceColor.needsUpdate = true
       glow.material.color.copy(CALL)
@@ -498,7 +544,7 @@ export default {
         const lo = Y_BOT - 0.08, s = Math.min(1, (frameTop - lo) / (need - lo))
         fit.scale.setScalar(s); fit.position.y = lo * (1 - s)
       } else {
-        fit.scale.setScalar(1); fit.position.y = Math.min(0, frameTop - need)
+        fit.scale.setScalar(1); fit.position.y = Math.min(0, frameTop - need) * 0.6 // in the small tab, let the hat crown crop a little rather than lose the face
       }
     }
     setLook(look)
@@ -507,23 +553,21 @@ export default {
       const x = e.s * EX + f.lookX * 0.045, y = EY - f.lookY * 0.04
       e.grp.position.set(x, y, surfZ(x, y) - 0.002)
       e.grp.rotation.set(0, surfYaw(x, y), 0)
-      const geo = shape === 'open' ? EYE[curLook.eyes] ?? EYE.pills : EYE[shape]
+      const open = shape !== 'happy' && shape !== 'closed'
+      const geo = open ? EYE[curLook.eyes] ?? EYE.pills : EYE[shape]
       if (e.m.geometry !== geo) e.m.geometry = geo
-      e.hl.visible = shape === 'open' || shape === 'lid'
-      if (shape === 'open') {
-        const o = Math.max(0.1, f.open * f.blink)
-        e.m.scale.set(1 + (Math.min(f.open, 1.15) - 1) * 0.6, o, 1)
-        e.m.rotation.z = 0
-        e.hl.position.set(0.022, curLook.eyes === 'arcs' ? 0.0 : 0.045, 0.022)
-      } else if (shape === 'lid') {
-        const o = f.mood === 'sleepy' ? Math.min(1, 0.45 + f.open * 1.7) : 1
-        e.m.scale.set(1, o * f.blink, 1)
-        e.m.rotation.z = f.mood === 'worried' ? -e.s * 0.3 : 0
-        e.hl.position.set(0.024, -0.03, 0.022)
-      } else {
-        e.m.scale.set(1, 1, 1)
-        e.m.rotation.z = 0
-      }
+      e.hl.visible = open
+      const k = open ? LIDS[shape] : 0
+      e.lid.visible = k > 0
+      if (open) {
+        const { top, bot, hw } = geo.userData, wide = shape === 'wide'
+        e.m.scale.set(wide ? 1.08 : 1, Math.max(0.1, f.blink * (wide ? 1.06 : 1)), 1)
+        const lidTop = top + 0.008, cut = top - (top - bot) * k * (shape === 'sleepy' ? Math.min(1.15, 1.3 - f.open) : 1)
+        e.lid.position.set(0, lidTop, 0.006)
+        e.lid.scale.set(hw + 0.014, lidTop - cut, 1)
+        e.lid.rotation.z = shape === 'worried' ? -e.s * 0.32 : 0
+        e.hl.position.set(0.022, Math.min(0.045, cut - 0.03), 0.022)
+      } else e.m.scale.set(1, 1, 1)
     }
 
     function update(f) {
@@ -538,7 +582,7 @@ export default {
       /* posture */
       const sway = A * Math.sin(c * 0.9) * 0.018 * f.wob
       const breathe = A * Math.sin(c * 1.7) * 0.007 * (0.5 + f.wob)
-      base.position.y = f.bounce - pose.sink * (0.6 + 0.4 * P)
+      base.position.y = f.bounce - pose.sink * (0.6 + 0.4 * P) * (size === 'big' ? 0.4 : hatTop ? 0.45 : 1) // tuck deeper in the small tab (less under a hat)
       base.position.x = f.mood === 'worried' ? A * Math.sin(f.t * 38) * 0.006 * P : 0
       pivot.rotation.x = pose.lean * (0.75 + 0.35 * P) + talk * lvl * 0.035 * A
       pivot.rotation.z = -pose.tilt * (0.75 + 0.35 * P) + sway + talk * A * Math.sin(c * 2.3) * 0.02
@@ -546,18 +590,17 @@ export default {
       pivot.scale.set(1 / Math.sqrt(st), st, 1 / Math.sqrt(st))
 
       /* body color: warm when worried */
-      bodyMat.color.copy(pal.body).lerp(warmCol, f.warm * 0.12)
-      rimMat.uniforms.color.value.copy(curLook.dark ? curLook.tint.glow : WHITE).lerp(warmCol, f.warm)
-      rimMat.uniforms.intensity.value = (curLook.dark ? 0.55 : 0.32) + f.warm * 0.9
+      
 
       /* eyes */
-      const shape = f.mood === 'resting' ? 'closed' : f.mood === 'done' || f.mood === 'celebrating' ? 'happy' : f.mood === 'sleepy' || f.mood === 'worried' ? 'lid' : 'open'
+      const md = f.mood
+      const shape = md === 'resting' ? 'closed' : md === 'done' || md === 'celebrating' ? 'happy' : md === 'sleepy' ? 'sleepy' : md === 'worried' ? 'worried' : md === 'listening' || md === 'needs-you' ? 'wide' : 'neutral'
       for (const e of eyes) placeEye(e, f, shape)
 
       /* brows */
       for (const b of brows) {
         const own = b.s < 0 ? pose.bL : pose.bR
-        b.m.position.y = pose.brow + own + talk * lvl * 0.03 + (shape === 'open' ? (f.open - 1) * 0.12 : 0)
+        b.m.position.y = pose.brow + own + talk * lvl * 0.03 + (shape === 'wide' ? 0.025 : 0)
         b.m.rotation.z = -b.s * pose.bSlant + (b.s > 0 ? pose.bR : -pose.bL) * 0.0
       }
 
@@ -565,22 +608,23 @@ export default {
       mus.position.y = MY + talk * lvl * 0.025
       halves[0].rotation.z = -(pose.mus + pose.musL)
       halves[1].rotation.z = pose.mus + pose.musR
-      const mo = Math.max(talk * (0.3 + lvl * 0.7), pose.mouth)
+      const mo = Math.max(talk * (0.45 + lvl * 0.55), pose.mouth)
       mouth.visible = mo > 0.04
-      mouth.scale.set(0.075 + mo * 0.035, 0.02 + mo * 0.11, 1)
-      cheekMat.opacity = pose.cheek * 0.55
-      cheeks.visible = pose.cheek > 0.02
+      mouth.scale.set(0.08 + mo * 0.05, 0.02 + mo * 0.14, 1)
 
       /* hat */
-      hatGrp.rotation.set(-pose.hatTip * 0.6, 0, -0.07 + (f.mood === 'celebrating' ? A * Math.sin(f.t * 6.5) * 0.12 : 0))
-      hatGrp.position.y = Y_TOP - 0.012 + pose.hatLift * (0.6 + 0.4 * P) + pose.hatTip * 0.05
+      const toss = f.mood === 'celebrating' ? Math.min(1, -f.bounce / 0.09) : 0
+      hatGrp.rotation.set(-pose.hatTip * 0.6, pose.hatLift * toss * 2.5, -0.07 - pose.hatLift * 1.6)
+      hatGrp.position.y = Y_TOP - 0.012 + pose.hatLift * (0.35 + 0.65 * toss) + pose.hatTip * 0.05
 
       /* glasses */
       specs.position.y = pose.gY
       specs.rotation.z = pose.gTilt
 
       /* thinking beads / call bead / sweat drop */
-      const showBeads = pose.think > 0.02 || pose.call > 0.02 || pose.sweat > 0.02
+      const showBeads = pose.think > 0.02 || pose.sweat > 0.02
+      badge.visible = pose.call > 0.02
+      badge.scale.setScalar(0.38 * pose.call * (A ? 1 + 0.07 * Math.sin(f.t * 6) : 1))
       beads.visible = showBeads
       glow.material.opacity = pose.call * (0.55 + 0.3 * A * Math.sin(f.t * 5)) * (curLook.dark ? 1 : 0.6)
       glow.visible = pose.call > 0.02
@@ -589,21 +633,21 @@ export default {
           let x = 0, y = 0, z = 0.1, s = 0, sx = 1
           if (pose.think > 0.02) {
             const pulse = A ? 0.75 + 0.25 * Math.max(0, Math.sin(f.t * 4 - i * 0.9)) : 0.9
-            x = 0.54 + i * 0.15; y = 0.82 + i * 0.11; z = 0.2; s = (0.06 + i * 0.022) * pulse * pose.think
+            x = 0.52 + i * 0.16; y = 0.8 + i * 0.12; z = 0.25; s = (0.065 + i * 0.024) * pulse * pose.think
           } else if (pose.call > 0.02) {
-            if (i === 0) { x = 0.63; y = 0.7; z = 0.3; s = 0.12 * pose.call * (A ? 1 + 0.08 * Math.sin(f.t * 5) : 1) }
+            
           } else if (i === 0) {
             const drip = A ? (f.t * 0.6) % 1 : 0.3
-            x = 0.47; y = 0.74 - drip * 0.08; z = surfZ(0.47, 0.72) + 0.03; s = 0.034 * pose.sweat; sx = 0.78
+            x = 0.4; y = 0.7 - drip * 0.06; z = surfZ(0.4, 0.68) + 0.05; s = 0.085 * pose.sweat; sx = 0.78
           }
           v3.set(x, y, z); s3.set(s * sx, s * (sx < 1 ? 1.35 : 1), s); q.identity()
           beads.setMatrixAt(i, m4.compose(v3, q, s3))
         }
         beads.instanceMatrix.needsUpdate = true
-        if (pose.sweat > 0.02 && pose.think <= 0.02 && pose.call <= 0.02) { tmpCol.set('#bfe6ff'); beads.setColorAt(0, tmpCol) } else beads.setColorAt(0, pose.call > 0.02 ? CALL : pal.signal)
+        if (pose.sweat > 0.02 && pose.think <= 0.02 && pose.call <= 0.02) { beads.setColorAt(0, warmCol) } else beads.setColorAt(0, pal.signal)
         beads.instanceColor.needsUpdate = true
       }
-      glow.position.set(0.63, 0.7, 0.25)
+      glow.position.set(0.6, 0.78, 0.3)
       glow.scale.setScalar(0.7)
 
       /* z's */
