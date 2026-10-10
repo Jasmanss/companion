@@ -281,12 +281,12 @@ float eyeSD(vec2 q, float side) {
     ext = mix(0.55, 0.45, uSad) * ah;
   }
   // lids: a straight edge from above; tilt > 0 slopes it down toward the outer corner (worried brows, sleepy droop)
-  // sleepy lids curve down toward both corners (a drowsy arc, not the flat cut of an unimpressed look)
-  float lidY = ext - uLid * 2.0 * ext + uTilt * (-side) * q.x - uLidLine * 7.0 * q.x * q.x;
+  // sleepy lids sag in the middle (a drowsy curve, not the flat cut of an unimpressed look)
+  float lidY = ext - uLid * 2.0 * ext + uTilt * (-side) * q.x + uLidLine * 5.0 * q.x * q.x;
   d = max(d, q.y - lidY);
   float sw = w * 0.16 * uStroke;
   // sleepy: a heavy lid, drawn as a line a little wider than the eye
-  float dLid = max(abs(q.y - lidY) - sw * 0.55, abs(q.x) - w * 0.62);
+  float dLid = max(abs(q.y - lidY) - sw * 0.5, abs(q.x) - w * 0.5);
   d = mix(d, min(d, dLid), uLidLine);
   float dH = sdArc(q - vec2(0.0, -0.42 * w), 1.12, 0.7 * w, sw);
   float dC = sdArc(vec2(q.x, -(q.y - 0.36 * w)), 1.0, 0.64 * w, sw * 0.9);
