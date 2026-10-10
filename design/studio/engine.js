@@ -7,6 +7,7 @@
 //     eyes: ['pills', 'dots', 'arcs'],      // eye styles it supports (the Eyes control); [] if it has its own
 //     accessories: true,                    // optional: it draws look.hat and look.glasses (the Hat and Glasses controls)
 //     frame: { height: 2.6, y: 0 },         // world units the camera fits vertically, and where it looks
+//     style: 'glass' | 'solid',             // optional, shown on the card; solid characters use kit.solid
 //     create(ctx) -> instance,
 //   }
 //   ctx = { THREE, kit, look, size }        // size: 'big' | 'header' | 'peek'
@@ -160,6 +161,22 @@ export function makeKit() {
       m.attenuationColor.copy(tn.glass)
       m.attenuationDistance = extra.attenuationDistance ?? 1.6 - look.frost * 0.8
       m.envMapIntensity = look.dark ? 0.8 : 1.1
+      m.needsUpdate = true
+    },
+    /**
+     * Solid soft-toy material (designer vinyl / soft-touch clay), for opaque characters. look.frost doubles as the finish:
+     * 0 = glossy enamel, 1 = soft matte. Pass the result to updateSolid when the look changes.
+     */
+    solid(color, look, extra = {}) {
+      const m = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color), sheen: 0.5, sheenRoughness: 0.6, sheenColor: new THREE.Color(1, 1, 1), ...extra })
+      this.updateSolid(m, look, extra)
+      return m
+    },
+    updateSolid(m, look, extra = {}) {
+      m.roughness = extra.roughness ?? 0.28 + 0.45 * look.frost
+      m.clearcoat = extra.clearcoat ?? 0.6 * (1 - look.frost)
+      m.clearcoatRoughness = 0.25
+      m.envMapIntensity = look.dark ? 0.7 : 1
       m.needsUpdate = true
     },
     /** Additive soft glow sprite: put it behind or inside glass to make light. */
