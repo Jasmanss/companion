@@ -22,7 +22,7 @@ import * as THREE from 'three'
 
 const WARM = new THREE.Color('#ffb870')
 const WARM_DEEP = new THREE.Color('#ff9a3c')
-const WARM_ATT = new THREE.Color('#ffa040')
+const WARM_ATT = new THREE.Color('#ffb24a')
 const WHITE = new THREE.Color(1, 1, 1)
 const BLACK = new THREE.Color(0, 0, 0)
 
@@ -47,7 +47,7 @@ const EYE_WHITE = { ice: 0.62, lilac: 0.62, mint: 0.6, peach: 0.8, graphite: 0.6
 const HALO_SOFTEN = { ice: 0, lilac: 0, mint: 0.1, peach: 0.4, graphite: 0 }
 // Body absorption per tint: [how far the glow is pulled toward ink (negative: toward white), attenuation distance].
 // Peach keeps the stone nearly clear (warm glass reads as skin) and carries its colour in the light instead.
-const ATT = { ice: [0.3, 2.2], lilac: [0.3, 2.2], mint: [0.34, 2.3], peach: [-0.5, 4.5], graphite: [0.42, 2.5] }
+const ATT = { ice: [0.3, 1.75], lilac: [0.3, 1.75], mint: [0.34, 1.85], peach: [-0.5, 4.2], graphite: [0.42, 2.0] }
 // a saturated status light for needs-you (graphite's own glow is too pale to read as a signal)
 const PIP = { graphite: '#69b4ff' }
 
@@ -120,7 +120,7 @@ void main() {
 const LENS_FRAG = /* glsl */ `
 uniform float uT, uPulse, uOpen, uStyle, uHappy, uClosed, uDroop, uWorry, uRing, uGlow, uSwirl, uRip, uLevel, uTalk;
 uniform float uWarm, uSpark, uAlert, uDone, uSweep, uListen, uCeleb, uSmall, uFrost, uEgg, uN, uDim, uDark;
-uniform float uRingR, uCoreR, uOpacity, uHasBg, uLid, uGap;
+uniform float uRingR, uCoreR, uOpacity, uHasBg, uLid, uGap, uHead;
 uniform vec2 uLook, uA, uEyePos, uEyeSize;
 uniform vec3 uPip;
 uniform vec4 uBgMap;
@@ -201,9 +201,8 @@ void main() {
   float fw = 0.012 + 0.08 * uFrost * uFrost * uFrost;
   float core = 1.0 - smoothstep(uCoreR - fw, uCoreR + fw, rho);
   vec3 halo = mix(cHalo, cWarm, uWarm);
-  float sr = smoothstep(0.2, uCoreR + 0.05, rho);
   // smoked glass: deeper at the top, a little light gathering toward the bottom, lighter toward its rim
-  vec3 smoke = cBase * mix(0.8, 1.6, sr * sr) * (1.0 + 0.28 * smoothstep(0.1, -0.9, u.y) - 0.12 * smoothstep(0.2, 0.9, u.y));
+  vec3 smoke = cBase * mix(0.85, 1.4, smoothstep(0.45, uCoreR, rho)) * (1.0 + 0.28 * smoothstep(0.1, -0.9, u.y) - 0.12 * smoothstep(0.2, 0.9, u.y));
   vec3 col = mix(bg, smoke, core * uOpacity);
   vec3 lt = halo * (0.035 + 0.04 * uListen) * uGlow * core * (1.0 - rho * 0.6);
 
@@ -232,11 +231,13 @@ void main() {
   // needs-you: a bright heartbeat
   ringI += uAlert * (0.55 + 1.25 * uPulse);
   // listening: the whole ring lit, steady and even
-  ringI += uListen * (0.8 + 0.12 * uPulse);
-  // thinking: one short comet circling clockwise, bright over the top right (where the eyes look), faint below
-  float cs = fract(a01 + uT * 0.3);
-  float comet = (1.0 - exp(-cs * 80.0)) * exp(-cs * 17.0) * 3.4 * (1.0 - smoothstep(0.11, 0.165, cs));
-  comet *= 0.06 + 0.94 * smoothstep(-0.3, 0.5, dot(vec2(cos(th), sin(th)), vec2(0.55, 0.835)));
+  ringI += uListen * (0.55 + 0.08 * uPulse);
+  // thinking: one short comet (about 60 degrees with its tail) circling clockwise. Its orbit is uneven: it
+  // lingers over the top right, where the eyes look, and hurries through the bottom, where it also dims, so it
+  // never sits under the eyes like a mouth.
+  float cs = fract(a01 - uHead);
+  float comet = (1.0 - exp(-cs * 90.0)) * exp(-cs * 9.0) * 2.6 * (1.0 - smoothstep(0.1, 0.165, cs));
+  comet *= smoothstep(-0.25, 0.4, dot(vec2(cos(th), sin(th)), vec2(0.55, 0.835)));
   ringI += uSwirl * comet;
   // celebrating: three bright bands chasing round
   float cb = 0.5 + 0.5 * sin(th * 3.0 - uT * 3.4);
@@ -294,8 +295,9 @@ void main() {
   float pip = 1.0 - smoothstep(uPip.z - paa, uPip.z + paa, pd);
   float seat = smoothstep(uPip.z * 0.85, uPip.z * 1.2, pd) * (1.0 - smoothstep(uPip.z * 1.45, uPip.z * 2.0, pd));
   col *= 1.0 - 0.8 * seat * uAlert;
-  col += cPip * exp(-max(pd - uPip.z, 0.0) / (uPip.z * 0.9)) * uAlert * (0.25 + 0.6 * uPulse) * (1.0 - seat);
-  col = mix(col, mix(cPip, vec3(1.0), 0.25 + 0.5 * smoothstep(uPip.z, 0.0, pd)) * (1.5 + 0.7 * uPulse), pip * uAlert);
+  col += cPip * exp(-max(pd - uPip.z * 1.6, 0.0) / (uPip.z * 1.2)) * smoothstep(uPip.z * 1.3, uPip.z * 2.0, pd) * uAlert * (0.35 + 0.9 * uPulse);
+  // a saturated light with a hot white centre
+  col = mix(col, mix(cPip * 1.25, vec3(1.6), smoothstep(uPip.z * 0.75, 0.0, pd)) * (1.0 + 0.45 * uPulse), pip * uAlert);
 
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -319,7 +321,7 @@ export default {
     root.add(tilt)
 
     // Shell: a lozenge 2.4 wide, 1.72 tall, 0.84 thick.
-    const SH = { a: 1.2, b: 0.86, c: 0.42, n: 2.25, m: 2.3, egg: 0.05 }
+    const SH = { a: 1.2, b: 0.86, c: 0.45, n: 2.25, m: 2.05, egg: 0.05 }
     const seg = tiny ? [56, 38] : small ? [72, 48] : [112, 72]
     const shellGeo = pebbleGeometry({ ...SH, ws: seg[0], hs: seg[1] })
     const U = {
@@ -383,7 +385,7 @@ export default {
         // Beer-Lambert: thin through the face, deep at the silhouette; then a darker refraction band inside the
         // light pipe (dark then bright at the edge is how glass reads on white)
         .replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment
-          .replace('material.thickness = thickness;', 'material.thickness = thickness * (uThin + uThick * pow(pbFr, 2.4));')
+          .replace('material.thickness = thickness;', 'material.thickness = thickness * (uThin + uThick * pow(pbFr, 2.0));')
           .replace('material.transmissionAlpha = mix(', `transmitted.rgb *= uGain * (1.0 - uBand * smoothstep(0.45, 0.72, pbFr) * (1.0 - smoothstep(0.8, 0.92, pbFr)));
           material.transmissionAlpha = mix(`))
         .replace('#include <opaque_fragment>', `
@@ -436,7 +438,7 @@ export default {
       uLevel: { value: 0 }, uTalk: { value: 0 }, uWarm: { value: 0 }, uSpark: { value: 0 }, uAlert: { value: 0 }, uDone: { value: 0 },
       uSweep: { value: 1 }, uListen: { value: 0 }, uCeleb: { value: 0 }, uSmall: { value: small ? 1 : 0 }, uFrost: { value: look.frost },
       uEgg: { value: SH.egg }, uN: { value: SH.n }, uDim: { value: 1 }, uDark: { value: look.dark ? 1 : 0 },
-      uRingR: { value: ringR }, uCoreR: { value: 0.84 }, uOpacity: { value: 0.95 }, uHasBg: { value: 0 }, uLid: { value: 0.4 }, uGap: { value: 0 },
+      uRingR: { value: ringR }, uCoreR: { value: 0.84 }, uOpacity: { value: 0.95 }, uHasBg: { value: 0 }, uLid: { value: 0.4 }, uGap: { value: 0 }, uHead: { value: 0.1 },
       uLook: { value: new THREE.Vector2() }, uA: { value: new THREE.Vector2(LA.a, LA.b) },
       // upper left on the ring, clear of the shell's highlights and of the eyes
       uPip: { value: pipAt(1.98, ringR, tiny ? 0.082 : small ? 0.066 : 0.042) },
@@ -544,7 +546,7 @@ export default {
       } else {
         U.uPipe.value.copy(WHITE).multiplyScalar(tiny ? 0.5 : 0.42)
         U.uHair.value.copy(tn.ink).lerp(BLACK, 0.35)
-        U.uHairI.value = tiny ? 0.42 : 0.5
+        U.uHairI.value = tiny ? 0.42 : small ? 0.4 : 0.32
         U.uVeil.value.copy(WHITE).lerp(tn.glass, 0.25)
       }
       U.uVeilA.value = 0.36 * Math.pow(fr, 2.5)
@@ -610,7 +612,7 @@ export default {
       U.uSwirl.value = f.swirl
       U.uLevel.value = f.level
       // worried: the glass itself warms to amber (absorption, not a grey wash)
-      shellMat.attenuationColor.copy(attBase).lerp(WARM_ATT, f.warm * 0.75)
+      shellMat.attenuationColor.copy(attBase).lerp(WARM_ATT, f.warm * 0.8)
       // caustic: a thin crescent of the face's light in the lower inner edge
       const cI = (dark ? 0.5 : 0.7) * (0.55 + 0.45 * mp.glow * mp.dim + 0.9 * mp.alert * pulse + 0.6 * f.spark)
       U.uCaustic.value.copy(causticBase).lerp(WARM_DEEP, f.warm * 0.8).multiplyScalar(cI)
@@ -629,7 +631,7 @@ export default {
       L.uClosed.value = mp.closed
       L.uDroop.value = mp.droop
       // sleepy lid: level, about 40% open, sagging slowly with the engine's lids (and still blinking)
-      L.uLid.value = Math.max(0.05, (0.3 + (Math.min(f.open, 0.6) - 0.2) * 0.9) * f.blink)
+      L.uLid.value = Math.max(0.05, (0.36 + (Math.min(f.open, 0.6) - 0.2) * 0.9) * f.blink)
       L.uWorry.value = mp.worry
       L.uRing.value = mp.ring
       L.uGlow.value = mp.glow
@@ -644,11 +646,17 @@ export default {
       L.uListen.value = mp.listen
       L.uDone.value = mp.done
       L.uGap.value = rm ? 0.12 : 0.12 + Math.sin(T * 0.4) * 0.08
+      // comet head (turns, counterclockwise from +x). Clockwise and uneven: it glides across the upper-right arc
+      // (from 10 o'clock to 4 o'clock) for 88% of the cycle, then slips quickly round the back, where it is hidden.
+      const ph = rm ? 0.45 : (T * 0.28) % 1
+      const sw = ph < 0.88 ? (ph / 0.88) * (190 / 360) : 190 / 360 + ((ph - 0.88) / 0.12) * (170 / 360)
+      const hd = 150 / 360 - sw
+      L.uHead.value = hd - Math.floor(hd)
       const sweep = f.mood === 'done' && !rm ? Math.min(1, Math.max(0, (f.moodAge - 0.15) / 0.85)) : 1
       L.uSweep.value = sweep < 1 ? 1 - Math.pow(1 - sweep, 2.2) : 1
       L.uDim.value = mp.dim
       // eye shape per mood: listening rounder and lifted, needs-you wide, worried smaller, sleepy wide and low
-      const ew = 1 + 0.36 * mp.listen + 0.12 * mp.alert + 0.12 * mp.worry + 0.22 * mp.droop
+      const ew = 1 + 0.36 * mp.listen + 0.12 * mp.alert + 0.12 * mp.worry + 0.42 * mp.droop
       const eh = 1 + 0.04 * mp.listen + 0.08 * mp.alert - 0.14 * mp.worry
       L.uEyeSize.value.set(eyeW * ew, eyeH * eh)
       L.uEyePos.value.y = 0.04 + 0.045 * mp.listen - 0.03 * mp.droop

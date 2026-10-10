@@ -135,14 +135,10 @@ uniform float uLevel;
 uniform float uDark;
 uniform float uCaustic;
 uniform float uLamp;
-uniform float uHorizon;
 uniform vec2 uCoreC;
 uniform vec2 uMouthC;
 uniform float uOn;
-uniform float uWin;
 varying vec2 vP;
-mat2 rot2(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
-float sdRB(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
 void main() {
   if (uOn < 0.5) discard;
   vec2 c = vP - uCoreC;
@@ -165,22 +161,17 @@ void main() {
   float crescent = exp(-pow((cr - 0.6) / 0.05, 2.0)) * smoothstep(-0.05, -0.55, cq.y);
   vec2 fq = (vP - vec2(0.18, -0.74)) * vec2(1.0, 1.7);
   float focal = exp(-dot(fq, fq) * 55.0);
-  // the key light (upper left) seen through the lens: a small bright window, low on the opposite side
-  vec2 wq = rot2(-0.75) * (vP - vec2(0.42, -0.6));
-  float win = 1.0 - smoothstep(-0.008, 0.008, sdRB(wq, vec2(0.06, 0.022), 0.02));
-  float caustic = (crescent + focal * 0.8) * (0.85 + 0.15 * sin(uClock * 0.9)) * uCaustic + win * uWin;
+  float caustic = (crescent + focal * 0.8) * (0.85 + 0.15 * sin(uClock * 0.9)) * uCaustic;
   // worried: a warm lamp low in the belly
-  vec2 lq = (vP - vec2(0.0, -0.42)) * vec2(1.0, 1.15);
-  float lamp = exp(-dot(lq, lq) * 4.2) * uLamp;
+  vec2 lq = (vP - vec2(0.0, -0.45)) * vec2(1.0, 1.15);
+  float lamp = exp(-dot(lq, lq) * (uDark > 0.5 ? 13.0 : 8.0)) * uLamp;
   if (uDark > 0.5) {
-    vec3 add = uCoreCol * (core * uCore + arm * 0.7 + ringB * 1.1) + uCausticCol * caustic + uLampCol * lamp * 1.3;
+    vec3 add = uCoreCol * (core * uCore + arm * 0.7 + ringB * 1.1) + uCausticCol * caustic + uLampCol * lamp * 1.5;
     gl_FragColor = vec4(add, 0.0);
   } else {
-    // pale panels: the glass needs structure more than light. The dome shows the inverted "ground" (a soft darker
-    // band with a crisp-ish horizon), the belly gathers the caustics; the core is only a whisper.
-    float hy = 0.1 + 0.2 * vP.x * vP.x;
-    float ground = smoothstep(hy - 0.04, hy + 0.32, vP.y) * smoothstep(1.45, 0.9, vP.y) * smoothstep(1.35, 0.95, abs(vP.x)) * uHorizon;
-    float dk = clamp(ground + ringD * 0.35, 0.0, 0.8);
+    // pale panels: the glass needs structure more than light (the edge band and inner ring live in the body
+    // shader); here the belly gathers the caustics, talking adds shaded ripples, the core is only a whisper
+    float dk = clamp(ringD * 0.35, 0.0, 0.8);
     float la = clamp(lamp * 0.55, 0.0, 0.7);
     vec3 add = uCoreCol * (core * uCore + ringB * 0.9 + arm * 0.55) + uCausticCol * caustic * 1.7 + uLampCol * lamp * 0.6;
     gl_FragColor = vec4(uInk * dk * (1.0 - la) + uLampCol * la + add, 1.0 - (1.0 - dk) * (1.0 - la));
@@ -207,6 +198,7 @@ uniform float uStyle;
 uniform float uHappy;
 uniform float uClosed;
 uniform float uLid;
+uniform float uLidLine;
 uniform float uSad;
 uniform float uTilt;
 uniform float uRot;
@@ -241,6 +233,9 @@ uniform float uShadowY;
 uniform vec3 uShadowCol;
 uniform vec3 uCausticCol;
 uniform float uSweat;
+uniform float uZ;
+uniform vec3 uZP;
+uniform vec3 uZCol;
 uniform vec3 uSweatP;
 uniform vec3 uSweatCol;
 uniform vec3 uSweatEdge;
@@ -286,9 +281,13 @@ float eyeSD(vec2 q, float side) {
     ext = mix(0.55, 0.45, uSad) * ah;
   }
   // lids: a straight edge from above; tilt > 0 slopes it down toward the outer corner (worried brows, sleepy droop)
-  float lidY = ext - uLid * 2.0 * ext + uTilt * (-side) * q.x;
+  // sleepy lids curve down toward both corners (a drowsy arc, not the flat cut of an unimpressed look)
+  float lidY = ext - uLid * 2.0 * ext + uTilt * (-side) * q.x - uLidLine * 7.0 * q.x * q.x;
   d = max(d, q.y - lidY);
   float sw = w * 0.16 * uStroke;
+  // sleepy: a heavy lid, drawn as a line a little wider than the eye
+  float dLid = max(abs(q.y - lidY) - sw * 0.55, abs(q.x) - w * 0.62);
+  d = mix(d, min(d, dLid), uLidLine);
   float dH = sdArc(q - vec2(0.0, -0.42 * w), 1.12, 0.7 * w, sw);
   float dC = sdArc(vec2(q.x, -(q.y - 0.36 * w)), 1.0, 0.64 * w, sw * 0.9);
   d = mix(d, dH, uHappy);
@@ -304,7 +303,7 @@ float mouthA(vec2 p) {
   float dS = sdArc(vec2(q.x, -(q.y - R * 0.72)), 0.95, R, st);
   float dD = max(length(q - vec2(0.0, 0.1 * mw)) - 0.44 * mw, q.y - 0.1 * mw);
   // talking: a soft horizontal oval at rest, opening with the voice
-  float dO = sdEll(q, vec2((0.3 + 0.06 * uLevel) * mw, (0.1 + uLevel * 0.3) * mw));
+  float dO = sdEll(q, vec2((0.34 + 0.08 * uLevel) * mw, (0.08 + uLevel * 0.26) * mw));
   float dN = sdEll(q, vec2(0.15, 0.19) * mw * uOSize);
   float xw = clamp(q.x, -0.4 * mw, 0.4 * mw);
   float wy = 0.065 * mw * sin(xw / mw * 15.0);
@@ -334,8 +333,9 @@ void main() {
   gPx = max(fwidth(vP.x), fwidth(vP.y));
   vec4 acc = vec4(0.0);
 
+#ifdef LM_SHADOW
   // contact shadow, with the light the drop focuses into it
-  if (uShadow > 0.001) {
+  {
     vec2 s = vec2(p.x / 0.62, (p.y - uShadowY) / 0.075);
     float sh = exp(-dot(s, s) * 1.4) * uShadow;
     over(acc, uShadowCol, sh * (uDark > 0.5 ? 0.42 : 0.24));
@@ -345,6 +345,8 @@ void main() {
     else over(acc, uCausticCol, ca * 0.75);
   }
 
+#endif
+#ifdef LM_FX
   // celebrating sparkles
   if (uSpark > 0.001) {
     for (int i = 0; i < 7; i++) {
@@ -386,29 +388,46 @@ void main() {
     over(acc, uSigHot, cov(length(b) - Rp * 0.5) * uBeacon);
   }
 
+  // sleepy: a small z drifting up off the tip
+  if (uZ > 0.001) {
+    vec2 q = (p - uZP.xy) / uZP.z;
+    float dz = min(min(sdSeg(q, vec2(-0.5, 0.5), vec2(0.5, 0.5)), sdSeg(q, vec2(0.5, 0.5), vec2(-0.5, -0.5))), sdSeg(q, vec2(-0.5, -0.5), vec2(0.5, -0.5)));
+    dz = dz * uZP.z - 0.022 * uStroke * uZP.z / 0.14;
+    over(acc, uZCol, cov(dz) * uZ);
+  }
+
   // thinking: one bead of light with a short tapered tail, orbiting the upper drop
   if (uThink > 0.001) {
-    vec2 oc = vec2(0.0, 0.36);
-    vec2 orad = vec2(0.44, 0.13);
+    vec2 oc = vec2(0.0, 0.5);
+    vec2 orad = vec2(0.37, 0.11);
     vec2 q = rot(0.22) * (p - oc);
     float rr = length(q / orad);
     vec2 gq = q / (orad * orad) / max(rr, 1e-3);
     float dist = (rr - 1.0) / max(length(gq), 1e-3);
     float ang = atan(q.y / orad.y, q.x / orad.x);
     float dA = mod(uOrbit - ang, 6.2831);
-    float tl = clamp(1.0 - dA / 1.7, 0.0, 1.0);
-    float back = mix(0.45, 1.0, smoothstep(0.7, -0.7, sin(ang)));
+    float tl = clamp(1.0 - dA / 2.2, 0.0, 1.0);
+    float back = mix(0.6, 1.0, smoothstep(0.7, -0.7, sin(ang)));
     float wdt = uCometR * 0.7 * tl;
     float line = (1.0 - smoothstep(wdt - gPx, wdt + gPx, abs(dist))) * tl * back * step(0.001, tl);
     vec2 hp = oc + rot(-0.22) * (vec2(cos(uOrbit), sin(uOrbit)) * orad);
     vec2 hd = p - hp;
-    float hb = mix(0.55, 1.0, smoothstep(0.7, -0.7, sin(uOrbit)));
+    float hb = mix(0.65, 1.0, smoothstep(0.7, -0.7, sin(uOrbit)));
     float hs = uCometR * (0.8 + 0.2 * hb);
-    glow(acc, uCometGlow, (exp(-dot(hd, hd) / (hs * hs * 5.0)) * 0.9 * hb + line * 0.35) * uThink);
+    // the whole orbit, faintly: it reads as a path of thought rather than a brow
+    float near = smoothstep(0.5, -0.6, sin(ang));
+    float path = exp(-pow(dist / (0.013 * uStroke), 2.0)) * mix(0.12, 1.0, near) * (uDark > 0.5 ? 1.0 : 1.6);
+    glow(acc, uCometGlow, (exp(-dot(hd, hd) / (hs * hs * 5.0)) * 0.9 * hb + line * 0.35 + path * 0.35) * uThink);
+    // light theme: the bead is drawn like the LED (deep outline, saturated ring, white-hot heart) so it reads as light
     over(acc, uCometCol, max(cov(length(hd) - hs) * hb, line * 0.85) * uThink);
-    over(acc, vec3(1.0), cov(length(hd - vec2(-0.3, 0.3) * hs) - hs * 0.38) * uThink * (uDark > 0.5 ? 0.0 : 0.9) * hb);
+    if (uDark < 0.5) {
+      over(acc, uCometGlow, cov(length(hd) - hs * 0.72) * hb * uThink);
+      over(acc, vec3(1.0), cov(length(hd) - hs * 0.38) * hb * uThink);
+    }
   }
 
+#endif
+#ifdef LM_FACE
   // eyes and mouth
   vec2 fq = (p - uFace - vec2(0.0, -0.18)) * vec2(0.85, 1.0);
   if (dot(fq, fq) > 0.62) { gl_FragColor = acc; return; }
@@ -439,6 +458,7 @@ void main() {
     float g = max(cov(length(el - go) - gr), cov(length(er - go) - gr)) * smoothstep(0.0, gr * 0.8, -d);
     over(acc, vec3(1.0), g * uDepth * 0.9 * (1.0 - uHappy) * (1.0 - uClosed));
   }
+#endif
 
   gl_FragColor = acc;
 }
@@ -458,7 +478,7 @@ const MOOD = {
   'needs-you': mood({ core: 0.85, halo: 1, beacon: 1, m: [0, 0, 0, 1, 0, 0], squash: 0.04, pitch: 0.04, big: 0.5 }),
   worried: mood({ sad: 1, lid: 0.2, tilt: 0.55, rot: 0.12, core: 0.6, halo: 0.8, m: [0, 0, 0, 0, 1, 0], squash: -0.02 }),
   celebrating: mood({ happy: 1, core: 1, halo: 1, smile: 1, m: [0, 1, 0, 0, 0, 0] }),
-  sleepy: mood({ tilt: 0.42, core: 0.3, halo: 0.4, m: [0, 0, 0, 1, 0, 0], osz: 0.75, squash: -0.03, lean: 0.1, pitch: 0.06, sleep: 1, low: 1 }),
+  sleepy: mood({ tilt: 0.12, core: 0.3, halo: 0.4, m: [0, 0, 0, 1, 0, 0], osz: 0.75, squash: -0.03, lean: 0.1, pitch: 0.06, sleep: 1, low: 1 }),
 }
 const KEYS = Object.keys(BASE)
 
@@ -504,14 +524,16 @@ export default {
     const GU = {
       uEdgeCol: { value: new THREE.Color() }, uEdgeK: { value: 0.6 }, uEdgeP: { value: 1.8 }, uLift: { value: 0.1 }, uSoftTone: { value: 0 },
       uFaceSpec: { value: 0.1 }, uSpecIn: { value: 1 }, uTopK: { value: 0.3 }, uDeep: { value: new THREE.Color() }, uThick: { value: 0 },
-      uClearA: { value: 1 }, uMilk: { value: 0 }, uMilkCol: { value: new THREE.Color() }, uCCEdge: { value: 1 }, uSpecEdge: { value: 1 }, uBand: { value: new THREE.Vector2(0.22, 0.55) },
+      uClearA: { value: 1 }, uMilk: { value: 0 }, uMilkCol: { value: new THREE.Color() }, uCCEdge: { value: 1 }, uSpecEdge: { value: 1 }, uBand: { value: new THREE.Vector2(0.28, 0.62) }, uInner: { value: 0 },
     }
     const U = { uClock: { value: 0 }, uWob: { value: 0 }, uRip: { value: 0 }, uSwirl: { value: 0 }, uRing: { value: 0 }, uRingA: { value: 0 } }
 
     // body
     const geo = new THREE.LatheGeometry(dropProfile(small ? 56 : 96), small ? 44 : 72)
-    const glassExtra = { thickness: 1.05, ior: 1.42, dispersion: small ? 0 : 0.35 }
+    const glassExtra = { thickness: 1.05, ior: 1.42 } // no dispersion: three extra refraction samples per pixel for a fringe the rim already draws
     const glass = kit.glass(look, glassExtra)
+    // the iridescent film lives in the rim shader: the material's own iridescence costs a lot per pixel every frame
+    glass.iridescence = 0
     glass.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, U, GU)
       sh.vertexShader = sh.vertexShader
@@ -536,6 +558,7 @@ uniform vec3 uMilkCol;
 uniform float uCCEdge;
 uniform float uSpecEdge;
 uniform vec2 uBand;
+uniform float uInner;
 vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28)); return mix(x, k, step(0.72, x)); }`)
         .replace('#include <opaque_fragment>', `#include <opaque_fragment>
   {
@@ -543,6 +566,16 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
     gl_FragColor.a *= smoothstep(0.0, fwidth(lmN) * 1.6 + 0.004, lmN);
     // light theme: where the glass is thin and faces you, the panel itself shows through
     gl_FragColor.a *= mix(1.0, uClearA, smoothstep(0.5, 0.92, lmN));
+    // light theme: the refracted edge band is an absolute tone laid over the reflections (dark-field glass), so the
+    // bright room in the coat cannot wash it out; real highlights (the streaks) pass through untouched
+    if (uEdgeP <= 0.0) {
+      float lmB = pow(1.0 - smoothstep(uBand.x, uBand.y, lmN), 1.4);
+      float lmL = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, uEdgeCol, clamp(lmB * uEdgeK, 0.0, 1.0) * (1.0 - smoothstep(0.8, 1.3, lmL)));
+      // and just inside it, a thin bright ring of light the lens gathers (strongest low, where the light pools)
+      float lmR = exp(-pow((lmN - uBand.y - 0.05) / 0.05, 2.0)) * (0.3 + 0.7 * smoothstep(0.35, -0.7, normalize(normal).y));
+      gl_FragColor.rgb += vec3(uInner * lmR);
+    }
   }`)
         .replace('#include <tonemapping_fragment>', '#if defined( TONE_MAPPING )\n  gl_FragColor.rgb = uSoftTone > 0.5 ? lmShoulder(gl_FragColor.rgb) : toneMapping(gl_FragColor.rgb);\n#endif')
         .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
@@ -576,7 +609,6 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
     vec3 lmThick = mix(vec3(1.0), mix(uDeep, vec3(1.0), lmNdv * lmNdv), uThick);
     totalDiffuse *= lmThick * mix(vec3(1.0), uEdgeCol, clamp(lmTop * uTopK + (uEdgeP > 0.0 ? lmEdge * uEdgeK : 0.0), 0.0, 1.0)) * (1.0 + uLift * lmNdv * lmNdv);
     // light theme: the band is an absolute tone (dark-field glass), so the grazing Fresnel loss cannot wash it out
-    if (uEdgeP <= 0.0) totalDiffuse = mix(totalDiffuse, uEdgeCol, clamp(lmEdge * uEdgeK, 0.0, 1.0));
     // frost: a soft milky veil, strongest across the face
     totalDiffuse = mix(totalDiffuse, uMilkCol, uMilk * (0.35 + 0.65 * lmNdv));
   }`)
@@ -606,13 +638,13 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
       uniforms: {
         uCoreCol: { value: new THREE.Color() }, uCausticCol: { value: new THREE.Color() }, uLampCol: { value: new THREE.Color() }, uInk: { value: new THREE.Color() },
         uCore: { value: 0.6 }, uCoreFall: { value: 4.5 }, uSpiral: { value: 0 }, uClock: { value: 0 }, uRip: { value: 0 }, uLevel: { value: 0 },
-        uDark: { value: 0 }, uCaustic: { value: 0.6 }, uLamp: { value: 0 }, uHorizon: { value: 0 }, uWin: { value: 0 },
+        uDark: { value: 0 }, uCaustic: { value: 0.6 }, uLamp: { value: 0 },
         uCoreC: { value: new THREE.Vector2(0, -0.36) }, uMouthC: { value: new THREE.Vector2(0, -0.62) }, uOn: { value: 0 },
       },
       vertexShader: PLANE_VERT, fragmentShader: CORE_FRAG, depthWrite: false, toneMapped: false,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     })
-    const core = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 3.0), coreMat)
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 2.6), coreMat)
     core.position.set(0, 0, 0.05)
     core.renderOrder = 1
     core.onBeforeRender = (r) => {
@@ -630,26 +662,37 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
       uEyeCol: { value: new THREE.Color() }, uEyeEdge: { value: new THREE.Color() }, uEyeLit: { value: new THREE.Color() }, uEyeShCol: { value: new THREE.Color() },
       uHaloCol: { value: new THREE.Color() }, uHaloA: { value: 0.8 }, uHaloK: { value: 11 }, uDark: { value: 0 }, uDepth: { value: 0 },
       uFace: { value: new THREE.Vector2(0, -0.24) }, uSep: { value: 0.62 * (small ? 1.06 : 1) }, uEye: { value: new THREE.Vector2(0.19 * eyeK, 0.36 * eyeK) },
-      uOpen: { value: 1 }, uStyle: { value: 0 }, uHappy: { value: 0 }, uClosed: { value: 0 }, uLid: { value: 0 }, uSad: { value: 0 }, uTilt: { value: 0 }, uRot: { value: 0 },
+      uOpen: { value: 1 }, uStyle: { value: 0 }, uHappy: { value: 0 }, uClosed: { value: 0 }, uLid: { value: 0 }, uLidLine: { value: 0 }, uSad: { value: 0 }, uTilt: { value: 0 }, uRot: { value: 0 },
       uSoft: { value: 0 }, uStroke: { value: small ? 1.35 : 1 },
       uMouth: { value: new THREE.Vector2(0, -0.62) }, uMW: { value: 0.25 * (small ? 1.3 : eyeK) }, uM: { value: [0, 0, 0, 0, 0, 0] },
       uSmile: { value: 0.8 }, uLevel: { value: 0 }, uOSize: { value: 1 },
       uBeacon: { value: 0 }, uBeat: { value: 0 }, uGlowP: { value: 0 }, uSigCol: { value: new THREE.Color() }, uSigHot: { value: new THREE.Color() }, uSigInk: { value: new THREE.Color() }, uSigTip: { value: new THREE.Color() },
       uTip: { value: new THREE.Vector2(0, small ? 0.78 : size === 'header' ? 0.82 : 0.86) }, uDotK: { value: small ? 2.2 : size === 'header' ? 1.5 : 1 },
       uSpark: { value: 0 }, uT: { value: 0 }, uSpk: { value: SPARKS.map(([x, y, z, w]) => new THREE.Vector4(x * sparkPos, y * sparkPos, z * sparkK, w)) }, uSparkCol: { value: new THREE.Color() },
-      uThink: { value: 0 }, uOrbit: { value: 0 }, uCometR: { value: small ? 0.08 : size === 'header' ? 0.066 : 0.052 }, uCometCol: { value: new THREE.Color() }, uCometGlow: { value: new THREE.Color() },
+      uThink: { value: 0 }, uOrbit: { value: 0 }, uCometR: { value: small ? 0.088 : size === 'header' ? 0.075 : 0.062 }, uCometCol: { value: new THREE.Color() }, uCometGlow: { value: new THREE.Color() },
       uShadow: { value: 1 }, uShadowY: { value: -B - 0.04 }, uShadowCol: { value: new THREE.Color() }, uCausticCol: { value: new THREE.Color() },
+      uZ: { value: 0 }, uZP: { value: new THREE.Vector3(0.45, 0.85, 0.14) }, uZCol: { value: new THREE.Color() },
       uSweat: { value: 0 }, uSweatP: { value: new THREE.Vector3(0.5, 0.3, 0.07) }, uSweatCol: { value: new THREE.Color() }, uSweatEdge: { value: new THREE.Color() },
     }
-    const faceMat = new THREE.ShaderMaterial({
-      uniforms: fu, vertexShader: PLANE_VERT, fragmentShader: FACE_FRAG, transparent: true, depthWrite: false, depthTest: false,
-      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-    })
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 3.0), faceMat)
-    face.position.z = 0.0
-    face.renderOrder = 6
+    // three small planes sharing one shader source and one set of uniforms, each compiled with only its part, so
+    // no pixel pays for features it cannot show: the contact shadow, the mood effects (only while a mood has one)
+    // and the face itself
+    const overlay = (part, w, h, y, order) => {
+      const mat = new THREE.ShaderMaterial({
+        uniforms: fu, defines: { [part]: 1 }, vertexShader: PLANE_VERT, fragmentShader: FACE_FRAG, transparent: true, depthWrite: false, depthTest: false,
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+      })
+      const geo = new THREE.PlaneGeometry(w, h)
+      geo.translate(0, y, 0)
+      const m = new THREE.Mesh(geo, mat)
+      m.renderOrder = order
+      return m
+    }
+    const shadow = overlay('LM_SHADOW', 1.9, 0.5, -B - 0.04, 5)
+    const fx = overlay('LM_FX', 3.1, 2.75, 0.02, 6)
+    const face = overlay('LM_FACE', 1.7, 1.55, -0.38, 7)
 
-    content.add(core, body, rim, face)
+    content.add(core, body, rim, shadow, fx, face)
 
     // live state, eased toward the mood's targets (snapped on the first update so mood-sheet stills are exact)
     const S = Object.fromEntries(KEYS.map((k) => [k, 0]))
@@ -690,7 +733,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         srgb(fu.uCometGlow.value, tn.glow)
         srgb(fu.uSweatCol.value, tmp.copy(tn.soft).lerp(WHITE, 0.4))
         // warm glass reads as brown when it is darkened: keep peach brighter and its dome untinted
-        glass.color.multiplyScalar(warmTint ? 0.88 : 0.7)
+        glass.color.multiplyScalar(warmTint ? 0.8 : 0.7)
         glass.envMapIntensity = 0.5
         glass.attenuationDistance = 1.5 - l.frost * 0.5
         GU.uEdgeCol.value.copy(tn.glass).multiply(tn.glass).lerp(tn.glow, 0.25)
@@ -706,7 +749,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         GU.uMilk.value = l.frost * 0.12
         GU.uMilkCol.value.copy(tn.glow).multiplyScalar(0.22)
         topK = warmTint ? 0.1 : 0.3
-        C.warmGlass.copy(glass.color).lerp(C.warm, 0.25)
+        C.warmGlass.copy(glass.color)
       } else {
         // deep enough to read on the pale glass: darken toward ink until it clears a contrast target
         const target = lum(tn.glass) * 0.21
@@ -722,7 +765,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         C.lamp.copy(C.warm).lerp(WARM_INK, warmTint ? 0.15 : 0)
         srgb(fu.uShadowCol.value, tmp.copy(tn.ink).lerp(new THREE.Color(0.02, 0.03, 0.06), 0.4))
         srgb(fu.uCometCol.value, C.eye)
-        srgb(fu.uCometGlow.value, tn.glow)
+        srgb(fu.uCometGlow.value, tmp.copy(tn.glow).lerp(tn.ink, 0.15))
         srgb(fu.uSweatCol.value, tmp.copy(WHITE).lerp(tn.glow, 0.25))
         // optical glass on a pale panel: near-clear body, tint only where the path is long, a dark refracted edge
         glass.color.copy(tn.glass).lerp(WHITE, 0.9)
@@ -731,7 +774,10 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         glass.attenuationDistance = 50
         GU.uCCEdge.value = 0.2
         GU.uSpecEdge.value = 0.15
-        GU.uEdgeCol.value.copy(tn.ink).lerp(tn.glass, 0.2)
+        GU.uInner.value = 0.3 * (1 - 0.6 * l.frost)
+        // the refracted edge band: ink toward the glass until it sits near 45% lightness (graphite's ink is near black)
+        let ek = 0.2
+        while (ek < 0.6 && lum(GU.uEdgeCol.value.copy(tn.ink).lerp(tn.glass, ek)) < 0.15) ek += 0.04
         GU.uEdgeK.value = 0.95
         GU.uEdgeP.value = 0
         GU.uLift.value = 0.1
@@ -740,7 +786,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         GU.uDeep.value.copy(tn.glass).multiply(tn.glass).lerp(tn.glow, 0.15)
         GU.uThick.value = 1
         GU.uClearA.value = 0.4 + 0.36 * l.frost
-        GU.uMilk.value = l.frost * 0.32
+        GU.uMilk.value = l.frost * 0.26
         GU.uMilkCol.value.copy(WHITE).lerp(tn.glass, 0.3)
         topK = 0.2
         C.warmGlass.copy(glass.color).lerp(C.warm, 0.12)
@@ -750,6 +796,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
       srgb(fu.uEyeShCol.value, tn.ink)
       srgb(fu.uEyeLit.value, tmp.copy(tn.glow).lerp(C.eye, 0.35))
       srgb(fu.uSweatEdge.value, tn.ink)
+      srgb(fu.uZCol.value, l.dark ? tmp.copy(tn.soft).lerp(WHITE, 0.3) : C.eye)
       srgb(fu.uSparkCol.value, C.spark)
       srgb(fu.uSigCol.value, l.dark ? SIGNAL : tmp.copy(SIGNAL).lerp(SIGNAL_DEEP, 0.35))
       srgb(fu.uSigHot.value, tmp.copy(WHITE).lerp(SIGNAL, 0.12))
@@ -768,8 +815,6 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
       GU.uFaceSpec.value = 0.1
       coreMat.uniforms.uCaustic.value = l.dark ? 0.55 : 1.6 * (1 - 0.45 * l.frost)
       coreMat.uniforms.uCoreFall.value = l.dark ? 4.5 : 14
-      coreMat.uniforms.uWin.value = (l.dark ? 0.5 : 1.4) * (1 - 0.5 * l.frost)
-      coreMat.uniforms.uHorizon.value = l.dark ? 0 : 0.3 * (1 - 0.5 * l.frost)
       const DBG = globalThis.__lumenDbg || {}
       for (const [k, v] of Object.entries(DBG)) {
         if (GU[k]) { if (Array.isArray(v)) GU[k].value.set(...v); else GU[k].value = v }
@@ -836,10 +881,9 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
 
         // glass: stays clear when worried (the warmth is a lamp inside, not a dye); more iridescent when celebrating
         glass.color.copy(baseColor).lerp(C.warmGlass, f.warm)
-        glass.attenuationColor.copy(baseAtt).lerp(C.warm, f.warm * 0.35)
+        glass.attenuationColor.copy(baseAtt).lerp(C.warm, dark ? 0 : f.warm * 0.35)
         GU.uEdgeCol.value.copy(baseEdge)
         GU.uTopK.value = topK * (1 - f.warm)
-        glass.iridescence = 0.25 + f.spark * 0.55
 
         // face
         const lx = f.lookX * 0.11, ly = -f.lookY * 0.09 - S.low * 0.045
@@ -849,6 +893,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         fu.uOpen.value = openShape
         fu.uLid.value = S.lid + S.sleep * Math.max(0, 1 - f.open) * 0.78
         fu.uTilt.value = S.tilt
+        fu.uLidLine.value = S.sleep
         fu.uSad.value = S.sad
         fu.uRot.value = S.rot
         fu.uHappy.value = S.happy
@@ -865,15 +910,22 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         fu.uGlowP.value = rm ? 0.7 : 0.5 + 0.5 * Math.cos(beat * Math.PI * 2)
         fu.uSpark.value = f.spark
         fu.uThink.value = f.swirl
-        fu.uOrbit.value = rm ? -0.5 : f.t * 2.4 - 1.6 // still pose: the bead in front, toward where the eyes look
+        fu.uOrbit.value = rm ? -0.9 : f.t * 2.4 + 1.24 // still pose: the bead in front, toward where the eyes look
         fu.uT.value = rm ? 0.7 : f.t
         fu.uShadowY.value = -B - 0.04 - hop / Math.max(0.5, sy)
         fu.uShadow.value = small ? 0 : Math.max(0, 1 - hop * 3)
+        shadow.visible = fu.uShadow.value > 0.001
+        fx.visible = f.spark > 0.002 || S.beacon > 0.002 || f.swirl > 0.002 || S.sleep > 0.002 || f.warm > 0.002
         // sweat bead path: hugging the right temple, accelerating as it slides
         const sy0 = 0.5 - wph * wph * 0.42
         const ssz = small ? 0.1 : size === 'header' ? 0.085 : 0.068
         fu.uSweatP.value.set(dropR(sy0) - ssz * 1.25, sy0, ssz)
         fu.uSweat.value = f.warm * (rm ? 1 : Math.min(1, wph / 0.08) * Math.min(1, (1 - wph) / 0.18))
+        // sleepy z: rises from beside the tip and fades, one every ~3.3 s
+        const zph = rm ? 0.4 : (f.t * 0.3 + 0.35) % 1
+        const zs = small ? 0.2 : size === 'header' ? 0.16 : 0.13
+        fu.uZP.value.set(0.36 + zph * 0.2, 0.74 + zph * 0.26, zs * (0.75 + 0.35 * zph))
+        fu.uZ.value = S.sleep * (rm ? 0.85 : Math.min(1, zph / 0.15) * Math.min(1, (1 - zph) / 0.35))
 
         // colors (warm when worried)
         tmp.copy(C.eye).lerp(C.eyeWarm, f.warm)
@@ -886,15 +938,15 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         srgb(fu.uCausticCol.value, tmp)
         rimMat.uniforms.uCol.value.copy(C.rim).lerp(C.warm, f.warm * 0.85).convertLinearToSRGB()
         rimMat.uniforms.uT.value = tt
-        rimMat.uniforms.uPulse.value = S.beacon * (dark ? 0.7 : 0.9) * fu.uGlowP.value
+        rimMat.uniforms.uPulse.value = S.beacon * (dark ? 0.45 : 0.35) * fu.uGlowP.value
 
         // core light
         const cu = coreMat.uniforms
-        cu.uCoreCol.value.copy(C.core).lerp(C.warm, f.warm)
+        cu.uCoreCol.value.copy(C.core).lerp(C.warm, dark ? f.warm * 0.3 : f.warm)
         cu.uCausticCol.value.copy(L.dark ? C.caustic : WHITE).lerp(C.warm, f.warm)
         cu.uLampCol.value.copy(C.lamp)
-        cu.uLamp.value = f.warm * (rm ? 0.85 : 0.72 + 0.28 * Math.sin(f.t * 1.9)) * (dark ? 1 : 0.9)
-        cu.uCore.value = S.core * (1 + f.level * 0.45) * (dark ? 0.5 : 0.12) * (1 - f.warm * 0.5)
+        cu.uLamp.value = f.warm * (rm ? 0.85 : 0.72 + 0.28 * Math.sin(f.t * 1.9)) * (dark ? (L.tint.key === 'peach' ? 0.55 : 1) : 0.9)
+        cu.uCore.value = S.core * (1 + f.level * 0.45) * (dark ? (L.tint.key === 'peach' ? 0.75 : 0.5) : 0.12) * (1 - f.warm * 0.6)
         cu.uSpiral.value = small ? 0 : f.swirl * (dark ? 0.75 : 0.5)
         cu.uClock.value = tt
         cu.uRip.value = f.rip
@@ -908,8 +960,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         rimMat.dispose()
         core.geometry.dispose()
         coreMat.dispose()
-        face.geometry.dispose()
-        faceMat.dispose()
+        for (const m of [shadow, fx, face]) { m.geometry.dispose(); m.material.dispose() }
       },
     }
   },
