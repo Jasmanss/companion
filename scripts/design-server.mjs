@@ -91,8 +91,20 @@ const server = createServer(async (req, res) => {
   res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' })
   createReadStream(file).pipe(res)
 })
-server.listen(port, '127.0.0.1', () => {
-  const link = `http://localhost:${server.address().port}/`
+// If the port is taken (4321 is also Astro's default), try the next few.
+let tries = 0
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE' && !process.env.PORT && tries < 20) {
+    tries++
+    server.listen(port + tries, '127.0.0.1')
+    return
+  }
+  console.error(`Couldn't start the design server: ${err.message}`)
+  process.exit(1)
+})
+server.on('listening', () => {
+  const link = `http://127.0.0.1:${server.address().port}/`
   console.log(`Designs at ${link} (reloads on change, Ctrl+C to stop)`)
   if (process.platform === 'darwin' && !process.env.NO_OPEN) spawn('open', [link], { stdio: 'ignore', detached: true }).unref()
 })
+server.listen(port, '127.0.0.1')
