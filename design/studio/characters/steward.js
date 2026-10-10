@@ -1,7 +1,7 @@
 // Steward: a glass gentleman's gentleman. A clear glass head whose face is light: two calm eyes and fine brows
 // under a soft smoked veil (no hard visor), over a glass tailcoat: lapels, a shirt front with onyx studs, a wing
 // collar, a satin bow tie, a brushed collar ring and tails at the back. Small glass hands with shirt cuffs
-// gesture: a silver tray and towel when idle, a pocket watch when thinking, the approval card presented on the
+// gesture: a silver tray with a folded napkin when idle, a pocket watch when thinking, the approval card presented on the
 // tray when it needs you, a bow (and a hat tip) when done, a raised hat when celebrating.
 // Accessories (look.hat, look.glasses): bowler or top hat; half-moon readers, round frames or a monocle on a chain.
 //
@@ -13,8 +13,8 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
-const HEAD_Y = 0.55
-const HR = 0.5
+const HEAD_Y = 0.49
+const HR = 0.46
 const HEAD_S = [1.02, 1, 0.98]
 const FACE_PHI = 2.2 // radians of face shell around the head
 const FACE_TH0 = 0.78 // from the top of the head
@@ -25,7 +25,7 @@ const EYE_PHI = 0.3 // eyes sit this far either side of the front
 const EYE_TH = Math.PI / 2 - 0.05
 const EX = (EYE_PHI / FACE_PHI) * FW
 const EY = ((EYE_TH - FACE_TH0) / FACE_TH) * FH
-const HAT_Y = 0.33 // head-local height where a hat sits
+const HAT_Y = 0.3 // head-local height where a hat sits
 const WARM_EYE = new THREE.Color('#ffc07a')
 const WARM_GLOW = new THREE.Color('#ff8a2a')
 const WARM = new THREE.Color('#ffb870')
@@ -51,7 +51,7 @@ function setHand(o, side, x, y, z, rx, ry, rz) {
   o[p + 0] = x; o[p + 1] = y; o[p + 2] = z; o[p + 3] = rx; o[p + 4] = ry; o[p + 5] = rz
 }
 // Hands hang fingers down, palm in. rx -1.4 turns the palm up (to carry), rz tips the fingers.
-function pose(o, mood, f, hat) {
+function pose(o, mood, f, hat, small) {
   const t = f.rm ? 0 : f.t, A = f.rm ? 0 : f.P
   for (const k of P_KEYS) o[k] = 0
   o.hrz = 0.05 // a slight, deliberate tilt
@@ -69,7 +69,7 @@ function pose(o, mood, f, hat) {
     case 'thinking':
       o.hx = -0.04; o.hz = -0.08
       // the pocket watch, open on the right palm; the left hand at the chin
-      setHand(o, 0, 0.52, 0.06 + Math.sin(t * 1.6) * 0.01 * A, 0.3, -1.25, 0.2, 0.15)
+      setHand(o, 0, 0.42, -0.04 + Math.sin(t * 1.6) * 0.01 * A, 0.34, -1.25, 0.2, 0.15)
       setHand(o, 1, -0.17, 0.07, 0.42, -0.35, 0, -2.4)
       o.watch = 1
       o.gdy = -0.02
@@ -78,7 +78,7 @@ function pose(o, mood, f, hat) {
       const g = Math.sin(t * 2.3) * A, lv = f.level
       o.hz = Math.sin(t * 1.3) * 0.05 * A
       setHand(o, 0, 0.6 + g * 0.04, -0.2 + lv * 0.05 * (0.5 + A), 0.25, -1.1 - lv * 0.2, 0, 0.55 + g * 0.12)
-      setHand(o, 1, -0.44, -0.4, 0.12, 0.1, 0, -0.2)
+      setHand(o, 1, -0.4, -0.4, 0.12, 0.1, 0, -0.2)
       break
     }
     case 'done': {
@@ -89,7 +89,7 @@ function pose(o, mood, f, hat) {
         o.hty = 0.07 * bow; o.hrx = -0.25 * bow; o.htz = 0.04 * bow
         setHand(o, 0, 0.3, HEAD_Y + HAT_Y + 0.05 + 0.07 * bow, 0.24, -0.2, 0, 2.6)
       } else setHand(o, 0, 0.1, -0.22, 0.38, 0.2, 0, 1.3)
-      setHand(o, 1, -0.44, -0.46, -0.06, 0, 0, -0.2)
+      setHand(o, 1, -0.4, -0.46, -0.06, 0, 0, -0.2)
       break
     }
     case 'needs-you': {
@@ -97,7 +97,7 @@ function pose(o, mood, f, hat) {
       o.hz = 0.06; o.hx = 0.02
       // the approval card, presented on the tray
       setHand(o, 0, 0.62, -0.12 + lift, 0.34, -1.45, 0, 0.1)
-      setHand(o, 1, -0.44, -0.4, 0.08, 0, 0, -0.2)
+      setHand(o, 1, -0.4, -0.4, 0.08, 0, 0, -0.2)
       o.tray = 1; o.card = 1
       o.gdy = -0.025
       break
@@ -116,10 +116,11 @@ function pose(o, mood, f, hat) {
       o.hx = -0.08
       if (hat) {
         // the hat raised high in the right hand
-        o.htx = 0.52; o.hty = 0.12 + Math.cos(t * 4.2) * 0.03 * A; o.htz = 0.08; o.hrz = -0.45 + s * 0.12 * A
-        setHand(o, 0, 0.52 + 0.04, HEAD_Y + HAT_Y + 0.07 + Math.cos(t * 4.2) * 0.03 * A, 0.12, -0.2, 0, 2.7)
-      } else setHand(o, 0, 0.66 + s * 0.05 * A, 0.48 + Math.cos(t * 4.2) * 0.05 * A, 0.2, -0.9, 0, -0.2 + s * 0.35 * A)
-      setHand(o, 1, -0.64 - s * 0.05 * A, 0.26 - Math.cos(t * 4.2) * 0.05 * A, 0.2, -0.9, 0, 0.3 + s * 0.3 * A)
+        if (small) { o.hty = 0.06 + Math.cos(t * 4.2) * 0.02 * A; o.hrz = s * 0.15 * A }
+        else { o.htx = 0.4; o.hty = 0.1 + Math.cos(t * 4.2) * 0.03 * A; o.htz = 0.08; o.hrz = -0.4 + s * 0.12 * A }
+        setHand(o, 0, 0.44, HEAD_Y + HAT_Y + 0.05 + Math.cos(t * 4.2) * 0.03 * A, 0.12, -0.2, 0, 2.7)
+      } else setHand(o, 0, 0.58 + s * 0.05 * A, 0.44 + Math.cos(t * 4.2) * 0.05 * A, 0.2, -0.9, 0, -0.2 + s * 0.35 * A)
+      setHand(o, 1, -0.56 - s * 0.05 * A, 0.26 - Math.cos(t * 4.2) * 0.05 * A, 0.2, -0.9, 0, 0.3 + s * 0.3 * A)
       break
     }
     case 'sleepy': {
@@ -132,10 +133,10 @@ function pose(o, mood, f, hat) {
       o.gdy = -0.06
       break
     }
-    default: // idle: a silver tray, a towel over the left wrist
+    default: // idle: a silver tray
       o.hz = Math.sin(t * 1.1) * 0.02 * A
-      setHand(o, 0, 0.56, -0.14 + Math.sin(t * 1.4) * 0.012 * A, 0.22, -1.45, 0, 0.12)
-      setHand(o, 1, -0.44, -0.36, 0.1, 0, 0, -0.15)
+      setHand(o, 0, 0.52, -0.14 + Math.sin(t * 1.4) * 0.012 * A, 0.22, -1.45, 0, 0.12)
+      setHand(o, 1, -0.4, -0.38, 0.1, 0, 0, -0.15)
       o.tray = 1; o.towel = 1
   }
   return o
@@ -143,7 +144,7 @@ function pose(o, mood, f, hat) {
 
 /* ---------------- geometry ---------------- */
 // Torso profile (radius, y), top to bottom: square shoulders, a waist, a short rounded hem.
-const TORSO = [[0, 0.02], [0.19, 0.012], [0.29, -0.025], [0.325, -0.1], [0.315, -0.24], [0.265, -0.42], [0.215, -0.56], [0.2, -0.66], [0.18, -0.73], [0.11, -0.775], [0, -0.785]]
+const TORSO = [[0, 0.02], [0.2, 0.012], [0.31, -0.03], [0.345, -0.11], [0.33, -0.26], [0.28, -0.44], [0.24, -0.58], [0.235, -0.68], [0.215, -0.73], [0.12, -0.745], [0, -0.748]]
 const TORSO_Y = -0.05
 const torsoProf = (() => {
   const curve = new THREE.CatmullRomCurve3(TORSO.map(([x, y]) => new THREE.Vector3(x, y, 0)), false, 'centripetal')
@@ -214,35 +215,27 @@ function tailGeometry() {
   sh.quadraticCurveTo(0.0, -0.585, -0.025, -0.56)
   sh.quadraticCurveTo(-0.07, -0.3, -0.1, 0)
   const g = new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 3, curveSegments: 10 })
-  const mk = (s) => g.clone().scale(0.62, 0.8, 1).rotateZ(s * 0.13).rotateX(0.22).rotateY(s * 0.3).translate(s * 0.065, -0.4, -0.15)
+  const mk = (s) => g.clone().scale(0.62, 0.6, 1).rotateZ(s * 0.13).rotateX(0.22).rotateY(s * 0.3).translate(s * 0.065, -0.4, -0.15)
   return mergeGeometries([mk(1), mk(-1)].map((x) => (x.index ? x.toNonIndexed() : x)))
 }
-// A refined hand: fingers together, thumb resting along the side, a shirt cuff at the wrist (group 1).
+// A refined hand: fingers closed together, the thumb along the side, a shirt cuff at the wrist (group 1).
 function handGeometry() {
-  const parts = []
   const palm = new THREE.SphereGeometry(1, 18, 12)
-  palm.scale(0.058, 0.07, 0.026)
-  parts.push(palm)
-  for (let i = 0; i < 4; i++) {
-    const len = [0.05, 0.06, 0.057, 0.045][i]
-    const fg = new THREE.CapsuleGeometry(0.0135, len, 4, 8)
-    fg.translate((i - 1.5) * 0.027, -0.062 - len * 0.5 + Math.abs(i - 1.5) * 0.005, 0)
-    parts.push(fg)
-  }
-  const thumb = new THREE.CapsuleGeometry(0.015, 0.04, 4, 8)
-  thumb.rotateZ(0.5).translate(0.058, -0.03, 0.012)
-  parts.push(thumb)
-  const hand = mergeGeometries(parts.map((x) => (x.index ? x.toNonIndexed() : x)))
-  const cuff = new THREE.CylinderGeometry(0.05, 0.056, 0.05, 20, 1)
-  cuff.translate(0, 0.085, 0)
-  const link = new THREE.SphereGeometry(0.011, 8, 6).translate(0.0, 0.085, 0.056)
+  palm.scale(0.046, 0.06, 0.022)
+  const fingers = new THREE.CapsuleGeometry(0.03, 0.035, 6, 12)
+  fingers.scale(1.05, 1, 0.62).translate(0, -0.068, 0.002)
+  const thumb = new THREE.CapsuleGeometry(0.012, 0.03, 4, 8)
+  thumb.rotateZ(0.45).translate(0.046, -0.026, 0.01)
+  const hand = mergeGeometries([palm, fingers, thumb].map((x) => (x.index ? x.toNonIndexed() : x)))
+  const cuff = new THREE.CylinderGeometry(0.04, 0.045, 0.042, 20, 1)
+  cuff.translate(0, 0.07, 0)
+  const link = new THREE.SphereGeometry(0.009, 8, 6).translate(0.0, 0.07, 0.045)
   return mergeGeometries([hand, mergeGeometries([cuff.toNonIndexed(), link.toNonIndexed()])], true)
 }
-function towelGeometry() {
-  const front = new THREE.BoxGeometry(0.13, 0.24, 0.012).translate(0, -0.12, 0.03)
-  const back = new THREE.BoxGeometry(0.13, 0.15, 0.012).translate(0, -0.075, -0.03)
-  const top = new THREE.CylinderGeometry(0.03, 0.03, 0.13, 12, 1, true, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2)
-  return mergeGeometries([front, back, top].map((x) => (x.index ? x.toNonIndexed() : x)))
+function napkinGeometry() {
+  const tri = new THREE.Shape()
+  tri.moveTo(-0.07, 0); tri.lineTo(0.07, 0); tri.lineTo(0, 0.07); tri.closePath()
+  return new THREE.ExtrudeGeometry(tri, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 }).rotateX(-Math.PI / 2)
 }
 // Hats: a lathe of felt with a satin band (group 1).
 function hatGeometry(kind) {
@@ -256,11 +249,12 @@ function hatGeometry(kind) {
     band = new THREE.LatheGeometry(P([[0.279, 0.025], [0.281, 0.065], [0.278, 0.09]]).reverse(), 48)
   }
   band.scale(1.012, 1, 1.012)
+  felt.scale(0.92, 0.92, 0.92); band.scale(0.92, 0.92, 0.92)
   return mergeGeometries([felt.toNonIndexed(), band.toNonIndexed()], true)
 }
 // Glasses, head-local, built around the eye positions. Returns {geo, lens: [centers]}.
 function glassesGeometry(kind, small) {
-  const tube = small ? 0.013 : 0.0075
+  const tube = small ? 0.01 : 0.0075
   const v = new THREE.Vector3()
   const parts = []
   const rim = (cx, cy, cz, r, arc, rotZ, phi) => {
@@ -281,9 +275,12 @@ function glassesGeometry(kind, small) {
   if (kind === 'round' || kind === 'half-moon') {
     const half = kind === 'half-moon'
     const r = half ? 0.082 : 0.09
-    const dy = half ? -0.075 : 0
+    const dy = half ? -0.05 : 0
     const L = eye(-1, dy), R = eye(1, dy)
-    for (const [c, s] of [[L, -1], [R, 1]]) rim(c.x, c.y, c.z, r, half ? Math.PI : Math.PI * 2, half ? Math.PI : 0, s * EYE_PHI)
+    for (const [c, s] of [[L, -1], [R, 1]]) {
+      rim(c.x, c.y, c.z, r, half ? Math.PI : Math.PI * 2, half ? Math.PI : 0, s * EYE_PHI)
+      if (half) { const dx = r * Math.cos(s * EYE_PHI), dz = -r * Math.sin(s * EYE_PHI); bar(new THREE.Vector3(c.x - dx, c.y, c.z - dz), new THREE.Vector3(c.x + dx, c.y, c.z + dz), tube) }
+    }
     // bridge
     if (half) bar(new THREE.Vector3(L.x + r * 0.96, L.y, L.z + 0.01), new THREE.Vector3(R.x - r * 0.96, R.y, R.z + 0.01))
     else { const g = new THREE.TorusGeometry(Math.abs(R.x - L.x) / 2 - r, tube, 6, 16, Math.PI); g.translate(0, L.y + 0.005, (L.z + R.z) / 2 + 0.012); parts.push(g) }
@@ -393,7 +390,7 @@ function faceTexture() {
   function draw(f, look, eyeCol, glowCol, veilCol, browCol, small) {
     const W = FW, H = FH, m = f.mood
     g.clearRect(0, 0, W, H)
-    const k = small ? 1.5 : 1
+    const k = small ? 2 : 1
     // The veil: no band, just a faint smoke across the face and a soft shade behind each eye, so light eyes
     // read on clear glass in a light theme.
     const va = look.dark ? 0.4 : 0.5
@@ -426,7 +423,7 @@ function faceTexture() {
     const eye = css(eyeCol)
     g.lineCap = g.lineJoin = 'round'
     g.shadowColor = css(glowCol)
-    g.shadowBlur = 14 * k
+    g.shadowBlur = 8 * k
     g.fillStyle = g.strokeStyle = eye
     for (const side of [-1, 1]) {
       const cx = W / 2 + side * EX + lx
@@ -457,7 +454,7 @@ function faceTexture() {
           else { g.rotate(side * 0.1); g.fillRect(-60, -80 - eh * 0.04, 120, 80) }
           g.restore()
           g.globalCompositeOperation = 'source-over'
-          g.shadowBlur = 14 * k
+          g.shadowBlur = 8 * k
           g.fillStyle = eye
         }
         g.restore()
@@ -472,13 +469,13 @@ function faceTexture() {
       g.globalAlpha = ba
       g.shadowBlur = look.dark ? 10 * k : 0
       g.strokeStyle = browCol
-      g.lineWidth = 6 * k
+      g.lineWidth = (small ? 7 : 6) * k
       g.beginPath()
       g.moveTo(bx + side * 17 * k, by - O * k)
       g.quadraticCurveTo(bx, by - 6 * k - (I + O) * 0.3 * k, bx - side * 15 * k, by - I * k)
       g.stroke()
       g.globalAlpha = 1
-      g.shadowBlur = 14 * k
+      g.shadowBlur = 8 * k
       g.strokeStyle = eye
     }
     // mouth: only speaking and a quiet smile when done
@@ -543,8 +540,8 @@ function watchDial() {
 }
 
 /* ---------------- character ---------------- */
-const HAT_H = { none: 0, bowler: 0.3, top: 0.4 }
-const FRAMES = { big: { height: 2.62, y: 0.1 }, peek: { height: 1.36, y: 0.47 }, header: { height: 1.5, y: 0.42 } }
+const HAT_H = { none: 0, bowler: 0.28, top: 0.37 }
+const FRAMES = { big: { height: 2.62, y: 0.1 }, peek: { height: 1.26, y: 0.48 }, header: { height: 1.32, y: 0.46 } }
 
 export default {
   id: 'steward',
@@ -581,14 +578,14 @@ export default {
     head.add(faceMesh)
 
     // Materials.
-    const metal = new THREE.MeshPhysicalMaterial({ color: 0x8a8882, metalness: 1, roughness: 0.38, anisotropy: 0.7, clearcoat: 0.5, clearcoatRoughness: 0.2, envMapIntensity: 0.8 })
+    const metal = new THREE.MeshPhysicalMaterial({ color: 0x7e7c77, metalness: 1, roughness: 0.48, anisotropy: 0.7, clearcoat: 0.5, clearcoatRoughness: 0.2, envMapIntensity: 0.8 })
     const gold = new THREE.MeshPhysicalMaterial({ color: 0xd9b46c, metalness: 1, roughness: 0.25, clearcoat: 0.6, clearcoatRoughness: 0.1 })
     const satin = new THREE.MeshPhysicalMaterial({ color: 0x15161a, roughness: 0.42, sheen: 1, sheenRoughness: 0.35, sheenColor: 0x8890a0, clearcoat: 0.25, side: THREE.DoubleSide })
     const shirt = new THREE.MeshPhysicalMaterial({ color: 0xf4f6fa, roughness: 0.55, sheen: 0.6, sheenRoughness: 0.5, clearcoat: 0.2, side: THREE.DoubleSide })
     const felt = new THREE.MeshPhysicalMaterial({ color: 0x1a1b20, roughness: 0.62, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0x50545e, clearcoat: 0.15, clearcoatRoughness: 0.4, side: THREE.DoubleSide })
 
     // Collar ring, bow tie, beacon.
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.028, 18, 64), metal)
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.019, 14, 64), metal)
     collar.rotation.x = Math.PI / 2 + 0.22
     collar.position.y = -0.02
     body.add(collar)
@@ -599,7 +596,7 @@ export default {
     body.add(bow)
     const beaconMat = kit.light(look.tint.glow, 2)
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), beaconMat)
-    beacon.position.set(0.47, HEAD_Y + 0.3, 0.2)
+    beacon.position.set(0.42, HEAD_Y + 0.27, 0.2)
     const beaconGlow = kit.glowSprite(look.tint.glow, 0.5, 0.9)
     beaconGlow.position.copy(beacon.position)
     body.add(beacon, beaconGlow)
@@ -661,10 +658,9 @@ export default {
       card.rotation.x = -0.28
       tray.add(card)
 
-      towel = new THREE.Mesh(towelGeometry(), shirt)
-      towel.scale.setScalar(0.8)
-      towel.position.set(0.11, 0.035, 0.03)
-      towel.rotation.set(0, -0.4, Math.PI / 2)
+      towel = new THREE.Mesh(napkinGeometry(), shirt)
+      towel.position.set(0.08, 0.012, 0.03)
+      towel.rotation.y = 0.5
       tray.add(towel)
 
       watch = new THREE.Group()
@@ -715,8 +711,8 @@ export default {
       const F = FRAMES[size]
       const hh = HAT_H[l.hat || 'none'] || 0
       if (small && hh) {
-        const lo = -0.17, hi = HEAD_Y + HAT_Y + hh + 0.03
-        const top = F.y + F.height / 2 - 0.03, bot = F.y - F.height / 2 + 0.05
+        const lo = -0.15, hi = HEAD_Y + HAT_Y + hh + 0.08
+        const top = F.y + F.height / 2 - 0.02, bot = F.y - F.height / 2 + 0.02
         const s = Math.min(1, (top - bot) / (hi - lo))
         rig.scale.setScalar(s)
         rig.position.set(0, bot - lo * s, 0)
@@ -727,10 +723,11 @@ export default {
       cur = l
       kit.updateGlass(headMat, l, { thickness: 0.35 })
       headMat.thickness = 0.35
-      if (torsoMat) kit.updateGlass(torsoMat, l)
+      headMat.emissive.copy(l.tint.glass).multiplyScalar(l.dark ? 0.07 : 0)
+      if (torsoMat) { kit.updateGlass(torsoMat, l); torsoMat.emissive.copy(l.tint.glass).multiplyScalar(l.dark ? 0.06 : 0) }
       rimMat.uniforms.dark.value = l.dark ? 1 : 0
       rimMat.uniforms.color.value.copy(l.dark ? l.tint.glow : l.tint.ink).lerp(l.dark ? WHITE : l.tint.ink, 0.4)
-      rimMat.uniforms.intensity.value = l.dark ? 2.2 : 0.8
+      rimMat.uniforms.intensity.value = l.dark ? 3 : 0.8
       tmp.setRGB(0.05, 0.05, 0.06)
       satin.color.copy(l.tint.ink).lerp(tmp, 0.35).multiplyScalar(l.tint.key === 'graphite' ? 0.6 : 0.8)
       satin.sheenColor.copy(l.tint.soft).multiplyScalar(0.55)
@@ -763,8 +760,8 @@ export default {
         l = cur
         const t = f.rm ? 0 : f.t
         const hasHat = hatKind !== 'none'
-        pose(A, f.prevMood, f, hasHat)
-        pose(B, f.mood, f, hasHat)
+        pose(A, f.prevMood, f, hasHat, small)
+        pose(B, f.mood, f, hasHat, small)
         const k = f.rm ? 1 : smooth(f.moodAge / 0.6)
         for (const key of P_KEYS) A[key] += (B[key] - A[key]) * k
 
@@ -796,7 +793,7 @@ export default {
         face.draw(f, l, eyeCol, glowCol, veilCol, l.dark ? css(eyeCol) : css(tmp.copy(l.tint.ink).multiplyScalar(0.8).lerp(WARM_GLOW, f.warm * 0.5)), small)
         tmp.copy(l.tint.glass).lerp(WARM, f.warm * 0.6)
         headMat.attenuationColor.copy(tmp)
-        headMat.color.copy(tmp).lerp(WHITE, l.dark ? 0.15 : 0.45)
+        headMat.color.copy(tmp).lerp(WHITE, l.dark ? 0.35 : 0.45)
 
         // Beacon: needs-you only, pulsing.
         const nv = f.mood === 'needs-you' ? smooth(f.moodAge / 0.3) : f.prevMood === 'needs-you' ? 1 - smooth(f.moodAge / 0.3) : 0
