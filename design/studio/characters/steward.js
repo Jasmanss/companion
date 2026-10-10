@@ -11,8 +11,8 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
-const HEAD_Y = 0.64
-const HEAD_R = 0.56
+const HEAD_Y = 0.55
+const HEAD_R = 0.5
 const VIS_PHI = 2.5 // radians of visor band around the head
 const VIS_W = 512
 const VIS_H = Math.round((VIS_W * 0.74) / VIS_PHI) // square texels at the band's center
@@ -102,7 +102,7 @@ function pose(o, mood, f) {
     }
     default: // idle: carries a small tray
       o.hz = sway
-      setHand(o, 0, 0.7, -0.14 + Math.sin(t * 1.4) * 0.015 * A, 0.15, -1.45, 0, 0.12)
+      setHand(o, 0, 0.6, -0.16 + Math.sin(t * 1.4) * 0.015 * A, 0.2, -1.45, 0, 0.12)
       setHand(o, 1, -0.5, -0.46, 0.08, 0, 0, -0.18)
       o.tray = 1
   }
@@ -111,7 +111,7 @@ function pose(o, mood, f) {
 
 /* ---------------- geometry ---------------- */
 // Torso profile (radius, y), top to bottom: square-ish shoulders tapering to a soft point.
-const TORSO = [[0, 0.02], [0.18, 0.012], [0.29, -0.02], [0.34, -0.08], [0.335, -0.2], [0.3, -0.38], [0.24, -0.56], [0.165, -0.71], [0.095, -0.81], [0.04, -0.86], [0, -0.872]]
+const TORSO = [[0, 0.02], [0.2, 0.012], [0.305, -0.025], [0.35, -0.1], [0.345, -0.24], [0.305, -0.44], [0.24, -0.62], [0.17, -0.74], [0.1, -0.805], [0.04, -0.828], [0, -0.832]]
 function torsoProfile(scale = 1) {
   const curve = new THREE.CatmullRomCurve3(TORSO.map(([x, y]) => new THREE.Vector3(x * scale, y, 0)), false, 'centripetal')
   const prof = curve.getPoints(40).map((p) => new THREE.Vector2(Math.max(0, p.x), p.y))
@@ -120,7 +120,7 @@ function torsoProfile(scale = 1) {
   return prof
 }
 function torsoGeometry() { return new THREE.LatheGeometry(torsoProfile(), 48) }
-const LIQ = -0.3 // liquid level (torso space)
+const LIQ = -0.17 // liquid level (torso space)
 // The liquid: the torso's profile inset, cut at the level. Sides and a flat top share one shader.
 function liquidGeometries() {
   const prof = torsoProfile(0.88).filter((p) => p.y < LIQ - 0.004).map((p) => new THREE.Vector2(p.x, p.y + 0.012))
@@ -176,7 +176,7 @@ void main() {
     float arms = pow(0.5 + 0.5 * sin(2.0 * a - r * 26.0 + uClock * 5.0), 5.0) * uSwirl * smoothstep(0.0, 0.05, r);
     col = mix(uCol, uHi, 0.45 + 0.5 * rings + 0.55 * arms);
   } else {
-    float h = clamp((vP.y + 0.86) / (uLevel + 0.86), 0.0, 1.0);
+    float h = clamp((vP.y + 0.82) / (uLevel + 0.82), 0.0, 1.0);
     col = mix(uDeep, uCol, smoothstep(0.0, 1.0, h));
     col = mix(col, uHi, pow(1.0 - ndv, 2.5) * 0.35 + smoothstep(0.86, 1.0, h) * 0.35);
     // bubbles: a few always, many when celebrating
@@ -185,7 +185,7 @@ void main() {
     vec2 id = floor(q);
     vec2 cell = fract(q) - 0.5;
     float rnd = fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
-    float b = smoothstep(0.2, 0.08, length(cell + vec2(rnd - 0.5, 0.0) * 0.4)) * step(0.82 - uSpark * 0.45, rnd);
+    float b = smoothstep(0.16, 0.06, length(cell + vec2(rnd - 0.5, fract(rnd * 7.0) - 0.5) * 0.5)) * step(0.84 - uSpark * 0.22, rnd);
     col = mix(col, uHi, b * (0.35 + uSpark * 0.5));
   }
   gl_FragColor = vec4(col * uGlow, 1.0);
@@ -193,18 +193,27 @@ void main() {
   #include <colorspace_fragment>
 }
 `
+// A slim tailored glove: wrist cuff up (+y), four fingers down, thumb toward +x.
 function gloveGeometry() {
-  const palm = new THREE.SphereGeometry(1, 24, 16)
-  palm.applyMatrix4(new THREE.Matrix4().makeScale(0.11, 0.145, 0.062))
-  const thumb = new THREE.CapsuleGeometry(0.034, 0.055, 6, 12)
-  thumb.applyMatrix4(new THREE.Matrix4().makeRotationZ(0.7))
-  thumb.applyMatrix4(new THREE.Matrix4().makeTranslation(-0.088, 0.012, 0.014))
-  const cuff = new THREE.CylinderGeometry(0.08, 0.09, 0.055, 24, 1)
-  cuff.applyMatrix4(new THREE.Matrix4().makeTranslation(0, -0.15, 0))
-  const g = mergeGeometries([palm, thumb.toNonIndexed().index ? thumb : thumb, cuff].map((x) => (x.index ? x.toNonIndexed() : x)))
-  // Fingers point down (-y), cuff up: flip so the cuff is at the wrist above.
-  g.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI))
-  return g
+  const parts = []
+  const palm = new THREE.SphereGeometry(1, 20, 14)
+  palm.applyMatrix4(new THREE.Matrix4().makeScale(0.072, 0.08, 0.036))
+  parts.push(palm)
+  for (let i = 0; i < 4; i++) {
+    const len = [0.05, 0.062, 0.058, 0.044][i]
+    const fg = new THREE.CapsuleGeometry(0.0175, len, 4, 10)
+    fg.applyMatrix4(new THREE.Matrix4().makeRotationZ((i - 1.5) * 0.08))
+    fg.applyMatrix4(new THREE.Matrix4().makeTranslation((i - 1.5) * 0.036, -0.075 - len * 0.5 + Math.abs(i - 1.5) * 0.006, 0))
+    parts.push(fg)
+  }
+  const thumb = new THREE.CapsuleGeometry(0.019, 0.045, 4, 10)
+  thumb.applyMatrix4(new THREE.Matrix4().makeRotationZ(0.75))
+  thumb.applyMatrix4(new THREE.Matrix4().makeTranslation(0.075, -0.035, 0.01))
+  parts.push(thumb)
+  const cuff = new THREE.CylinderGeometry(0.06, 0.068, 0.045, 24, 1)
+  cuff.applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.085, 0))
+  parts.push(cuff)
+  return mergeGeometries(parts.map((x) => (x.index ? x.toNonIndexed() : x)))
 }
 function bowGeometry() {
   const wing = new THREE.Shape()
@@ -271,10 +280,20 @@ function visorFace() {
     g.globalCompositeOperation = 'source-over'
     g.fillStyle = '#000'
     g.fillRect(0, 0, W, H)
-    const k = small ? 1.3 : 1 // enlarge features at peek/header size
-    const sep = 62 * (small ? 1.08 : 1)
-    const ew = 30 * k, eh = 46 * k
-    const lx = f.lookX * 22, ly = f.lookY * 12
+    // A wash of light across the whole visor carries the mood's color at any size.
+    const wash = m === 'needs-you' ? (f.rm ? 0.3 : 0.2 + 0.14 * Math.sin(f.t * 5)) : m === 'worried' ? 0.16 : m === 'celebrating' ? 0.16 : m === 'done' ? 0.1 : m === 'listening' ? 0.07 : 0
+    if (wash > 0) {
+      const gr = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.42)
+      gr.addColorStop(0, css(glowCol)); gr.addColorStop(1, 'rgba(0,0,0,0)')
+      g.globalAlpha = wash
+      g.fillStyle = gr
+      g.fillRect(0, 0, W, H)
+      g.globalAlpha = 1
+    }
+    const k = small ? 1.55 : 1 // enlarge features at peek/header size
+    const sep = 64 * (small ? 1.12 : 1)
+    const ew = 30 * k, eh = (m === 'listening' ? 52 : 46) * k
+    const lx = f.lookX * 30, ly = f.lookY * 13
     const cy = H * 0.47 + ly
     const eye = css(eyeCol), glow = css(glowCol)
     g.lineCap = g.lineJoin = 'round'
@@ -285,12 +304,12 @@ function visorFace() {
       const cx = W / 2 + side * sep + lx
       if (m === 'done' || m === 'celebrating') {
         // happy closed eyes: a bright arch
-        g.lineWidth = 11 * k
-        g.beginPath(); g.arc(cx, cy + 10 * k, 17 * k, Math.PI * 1.15, Math.PI * 1.85); g.stroke()
+        g.lineWidth = 12 * k
+        g.beginPath(); g.arc(cx, cy + 10 * k, 18 * k, Math.PI * 1.15, Math.PI * 1.85); g.stroke()
       } else if (m === 'resting') {
-        g.globalAlpha = 0.75
-        g.lineWidth = 8 * k
-        g.beginPath(); g.arc(cx, cy - 6 * k, 16 * k, Math.PI * 0.2, Math.PI * 0.8); g.stroke()
+        g.globalAlpha = 0.7
+        g.lineWidth = 7 * k
+        g.beginPath(); g.moveTo(cx - 14 * k, cy + 6 * k); g.quadraticCurveTo(cx, cy + 11 * k, cx + 14 * k, cy + 6 * k); g.stroke()
         g.globalAlpha = 1
       } else {
         const open = Math.max(0.08, f.open * f.blink)
@@ -307,7 +326,7 @@ function visorFace() {
           g.shadowBlur = 0
           g.fillStyle = '#000'
           g.save()
-          if (m === 'worried') { g.rotate(-side * 0.42); g.fillRect(-60, -eh * 0.5 - 60 - 2 * k, 120, 60 + eh * 0.12) }
+          if (m === 'worried') { g.rotate(side * 0.42); g.fillRect(-60, -eh * 0.5 - 60 - 2 * k, 120, 60 + eh * 0.12) }
           else { g.rotate(side * 0.12); g.fillRect(-60, -80 - eh * 0.04, 120, 80) }
           g.restore()
           g.globalCompositeOperation = 'source-over'
@@ -325,7 +344,7 @@ function visorFace() {
       g.beginPath(); g.roundRect(W / 2 - mw / 2 + lx * 0.5, my - mh / 2 - 4 * k, mw, mh, mh / 2); g.fill()
     } else if (m === 'thinking') {
       // a comet of light circling up by the corner the eyes look at
-      const sx = W / 2 + sep + 46 * k, sy = H * 0.26, R = 15 * k, a0 = f.rm ? 0 : f.t * 5
+      const sx = W / 2 + sep + 44 * k, sy = H * 0.3, R = 14 * k, a0 = f.rm ? 0 : f.t * 5
       g.lineWidth = 5 * k
       for (let i = 0; i < 8; i++) {
         g.globalAlpha = (1 - i / 8) * 0.95
@@ -336,8 +355,8 @@ function visorFace() {
       // An attention mark in the visor: a soft bar between the eyes.
       const pulse = f.rm ? 1 : 0.6 + 0.4 * Math.sin(f.t * 5)
       g.globalAlpha = pulse
-      g.beginPath(); g.roundRect(W / 2 - 4 * k, H * 0.28, 8 * k, 26 * k, 4 * k); g.fill()
-      g.beginPath(); g.arc(W / 2, H * 0.28 + 36 * k, 4.5 * k, 0, Math.PI * 2); g.fill()
+      g.beginPath(); g.roundRect(W / 2 - 5 * k, H * 0.5 - 26 * k, 10 * k, 30 * k, 5 * k); g.fill()
+      g.beginPath(); g.arc(W / 2, H * 0.5 + 15 * k, 5.5 * k, 0, Math.PI * 2); g.fill()
       g.globalAlpha = 1
     }
     if (m === 'worried') {
@@ -401,7 +420,7 @@ export default {
   name: 'Steward',
   vibe: 'A glass butler with a smoked visor, a brushed collar and a bow tie: composed, attentive, at your service.',
   eyes: ['pills', 'dots', 'arcs'],
-  frame: { height: 2.6, y: 0.04, peek: { height: 1.62, y: 0.56 }, header: { height: 1.72, y: 0.5 } },
+  frame: { height: 2.45, y: 0.06, peek: { height: 1.36, y: 0.47 }, header: { height: 1.5, y: 0.42 } },
   create({ kit, look, size }) {
     const small = size !== 'big'
     const object = new THREE.Group()
@@ -424,7 +443,7 @@ export default {
 
     const face = visorFace()
     const visorGeo = new THREE.SphereGeometry(HEAD_R * 1.018, 64, 16, Math.PI / 2 - VIS_PHI / 2, VIS_PHI, Math.PI / 2 - VIS_THETA / 2 + 0.13, VIS_THETA)
-    const visorMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0d12, roughness: 0.2, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06, emissive: 0xffffff, emissiveMap: face.texture, emissiveIntensity: 1.5 })
+    const visorMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0d12, roughness: 0.3, metalness: 0.1, clearcoat: 0.6, clearcoatRoughness: 0.18, emissive: 0xffffff, emissiveMap: face.texture, emissiveIntensity: 1.5 })
     const visor = new THREE.Mesh(visorGeo, visorMat)
     visor.scale.copy(headMesh.scale)
     head.add(visor)
@@ -432,14 +451,14 @@ export default {
 
     // Beacon on the crown (needs you).
     const beaconMat = kit.light(look.tint.glow, 2)
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), beaconMat)
-    beacon.position.set(0, HEAD_Y + 0.64, 0)
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), beaconMat)
+    beacon.position.set(0.37, HEAD_Y + 0.38, 0.22)
     const beaconGlow = kit.glowSprite(look.tint.glow, 0.5, 0.9)
     beaconGlow.position.copy(beacon.position)
     body.add(beacon, beaconGlow)
 
     // Collar ring and bow tie.
-    const metal = new THREE.MeshPhysicalMaterial({ color: 0x9a9890, metalness: 1, roughness: 0.34, anisotropy: 0.7, clearcoat: 0.5, clearcoatRoughness: 0.2 })
+    const metal = new THREE.MeshPhysicalMaterial({ color: 0x76746f, metalness: 1, roughness: 0.42, envMapIntensity: 0.75, anisotropy: 0.7, clearcoat: 0.5, clearcoatRoughness: 0.2 })
     const collar = new THREE.Mesh(new THREE.TorusGeometry(0.275, 0.042, 20, 72), metal)
     collar.rotation.x = Math.PI / 2 + 0.14
     collar.position.y = -0.01
@@ -474,7 +493,7 @@ export default {
       liquid.position.copy(torso.position)
       body.add(liquid)
       const stud = new THREE.SphereGeometry(0.024, 12, 8)
-      studs = new THREE.Mesh(mergeGeometries([stud.clone().translate(0, -0.27, 0.33), stud.translate(0, -0.42, 0.3)]), bowMat)
+      studs = new THREE.Mesh(stud.translate(0, -0.13, 0.345), bowMat)
       body.add(studs)
 
       gloveMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, sheen: 1, sheenRoughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.3 })
@@ -482,7 +501,7 @@ export default {
       gloves = [0, 1].map((i) => { const m = new THREE.Mesh(gloveGeo, gloveMat); if (i) m.scale.x = -1; object.add(m); return m })
 
       tray = new THREE.Group()
-      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.21, 0.022, 48), metal)
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.24, 0.022, 48), metal)
       const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.12, 24), torsoMat)
       cup.position.set(0.05, 0.07, 0)
       tray.add(plate, cup)
@@ -506,7 +525,7 @@ export default {
 
     // Reused state.
     const A = blank(), B = blank()
-    const eyeCol = new THREE.Color(), glowCol = new THREE.Color(), tmp = new THREE.Color()
+    const eyeCol = new THREE.Color(), glowCol = new THREE.Color(), tmp = new THREE.Color(), tmpGray = new THREE.Color()
     let cur = look
 
     function rimMaterial() {
@@ -529,13 +548,13 @@ export default {
       headMat.thickness = 0.35
       if (torsoMat) kit.updateGlass(torsoMat, l)
       headRimMat.uniforms.dark.value = l.dark ? 1 : 0
-      headRimMat.uniforms.color.value.copy(l.dark ? l.tint.soft : l.tint.ink).lerp(l.dark ? WHITE : l.tint.ink, 0.3)
-      headRimMat.uniforms.intensity.value = l.dark ? 1.3 : 0.75
-      visorMat.color.set(0x0a0c11).lerp(l.tint.ink, l.tint.key === 'graphite' ? 0.1 : 0.22)
-      visorMat.roughness = 0.12 + l.frost * 0.3
-      visorMat.clearcoatRoughness = 0.04 + l.frost * 0.25
-      visorMat.envMapIntensity = small ? 0.45 : 0.8
-      bowMat.color.copy(l.tint.ink).multiplyScalar(l.tint.key === 'graphite' ? 0.6 : 0.75)
+      headRimMat.uniforms.color.value.copy(l.dark ? l.tint.glow : l.tint.ink).lerp(l.dark ? WHITE : l.tint.ink, 0.4)
+      headRimMat.uniforms.intensity.value = l.dark ? 2.2 : 0.75
+      visorMat.color.set(l.dark ? 0x1b2029 : 0x0a0c11).lerp(l.tint.ink, l.tint.key === 'graphite' ? 0.1 : l.dark ? 0.3 : 0.22)
+      visorMat.roughness = 0.25 + l.frost * 0.25
+      visorMat.clearcoatRoughness = 0.16 + l.frost * 0.2
+      visorMat.envMapIntensity = small ? 0.3 : 0.5
+      bowMat.color.copy(l.tint.ink).lerp(tmpGray.setRGB(0.05, 0.05, 0.06), 0.25).multiplyScalar(l.tint.key === 'graphite' ? 0.6 : 0.8)
       bowMat.sheenColor.copy(l.tint.soft).multiplyScalar(0.6)
       if (gloveMat) { gloveMat.color.copy(WHITE).lerp(l.tint.soft, 0.25); gloveMat.sheenColor.copy(l.tint.soft) }
       if (cardTex) cardTex.paint(l)
@@ -636,7 +655,7 @@ export default {
               const a = i * 2.4 + ph * 1.5
               const r = 0.85 + 0.35 * ((i * 0.37) % 1)
               arr[i * 3] = Math.cos(a) * r * 1.05
-              arr[i * 3 + 1] = Math.min(1.12, HEAD_Y - 0.15 + Math.sin(a) * r * 0.7 + ph * 0.25)
+              arr[i * 3 + 1] = Math.min(1.1, HEAD_Y + 0.05 - 0.15 + Math.sin(a) * r * 0.7 + ph * 0.25)
               arr[i * 3 + 2] = 0.2 + ((i * 0.53) % 1) * 0.3
             }
             sparks.geometry.attributes.position.needsUpdate = true
