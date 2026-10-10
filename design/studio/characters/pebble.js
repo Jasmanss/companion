@@ -205,16 +205,18 @@ void main() {
   float sb = max(0.0, -sin(th));
   ringI += uListen * (0.15 + 1.05 * sb * sb) * (0.85 + 0.15 * uPulse);
   col += halo * uListen * sb * sb * 0.1 * exp(-max(0.0, -dr) / 0.09) * step(dr, 0.0);
-  // thinking: two comets circling clockwise, tails behind, soft heads (continuous, no seams)
+  // thinking: two comets circling clockwise, tails behind, soft heads. Each tail fades fully to zero before
+  // the next head, so there is no seam where fract() wraps.
   float cs = fract(a01 + uT * 0.33);
   float cs2 = fract(cs + 0.5);
-  float comet = (1.0 - exp(-cs * 45.0)) * exp(-cs * 2.6) * 2.4 + (1.0 - exp(-cs2 * 45.0)) * exp(-cs2 * 4.0) * 1.1;
+  float comet = (1.0 - exp(-cs * 45.0)) * exp(-cs * 2.6) * 2.4 * (1.0 - smoothstep(0.55, 0.98, cs))
+              + (1.0 - exp(-cs2 * 45.0)) * exp(-cs2 * 4.0) * 1.1 * (1.0 - smoothstep(0.45, 0.95, cs2));
   ringI += uSwirl * comet;
   // the comet's light spills into the lens like a swirl of liquid light
   col += mix(halo, cSoft, 0.35) * uSwirl * comet * 0.3 * exp(-max(0.0, -dr) / 0.14) * step(dr, 0.0);
   // done: the ring closes clockwise from the top, then glows
   float ac = fract(0.25 - a01);
-  float drawn = 1.0 - smoothstep(uSweep - 0.015, uSweep, ac);
+  float drawn = uSweep > 0.999 ? 1.0 : 1.0 - smoothstep(uSweep - 0.015, uSweep, ac);
   ringI += uDone * drawn * (0.95 + 1.0 * exp(-(uSweep - ac) * 14.0) * (1.0 - step(0.999, uSweep)));
   // celebrating: bright bands chasing around
   float cb = 0.5 + 0.5 * sin(th * 3.0 - uT * 3.2);
@@ -415,13 +417,15 @@ export default {
     const starTex = starTexture()
     // depthTest off: they float in front of the stone, and the shell's turned edge must not clip them
     const sparkMat = new THREE.SpriteMaterial({ map: starTex, transparent: true, depthWrite: false, depthTest: false, opacity: 0 })
+    // Placed in the corners the lozenge leaves free, kept inside the frame (beam tips included) so none is cut off.
     const SPARKS = tiny
-      ? [[-1.0, 0.72, 0.42, 0], [1.02, 0.62, 0.36, 1.7], [0.92, -0.78, 0.3, 3.1]]
-      : [[-1.18, 0.7, 0.3, 0], [1.16, 0.74, 0.26, 1.3], [-1.28, -0.35, 0.2, 2.2], [1.3, -0.2, 0.22, 3.4], [0.4, 1.08, 0.18, 4.5], [-0.55, -1.02, 0.17, 5.3]]
+      ? [[-0.98, 0.64, 0.36, 0], [0.98, 0.6, 0.32, 1.7], [0.86, -0.72, 0.28, 3.1]]
+      : [[-1.08, 0.74, 0.3, 0], [1.06, 0.78, 0.26, 1.3], [-1.18, -0.42, 0.2, 2.2], [1.16, -0.36, 0.22, 3.4], [0.3, 0.92, 0.17, 4.5], [-0.5, -0.94, 0.17, 5.3]]
+    const SPARK_PULL = size === 'header' ? 0.95 : 1
     const sparks = SPARKS.map(([x, y, s, ph]) => {
       const m = sparkMat.clone()
       const sp = new THREE.Sprite(m)
-      sp.position.set(x, y, 0.7)
+      sp.position.set(x, y, 0.3)
       sp.userData = { x, y, s, ph }
       sp.visible = false
       object.add(sp)
@@ -568,7 +572,7 @@ export default {
         sp.visible = sp.material.opacity > 0.01
         const sc = s * (0.55 + 0.6 * tw) * (tiny ? 1.45 : small ? 1.2 : 1)
         sp.scale.set(sc, sc, 1)
-        sp.position.set(x * (1 + 0.06 * cyc), y + cyc * 0.12 + f.bounce * 0.5, 0.7)
+        sp.position.set(x * SPARK_PULL * (1 + 0.03 * cyc), y * SPARK_PULL + cyc * 0.07 + f.bounce * 0.5, 0.3)
         sp.material.rotation = rm ? 0 : cyc * 0.8
       }
     }
