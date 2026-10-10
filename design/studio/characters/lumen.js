@@ -3,14 +3,18 @@
 //
 // How the layers work with three.js transmission:
 // - body: one transmissive MeshPhysicalMaterial, deformed in its vertex shader (wobble, ripples, mood rings). Its
-//   fragment shader is patched for a lens-like falloff: clear in the middle, tinted on the shoulders, a darker
-//   refracted band at the edge. In the light theme the thin middle also lets the panel itself show through.
+//   fragment shader is patched for a lens-like falloff. Light theme ("dark-field" optical glass): the refracted
+//   backdrop's tint is taken out so the middle reads clear and lets the panel itself show through, the tint sits
+//   on the shoulders where the path is long, the outer band is an absolute ink-tinted tone laid over the
+//   reflections, a thin bright ring of gathered light sits just inside it, and frost widens and softens all of it
+//   into a milky veil. Dark theme: a lit glass bead (glass-tinted edges, soft core glow).
 // - core: a plane drawn ONLY in the transmission pass (opaque list, premultiplied blending), so the glass refracts
-//   it and frost blurs it. It carries the core glow, caustics, the thinking spiral, talking rings, the worried lamp
-//   and (light theme) an inverted horizon. It never carries the eyes: refracted eye halos would misregister.
-// - face: a plane drawn after the glass with SDF eyes and mouth, so they stay crisp at 50x44 at any frost.
-//   It also draws the needs-you LED, the thinking comet, the worried sweat bead, celebrating sparkles and the
-//   contact shadow (one draw call).
+//   it and frost blurs it. It carries the core glow, caustics, the thinking spiral, talking rings and the worried
+//   lamp. It never carries the eyes: refracted eye halos would misregister with the crisp eyes drawn on top.
+// - overlays, drawn after the glass from one SDF shader compiled three ways (each plane only pays for its part):
+//   the face (eyes and mouth, crisp at 50x44 at any frost; in the light theme the eyes get a catchlight and a
+//   soft shadow inside the glass), the mood effects (needs-you LED, thinking bead, worried sweat bead, sleepy z,
+//   celebrating sparkles; hidden unless a mood uses one) and the contact shadow with its caustic.
 // - rim: a thin iridescent fresnel edge sharing the body's deformation; it pulses in the signal color for needs-you.
 import * as THREE from 'three'
 
@@ -524,7 +528,7 @@ export default {
     const GU = {
       uEdgeCol: { value: new THREE.Color() }, uEdgeK: { value: 0.6 }, uEdgeP: { value: 1.8 }, uLift: { value: 0.1 }, uSoftTone: { value: 0 },
       uFaceSpec: { value: 0.1 }, uSpecIn: { value: 1 }, uTopK: { value: 0.3 }, uDeep: { value: new THREE.Color() }, uThick: { value: 0 },
-      uClearA: { value: 1 }, uMilk: { value: 0 }, uMilkCol: { value: new THREE.Color() }, uCCEdge: { value: 1 }, uSpecEdge: { value: 1 }, uBand: { value: new THREE.Vector2(0.28, 0.62) }, uInner: { value: 0 },
+      uClearA: { value: 1 }, uMilk: { value: 0 }, uMilkCol: { value: new THREE.Color() }, uCCEdge: { value: 1 }, uSpecEdge: { value: 1 }, uBand: { value: new THREE.Vector2(0.28, 0.62) }, uInner: { value: 0 }, uDesat: { value: 0 },
     }
     const U = { uClock: { value: 0 }, uWob: { value: 0 }, uRip: { value: 0 }, uSwirl: { value: 0 }, uRing: { value: 0 }, uRingA: { value: 0 } }
 
@@ -559,6 +563,7 @@ uniform float uCCEdge;
 uniform float uSpecEdge;
 uniform vec2 uBand;
 uniform float uInner;
+uniform float uDesat;
 vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28)); return mix(x, k, step(0.72, x)); }`)
         .replace('#include <opaque_fragment>', `#include <opaque_fragment>
   {
@@ -601,6 +606,9 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         .replace('#include <transmission_fragment>', `#include <transmission_fragment>
   {
     float lmNdv = clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
+    // light theme: the backdrop the glass refracts is tinted like the glass; take most of that cast out so the
+    // middle reads as clear (the tint returns below, only where the path through the glass is long)
+    totalDiffuse = mix(totalDiffuse, vec3(dot(totalDiffuse, vec3(0.2126, 0.7152, 0.0722))), uDesat);
     // a refracted edge: the outer band of the lens bends darker surroundings in
     float lmEdge = uEdgeP > 0.0 ? pow(1.0 - lmNdv, uEdgeP) : pow(1.0 - smoothstep(uBand.x, uBand.y, lmNdv), 1.4);
     // a lens shows the world upside down: the dome takes a little of the deeper tint, the belly gathers light
@@ -608,7 +616,6 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
     // thickness: clear where you look straight through, tinted on the shoulders where the path is long
     vec3 lmThick = mix(vec3(1.0), mix(uDeep, vec3(1.0), lmNdv * lmNdv), uThick);
     totalDiffuse *= lmThick * mix(vec3(1.0), uEdgeCol, clamp(lmTop * uTopK + (uEdgeP > 0.0 ? lmEdge * uEdgeK : 0.0), 0.0, 1.0)) * (1.0 + uLift * lmNdv * lmNdv);
-    // light theme: the band is an absolute tone (dark-field glass), so the grazing Fresnel loss cannot wash it out
     // frost: a soft milky veil, strongest across the face
     totalDiffuse = mix(totalDiffuse, uMilkCol, uMilk * (0.35 + 0.65 * lmNdv));
   }`)
@@ -708,6 +715,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
     const tmp = new THREE.Color()
     const srgb = (dst, src) => dst.copy(src).convertLinearToSRGB()
     let topK = 0.3
+    let desat = 0
 
     function setLook(l) {
       L = l
@@ -733,7 +741,8 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         srgb(fu.uCometGlow.value, tn.glow)
         srgb(fu.uSweatCol.value, tmp.copy(tn.soft).lerp(WHITE, 0.4))
         // warm glass reads as brown when it is darkened: keep peach brighter and its dome untinted
-        glass.color.multiplyScalar(warmTint ? 0.8 : 0.7)
+        if (warmTint) glass.color.copy(tn.glass).lerp(WHITE, 0.35).multiplyScalar(0.78)
+        else glass.color.multiplyScalar(0.7)
         glass.envMapIntensity = 0.5
         glass.attenuationDistance = 1.5 - l.frost * 0.5
         GU.uEdgeCol.value.copy(tn.glass).multiply(tn.glass).lerp(tn.glow, 0.25)
@@ -746,6 +755,8 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         GU.uClearA.value = 1
         GU.uCCEdge.value = 1
         GU.uSpecEdge.value = 1
+        GU.uBand.value.set(0.28, 0.62)
+        desat = 0
         GU.uMilk.value = l.frost * 0.12
         GU.uMilkCol.value.copy(tn.glow).multiplyScalar(0.22)
         topK = warmTint ? 0.1 : 0.3
@@ -778,21 +789,25 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         // the refracted edge band: ink toward the glass until it sits near 45% lightness (graphite's ink is near black)
         let ek = 0.2
         while (ek < 0.6 && lum(GU.uEdgeCol.value.copy(tn.ink).lerp(tn.glass, ek)) < 0.15) ek += 0.04
-        GU.uEdgeK.value = 0.95
-        GU.uEdgeP.value = 0
+        // frost softens the lens: a wider, lighter edge band and a milkier, less see-through middle
+        GU.uEdgeK.value = 0.95 - 0.25 * l.frost
+        GU.uBand.value.set(0.28 - 0.12 * l.frost, 0.62 + 0.14 * l.frost)
+        GU.uEdgeP.value = 0 // 0 switches the body shader to the light theme's absolute edge band
         GU.uLift.value = 0.1
         GU.uSoftTone.value = 1
         GU.uSpecIn.value = 0.6
         GU.uDeep.value.copy(tn.glass).multiply(tn.glass).lerp(tn.glow, 0.15)
         GU.uThick.value = 1
-        GU.uClearA.value = 0.4 + 0.36 * l.frost
-        GU.uMilk.value = l.frost * 0.26
-        GU.uMilkCol.value.copy(WHITE).lerp(tn.glass, 0.3)
+        desat = 0.75
+        GU.uClearA.value = 0.38 + 0.47 * l.frost
+        GU.uMilk.value = l.frost * l.frost * 0.42
+        GU.uMilkCol.value.copy(WHITE).lerp(tn.glass, 0.15)
         topK = 0.2
         C.warmGlass.copy(glass.color).lerp(C.warm, 0.12)
         if (warmTint) C.warmGlass.multiplyScalar(0.86)
       }
       C.core.copy(tn.glow)
+      if (l.dark && warmTint) C.core.lerp(WHITE, 0.2)
       srgb(fu.uEyeShCol.value, tn.ink)
       srgb(fu.uEyeLit.value, tmp.copy(tn.glow).lerp(C.eye, 0.35))
       srgb(fu.uSweatEdge.value, tn.ink)
@@ -815,14 +830,6 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
       GU.uFaceSpec.value = 0.1
       coreMat.uniforms.uCaustic.value = l.dark ? 0.55 : 1.6 * (1 - 0.45 * l.frost)
       coreMat.uniforms.uCoreFall.value = l.dark ? 4.5 : 14
-      const DBG = globalThis.__lumenDbg || {}
-      for (const [k, v] of Object.entries(DBG)) {
-        if (GU[k]) { if (Array.isArray(v)) GU[k].value.set(...v); else GU[k].value = v }
-        else if (coreMat.uniforms[k]) coreMat.uniforms[k].value = v
-        else if (fu[k]) fu[k].value = v
-        else if (rimMat.uniforms[k]) rimMat.uniforms[k].value = v
-        else if (k in glass) glass[k] = v
-      }
       baseColor.copy(glass.color)
       baseAtt.copy(glass.attenuationColor)
       baseEdge.copy(GU.uEdgeCol.value)
@@ -884,6 +891,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         glass.attenuationColor.copy(baseAtt).lerp(C.warm, dark ? 0 : f.warm * 0.35)
         GU.uEdgeCol.value.copy(baseEdge)
         GU.uTopK.value = topK * (1 - f.warm)
+        GU.uDesat.value = desat * (1 - f.warm)
 
         // face
         const lx = f.lookX * 0.11, ly = -f.lookY * 0.09 - S.low * 0.045
@@ -945,7 +953,7 @@ vec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28))
         cu.uCoreCol.value.copy(C.core).lerp(C.warm, dark ? f.warm * 0.3 : f.warm)
         cu.uCausticCol.value.copy(L.dark ? C.caustic : WHITE).lerp(C.warm, f.warm)
         cu.uLampCol.value.copy(C.lamp)
-        cu.uLamp.value = f.warm * (rm ? 0.85 : 0.72 + 0.28 * Math.sin(f.t * 1.9)) * (dark ? (L.tint.key === 'peach' ? 0.55 : 1) : 0.9)
+        cu.uLamp.value = f.warm * (rm ? 0.85 : 0.72 + 0.28 * Math.sin(f.t * 1.9)) * (dark ? (L.tint.key === 'peach' ? 0.55 : 1) : 1.4)
         cu.uCore.value = S.core * (1 + f.level * 0.45) * (dark ? (L.tint.key === 'peach' ? 0.75 : 0.5) : 0.12) * (1 - f.warm * 0.6)
         cu.uSpiral.value = small ? 0 : f.swirl * (dark ? 0.75 : 0.5)
         cu.uClock.value = tt

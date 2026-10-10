@@ -160,11 +160,11 @@ float eye(vec2 p, float s) {
     float r = w * 1.5 * mix(1.0, 1.1, big - 1.0);
     d = length(q) - r;
     top = r; bot = -r;
-  } else {                       // arcs: a tall dome, more than half a circle, so it reads open and awake
-    float r = w * 1.6 * mix(1.0, 1.08, big - 1.0);
-    vec2 o = vec2(0.0, -r * 0.18);
-    float cut = o.y - r * 0.55;
-    d = smax(length(q - o) - r, cut - q.y, r * 0.25);
+  } else {                       // arcs: a gumdrop, round on top and only gently flattened below, so it reads awake
+    float r = w * 1.55 * mix(1.0, 1.08, big - 1.0);
+    vec2 o = vec2(0.0, -r * 0.08);
+    float cut = o.y - r * 0.78;
+    d = smax(length(q - o) - r, cut - q.y, r * 0.3);
     top = o.y + r; bot = cut;
   }
   // upper lid comes down from the top
@@ -216,8 +216,15 @@ void main() {
   lt += halo * rip * uRip * (0.12 + 0.45 * uLevel) * core;
 
   // ---- the halo ring, floating inside the lens
+  // thinking: one short comet (about 60 degrees with its tail) circling clockwise. Its orbit is uneven: it
+  // glides across the upper right, where the eyes look, then slips round the back (bottom left), where it is
+  // hidden, so it never sits under the eyes like a mouth.
+  float cs = fract(a01 - uHead);
+  float comet = (1.0 - exp(-cs * 90.0)) * exp(-cs * 8.0) * 3.0 * (1.0 - smoothstep(0.1, 0.165, cs));
+  comet *= smoothstep(-0.25, 0.4, dot(vec2(cos(th), sin(th)), vec2(0.55, 0.835)));
+  float cw = clamp(comet * uSwirl, 0.0, 2.0);
   float dr = (rho - uRingR) * lb;
-  float tw = mix(0.0085, 0.016, uSmall) * (1.0 + 0.8 * uAlert + 1.0 * uLevel * uTalk + 0.35 * uCeleb + 0.3 * uListen) * (1.0 + 0.7 * uFrost);
+  float tw = mix(0.0085, 0.016, uSmall) * (1.0 + 0.8 * uAlert + 1.0 * uLevel * uTalk + 0.35 * uCeleb + 0.3 * uListen + 0.55 * cw) * (1.0 + 0.7 * uFrost);
   tw = max(tw, fwidth(dr) * 0.9);
   float ringCore = exp(-dr * dr / (tw * tw));
   float ringGlow = exp(-abs(dr) / (mix(0.028, 0.04, uSmall) * (1.0 + 0.8 * uFrost)));
@@ -232,19 +239,15 @@ void main() {
   ringI += uAlert * (0.55 + 1.25 * uPulse);
   // listening: the whole ring lit, steady and even
   ringI += uListen * (0.55 + 0.08 * uPulse);
-  // thinking: one short comet (about 60 degrees with its tail) circling clockwise. Its orbit is uneven: it
-  // lingers over the top right, where the eyes look, and hurries through the bottom, where it also dims, so it
-  // never sits under the eyes like a mouth.
-  float cs = fract(a01 - uHead);
-  float comet = (1.0 - exp(-cs * 90.0)) * exp(-cs * 9.0) * 2.6 * (1.0 - smoothstep(0.1, 0.165, cs));
-  comet *= smoothstep(-0.25, 0.4, dot(vec2(cos(th), sin(th)), vec2(0.55, 0.835)));
-  ringI += uSwirl * comet;
+  ringI += cw;
   // celebrating: three bright bands chasing round
   float cb = 0.5 + 0.5 * sin(th * 3.0 - uT * 3.4);
   float cb3 = cb * cb * cb;
   ringI += uCeleb * (0.35 + 1.1 * cb3);
-  vec3 ringCol = mix(halo, vec3(1.0), (0.18 + 0.45 * clamp(comet * uSwirl, 0.0, 1.0) + 0.35 * uCeleb * cb3) * (1.0 - 0.8 * uWarm));
+  vec3 ringCol = mix(halo, vec3(1.0), (0.18 + 0.45 * min(cw, 1.0) + 0.35 * uCeleb * cb3) * (1.0 - 0.8 * uWarm));
   lt += ringCol * ringI * (ringCore * 1.2 + ringGlow * 0.2);
+  // the comet's light spills softly into the lens around it
+  lt += halo * cw * ringGlow * 0.35;
   // done: the ring closes clockwise from the top, a bright head leading, then holds
   float ac = fract(0.25 - a01);
   float sw = uSweep;
@@ -330,7 +333,7 @@ export default {
       uWinRough: { value: 0.2 }, uThin: { value: 0.04 }, uThick: { value: 1.1 }, uBand: { value: 0.4 },
       uPipe: { value: new THREE.Color() }, uCaustic: { value: new THREE.Color() }, uInner: { value: new THREE.Color() },
       uHair: { value: new THREE.Color() }, uHairI: { value: 0.5 }, uVeil: { value: new THREE.Color() }, uVeilA: { value: 0 },
-      uSmallS: { value: tiny ? 2 : small ? 1 : 0 }, uGain: { value: 1 }, uToe: { value: 0 }, uCMix: { value: 0 }, uEdgeRefl: { value: 1 },
+      uSmallS: { value: tiny ? 2 : small ? 1 : 0 }, uGain: { value: 1 }, uToe: { value: 0 }, uCMix: { value: 0 }, uEdgeRefl: { value: 1 }, uDesat: { value: 0 },
     }
     const shellMat = kit.glass(look, { thickness: 1, ior: 1.42, iridescence: 0.2, iridescenceIOR: 1.3 })
     // The panel behind a light theme is near white; ACES would grey it through the glass. Map linearly and
@@ -359,7 +362,7 @@ export default {
           }`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           transformed += normal * uWob * 0.012 * sin(position.x * 2.2 + position.y * 1.3 + uT * 1.2);`)
-      sh.fragmentShader = `uniform float uWinRough, uThin, uThick, uBand, uHairI, uVeilA, uSmallS, uGain, uToe, uCMix, uEdgeRefl;
+      sh.fragmentShader = `uniform float uWinRough, uThin, uThick, uBand, uHairI, uVeilA, uSmallS, uGain, uToe, uCMix, uEdgeRefl, uDesat;
         uniform vec3 uPipe, uCaustic, uInner, uHair, uVeil; varying float vWin; varying float vNear;\n` + sh.fragmentShader
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
           roughnessFactor *= mix(1.0, uWinRough, vWin);`)
@@ -386,7 +389,8 @@ export default {
         // light pipe (dark then bright at the edge is how glass reads on white)
         .replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment
           .replace('material.thickness = thickness;', 'material.thickness = thickness * (uThin + uThick * pow(pbFr, 2.0));')
-          .replace('material.transmissionAlpha = mix(', `transmitted.rgb *= uGain * (1.0 - uBand * smoothstep(0.45, 0.72, pbFr) * (1.0 - smoothstep(0.8, 0.92, pbFr)));
+          .replace('material.transmissionAlpha = mix(', `transmitted.rgb = mix(transmitted.rgb, vec3(dot(transmitted.rgb, vec3(0.2126, 0.7152, 0.0722))), uDesat);
+          transmitted.rgb *= uGain * (1.0 - uBand * smoothstep(0.45, 0.72, pbFr) * (1.0 - smoothstep(0.8, 0.92, pbFr)));
           material.transmissionAlpha = mix(`))
         .replace('#include <opaque_fragment>', `
           {
@@ -506,6 +510,7 @@ export default {
     const baseRX = 0.13
     const jitA = tiny ? 0.04 : small ? 0.028 : 0.016
     let curLook = look
+    let desatBase = 0
 
     function setLook(l) {
       curLook = l
@@ -530,6 +535,9 @@ export default {
       shellMat.clearcoatRoughness = 0.03 + 0.32 * f2
       // dark panels: smoked glass, so the body sits darker than the panel instead of glowing like resin
       U.uGain.value = l.dark ? 0.6 : 1
+      // the dark backdrop carries the tint's own glows; smoked glass filters toward neutral (warm tints most)
+      desatBase = l.dark ? (tn.key === 'peach' ? 0.85 : 0.35) : 0
+      U.uDesat.value = desatBase
       shellMat.envMapIntensity = l.dark ? 0.42 : 0.85
       U.uThin.value = 0.04
       U.uThick.value = 3.5
@@ -608,6 +616,7 @@ export default {
       // liquid shell
       U.uT.value = T
       U.uWob.value = f.wob * (0.6 + 0.6 * mp.lean)
+      U.uDesat.value = desatBase * (1 - 0.8 * f.warm)
       U.uRip.value = f.rip
       U.uSwirl.value = f.swirl
       U.uLevel.value = f.level
