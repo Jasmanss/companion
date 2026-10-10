@@ -478,7 +478,7 @@ export default {
       const rm = f.rm
       const w = rm ? 1 : 1 - Math.exp(-f.moodAge * 5.5)
       const a = MP[f.prevMood] || MP.idle, b = MP[f.mood] || MP.idle
-      for (const k of KEYS) mp[k] = a[k] + (b[k] - a[k]) * w
+      for (let i = 0; i < KEYS.length; i++) { const k = KEYS[i]; mp[k] = a[k] + (b[k] - a[k]) * w }
       const A = f.P / 0.55 // 1 calm, ~2.5 lively
       const T = rm ? 0.6 : f.clock
       const t = rm ? 0 : f.t
@@ -532,7 +532,7 @@ export default {
       const sweep = f.mood === 'done' && !rm ? Math.min(1, Math.max(0, (f.moodAge - 0.15) / 0.85)) : 1
       L.uSweep.value = sweep < 1 ? 1 - Math.pow(1 - sweep, 2.2) : 1
       L.uDim.value = mp.dim
-      const perk = 1 + 0.08 * mp.listen + 0.05 * mp.alert
+      const perk = 1 + 0.11 * mp.listen + 0.06 * mp.alert
       L.uEyeSize.value.set(eyeW * perk, eyeH * perk)
       L.uLook.value.set(f.lookX * 0.18, -f.lookY * 0.13)
 
@@ -540,8 +540,8 @@ export default {
       const ap = mp.aura * (0.55 + 0.45 * (mp.alert > 0.5 ? pulse : 0.5 + 0.5 * f.level))
       auraMat.opacity = ap * (curLook.dark ? 0.55 : 0.42)
       aura.visible = auraMat.opacity > 0.01
-      for (const sp of sparks) {
-        const { x, y, s, ph } = sp.userData
+      for (let i = 0; i < sparks.length; i++) {
+        const sp = sparks[i], ud = sp.userData, x = ud.x, y = ud.y, s = ud.s, ph = ud.ph
         const cyc = rm ? 0.5 : ((t * 0.55 + ph * 0.37) % 1)
         const tw = rm ? 0.8 : 0.25 + 0.75 * Math.pow(Math.max(0, Math.sin(cyc * Math.PI)), 1.5)
         sp.material.opacity = f.spark * tw

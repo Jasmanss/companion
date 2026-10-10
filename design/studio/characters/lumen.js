@@ -127,7 +127,9 @@ uniform float uCaustic;
 uniform float uCoreFall;
 uniform vec3 uLightCol;
 varying vec2 vP;
+uniform float uOn;
 void main() {
+  if (uOn < 0.5) discard;
   vec2 c = vP - uCoreC;
   float r = length(c * vec2(1.0, 0.9));
   float core = exp(-r * r * uCoreFall);
@@ -342,6 +344,8 @@ void main() {
   }
 
   // eyes and mouth
+  vec2 fq = (p - uFace - vec2(0.0, -0.18)) * vec2(0.85, 1.0);
+  if (dot(fq, fq) > 0.62) { gl_FragColor = acc; return; }
   vec2 el = p - (uFace + vec2(-uSep * 0.5, 0.0));
   vec2 er = p - (uFace + vec2(uSep * 0.5, 0.0));
   float d = min(eyeSD(el, -1.0), eyeSD(er, 1.0));
@@ -393,8 +397,6 @@ function dropProfile(n) {
   return pts
 }
 
-const DEV = new URLSearchParams(typeof location !== 'undefined' ? location.search : '')
-const dev = (k, d) => (DEV.has(k) ? +DEV.get(k) : d)
 const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 const ease = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt))
 
@@ -458,7 +460,7 @@ export default {
     body.onBeforeRender = (r, scene) => {
       if (glass.envMap || !scene.environment) return
       glass.envMap = scene.environment
-      glass.envMapRotation.set(dev('lx_ex', 0.3), dev('lx_ey', 0.6), 0)
+      glass.envMapRotation.set(0.3, 0.6, 0)
       glass.needsUpdate = true
     }
     const baseColor = new THREE.Color(), baseAtt = new THREE.Color(), baseEdge = new THREE.Color(), baseLight = new THREE.Color()
@@ -481,7 +483,7 @@ export default {
         uCoreCol: { value: new THREE.Color() }, uEyeGlowCol: { value: new THREE.Color() }, uBeaconCol: { value: new THREE.Color() },
         uCore: { value: 0.6 }, uSwirl: { value: 0 }, uClock: { value: 0 }, uRip: { value: 0 }, uLevel: { value: 0 }, uBeacon: { value: 0 },
         uEyeGlow: { value: 1 }, uDark: { value: 0 }, uEyeL: { value: new THREE.Vector2() }, uEyeR: { value: new THREE.Vector2() },
-        uTip: { value: new THREE.Vector2(0, 0.56) }, uCoreC: { value: new THREE.Vector2(0, -0.36) }, uCaustic: { value: 0.6 }, uCoreFall: { value: 4.5 }, uLightCol: { value: new THREE.Color() },
+        uTip: { value: new THREE.Vector2(0, 0.56) }, uCoreC: { value: new THREE.Vector2(0, -0.36) }, uOn: { value: 0 }, uCaustic: { value: 0.6 }, uCoreFall: { value: 4.5 }, uLightCol: { value: new THREE.Color() },
       },
       vertexShader: PLANE_VERT, fragmentShader: CORE_FRAG, depthWrite: false, toneMapped: false,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -489,7 +491,11 @@ export default {
     const core = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 2.3), coreMat)
     core.position.set(0, 0, 0.05)
     core.renderOrder = 1
-    core.onBeforeRender = (r) => { coreMat.colorWrite = r.getRenderTarget() !== null }
+    core.onBeforeRender = (r) => {
+      const on = r.getRenderTarget() !== null
+      coreMat.colorWrite = on
+      coreMat.uniforms.uOn.value = on ? 1 : 0
+    }
 
     // face overlay (after the glass)
     const eyeK = small ? 1.22 : size === 'header' ? 1.1 : 1
@@ -573,19 +579,19 @@ export default {
       rimMat.uniforms.uI.value = l.dark ? 0.95 : 0.75
       fu.uShadow.value = small ? 0 : 1
       GU.uSoftTone.value = l.dark ? 0 : 1
-      GU.uFaceSpec.value = dev('lx_fspec', 0.1)
-      GU.uTopK.value = l.dark ? dev('lx_dtop', 0.25) : dev('lx_ltop', 0.45)
-      glass.envMapIntensity = l.dark ? dev('lx_denv', 0.5) : 1.1
+      GU.uFaceSpec.value = 0.1
+      GU.uTopK.value = l.dark ? 0.3 : 0.75
+      glass.envMapIntensity = l.dark ? 0.5 : 1.1
       GU.uEdgeCol.value.copy(tn.glass).multiply(tn.glass).lerp(tn.glow, 0.25)
       baseEdge.copy(GU.uEdgeCol.value)
       GU.uEdgeK.value = l.dark ? 0.5 : 0.7
       GU.uLift.value = l.dark ? 0.05 : 0.12
-      coreMat.uniforms.uCaustic.value = l.dark ? 0.55 : dev('lx_lcaus', 0.6)
-      coreMat.uniforms.uCoreFall.value = dev('lx_fall', 4.5)
+      coreMat.uniforms.uCaustic.value = l.dark ? 0.55 : 1.1
+      coreMat.uniforms.uCoreFall.value = 4.5
       coreMat.uniforms.uLightCol.value.copy(tn.glow).lerp(WHITE, 0.6)
       baseLight.copy(coreMat.uniforms.uLightCol.value)
-      glass.attenuationDistance = l.dark ? dev('lx_datt', 1.5) - l.frost * 0.5 : dev('lx_att', 2.6) - l.frost * 0.8
-      if (l.dark) glass.color.multiplyScalar(dev('lx_dcol', 0.7))
+      glass.attenuationDistance = l.dark ? 1.5 - l.frost * 0.5 : 2.6 - l.frost * 0.8
+      if (l.dark) glass.color.multiplyScalar(0.7)
       baseColor.copy(glass.color)
       baseAtt.copy(glass.attenuationColor)
     }
@@ -657,7 +663,7 @@ export default {
         fu.uSmile.value = S.smile
         fu.uLevel.value = f.level
         for (let i = 0; i < 6; i++) fu.uM.value[i] = M[i]
-        fu.uHaloA.value = S.halo * (L.dark ? dev('lx_halo', 0.3) : 0.22)
+        fu.uHaloA.value = S.halo * (L.dark ? 0.3 : 0.22)
         fu.uBeacon.value = S.beacon
         fu.uBeat.value = rm ? 0.35 : (f.t * 0.85) % 1
         fu.uSpark.value = f.spark
@@ -682,13 +688,13 @@ export default {
         const cu = coreMat.uniforms
         cu.uCoreCol.value.copy(C.core).lerp(WARM, f.warm)
         cu.uEyeGlowCol.value.copy(C.halo).lerp(WARM, f.warm)
-        cu.uCore.value = S.core * (1 + f.level * 0.45) * (L.dark ? dev('lx_dcore', 0.5) * (1 + f.warm * 0.8) : dev('lx_lcore', 1))
+        cu.uCore.value = S.core * (1 + f.level * 0.45) * (L.dark ? 0.5 * (1 + f.warm * 0.8) : 1)
         cu.uSwirl.value = f.swirl
         cu.uClock.value = tt
         cu.uRip.value = f.rip
         cu.uLevel.value = f.level
         cu.uBeacon.value = S.beacon * (rm ? 0.8 : 0.65 + 0.35 * Math.sin(f.t * 0.85 * Math.PI * 2))
-        cu.uEyeGlow.value = S.halo * (1 - S.closed * 0.75) * (1 - S.happy * 0.55) * Math.min(1, 0.35 + 0.65 * fu.uOpen.value) * (1 - S.sleep * 0.5) * (L.dark ? dev('lx_deye', 0.38) : 1)
+        cu.uEyeGlow.value = S.halo * (1 - S.closed * 0.75) * (1 - S.happy * 0.55) * Math.min(1, 0.35 + 0.65 * fu.uOpen.value) * (1 - S.sleep * 0.5) * (L.dark ? 0.38 : 1)
         cu.uEyeL.value.set(lx - fu.uSep.value / 2, -0.24 + ly)
         cu.uEyeR.value.set(lx + fu.uSep.value / 2, -0.24 + ly)
       },
