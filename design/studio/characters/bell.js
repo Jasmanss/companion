@@ -32,7 +32,7 @@ const BRASS = '#d9b879'
 // browY: brow height (px, - is up), browIn/browOut: raise of the inner/outer brow ends, browR: extra raise of the
 // right brow, lid: upper lid cover (0..1), slant: lid droop toward the outer corners.
 const POSE = {
-  resting: { sq: 0.95, tilt: -0.05, lean: 0.06, glow: 0, browY: 16, browIn: 0, browOut: -4, browR: 0, lid: 0, slant: 0 },
+  resting: { sq: 0.93, tilt: -0.04, lean: 0.11, glow: 0, browY: 16, browIn: 0, browOut: -4, browR: 0, lid: 0, slant: 0 },
   idle: { sq: 1, tilt: 0, lean: 0, glow: 0.16, browY: 0, browIn: 0, browOut: 0, browR: 0, lid: 0, slant: 0 },
   listening: { sq: 1.02, tilt: 0.15, lean: 0.11, glow: 0.65, browY: -20, browIn: 4, browOut: 4, browR: 0, lid: 0, slant: 0 },
   thinking: { sq: 1, tilt: -0.1, lean: -0.08, glow: 0.55, browY: -4, browIn: -3, browOut: 0, browR: 18, lid: 0.22, slant: 0 },
@@ -337,7 +337,7 @@ export default {
       g.beginPath()
       switch (mood) {
         case 'talking': { const w = 34 * s, h = Math.max(12 * s, (0.2 + f.level * 0.8) * 50 * s); g.ellipse(mx, my + h * 0.35, w, h, 0, 0, Math.PI * 2); g.fill(); break }
-        case 'done': g.moveTo(mx - 28 * s, my - 6 * s); g.quadraticCurveTo(mx, my + 22 * s, mx + 28 * s, my - 6 * s); g.stroke(); break
+        case 'done': g.moveTo(mx - 34 * s, my - 8 * s); g.quadraticCurveTo(mx, my + 28 * s, mx + 34 * s, my - 8 * s); g.stroke(); break
         case 'celebrating': g.moveTo(mx - 34 * s, my - 10 * s); g.quadraticCurveTo(mx, my + 52 * s, mx + 34 * s, my - 10 * s); g.closePath(); g.fill(); break
         case 'needs-you': g.ellipse(mx, my + 2, 12 * s, 15 * s, 0, 0, Math.PI * 2); g.fill(); break
         case 'worried': { const x0 = mx - 30 * s, step = 15 * s; g.moveTo(x0, my); for (let i = 1; i <= 4; i++) g.quadraticCurveTo(x0 + (i - 0.5) * step, my + (i % 2 ? -9 : 9) * s, x0 + i * step, my); g.stroke(); break }
