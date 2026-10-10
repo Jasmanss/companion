@@ -215,7 +215,10 @@ float sdArc(vec2 p, float ap, float ra, float rb) {
   return ((sc.y * p.x > sc.x * p.y) ? length(p - sc * ra) : abs(length(p) - ra)) - rb;
 }
 float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
-float cov(float d) { float aa = fwidth(d) * 0.8 + uSoft; return 1.0 - smoothstep(-aa, aa, d); }
+// pixel size, taken once in uniform control flow: fwidth() inside the face's early-out branch is undefined
+// (quads straddling the branch edge painted stray eye-colored specks)
+float gPx = 0.002;
+float cov(float d) { float aa = gPx * 0.9 + uSoft; return 1.0 - smoothstep(-aa, aa, d); }
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
 
 float eyeSD(vec2 q, float side) {
@@ -286,6 +289,7 @@ void glow(inout vec4 acc, vec3 c, float k) {
 
 void main() {
   vec2 p = vP;
+  gPx = max(fwidth(vP.x), fwidth(vP.y));
   vec4 acc = vec4(0.0);
 
   // contact shadow + caustic (light focused through the drop)
@@ -324,23 +328,31 @@ void main() {
 
   // thinking: a comet of light orbiting inside the upper drop, dimmer while it passes behind
   if (uThink > 0.001) {
-    vec2 oc = vec2(0.0, 0.34);
-    vec2 orad = vec2(0.38, 0.12);
+    vec2 oc = vec2(0.0, 0.32);
+    vec2 orad = vec2(0.45, 0.13);
     vec2 q = rot(0.22) * (p - oc);
     float rr = length(q / orad);
+    // true distance to the ellipse (not radial), so the trail keeps one width all the way round
+    vec2 gq = q / (orad * orad) / max(rr, 1e-3);
+    float dist = (rr - 1.0) / max(length(gq), 1e-3);
     float ang = atan(q.y / orad.y, q.x / orad.x);
     float dA = mod(uOrbit - ang, 6.2831);
-    float tail = exp(-dA * 1.25) * step(dA, 4.5);
-    float back = 0.45 + 0.55 * smoothstep(0.6, -0.6, sin(ang));
-    float wdt = 0.022 * uStroke * (0.35 + 0.65 * tail);
-    float line = exp(-pow((rr - 1.0) * orad.y / wdt, 2.0)) * tail * back;
+    float tail = exp(-dA * 0.8) * step(dA, 5.2);
+    // the far side of the orbit dims (it passes behind the face); on pale glass it must stay legible
+    float bMin = uDark > 0.5 ? 0.3 : 0.6;
+    float back = bMin + (1.0 - bMin) * smoothstep(0.7, -0.7, sin(ang));
+    float wdt = (uDark > 0.5 ? 0.017 : 0.021) * uStroke * (0.35 + 0.65 * tail);
+    float line = exp(-pow(dist / wdt, 2.0)) * tail * back;
     vec2 hq = vec2(cos(uOrbit), sin(uOrbit)) * orad;
     vec2 hp = oc + rot(-0.22) * hq;
     vec2 hd = p - hp;
-    float headBack = 0.45 + 0.55 * smoothstep(0.6, -0.6, sin(uOrbit));
-    float head = cov(length(hd) - 0.046 * uStroke) * headBack;
-    glow(acc, uHaloCol, (line * 0.9 + exp(-dot(hd, hd) / 0.004) * 0.5 * headBack) * uThink);
-    over(acc, uCometCol, max(head, line * 0.9) * uThink);
+    float headBack = bMin + (1.0 - bMin) * smoothstep(0.7, -0.7, sin(uOrbit));
+    float hs = 0.05 * uStroke * (0.7 + 0.3 * headBack);
+    float head = cov(length(hd) - hs) * headBack;
+    float heart = cov(length(hd) - hs * 0.45) * headBack;
+    glow(acc, uHaloCol, (line * 0.7 + exp(-dot(hd, hd) / (hs * hs * 3.0)) * 0.8 * headBack) * uThink);
+    over(acc, uCometCol, max(head, line * (uDark > 0.5 ? 0.9 : 1.0)) * uThink);
+    over(acc, vec3(1.0), heart * uThink * (uDark > 0.5 ? 0.9 : 0.35));
   }
 
   // eyes and mouth
@@ -499,6 +511,10 @@ export default {
 
     // face overlay (after the glass)
     const eyeK = small ? 1.22 : size === 'header' ? 1.1 : 1
+    // small sizes: a lower hop (the frame is tight), bigger sparkles pulled a little inward so they survive 50x44
+    const hopK = small ? 0.45 : size === 'header' ? 0.7 : 1
+    const sparkK = small ? 1.7 : size === 'header' ? 1.3 : 1
+    const sparkPos = small ? 0.94 : 1
     const fu = {
       uEyeCol: { value: new THREE.Color() }, uEyeEdge: { value: new THREE.Color() }, uHaloCol: { value: new THREE.Color() }, uHaloA: { value: 0.8 }, uHaloK: { value: 11 }, uDark: { value: 0 },
       uFace: { value: new THREE.Vector2(0, -0.24) }, uSep: { value: 0.62 * (small ? 1.06 : 1) }, uEye: { value: new THREE.Vector2(0.19 * eyeK, 0.36 * eyeK) },
@@ -507,7 +523,7 @@ export default {
       uMouth: { value: new THREE.Vector2(0, -0.62) }, uMW: { value: 0.25 * (small ? 1.3 : eyeK) }, uM: { value: [0, 0, 0, 0, 0, 0] },
       uSmile: { value: 0.8 }, uLevel: { value: 0 },
       uBeacon: { value: 0 }, uBeat: { value: 0 }, uBeaconCol: { value: new THREE.Color() }, uTip: { value: new THREE.Vector2(0, 0.56) }, uDotK: { value: small ? 1.6 : size === 'header' ? 1.25 : 1 },
-      uSpark: { value: 0 }, uT: { value: 0 }, uSpk: { value: SPARKS.map((s) => new THREE.Vector4(...s)) }, uSparkCol: { value: new THREE.Color() },
+      uSpark: { value: 0 }, uT: { value: 0 }, uSpk: { value: SPARKS.map(([x, y, z, w]) => new THREE.Vector4(x * sparkPos, y * sparkPos, z * sparkK, w)) }, uSparkCol: { value: new THREE.Color() },
       uThink: { value: 0 }, uOrbit: { value: 0 }, uCometCol: { value: new THREE.Color() },
       uShadow: { value: 1 }, uShadowY: { value: -B - 0.04 }, uShadowCol: { value: new THREE.Color() }, uCausticCol: { value: new THREE.Color() },
     }
@@ -568,7 +584,8 @@ export default {
       C.core.copy(tn.glow)
       C.rim.copy(l.dark ? tn.soft : tn.glow).lerp(WHITE, l.dark ? 0.35 : 0)
       srgb(fu.uSparkCol.value, C.spark)
-      srgb(fu.uCometCol.value, tmp.copy(l.dark ? WHITE : tn.glow).lerp(l.dark ? tn.glow : tn.ink, l.dark ? 0.2 : 0.4))
+      // the comet is light: white-hot in the dark, a saturated spark of the tint on pale glass
+      srgb(fu.uCometCol.value, tmp.copy(l.dark ? WHITE : tn.glow).lerp(l.dark ? tn.glow : tn.ink, l.dark ? 0.35 : 0.18))
       srgb(fu.uBeaconCol.value, C.beacon)
       srgb(fu.uShadowCol.value, C.shadow)
       srgb(fu.uCausticCol.value, C.caustic)
@@ -624,10 +641,11 @@ export default {
         // pose: breathing, squash, lean, celebrating hop
         const breathe = rm ? 0 : Math.sin(tt * 1.25) * 0.012 * amp
         let sy = 1 + S.squash + breathe
-        const hop = -f.bounce
+        const bnc = -f.bounce
+        const hop = bnc * hopK
         if (f.mood === 'celebrating' && !rm) {
           const hmax = P > 1 ? 0.16 : 0.09
-          const h = Math.min(1, hop / hmax)
+          const h = Math.min(1, bnc / hmax)
           sy += h * 0.05 - Math.pow(1 - h, 6) * 0.06
         }
         const sx = 1 / Math.sqrt(Math.max(0.5, sy))
@@ -668,7 +686,7 @@ export default {
         fu.uBeat.value = rm ? 0.35 : (f.t * 0.85) % 1
         fu.uSpark.value = f.spark
         fu.uThink.value = f.swirl
-        fu.uOrbit.value = rm ? 2.2 : f.t * 2.4
+        fu.uOrbit.value = rm ? -0.5 : f.t * 2.4 - 1.6 // still pose: the comet in front, toward where the eyes look
         fu.uT.value = rm ? 0.7 : f.t
         fu.uShadowY.value = -B - 0.04 - hop / Math.max(0.5, sy)
         fu.uShadow.value = small ? 0 : Math.max(0, 1 - hop * 3)

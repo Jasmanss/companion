@@ -55,7 +55,7 @@ search. Keys are stored encrypted in your macOS keychain.
 |---|---|
 | `npm run dev` | Run with hot reload |
 | `npm run lint` / `typecheck` / `test` | The checks CI runs |
-| `npm run design` | Serve `design/` at http://localhost:4321 and reload open pages when files change (including after a `git pull`) |
+| `npm run design` | Serve `design/` at http://127.0.0.1:4321 (or the next free port) and reload open pages when files change (including after a `git pull`) |
 | `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png`, exit |
 | `npm run pack` | Build an unsigned `.app` in `dist/` |
 | `npm run dist` | Build the DMG and zip in `dist/` |

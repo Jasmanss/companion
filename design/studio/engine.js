@@ -5,6 +5,7 @@
 //   {
 //     id, name, vibe,                       // vibe: one sentence
 //     eyes: ['pills', 'dots', 'arcs'],      // eye styles it supports (the Eyes control); [] if it has its own
+//     accessories: true,                    // optional: it draws look.hat and look.glasses (the Hat and Glasses controls)
 //     frame: { height: 2.6, y: 0 },         // world units the camera fits vertically, and where it looks
 //     create(ctx) -> instance,
 //   }
@@ -15,7 +16,8 @@
 //     setLook(look),                        // tint, frost, dark or eyes changed (optional: else it's recreated)
 //     dispose(),
 //   }
-//   look = { tint: {key, name, glass, glow, ink, soft} (THREE.Color), frost: 0..1, dark: bool, eyes, size }
+//   look = { tint: {key, name, glass, glow, ink, soft} (THREE.Color), frost: 0..1, dark: bool, eyes, size,
+//            hat: 'none' | 'bowler' | 'top', glasses: 'none' | 'half-moon' | 'round' | 'monocle' }
 //
 // face (read-only for characters; Phase 4 ports step() into face-drawing.ts as stepFace):
 //   mood, moodAge (s since the mood changed), prevMood, t, dt, clock (liquid time: runs faster when lively/worried),
@@ -296,6 +298,18 @@ export class Studio {
       lin.addColorStop(1, '#' + base.getHexString())
       g.fillStyle = lin
       g.fillRect(0, 0, 256, 256)
+      if (!look.dark) {
+        // Light panels are nearly white, so clear glass has nothing to show and reads as milky ceramic. A soft horizon
+        // (bright above, a gentle band of panel shadow below) gives the refraction structure, like glass on a desk.
+        const band = g.createLinearGradient(0, 120, 0, 256)
+        const ink = look.tint.ink
+        band.addColorStop(0, 'rgba(255,255,255,0)')
+        band.addColorStop(0.35, `rgba(${(ink.r * 255) | 0},${(ink.g * 255) | 0},${(ink.b * 255) | 0},0.16)`)
+        band.addColorStop(0.6, `rgba(${(ink.r * 255) | 0},${(ink.g * 255) | 0},${(ink.b * 255) | 0},0.07)`)
+        band.addColorStop(1, 'rgba(255,255,255,0)')
+        g.fillStyle = band
+        g.fillRect(0, 120, 256, 136)
+      }
       // Soft colored light, so refraction has something to bend.
       for (const [x, y, r, col, a] of [[60, 70, 120, look.tint.hex.glow, look.dark ? 0.35 : 0.3], [200, 190, 130, look.tint.hex.soft, 0.4], [210, 40, 90, '#ffffff', look.dark ? 0.12 : 0.5]]) {
         const rg = g.createRadialGradient(x, y, 0, x, y, r)

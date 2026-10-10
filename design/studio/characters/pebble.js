@@ -106,6 +106,7 @@ const LENS_FRAG = /* glsl */ `
 uniform float uT, uPulse, uOpen, uStyle, uHappy, uClosed, uDroop, uWorry, uRing, uGlow, uSwirl, uRip, uLevel, uTalk;
 uniform float uWarm, uSpark, uAlert, uDone, uSweep, uListen, uCeleb, uSmall, uFrost, uEgg, uN, uDim, uDark;
 uniform vec2 uLook, uA, uEyePos, uEyeSize;
+uniform vec3 uPip;
 uniform vec3 cBase, cCore, cHalo, cSoft, cWarm;
 varying vec3 vP;
 #define PI 3.14159265
@@ -143,7 +144,7 @@ float eye(vec2 p, float s) {
   // sleepy lids rest half way down, flat across the top
   float open = clamp(mix(uOpen, 0.2 + uOpen * 0.7, uDroop), 0.0, 1.0);
   float lid = mix(bot + w * 0.42, top + 0.02, open);
-  lid -= s * q.x * (0.08 * uDroop + 0.55 * uWorry);
+  lid -= s * q.x * (0.3 * uDroop + 0.55 * uWorry);
   d = smax(d, q.y - lid, w * 0.35);
   // happy arcs (done, celebrating): a soft upturned curve
   float R = w * 2.05;
@@ -204,16 +205,23 @@ void main() {
   float sb = max(0.0, -sin(th));
   ringI += uListen * (0.15 + 1.05 * sb * sb) * (0.85 + 0.15 * uPulse);
   col += halo * uListen * sb * sb * 0.1 * exp(-max(0.0, -dr) / 0.09) * step(dr, 0.0);
-  // thinking: two comets circling clockwise, tails behind, soft heads (continuous, no seams)
+  // thinking: two comets circling clockwise, tails behind, soft heads. Each tail fades fully to zero before
+  // the next head, so there is no seam where fract() wraps.
   float cs = fract(a01 + uT * 0.33);
   float cs2 = fract(cs + 0.5);
-  float comet = (1.0 - exp(-cs * 45.0)) * exp(-cs * 2.6) * 2.4 + (1.0 - exp(-cs2 * 45.0)) * exp(-cs2 * 4.0) * 1.1;
+  float comet = (1.0 - exp(-cs * 45.0)) * exp(-cs * 2.6) * 2.4 * (1.0 - smoothstep(0.55, 0.98, cs))
+              + (1.0 - exp(-cs2 * 45.0)) * exp(-cs2 * 4.0) * 1.1 * (1.0 - smoothstep(0.45, 0.95, cs2));
   ringI += uSwirl * comet;
-  // the comet's light spills into the lens like a swirl of liquid light
-  col += mix(halo, cSoft, 0.35) * uSwirl * comet * 0.3 * exp(-max(0.0, -dr) / 0.14) * step(dr, 0.0);
+  // the comet's light spills into the lens as a soft spiral of liquid light: the inner part lags behind the
+  // ring, heads are wide and soft, and it fades out before the centre so no edges converge there
+  float css = fract(cs + (0.865 - rho) * 0.32);
+  float css2 = fract(css + 0.5);
+  float spill = smoothstep(0.0, 0.16, css) * exp(-css * 3.0) * (1.0 - smoothstep(0.5, 0.95, css))
+              + 0.45 * smoothstep(0.0, 0.16, css2) * exp(-css2 * 4.0) * (1.0 - smoothstep(0.45, 0.9, css2));
+  col += mix(halo, cSoft, 0.35) * uSwirl * spill * 0.55 * exp(-max(0.0, -dr) / 0.1) * step(dr, 0.0) * smoothstep(0.25, 0.7, rho);
   // done: the ring closes clockwise from the top, then glows
   float ac = fract(0.25 - a01);
-  float drawn = 1.0 - smoothstep(uSweep - 0.015, uSweep, ac);
+  float drawn = uSweep > 0.999 ? 1.0 : 1.0 - smoothstep(uSweep - 0.015, uSweep, ac);
   ringI += uDone * drawn * (0.95 + 1.0 * exp(-(uSweep - ac) * 14.0) * (1.0 - step(0.999, uSweep)));
   // celebrating: bright bands chasing around
   float cb = 0.5 + 0.5 * sin(th * 3.0 - uT * 3.2);
@@ -221,6 +229,16 @@ void main() {
   vec3 ringCol = mix(halo, vec3(1.0), 0.18 + 0.4 * clamp(comet * uSwirl, 0.0, 1.0) + 0.35 * uCeleb * pow(cb, 3.0));
   ringCol = mix(ringCol, mix(cSoft, vec3(1.0), 0.3), uCeleb * (1.0 - cb) * 0.6);
   col += ringCol * ringI * (ringCore * 1.25 + ringGlow * 0.22);
+
+  // ---- needs-you: a status light set into the ring at the upper right, beating with the ring
+  float pd = length(p - uPip.xy);
+  float paa = fwidth(pd) * 0.9 + 0.002;
+  float pip = 1.0 - smoothstep(uPip.z - paa, uPip.z + paa, pd);
+  // a dark seat around the light separates it from the ring, so it still reads at peek size
+  float seat = smoothstep(uPip.z * 0.9, uPip.z * 1.25, pd) * (1.0 - smoothstep(uPip.z * 1.5, uPip.z * 2.1, pd));
+  col *= 1.0 - 0.7 * seat * uAlert;
+  col += mix(halo, vec3(1.0), 0.35) * exp(-pd / (uPip.z * 1.6)) * uAlert * (0.45 + 0.9 * uPulse);
+  col = mix(col, mix(halo, vec3(1.0), 0.75) * (1.5 + 0.6 * uPulse), pip * uAlert);
 
   // ---- celebrating: a slow wash of coloured light across the lens
   float wash = 0.5 + 0.5 * sin(p.x * 3.2 + p.y * 2.0 - uT * 2.2);
@@ -252,8 +270,8 @@ void main() {
 
   // ---- voice light (talking): a small pill that breathes with the reply
   vec2 mq = p - vec2(uLook.x * 0.7, uEyePos.y - uEyeSize.y * 1.95 + uLook.y * 0.6);
-  float mw = mix(0.03, 0.044, uSmall) + uLevel * mix(0.085, 0.09, uSmall);
-  float mh = mix(0.02, 0.03, uSmall) + uLevel * mix(0.03, 0.032, uSmall);
+  float mw = mix(0.036, 0.05, uSmall) + uLevel * mix(0.11, 0.12, uSmall);
+  float mh = mix(0.022, 0.032, uSmall) + uLevel * mix(0.04, 0.042, uSmall);
   float dm = sdRoundBox(mq, vec2(mw, mh), mh);
   float mcore = 1.0 - smoothstep(-aa, aa, dm);
   col += halo * exp(-max(dm, 0.0) / 0.04) * 0.25 * uTalk * (0.4 + uLevel);
@@ -366,6 +384,13 @@ export default {
     const lensGeo = pebbleGeometry({ a: LA.a, b: LA.b, c: 0.13, n: SH.n, m: 2.2, egg: SH.egg, ws: tiny ? 48 : 72, hs: tiny ? 32 : 48 })
     const eyeScale = tiny ? 1.32 : small ? 1.18 : 1
     const eyeW = 0.07 * eyeScale, eyeH = 0.15 * eyeScale
+    // a point on the halo ring (rho 0.865 in the lens's squircle space) at angle ang, plus a radius
+    function pipAt(ang, r) {
+      const cx = Math.cos(ang), sy = Math.sin(ang)
+      const rn = Math.pow(Math.pow(Math.abs(cx), SH.n) + Math.pow(Math.abs(sy), SH.n), 1 / SH.n)
+      const ux = (cx * 0.865) / rn, uy = (sy * 0.865) / rn
+      return new THREE.Vector3(ux * LA.a * (1 - SH.egg * uy), uy * LA.b, r)
+    }
     const L = {
       uT: { value: 0 }, uPulse: { value: 0 }, uOpen: { value: 1 }, uStyle: { value: 0 }, uHappy: { value: 0 }, uClosed: { value: 0 },
       uDroop: { value: 0 }, uWorry: { value: 0 }, uRing: { value: 0.3 }, uGlow: { value: 1 }, uSwirl: { value: 0 }, uRip: { value: 0 },
@@ -373,6 +398,7 @@ export default {
       uSweep: { value: 1 }, uListen: { value: 0 }, uCeleb: { value: 0 }, uSmall: { value: small ? 1 : 0 }, uFrost: { value: look.frost },
       uEgg: { value: SH.egg }, uN: { value: SH.n }, uDim: { value: 1 }, uDark: { value: look.dark ? 1 : 0 },
       uLook: { value: new THREE.Vector2() }, uA: { value: new THREE.Vector2(LA.a, LA.b) },
+      uPip: { value: pipAt(0.95, tiny ? 0.1 : small ? 0.075 : 0.042) },
       uEyePos: { value: new THREE.Vector2(0.3 * (tiny ? 1.04 : 1), 0.06) },
       uEyeSize: { value: new THREE.Vector2(eyeW, eyeH) },
       cBase: { value: new THREE.Color() }, cCore: { value: new THREE.Color() }, cHalo: { value: new THREE.Color() },
@@ -394,14 +420,17 @@ export default {
 
     // Sparkles outside the stone (celebrating only).
     const starTex = starTexture()
-    const sparkMat = new THREE.SpriteMaterial({ map: starTex, transparent: true, depthWrite: false, opacity: 0 })
+    // depthTest off: they float in front of the stone, and the shell's turned edge must not clip them
+    const sparkMat = new THREE.SpriteMaterial({ map: starTex, transparent: true, depthWrite: false, depthTest: false, opacity: 0 })
+    // Placed in the corners the lozenge leaves free, kept inside the frame (beam tips included) so none is cut off.
     const SPARKS = tiny
-      ? [[-1.0, 0.72, 0.42, 0], [1.02, 0.62, 0.36, 1.7], [0.92, -0.78, 0.3, 3.1]]
-      : [[-1.18, 0.7, 0.3, 0], [1.16, 0.74, 0.26, 1.3], [-1.28, -0.35, 0.2, 2.2], [1.3, -0.2, 0.22, 3.4], [0.4, 1.08, 0.18, 4.5], [-0.55, -1.02, 0.17, 5.3]]
+      ? [[-0.98, 0.64, 0.36, 0], [0.98, 0.6, 0.32, 1.7], [0.86, -0.72, 0.28, 3.1]]
+      : [[-1.08, 0.74, 0.3, 0], [1.06, 0.78, 0.26, 1.3], [-1.18, -0.42, 0.2, 2.2], [1.16, -0.36, 0.22, 3.4], [0.3, 0.92, 0.17, 4.5], [-0.5, -0.94, 0.17, 5.3]]
+    const SPARK_PULL = size === 'header' ? 0.95 : 1
     const sparks = SPARKS.map(([x, y, s, ph]) => {
       const m = sparkMat.clone()
       const sp = new THREE.Sprite(m)
-      sp.position.set(x, y, 0.7)
+      sp.position.set(x, y, 0.3)
       sp.userData = { x, y, s, ph }
       sp.visible = false
       object.add(sp)
@@ -548,7 +577,7 @@ export default {
         sp.visible = sp.material.opacity > 0.01
         const sc = s * (0.55 + 0.6 * tw) * (tiny ? 1.45 : small ? 1.2 : 1)
         sp.scale.set(sc, sc, 1)
-        sp.position.set(x * (1 + 0.06 * cyc), y + cyc * 0.12 + f.bounce * 0.5, 0.7)
+        sp.position.set(x * SPARK_PULL * (1 + 0.03 * cyc), y * SPARK_PULL + cyc * 0.07 + f.bounce * 0.5, 0.3)
         sp.material.rotation = rm ? 0 : cyc * 0.8
       }
     }
