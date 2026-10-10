@@ -17,10 +17,11 @@ const R = 0.92, H = 1.06 // dome radii (it is a half-ellipsoid)
 const LIP = 0.11 // the rolled lip: the ellipsoid starts this high above the dome's bottom
 const BASE_TOP = -0.64
 const TOP = LIP + H // dome top, in dome space
+const PIVOT = BASE_TOP - 0.27 // bottom of the plinth
 const BEAD_R = 0.185, BEAD_Y = TOP + 0.29
 // Face patch (a slice of the ellipsoid, printed with a canvas): angles from the front (phi) and from the top (theta).
 const PHI_W = 1.8, TH0 = 0.42, TH1 = 1.56
-const EYE_TH = 1.02, EYE_PHI = 0.3, MOUTH_TH = 1.31
+const EYE_TH = 0.97, EYE_PHI = 0.31, MOUTH_TH = 1.28
 const FW = 512, FH = 384
 const U = (phi) => (0.5 + phi / PHI_W) * FW
 const V = (th) => ((th - TH0) / (TH1 - TH0)) * FH
@@ -34,7 +35,7 @@ const BRASS = '#d9b879'
 const POSE = {
   resting: { sq: 0.93, tilt: -0.04, lean: 0.11, glow: 0, browY: 16, browIn: 0, browOut: -4, browR: 0, lid: 0, slant: 0 },
   idle: { sq: 1, tilt: 0, lean: 0, glow: 0.16, browY: 0, browIn: 0, browOut: 0, browR: 0, lid: 0, slant: 0 },
-  listening: { sq: 1.02, tilt: 0.15, lean: 0.11, glow: 0.65, browY: -20, browIn: 4, browOut: 4, browR: 0, lid: 0, slant: 0 },
+  listening: { sq: 1.02, tilt: 0.14, lean: 0.1, glow: 0.65, browY: -14, browIn: 4, browOut: 4, browR: 10, lid: 0, slant: 0 },
   thinking: { sq: 1, tilt: -0.1, lean: -0.08, glow: 0.55, browY: -4, browIn: -3, browOut: 0, browR: 18, lid: 0.22, slant: 0 },
   talking: { sq: 1, tilt: 0, lean: 0.03, glow: 0.3, browY: -8, browIn: 0, browOut: 0, browR: 0, lid: 0.1, slant: 0 },
   done: { sq: 1, tilt: 0.05, lean: 0.05, glow: 0.35, browY: -8, browIn: 0, browOut: 0, browR: 0, lid: 0, slant: 0 },
@@ -66,7 +67,7 @@ export default {
   eyes: ['pills', 'dots', 'arcs'],
   accessories: true,
   style: 'solid',
-  frame: { height: 2.6, y: 0.04, peek: { height: 2.2, y: -0.02 }, header: { height: 2.3, y: 0 } },
+  frame: { height: 2.6, y: 0.04, peek: { height: 2.36, y: -0.02 }, header: { height: 2.3, y: 0 } },
   create({ kit, look, size }) {
     const small = size === 'peek' ? 1.3 : size === 'header' ? 1.15 : 1
     const object = new THREE.Group()
@@ -78,7 +79,7 @@ export default {
     /* materials */
     const bodyMat = own(kit.solid('#ffffff', look), mats)
     const brass = own(new THREE.MeshPhysicalMaterial({ color: BRASS, metalness: 1, roughness: 0.2, clearcoat: 0.4, clearcoatRoughness: 0.1 }), mats)
-    const BEAD_GLASS = { thickness: 0.4, attenuationDistance: 0.7, roughness: 0.03, flatShading: true, iridescence: 0.3 }
+    const BEAD_GLASS = { thickness: 0.25, roughness: 0.03, flatShading: true, iridescence: 0, attenuationDistance: 2.2 }
     const beadMat = own(kit.glass(look, BEAD_GLASS), mats)
     const coreMat = own(kit.light('#ffffff', 1.6), mats)
     const rimMat = own(kit.rim('#ffffff', { power: 2.6, intensity: 0.5 }), mats)
@@ -191,8 +192,8 @@ export default {
     }
 
     /* confetti: one instanced mesh */
-    const NC = 26
-    const confetti = new THREE.InstancedMesh(own(new THREE.PlaneGeometry(0.075, 0.13), geos), own(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped: false }), mats), NC)
+    const NC = 30
+    const confetti = new THREE.InstancedMesh(own(new THREE.PlaneGeometry(0.1, 0.16), geos), own(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped: false }), mats), NC)
     confetti.frustumCulled = false
     confetti.visible = false
     const cseed = Array.from({ length: NC }, (_, i) => ({ a: 0.35 + ((i * 0.618) % 1) * 2.45, v: 0.75 + ((i * 0.377) % 1) * 0.6, off: (i * 0.4142) % 1, spin: 4 + ((i * 0.7) % 1) * 7 }))
@@ -205,7 +206,7 @@ export default {
       zg.fillText('z', 18, 82); zg.font = '800 44px Nunito, ui-rounded, system-ui, sans-serif'; zg.fillText('z', 72, 40)
     }), texs)
     const zz = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: zTex, transparent: true, depthWrite: false, opacity: 0 }), mats))
-    zz.scale.setScalar(0.42 * Math.min(1.2, small))
+    zz.scale.setScalar(0.62 * Math.min(1.15, small))
     zz.visible = false
     hop.add(zz)
 
@@ -226,7 +227,7 @@ export default {
       const T = 0.016 * Math.min(1.3, small)
       const add = (geo, th, phi, out, mat = brass) => { const { p, q } = onDome(th, phi, out); const m = new THREE.Mesh(geo, mat); m.position.copy(p); m.quaternion.copy(q); specs.add(m); return m }
       if (kind === 'monocle') {
-        const r = 0.165
+        const r = 0.19
         add(new THREE.TorusGeometry(r, T * 1.2, 10, 40), EYE_TH, -EYE_PHI, 0.06)
         add(new THREE.CircleGeometry(r, 32), EYE_TH, -EYE_PHI, 0.055, lensMat)
         // chain: from the rim down the dome to the lip
@@ -235,14 +236,12 @@ export default {
         add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, T * 0.42, 5, false), 0, 0, 0).position.set(0, 0, 0)
         specs.children[specs.children.length - 1].quaternion.identity()
       } else if (kind === 'round') {
-        for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.15, T, 10, 40), EYE_TH, s * EYE_PHI, 0.05)
+        for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.17, T, 10, 40), EYE_TH, s * EYE_PHI, 0.05)
         add(new THREE.TorusGeometry(0.07, T * 0.85, 8, 16, Math.PI), EYE_TH - 0.02, 0, 0.06).rotation.z = 0
       } else if (kind === 'half-moon') {
         for (const s of [-1, 1]) {
-          const m = add(new THREE.TorusGeometry(0.15, T, 10, 30, Math.PI), EYE_TH + 0.1, s * EYE_PHI, 0.05)
+          const m = add(new THREE.TorusGeometry(0.17, T, 10, 30, Math.PI), EYE_TH + 0.1, s * EYE_PHI, 0.05)
           m.rotateZ(Math.PI)
-          const bar = add(new THREE.CylinderGeometry(T, T, 0.3, 8), EYE_TH + 0.1, s * EYE_PHI, 0.05)
-          bar.rotateZ(Math.PI / 2)
         }
         add(new THREE.TorusGeometry(0.06, T * 0.85, 8, 16, Math.PI), EYE_TH + 0.06, 0, 0.055)
       }
@@ -262,7 +261,7 @@ export default {
       bodyMat.color.copy(body)
       bodyMat.sheen = 0.3
       bodyMat.sheenColor.copy(tn.soft)
-      kit.updateSolid(bodyMat, l)
+      kit.updateSolid(bodyMat, l, { clearcoat: 0.25 + 0.55 * (1 - l.frost) }) // always a little enamel glaze
       if (graphite) { bodyMat.sheen = 0.35; bodyMat.sheenColor.set('#9aa6bc') }
       kit.updateGlass(beadMat, l, BEAD_GLASS)
       ink.copy(graphite ? new THREE.Color('#f3eee4') : tn.ink.clone().lerp(new THREE.Color(0, 0, 0), 0.38))
@@ -273,7 +272,7 @@ export default {
       else sig.copy(tn.glow).lerp(dark ? new THREE.Color(1, 1, 1) : tn.ink, dark ? 0.12 : 0.18)
       rimMat.uniforms.color.value.copy(dark ? tn.glow : new THREE.Color(1, 1, 1)).lerp(new THREE.Color(1, 1, 1), dark ? 0.35 : 0)
       rimMat.uniforms.intensity.value = dark ? 0.75 : 0.42
-      shadowMat.opacity = dark ? 0.9 : 0.55
+      shadowMat.opacity = dark ? 0.95 : 0.8
       zz.material.color.copy(dark ? tn.soft : tn.ink)
       for (let i = 0; i < NC; i++) confetti.setColorAt(i, tmp.set(i % 7 === 6 ? '#' + tn.glow.getHexString() : PALETTE[i % PALETTE.length]))
       confetti.instanceColor.needsUpdate = true
@@ -312,7 +311,7 @@ export default {
       }
     }
     function drawFace(f, mood, lod) {
-      const s = lod
+      const s = lod * 1.14
       const lx = f.lookX * 26, ly = f.lookY * 22
       g.clearRect(0, 0, FW, FH)
       g.lineCap = g.lineJoin = 'round'
@@ -321,8 +320,8 @@ export default {
       for (const side of [-1, 1]) {
         const x = FW / 2 + side * EX * (s > 1 ? 1.04 : 1) + lx, y = EY + ly
         // brows
-        const bw = 36 * s, inner = x - side * bw, outer = x + side * bw
-        const by = y - 74 * s + cur.browY - (side > 0 ? cur.browR : 0)
+        const bw = 38 * s, inner = x - side * bw, outer = x + side * bw
+        const by = y - 66 * s + cur.browY - (side > 0 ? cur.browR : 0)
         g.lineWidth = 12 * s
         g.beginPath(); g.moveTo(inner, by - cur.browIn); g.quadraticCurveTo(x, by - 10 * s - (cur.browIn + cur.browOut) / 2 - (side > 0 ? cur.browR * 0.3 : 0), outer, by - cur.browOut); g.stroke()
         // eyes
@@ -336,7 +335,7 @@ export default {
       g.lineWidth = 10 * s
       g.beginPath()
       switch (mood) {
-        case 'talking': { const w = 34 * s, h = Math.max(12 * s, (0.2 + f.level * 0.8) * 50 * s); g.ellipse(mx, my + h * 0.35, w, h, 0, 0, Math.PI * 2); g.fill(); break }
+        case 'talking': { const w = 36 * s, h = Math.max(10 * s, (0.25 + f.level * 0.75) * 46 * s); g.moveTo(mx - w, my - 4 * s); g.lineTo(mx + w, my - 4 * s); g.quadraticCurveTo(mx + w, my + h, mx, my + h); g.quadraticCurveTo(mx - w, my + h, mx - w, my - 4 * s); g.fill(); break } // an open "D"
         case 'done': g.moveTo(mx - 34 * s, my - 8 * s); g.quadraticCurveTo(mx, my + 28 * s, mx + 34 * s, my - 8 * s); g.stroke(); break
         case 'celebrating': g.moveTo(mx - 34 * s, my - 10 * s); g.quadraticCurveTo(mx, my + 52 * s, mx + 34 * s, my - 10 * s); g.closePath(); g.fill(); break
         case 'needs-you': g.ellipse(mx, my + 2, 12 * s, 15 * s, 0, 0, Math.PI * 2); g.fill(); break
@@ -376,7 +375,7 @@ export default {
           dip = strike(ph) + (mood === 'celebrating' ? strike(ph - 0.26) : 0)
           const sh = (x) => (x >= 0 ? Math.exp(-x * 7) : 0)
           shiver = (sh(ph) + (mood === 'celebrating' ? sh(ph - 0.26) : 0)) * Math.sin(t * 70)
-          ripAmt = 1
+          ripAmt = mood === 'needs-you' ? 1 : 0 // celebrating keeps the double ring but no arcs, so the two never look alike
         }
         if (still) { dip = 0; shiver = 0 }
 
@@ -389,9 +388,13 @@ export default {
         if (mood === 'talking') sq += f.level * 0.035
         if ((mood === 'resting' || mood === 'idle') && !still) sq += Math.sin(t * (mood === 'resting' ? 0.9 : 1.4)) * 0.006
         tilt += shiver * 0.035 * A
-        domeG.rotation.set(lean, f.lookX * 0.16 * (still ? 0.5 : 1), tilt)
+        // The whole bell leans and tilts (a dome tilting alone would lift off or sink into the plinth); only the shiver is the dome's.
+        hop.rotation.set(lean * 0.8, 0, tilt - shiver * 0.035 * A)
+        domeG.rotation.set(0, f.lookX * (mood === 'listening' ? 0.06 : 0.14) * (still ? 0.5 : 1), shiver * 0.035 * A)
         domeG.scale.set(1 + (1 - sq) * 0.45, sq, 1 + (1 - sq) * 0.45)
-        hop.position.y = -f.bounce * 0.95
+        // pivot on the bottom of the plinth, so the bell rocks on its base instead of swinging around its middle
+        const pz = hop.rotation.z, px = hop.rotation.x
+        hop.position.set(PIVOT * Math.sin(pz), PIVOT * (1 - Math.cos(pz) * Math.cos(px)) - f.bounce * 0.95, -PIVOT * Math.sin(px))
 
         // plunger: dips when it rings, turns like a dial while thinking
         plunger.position.y = TOP - dip * 0.075
