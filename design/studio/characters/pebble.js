@@ -265,16 +265,30 @@ void main() {
   #include <colorspace_fragment>
 }`
 
+// Edge of the glass: a bright light-pipe band just inside the silhouette (strongest toward the key light at
+// the upper left and the bounce at the lower right), and on light panels a dark hairline at the very edge,
+// which is how real glass reads against white.
 const RIM_VERT = /* glsl */ `
 varying vec3 vN; varying vec3 vV;
 void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`
 const RIM_FRAG = /* glsl */ `
-uniform vec3 color; uniform float power, intensity, additive;
+uniform vec3 liteCol, darkCol; uniform float liteI, darkI, additive, hair;
 varying vec3 vN; varying vec3 vV;
 void main() {
-  float f = pow(1.0 - max(dot(normalize(vN), normalize(vV)), 0.0), power) * intensity;
-  // light from the upper left reads as a highlight, the rest as the edge
-  gl_FragColor = additive > 0.5 ? vec4(color * f, f) : vec4(color, clamp(f, 0.0, 1.0));
+  vec3 n = normalize(vN);
+  float fr = 1.0 - max(dot(n, normalize(vV)), 0.0);
+  vec2 d2 = normalize(n.xy + 1e-4);
+  float dir = max(0.0, dot(d2, vec2(-0.6, 0.8)));
+  float dir2 = max(0.0, dot(d2, vec2(0.6, -0.8)));
+  float pipe = smoothstep(0.4, 0.8, fr) * (1.0 - smoothstep(0.86, 0.98, fr)) * (0.25 + 0.75 * max(dir * dir, 0.6 * dir2 * dir2));
+  float lite = pipe * liteI;
+  float dark = smoothstep(hair, 0.995, fr) * darkI;
+  if (additive > 0.5) {
+    gl_FragColor = vec4(liteCol * (lite + dark), 1.0);
+  } else {
+    float a = clamp(lite + dark, 0.0, 1.0);
+    gl_FragColor = vec4((liteCol * lite + darkCol * dark) / max(lite + dark, 1e-4), a);
+  }
 }`
 
 /* ---------------- the character ---------------- */
@@ -341,7 +355,7 @@ export default {
 
     const rimMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false,
-      uniforms: { color: { value: new THREE.Color() }, power: { value: 3 }, intensity: { value: 0.6 }, additive: { value: 1 } },
+      uniforms: { liteCol: { value: new THREE.Color() }, darkCol: { value: new THREE.Color() }, liteI: { value: 0.5 }, darkI: { value: 0.5 }, additive: { value: 1 }, hair: { value: 0.85 } },
       vertexShader: RIM_VERT, fragmentShader: RIM_FRAG,
     })
     const rim = new THREE.Mesh(shellGeo, rimMat)
@@ -375,7 +389,7 @@ export default {
     const auraMat = new THREE.SpriteMaterial({ map: kit.glowTex, transparent: true, depthWrite: false, opacity: 0 })
     const aura = new THREE.Sprite(auraMat)
     aura.position.z = -0.6
-    aura.scale.set(3.3, 2.7, 1)
+    aura.scale.set(4.0, 3.2, 1)
     root.add(aura)
 
     // Sparkles outside the stone (celebrating only).
@@ -431,17 +445,21 @@ export default {
       L.uDark.value = l.dark ? 1 : 0
       L.uStyle.value = l.eyes === 'dots' ? 1 : l.eyes === 'arcs' ? 2 : 0
       // rim: a dark hairline on light panels (how real glass reads on white), a lit edge on dark ones
+      const ru = rimMat.uniforms
       if (l.dark) {
-        rimMat.uniforms.color.value.copy(tn.soft).lerp(WHITE, 0.5)
-        rimMat.uniforms.intensity.value = tiny ? 0.75 : 0.55
-        rimMat.uniforms.power.value = 2.6
-        rimMat.uniforms.additive.value = 1
+        ru.liteCol.value.copy(tn.soft).lerp(WHITE, 0.55)
+        ru.liteI.value = tiny ? 0.5 : 0.42
+        ru.darkI.value = tiny ? 0.45 : 0.3 // in additive mode the outer edge is a fine lit line
+        ru.hair.value = 0.88
+        ru.additive.value = 1
         rimMat.blending = THREE.AdditiveBlending
       } else {
-        rimMat.uniforms.color.value.copy(tn.ink).lerp(new THREE.Color(0, 0, 0), 0.3)
-        rimMat.uniforms.intensity.value = tiny ? 0.6 : 0.42
-        rimMat.uniforms.power.value = tiny ? 3 : 3.4
-        rimMat.uniforms.additive.value = 0
+        ru.liteCol.value.copy(WHITE)
+        ru.darkCol.value.copy(tn.ink).lerp(new THREE.Color(0, 0, 0), 0.3)
+        ru.liteI.value = tiny ? 0.5 : 0.62
+        ru.darkI.value = tiny ? 0.6 : 0.5
+        ru.hair.value = tiny ? 0.8 : 0.86
+        ru.additive.value = 0
         rimMat.blending = THREE.NormalBlending
       }
       rimMat.needsUpdate = true

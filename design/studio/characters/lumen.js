@@ -414,7 +414,7 @@ export default {
     pose.add(content)
     object.add(pose)
 
-    const GU = { uEdgeCol: { value: new THREE.Color() }, uEdgeK: { value: 0.6 }, uLift: { value: 0.1 }, uSoftTone: { value: 0 }, uFaceSpec: { value: 0.3 } }
+    const GU = { uEdgeCol: { value: new THREE.Color() }, uEdgeK: { value: 0.6 }, uLift: { value: 0.1 }, uSoftTone: { value: 0 }, uFaceSpec: { value: 0.3 }, uTopK: { value: 0.3 } }
     const U = { uClock: { value: 0 }, uWob: { value: 0 }, uRip: { value: 0 }, uSwirl: { value: 0 }, uRing: { value: 0 }, uRingA: { value: 0 } }
 
     // body
@@ -429,7 +429,7 @@ export default {
         .replace('#include <begin_vertex>', 'vec3 transformed = lmP;')
       Object.assign(sh.uniforms, GU)
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uEdgeCol;\nuniform float uEdgeK;\nuniform float uLift;\nuniform float uSoftTone;\nuniform float uFaceSpec;\nvec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28)); return mix(x, k, step(0.72, x)); }')
+        .replace('#include <common>', '#include <common>\nuniform vec3 uEdgeCol;\nuniform float uEdgeK;\nuniform float uLift;\nuniform float uSoftTone;\nuniform float uFaceSpec;\nuniform float uTopK;\nvec3 lmShoulder(vec3 x) { vec3 k = 0.72 + 0.28 * (1.0 - exp(-(x - 0.72) / 0.28)); return mix(x, k, step(0.72, x)); }')
         .replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  { float lmN = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor.a *= smoothstep(0.0, fwidth(lmN) * 1.6 + 0.004, lmN); }')
         .replace('#include <tonemapping_fragment>', '#if defined( TONE_MAPPING )\n  gl_FragColor.rgb = uSoftTone > 0.5 ? lmShoulder(gl_FragColor.rgb) : toneMapping(gl_FragColor.rgb);\n#endif')
         .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
@@ -448,7 +448,9 @@ export default {
   {
     float lmNdv = clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
     float lmEdge = pow(1.0 - lmNdv, 1.8);
-    totalDiffuse *= mix(vec3(1.0), uEdgeCol, lmEdge * uEdgeK) * (1.0 + uLift * lmNdv * lmNdv);
+    // a lens shows the world upside down: the dome takes the deeper tint, the belly gathers light
+    float lmTop = smoothstep(-0.15, 0.9, normalize(normal).y);
+    totalDiffuse *= mix(vec3(1.0), uEdgeCol, clamp(lmEdge * uEdgeK + lmTop * uTopK, 0.0, 1.0)) * (1.0 + uLift * lmNdv * lmNdv);
   }`)
     }
     const body = new THREE.Mesh(geo, glass)
@@ -572,6 +574,7 @@ export default {
       fu.uShadow.value = small ? 0 : 1
       GU.uSoftTone.value = l.dark ? 0 : 1
       GU.uFaceSpec.value = dev('lx_fspec', 0.1)
+      GU.uTopK.value = l.dark ? dev('lx_dtop', 0.25) : dev('lx_ltop', 0.45)
       glass.envMapIntensity = l.dark ? dev('lx_denv', 0.5) : 1.1
       GU.uEdgeCol.value.copy(tn.glass).multiply(tn.glass).lerp(tn.glow, 0.25)
       baseEdge.copy(GU.uEdgeCol.value)
