@@ -1,5 +1,7 @@
-// Serves design/ on localhost and reloads open pages whenever a file in it changes (including after a git pull).
-// Files are served as they are, so pages behave exactly as they do when opened from disk.
+// Serves design/ (or the folder given as the first argument) on localhost and reloads open pages whenever a file in it
+// changes, including after a git pull. Files are served as they are, so pages behave exactly as they do from disk.
+//   npm run design                 -> this repo's design/
+//   npm run design -- ../coucou    -> any other folder, e.g. a project you cloned to try out
 import { spawn } from 'node:child_process'
 import { createReadStream, statSync, watch } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
@@ -7,7 +9,7 @@ import { createServer } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = path.resolve(fileURLToPath(import.meta.url), '../../design')
+const root = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(fileURLToPath(import.meta.url), '../../design')
 const port = process.env.PORT ? Number(process.env.PORT) : 4321
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -32,12 +34,23 @@ watch(root, { recursive: true }, () => {
   pending = setTimeout(() => clients.forEach((res) => res.write('data: reload\n\n')), 120)
 })
 
+// HTML pages up to two folders deep, skipping dependency and build folders.
+async function findPages(dir = root, depth = 0) {
+  const out = []
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    if (e.name.startsWith('.') || ['node_modules', 'dist', 'out', 'build'].includes(e.name)) continue
+    const full = path.join(dir, e.name)
+    if (e.isDirectory() && depth < 2) out.push(...(await findPages(full, depth + 1)))
+    else if (e.isFile() && e.name.endsWith('.html') && !(depth === 0 && e.name === 'index.html')) out.push(path.relative(root, full))
+  }
+  return out.sort()
+}
+
 async function listing() {
-  const pages = (await readdir(root)).filter((f) => f.endsWith('.html') && f !== 'index.html').sort()
-  const links = pages.map((f) => `<li><a href="/${f}">${f.replace(/\.html$/, '')}</a></li>`).join('')
-  return `<!doctype html><meta charset="utf-8"><title>Steward designs</title>
+  const links = (await findPages()).map((f) => `<li><a href="/${f.split(path.sep).join('/')}">${f.replace(/\.html$/, '')}</a></li>`).join('')
+  return `<!doctype html><meta charset="utf-8"><title>Designs</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px}a{color:#2f6feb}</style>
-<h1>Steward designs</h1><ul>${links}</ul>`
+<h1>${path.basename(root)}</h1><ul>${links || '<li>No HTML pages found.</li>'}</ul>`
 }
 
 const server = createServer(async (req, res) => {
