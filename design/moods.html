@@ -29,7 +29,9 @@ button.sw[aria-pressed="true"]{border-color:#fff}
 .vl{font-size:15px;font-weight:800;margin-bottom:6px}
 .stage{position:relative;height:210px;border-radius:14px;overflow:hidden;display:grid;place-items:center}
 .plain{background:#15161c}
+.plainl{background:#efedf4}
 .solidbg{background:rgba(16,17,22,.97)}
+.lightbg{background:linear-gradient(180deg,#f3f1f7,#e7e4ee)}
 .wl{background:radial-gradient(90% 70% at 15% 15%,#ffd6e7 0%,transparent 60%),radial-gradient(80% 70% at 90% 85%,#c9defe 0%,transparent 60%),#f4efe8}
 .wd{background:radial-gradient(90% 70% at 15% 10%,#5b3fa3 0%,transparent 60%),radial-gradient(80% 70% at 95% 90%,#0e5b7c 0%,transparent 60%),#151726}
 .lines{position:absolute;left:8%;right:8%;top:28%;height:44%;background:
@@ -82,6 +84,10 @@ table.grid td{vertical-align:middle}
 .tile .views>.cell{position:relative;flex:1;height:100%;display:grid;place-items:center;border-radius:8px;overflow:hidden}
 .tile .n{font-size:15px;font-weight:800;margin-top:8px}
 .tile .d{font-size:12.5px;color:var(--muted);line-height:1.35}
+.tile .num{display:none;font-size:15px;font-weight:800;margin-top:8px;color:var(--muted)}
+.sheet.anon .n,.sheet.anon .d{display:none}
+.sheet.anon .num{display:block}
+.tile .views.peek{height:62px}
 .notes{margin:10px 0 0;padding:0;list-style:none;font-size:14px;line-height:1.45;max-width:840px}
 .notes li{margin-top:6px}
 </style>
@@ -95,7 +101,9 @@ table.grid td{vertical-align:middle}
     <div class="grp" id="g-color"></div>
     <div class="grp" id="g-desk"></div>
     <div class="grp" id="g-glass"></div>
+    <div class="grp" id="g-mouth"></div>
     <div class="grp" id="g-motion"></div>
+    <button class="c" id="type" title="Simulate a burst of keystrokes while listening">Type</button>
   </div>
 
   <div class="main">
@@ -114,7 +122,8 @@ table.grid td{vertical-align:middle}
   <div class="panel" id="allc"></div>
 
   <h2>Every mood at real size</h2>
-  <p class="lead">Each tile runs on its own at the real 64×54 header size. Click one to show it above.</p>
+  <p class="lead">Each tile runs on its own at real size. Hide the names to test whether every mood reads without its label: the tiles get shuffled and numbered. Click one to show it above, with its name.</p>
+  <div class="grp" id="sheet-opts" style="margin-top:10px"></div>
   <div class="sheet" id="sheet"></div>
 
   <h2>How it works</h2>
@@ -129,12 +138,12 @@ table.grid td{vertical-align:middle}
   </ul>
 </div>
 <script type="module">
-import { MOODS, STORIES, createEyes, setMood, stepEyes } from './pill/eyes.js'
+import { MOODS, STORIES, createEyes, setMood, stepEyes, pressKey } from './pill/eyes.js'
 import { makeView, COLORS } from './pill/render.js'
 
 const VERSIONS = [['all', 'All three'], ['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]
 const NAMES = { glass: 'Glass', flat: 'Flat', blocky: 'Blocky' }
-const S = { ver: 'all', color: COLORS[0].hex, desk: 'dark', glass: 'tinted', rm: false, mood: 'idle' }
+const S = { ver: 'all', color: COLORS[0].hex, desk: 'dark', glass: 'tinted', rm: false, mood: 'idle', mouth: true, anon: false, sheetSize: 'header' }
 try { Object.assign(S, JSON.parse(localStorage.getItem('steward-moods') || '{}')) } catch {}
 if (!COLORS.some((c) => c.hex === S.color)) S.color = COLORS[0].hex
 const osRM = matchMedia('(prefers-reduced-motion: reduce)')
@@ -148,13 +157,14 @@ let groups = []
 const main = { st: createEyes(1), views: [], anchor: null, main: true, acc: 0, seen: true }
 const seen = new IntersectionObserver((list) => { for (const e of list) for (const g of groups) if (g.anchor === e.target) g.seen = e.isIntersecting })
 function addView(group, kind, host, W, H, color = S.color) {
-  const v = makeView(kind, W, H, { color, tinted: S.glass === 'tinted', light: S.desk === 'light' })
+  const v = makeView(kind, W, H, { color, tinted: S.glass === 'tinted', light: S.desk === 'light', mouth: S.mouth })
   host.append(v.el)
   group.views.push(v)
   return v
 }
 function newGroup(seed, anchor, mood) {
   const g = { st: createEyes(seed), views: [], anchor, acc: 0, seen: false }
+  g.st.t = window.__moods?.now() ?? now() // start the mood now, so its intro (a pop, the first bursts) plays
   if (mood) { g.fixed = mood; setMood(g.st, mood) }
   groups.push(g)
   seen.observe(anchor)
@@ -174,6 +184,10 @@ function build() {
   gg.hidden = !kinds().includes('glass')
   gg.innerHTML = '<span class="lbl">Glass</span>' + chip('glass', 'clear', 'Clear', S.glass === 'clear') + chip('glass', 'tinted', 'Tinted', S.glass === 'tinted')
   document.getElementById('g-motion').innerHTML = '<span class="lbl">Motion</span>' + chip('rm', 'false', 'Full', !S.rm) + chip('rm', 'true', 'Reduced', S.rm)
+  document.getElementById('g-mouth').innerHTML = '<span class="lbl">Mouth</span>' + chip('mouth', 'true', 'On', S.mouth) + chip('mouth', 'false', 'Off', !S.mouth)
+  document.getElementById('sheet-opts').innerHTML = '<span class="lbl">Names</span>' + chip('anon', 'false', 'Show', !S.anon) + chip('anon', 'true', 'Hide', S.anon)
+    + '<span class="lbl" style="margin-left:14px">Size</span>' + chip('sheetSize', 'header', 'Header 64×54', S.sheetSize === 'header') + chip('sheetSize', 'peek', 'Peek 50×44', S.sheetSize === 'peek')
+    + (S.anon ? '<button class="c" id="reshuffle" style="margin-left:14px">Reshuffle</button>' : '')
   document.getElementById('moods').innerHTML = MOODS.map((m) => `<button class="c" data-mood="${m.id}">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</button>`).join('')
   document.getElementById('stories').innerHTML = STORIES.map((s) => `<button class="c" data-story="${s.id}">${s.label}</button>`).join('')
 
@@ -186,9 +200,11 @@ function build() {
   for (const kind of kinds()) {
     const col = document.createElement('div')
     const glass = kind === 'glass'
-    col.innerHTML = `<div class="vl">${NAMES[kind]}</div><div class="stage ${glass ? wall : 'plain'}">${glass ? '<div class="lines"></div>' : ''}</div>
-      <div class="reals"><div class="mini ${wall}"><div class="win"></div><div class="tab ${glass ? tabGlass : 'solid'}"></div><span class="cap">${glass ? 'Glass tab' : "Today's tab"}</span></div>
-      <div class="headbox ${glass ? wall : 'solidp'}">${glass ? `<div class="lines" style="opacity:.5"></div><div class="${tabGlass}" style="position:absolute;inset:6px;border-radius:12px"></div>` : ''}<div class="row" style="color:${glass && light ? '#15161c' : '#eef0f4'}"><span class="hslot"></span><div><div class="t">Steward</div><div class="s" data-now></div></div></div></div></div>`
+    // On a light desktop every version sits on the light glass tab; on a dark one, flat and blocky use today's tab.
+    const glassy = glass || light
+    col.innerHTML = `<div class="vl">${NAMES[kind]}</div><div class="stage ${glass ? wall : light ? 'plainl' : 'plain'}">${glass ? '<div class="lines"></div>' : ''}</div>
+      <div class="reals"><div class="mini ${wall}"><div class="win"></div><div class="tab ${glassy ? tabGlass : 'solid'}"></div><span class="cap">${glassy ? 'Glass tab' : "Today's tab"}</span></div>
+      <div class="headbox ${glassy ? wall : 'solidp'}">${glassy ? `<div class="lines" style="opacity:.5"></div><div class="${tabGlass}" style="position:absolute;inset:6px;border-radius:12px"></div>` : ''}<div class="row" style="color:${light ? '#15161c' : '#eef0f4'}"><span class="hslot"></span><div><div class="t">Steward</div><div class="s" data-now></div></div></div></div></div>`
     stages.append(col)
     const W = Math.min(280, Math.max(200, Math.floor((stages.clientWidth - 12 * (kinds().length - 1)) / kinds().length) - 20))
     addView(main, kind, col.querySelector('.stage'), W, Math.round(W * 0.64))
@@ -206,12 +222,12 @@ function build() {
     if (withPeek) {
       const pk = document.createElement('div')
       pk.className = `peekbox ${wall}`
-      pk.innerHTML = `<div class="tab ${glass ? tabGlass : 'solid'}"></div>`
+      pk.innerHTML = `<div class="tab ${glass || light ? tabGlass : 'solid'}"></div>`
       wrap.append(pk)
       addView(grp, kind, pk, 50, 44, color)
     }
     const box = document.createElement('div')
-    box.className = `cellbox ${glass ? wall : 'solidbg'}`
+    box.className = `cellbox ${glass ? wall : light ? 'lightbg' : 'solidbg'}`
     if (glass) box.innerHTML = '<div class="lines" style="opacity:.6"></div>'
     wrap.append(box)
     addView(grp, kind, box, 64, 54, color)
@@ -252,26 +268,34 @@ function build() {
     }
   })
 
-  // The sheet: one tile per mood, each with its own eyes.
+  // The sheet: one tile per mood, each with its own eyes. With names hidden, shuffled and numbered.
   const sheet = document.getElementById('sheet')
   sheet.replaceChildren()
-  MOODS.forEach((m, i) => {
+  sheet.classList.toggle('anon', S.anon)
+  const peek = S.sheetSize === 'peek'
+  const order = S.anon ? shuffled : MOODS.map((_, i) => i)
+  order.forEach((i, n) => {
+    const m = MOODS[i]
     const tile = document.createElement('div')
     tile.className = 'tile'
     tile.dataset.mood = m.id
-    tile.innerHTML = `<div class="views"></div><div class="n">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</div><div class="d">${m.when}</div>`
+    tile.innerHTML = `<div class="views${peek ? ' peek' : ''}"></div><div class="num">#${n + 1}</div><div class="n">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</div><div class="d">${m.when}</div>`
     sheet.append(tile)
     const grp = newGroup(i + 7, tile, m.id)
     for (const kind of kinds()) {
       const c = document.createElement('div')
-      c.className = `cell ${kind === 'glass' ? wall : 'solidbg'}`
+      c.className = `cell ${kind === 'glass' ? wall : light ? 'lightbg' : 'solidbg'}`
       if (kind === 'glass') c.innerHTML = '<div class="lines"></div>'
       tile.querySelector('.views').append(c)
-      addView(grp, kind, c, 64, 54)
+      addView(grp, kind, c, peek ? 50 : 64, peek ? 44 : 54)
     }
   })
   caption()
 }
+
+let shuffled = MOODS.map((_, i) => i)
+const reshuffle = () => { shuffled = MOODS.map((_, i) => i).sort(() => Math.random() - 0.5) }
+reshuffle()
 
 /* ---------------- moods and stories ---------------- */
 let story = null, storyStep = 0, storyAt = 0
@@ -294,9 +318,12 @@ document.addEventListener('click', (e) => {
   const tile = e.target.closest('.tile')
   if (b?.dataset.mood) return pick(b.dataset.mood)
   if (b?.dataset.story) return play(b.dataset.story)
+  if (b?.id === 'type') { for (const g of groups) if (g.st.mood === 'listening') { g.burst = 10; g.nextKey = 0 } return }
+  if (b?.id === 'reshuffle') { reshuffle(); build(); return }
   if (b?.dataset.k) {
     const k = b.dataset.k
-    S[k] = k === 'rm' ? b.dataset.v === 'true' : b.dataset.v
+    S[k] = ['rm', 'mouth', 'anon'].includes(k) ? b.dataset.v === 'true' : b.dataset.v
+    if (k === 'anon' && S.anon) reshuffle()
     save(); build(); return
   }
   if (tile) { pick(tile.dataset.mood); main.anchor.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }) }
@@ -341,6 +368,7 @@ function tick(t, dt) {
   }
   for (const grp of groups) {
     if (grp.follow) setMood(grp.st, main.st.mood, main.st.glint)
+    if (!rm && grp.st.mood === 'listening') autoType(grp, t)
     grp.acc += dt
     if (!grp.main && !grp.seen && !simAll) continue // offscreen groups wait (a simulated run draws them all)
     const resting = grp.st.mood === 'resting' && !rm
@@ -350,6 +378,14 @@ function tick(t, dt) {
     grp.acc = 0
     for (const v of grp.views) { v.standby(resting); v.update(grp.st) }
   }
+}
+/** Keystrokes while listening: short bursts with pauses, faster during a Type burst. Only runs while listening. */
+function autoType(grp, t) {
+  if (!grp.nextKey || t > grp.nextKey + 5) grp.nextKey = grp.nextKey === 0 ? t : t + 0.3
+  if (t < grp.nextKey) return
+  pressKey(grp.st)
+  if (grp.burst > 0) { grp.burst--; grp.nextKey = t + 0.07 + Math.random() * 0.06 }
+  else grp.nextKey = t + (Math.random() < 0.18 ? 0.9 + Math.random() * 1.2 : 0.12 + Math.random() * 0.2)
 }
 if (new URLSearchParams(location.search).has('debug')) {
   let simT = 0

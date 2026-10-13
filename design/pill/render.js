@@ -1,7 +1,9 @@
 // The plain Pill in three versions, each with live eyes: glass (a real lens over whatever is behind it),
 // flat (one solid color) and blocky (pixels). makeView() builds one at a fixed size; view.update(state) redraws
 // its eyes and body pose from an eyes.js state every frame, and view.standby(on) runs resting's slow glow.
-import { vectorEyes, pixelEyes, zees, pixelZees, ZSPRITES } from './eyes.js'
+// Marks outside the Pill (the "!", "?", sweat drop, confetti, Z's and rings) are drawn in screen pixels, so the
+// 50 x 44 peek can get bigger, bolder ones than the 64 x 54 header, and they are colored against the desktop.
+import { vectorEyes, pixelEyes, marks, ZSPRITES, MARK_SPRITES } from './eyes.js'
 
 /** The classic Pill in a 100 x 100 design box. */
 export const GEO = { x0: 6, y0: 26, x1: 94, y1: 74, W: 88, H: 48, cx: 50, cy: 50 }
@@ -38,6 +40,26 @@ export const lighten = (h, t) => mix(h, WHITE, t)
 export const darken = (h, t) => mix(h, '#000000', t)
 const luminance = (h) => { const c = rgb(h).map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
 export const contrast = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
+function toHsl(h) {
+  const [r, g, b] = rgb(h).map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2
+  if (max === min) return [0, 0, l]
+  const d = max - min, s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  const hh = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return [hh / 6, s, l]
+}
+function fromHsl(h, s, l) {
+  h = ((h % 1) + 1) % 1
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q
+  const f = (t) => { t = ((t % 1) + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p }
+  return hex([f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255])
+}
+/** The desktop right behind a mark: roughly the light or dark glass tab and wallpaper. */
+const BACKDROP = (light) => (light ? '#ece9f1' : '#17181f')
+/** Push a color lighter (dark desktop) or darker (light desktop) until it reaches the contrast asked for. */
+function onDesktop(base, light, min) {
+  for (let t = 0.35; t <= 1.001; t += 0.05) { const c = light ? darken(base, t) : lighten(base, t); if (contrast(c, BACKDROP(light)) >= min) return c }
+  return light ? '#111111' : '#ffffff'
+}
 
 /** What a glass Pill roughly looks like over the desktop: the blurred backdrop, then the tint over it. */
 // The tint reads stronger through the lens than its alpha suggests, so light desktops count it at 0.7.
@@ -49,12 +71,15 @@ const glassFace = (o) => mix(o.light ? '#e8e6ef' : '#1d1f2b', o.tinted ? o.color
 export function palette(kind, o) {
   const face = kind === 'glass' ? glassFace(o) : o.color
   const light = contrast(WHITE, face) > contrast(INK, face)
-  const backLight = kind === 'glass' && o.light // flat and blocky sit on the dark tab
+  const [h] = toHsl(o.color)
+  // Marks sit on the desktop next to the Pill, so they are colored against the desktop, not the Pill.
   return {
     face, light,
     eye: light ? WHITE : INK,
     glint: WHITE,
-    z: backLight ? darken(o.color, 0.6) : lighten(o.color, 0.55),
+    sym: onDesktop(o.color, o.light, 4.5),
+    drop: onDesktop('#5aa9f0', o.light, 3.5),
+    confetti: [0, 0.34, 0.6].map((dh) => onDesktop(fromHsl(h + dh, 0.85, o.light ? 0.45 : 0.62), o.light, 3)),
   }
 }
 
@@ -125,7 +150,8 @@ function addStyles() {
   if (document.getElementById('pill-styles')) return
   const s = document.createElement('style')
   s.id = 'pill-styles'
-  s.textContent = '@keyframes pv-standby{0%,100%{opacity:1}50%{opacity:.45}}.pv.standby .pv-dim{animation:pv-standby 4.8s ease-in-out infinite}'
+  // Resting sits dimmer than idle and breathes slowly: 62% down to 36% over 6.4 seconds.
+  s.textContent = '@keyframes pv-standby{0%,100%{opacity:.62}50%{opacity:.36}}.pv.standby .pv-dim{animation:pv-standby 6.4s ease-in-out infinite}'
   document.head.append(s)
 }
 
@@ -134,11 +160,13 @@ let uid = 0
 const bodyCss = (st, W, H) => `translate(${(st.body.tx * W).toFixed(2)}px,${(st.body.ty * H).toFixed(2)}px) rotate(${st.body.rot.toFixed(2)}deg) scale(${st.body.sc.toFixed(4)})`
 
 /**
- * One Pill view. kind: 'glass' | 'flat' | 'blocky'. o: { color, tinted, light } where light says the desktop
- * behind a glass Pill is light. Views of 80 px wide or less show a single Z when sleepy.
+ * One Pill view. kind: 'glass' | 'flat' | 'blocky'. o: { color, tinted, light, mouth } where light says the desktop
+ * behind the Pill is light and mouth turns talking's mouth on. The size class follows the width: 56 px or less is
+ * the peek, 80 px or less the header, anything bigger the big stage.
  */
 export function makeView(kind, W, H, o) {
   addStyles()
+  o = { ...o, cls: W <= 56 ? 'peek' : W <= 80 ? 'header' : 'big' }
   const el = document.createElement('div')
   el.className = 'pv'
   el.style.cssText = `position:relative;width:${W}px;height:${H}px;flex:none`
@@ -148,11 +176,15 @@ export function makeView(kind, W, H, o) {
   return view
 }
 
+/** Symbol size in screen pixels for each size class, and how much heavier the strokes get. */
+const markSize = (cls, pillH) => (cls === 'peek' ? 16 : cls === 'header' ? 12 : Math.round(pillH * 0.5))
+const markBold = (cls) => (cls === 'peek' ? 1.3 : 1)
+
 function vectorView(kind, el, W, H, o) {
   const id = `pv${uid++}`
   const [vx, vy, vw, vh] = fitBox(BOX, W / H), s = W / vw
   const vb = `${vx.toFixed(2)} ${vy.toFixed(2)} ${vw.toFixed(2)} ${vh.toFixed(2)}`
-  const glass = kind === 'glass', small = W <= 80
+  const glass = kind === 'glass'
   const pal = palette(kind, o)
   let base = ''
   if (glass) {
@@ -191,10 +223,15 @@ function vectorView(kind, el, W, H, o) {
   const defs = `
     ${glowOn ? `<filter id="${id}e" x="-80%" y="-80%" width="260%" height="260%">${glowChain('SourceGraphic')}</filter>` : ''}
     ${glass ? `<filter id="${id}g" x="-60%" y="-250%" width="220%" height="600%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2.6" result="bl"/><feColorMatrix in="bl" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo"/>${glowOn ? glowChain('goo') : ''}</filter>` : ''}
-    <filter id="${id}z" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="0.6"/></filter>
     <clipPath id="${id}l"><path/></clipPath><clipPath id="${id}rr"><path/></clipPath>
     <clipPath id="${id}bar"><rect/><rect/></clipPath>`
   const eyeFilter = glowOn ? `url(#${id}e)` : ''
+  // The marks layer works in screen pixels: P is the Pill's box in pixels, S the symbol size for this view.
+  const P = { x0: (GEO.x0 - vx) * s, y0: (GEO.y0 - vy) * s, x1: (GEO.x1 - vx) * s, y1: (GEO.y1 - vy) * s }
+  const ph = P.y1 - P.y0, S = markSize(o.cls, ph), bold = markBold(o.cls)
+  const shoulder = { x: P.x1 - 0.293 * (ph / 2), y: P.y0 + 0.293 * (ph / 2) }
+  const symAt = o.cls === 'peek' ? { x: Math.min(shoulder.x + S * 0.15, W + 1 - S * 0.3), y: shoulder.y - S * 0.62 } : { x: shoulder.x + S * 0.3, y: shoulder.y - S * 0.55 }
+  const POOL = 16
   el.innerHTML = `<div class="pv-body" style="position:absolute;inset:0;transform-origin:50% 62%">${base}
     <svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
       <defs>${defs}</defs>
@@ -203,27 +240,42 @@ function vectorView(kind, el, W, H, o) {
         <g clip-path="url(#${id}rr)"><rect/></g>
       </g>
       <g class="shut" fill="none" stroke="${pal.eye}" stroke-linecap="round" opacity="0"${eyeFilter ? ` filter="${eyeFilter}"` : ''}><path/><path/></g>
+      <rect class="mouth" fill="${pal.eye}" opacity="0"${eyeFilter ? ` filter="${eyeFilter}"` : ''}/>
       <g class="glint" clip-path="url(#${id}bar)" opacity="0"><ellipse fill="${pal.glint}"/></g>
       <circle class="ring" fill="none" stroke="${pal.glint}" opacity="0"/>
-    </svg></div>
-    <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible;pointer-events:none">
-      <g class="zz" fill="none" stroke="${pal.z}" stroke-linecap="round" stroke-linejoin="round"><path/><path/><path/></g>
-    </svg>`
+    </svg>
+    <svg class="marks" viewBox="0 0 ${W} ${H}" style="position:absolute;inset:0;overflow:visible;pointer-events:none">
+      <g class="rings" fill="none" stroke="${pal.sym}" stroke-linejoin="round"><path/><path/><path/></g>
+      <g class="zz" fill="none" stroke="${pal.sym}" stroke-linecap="round" stroke-linejoin="round"><path/><path/><path/></g>
+      <g class="conf">${Array.from({ length: POOL }, () => '<rect/>').join('')}</g>
+      <g class="sym"></g>
+    </svg></div>`
   const body = el.firstElementChild
-  const eyeSvg = body.lastElementChild
-  const open = eyeSvg.querySelector('.open'), shut = eyeSvg.querySelector('.shut')
+  const eyeSvg = body.children[body.children.length - 2]
+  const open = eyeSvg.querySelector('.open'), shut = eyeSvg.querySelector('.shut'), mouthEl = eyeSvg.querySelector('.mouth')
   const groups = [...open.children], rects = groups.map((g) => g.firstElementChild)
   const clips = [eyeSvg.querySelector(`#${id}l path`), eyeSvg.querySelector(`#${id}rr path`)]
   const barRects = [...eyeSvg.querySelectorAll(`#${id}bar rect`)]
   const arcs = [...shut.children]
   const glint = eyeSvg.querySelector('.glint'), glintE = glint.firstElementChild, ring = eyeSvg.querySelector('.ring')
-  const zs = [...el.querySelectorAll('.zz path')]
-  let gooOn = false
+  const mk = body.lastElementChild
+  const ringEls = [...mk.querySelector('.rings').children], zs = [...mk.querySelector('.zz').children]
+  const confEls = [...mk.querySelector('.conf').children], symG = mk.querySelector('.sym')
+  let gooOn = false, symKind = ''
   const f = (v) => v.toFixed(2)
+  // One corner symbol, drawn around (0, 0) at size S.
+  const glyph = (kind) => {
+    const w = S * 0.17 * bold
+    // "!" sits in a solid badge, with the "!" in the desktop's own color: the loudest mark, for needs-you.
+    if (kind === 'bang') { const cut = BACKDROP(o.light); return `<circle cx="0" cy="0" r="${f(S * 0.52)}" fill="${pal.sym}"/><rect x="${f(-S * 0.08 * bold)}" y="${f(-S * 0.33)}" width="${f(S * 0.16 * bold)}" height="${f(S * 0.4)}" rx="${f(S * 0.08 * bold)}" fill="${cut}"/><circle cx="0" cy="${f(S * 0.24)}" r="${f(S * 0.085 * bold)}" fill="${cut}"/>` }
+    if (kind === 'q') return `<path d="M${f(-S * 0.27)} ${f(-S * 0.2)} C${f(-S * 0.27)} ${f(-S * 0.58)} ${f(S * 0.28)} ${f(-S * 0.6)} ${f(S * 0.28)} ${f(-S * 0.24)} C${f(S * 0.28)} ${f(-S * 0.02)} 0 ${f(-S * 0.02)} 0 ${f(S * 0.16)}" fill="none" stroke="${pal.sym}" stroke-width="${f(w * 1.2)}" stroke-linecap="round"/><circle cx="0" cy="${f(S * 0.4)}" r="${f(S * 0.12 * bold)}" fill="${pal.sym}"/>`
+    return `<path d="M0 ${f(-S * 0.5)} C${f(S * 0.3)} ${f(-S * 0.1)} ${f(S * 0.34)} ${f(S * 0.08)} ${f(S * 0.34)} ${f(S * 0.2)} C${f(S * 0.34)} ${f(S * 0.42)} ${f(S * 0.16)} ${f(S * 0.54)} 0 ${f(S * 0.54)} C${f(-S * 0.16)} ${f(S * 0.54)} ${f(-S * 0.34)} ${f(S * 0.42)} ${f(-S * 0.34)} ${f(S * 0.2)} C${f(-S * 0.34)} ${f(S * 0.08)} ${f(-S * 0.3)} ${f(-S * 0.1)} 0 ${f(-S * 0.5)} Z" fill="${pal.drop}"/>`
+  }
+  const slide = o.cls === 'peek' ? 6 : o.cls === 'header' ? 10 : ph * 0.5
   return {
     el,
     update(st) {
-      const { eyes, merge, glint: gl } = vectorEyes(st, GEO)
+      const { eyes, merge, glint: gl, mouth } = vectorEyes(st, GEO)
       const closed = (eyes[0].closed + eyes[1].closed) / 2
       eyes.forEach((e, i) => {
         clips[i].setAttribute('d', e.clip)
@@ -246,15 +298,97 @@ function vectorView(kind, el, W, H, o) {
         ring.setAttribute('opacity', f(gl.alpha)); glint.setAttribute('opacity', '0')
         ring.setAttribute('cx', f(gl.x)); ring.setAttribute('cy', f(gl.y)); ring.setAttribute('r', f(gl.size * 0.85)); ring.setAttribute('stroke-width', f(Math.max(1.4 / s, gl.size * 0.34)))
       } else { glint.setAttribute('opacity', '0'); ring.setAttribute('opacity', '0') }
-      const Z = zees(st, GEO, small)
-      zs.forEach((p, i) => {
-        const z = Z[i]
-        if (!z) { p.setAttribute('d', ''); return }
-        p.setAttribute('d', zPath(z)); p.setAttribute('opacity', f(z.a)); p.setAttribute('stroke-width', f(Math.max(1.3 / s, z.s * 0.17)))
+      if (mouth && o.mouth) {
+        // The mouth grows at the small sizes so it still reads at 50 x 44.
+        const k2 = o.cls === 'peek' ? 1.4 : o.cls === 'header' ? 1.15 : 1, mw = mouth.w * k2, mh = mouth.h * k2
+        mouthEl.setAttribute('opacity', '1')
+        mouthEl.setAttribute('x', f(mouth.x - mw / 2)); mouthEl.setAttribute('y', f(mouth.y - mh / 2))
+        mouthEl.setAttribute('width', f(mw)); mouthEl.setAttribute('height', f(mh)); mouthEl.setAttribute('rx', f(Math.min(mw, mh) / 2))
+      } else mouthEl.setAttribute('opacity', '0')
+
+      // Marks outside the Pill.
+      const M = marks(st, { cls: o.cls, mouth: o.mouth, glass })
+      ringEls.forEach((p, i) => {
+        const r = M.rings[i]
+        if (!r) { p.setAttribute('d', ''); return }
+        const reach = r.kind === 'call' ? ph * (o.cls === 'peek' ? 0.55 : 0.45) : r.kind === 'key' ? ph * 0.22 : ph * 0.35
+        const d = 1.5 + r.u * reach
+        p.setAttribute('d', capsule(P.x0 - d, P.y0 - d, P.x1 + d, P.y1 + d))
+        p.setAttribute('opacity', f(r.a))
+        p.setAttribute('stroke-width', f(r.kind === 'call' ? S * 0.13 * bold : r.kind === 'key' ? 1.3 : 1.6 * (1 - r.u * 0.5)))
       })
+      zs.forEach((p, i) => {
+        const z = M.zs[i]
+        if (!z) { p.setAttribute('d', ''); return }
+        const zs2 = S * 0.62 * z.size, x = symAt.x + z.x * S - zs2 / 2, y = symAt.y + z.y * S - zs2 / 2
+        p.setAttribute('d', `M${f(x)} ${f(y)} L${f(x + zs2 * 0.8)} ${f(y)} L${f(x)} ${f(y + zs2)} L${f(x + zs2 * 0.8)} ${f(y + zs2)}`)
+        p.setAttribute('opacity', f(z.a)); p.setAttribute('stroke-width', f(Math.max(1.3, zs2 * 0.17 * bold)))
+      })
+      confEls.forEach((r, i) => {
+        const c = M.confetti[i]
+        if (!c) { r.setAttribute('width', '0'); return }
+        const cz = o.cls === 'peek' ? 1.45 : o.cls === 'header' ? 1.1 : 1
+        const w = c.shape === 'dot' ? S * 0.17 * cz : S * 0.24 * cz, hh = c.shape === 'dot' ? w : S * 0.13 * cz
+        // Small views keep the confetti close to the corner, where it has room and stays visible.
+        const reach = o.cls === 'peek' ? 0.5 : o.cls === 'header' ? 0.65 : 1
+        const x = symAt.x + c.x * S * reach, y = symAt.y + 0.25 * S + c.y * S * reach
+        r.setAttribute('x', f(x - w / 2)); r.setAttribute('y', f(y - hh / 2)); r.setAttribute('width', f(w)); r.setAttribute('height', f(hh))
+        r.setAttribute('rx', f(c.shape === 'dot' ? w / 2 : hh * 0.3)); r.setAttribute('fill', pal.confetti[c.c]); r.setAttribute('opacity', f(c.a))
+        r.setAttribute('transform', `rotate(${f(c.rot)} ${f(x)} ${f(y)})`)
+      })
+      const sym = M.symbol
+      if (!sym) { if (symKind) { symG.innerHTML = ''; symKind = '' } }
+      else {
+        if (sym.kind !== symKind) { symG.innerHTML = glyph(sym.kind); symKind = sym.kind }
+        const y = symAt.y + (sym.kind === 'drop' ? sym.dy * slide : 0)
+        symG.setAttribute('transform', `translate(${f(symAt.x)} ${f(y)}) rotate(${f(sym.rot)}) scale(${f(Math.max(0, sym.s))})`)
+        symG.setAttribute('opacity', f(sym.a))
+      }
       body.style.transform = bodyCss(st, W, H)
     },
   }
+}
+
+/* ---------------- blocky ---------------- */
+// The body grid, tilted: at an angle, the capsule is drawn again on the pixel grid rather than rotated, so it stays
+// crisp. Blocky tilts half again as far as the others, or a few degrees would not move a single pixel.
+const tilted = new Map()
+function bodyCells(angle) {
+  if (tilted.has(angle)) return tilted.get(angle)
+  if (!angle) {
+    const cells = []
+    GRID.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === '#') cells.push([x, y]) })
+    tilted.set(0, cells)
+    return cells
+  }
+  const a = (angle * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a)
+  const rot = ([x, y]) => [8 + (x - 8) * c - (y - 4) * sn, 4 + (x - 8) * sn + (y - 4) * c]
+  const [ax, ay] = rot([4, 4]), [bx, by] = rot([12, 4])
+  const cells = []
+  for (let y = -3; y < 11; y++) for (let x = -2; x < 18; x++) {
+    const px = x + 0.5, py = y + 0.5, dx = bx - ax, dy = by - ay
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    if (Math.hypot(px - (ax + t * dx), py - (ay + t * dy)) <= 3.85) cells.push([x, y])
+  }
+  tilted.set(angle, cells)
+  return cells
+}
+/** The ring of cells exactly d steps outside a set of cells (cached per body and distance). */
+const rings = new WeakMap()
+function outline(cells, d) {
+  const memo = rings.get(cells) ?? new Map()
+  rings.set(cells, memo)
+  if (memo.has(d)) return memo.get(d)
+  const key = (x, y) => x + ',' + y, inside = new Set(cells.map(([x, y]) => key(x, y))), out = []
+  const xs = cells.map((c) => c[0]), ys = cells.map((c) => c[1])
+  for (let y = Math.min(...ys) - d; y <= Math.max(...ys) + d; y++) for (let x = Math.min(...xs) - d; x <= Math.max(...xs) + d; x++) {
+    if (inside.has(key(x, y))) continue
+    let best = Infinity
+    for (const [cx, cy] of cells) best = Math.min(best, Math.max(Math.abs(cx - x), Math.abs(cy - y)))
+    if (best === d) out.push([x, y])
+  }
+  memo.set(d, out)
+  return out
 }
 
 function blockyView(el, W, H, o) {
@@ -267,41 +401,75 @@ function blockyView(el, W, H, o) {
   // On the bar, light eyes get a softer bar so the white highlight still shows.
   const ink = pal.eye, bar = pal.light ? lighten(o.color, 0.5) : INK, hi = pal.light ? WHITE : lighten(o.color, 0.75)
   const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr), className: 'pv-dim' })
-  cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px`
-  const zsvg = document.createElementNS(NS, 'svg')
-  zsvg.setAttribute('viewBox', `0 0 ${W} ${H}`)
-  zsvg.setAttribute('shape-rendering', 'crispEdges')
-  zsvg.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible;pointer-events:none`
-  el.append(cv, zsvg)
+  cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible`
+  const msvg = document.createElementNS(NS, 'svg')
+  msvg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+  msvg.setAttribute('shape-rendering', 'crispEdges')
+  msvg.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible;pointer-events:none`
+  el.append(cv, msvg)
   const g = cv.getContext('2d')
-  const small = W <= 80
-  const inBody = (x, y) => y >= 0 && y < rows && x >= 0 && x < cols && GRID[y][x] === '#'
-  let last = '', lastZ = ''
+  // Marks use their own pixel size: 3 in the peek, 2 in the header (so the peek's are bigger), a body cell when big.
+  const sp = o.cls === 'peek' ? 3 : o.cls === 'header' ? 2 : Math.max(2, Math.round(k * 0.6))
+  const SET = o.cls === 'peek' ? { ...MARK_SPRITES, ...MARK_SPRITES.bold } : MARK_SPRITES
+  const Spx = sp * 5
+  const corner = { x: ox + 13 * k, y: oy + Math.round(0.4 * k) }
+  // Blocky fills the view's width, so a sliding drop has only the space above the Pill: it slides a little less.
+  const slide = o.cls === 'peek' ? 3 : o.cls === 'header' ? 4 : rows * k * 0.35
+  let last = '', lastM = ''
   return {
     el,
     update(st) {
+      const angle = Math.max(-12, Math.min(12, Math.round((st.body.rot * 1.5) / 4) * 4))
+      const body = bodyCells(angle)
+      const inBody = new Set(body.map(([x, y]) => x + ',' + y))
       // Pixels move in whole steps and never rotate or scale, or they stop looking like pixels.
       const tx = Math.round((st.body.tx * W) / k) * k, ty = Math.round((st.body.ty * H) / k) * k
       const t = `translate(${tx}px,${ty}px)`
-      if (cv.style.transform !== t) cv.style.transform = t
-      const cells = pixelEyes(st).filter((c) => inBody(c.x, c.y))
-      const barCells = cells.length >= 8 && cells.filter((c) => c.y === 3).length >= 8
-      const sig = cells.map((c) => `${c.x},${c.y},${c.hi ? 1 : 0}`).join(';')
+      if (cv.style.transform !== t) { cv.style.transform = t; msvg.style.transform = t }
+      const cells = pixelEyes(st, { mouth: o.mouth }).filter((c) => inBody.has(c.x + ',' + c.y))
+      const barCells = cells.filter((c) => c.y === 3 && !c.mouth).length >= 8
+      const sig = angle + '|' + cells.map((c) => `${c.x},${c.y},${c.hi ? 1 : 0}`).join(';')
       if (sig !== last) {
         last = sig
         g.setTransform(dpr, 0, 0, dpr, 0, 0)
         g.clearRect(0, 0, W, H)
         g.fillStyle = o.color
-        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (GRID[y][x] === '#') g.fillRect(ox + x * k, oy + y * k, k, k)
-        for (const c of cells) { g.fillStyle = c.hi ? hi : barCells && c.y === 3 ? bar : ink; g.fillRect(ox + c.x * k, oy + c.y * k, k, k) }
+        for (const [x, y] of body) g.fillRect(ox + x * k, oy + y * k, k, k)
+        for (const c of cells) { g.fillStyle = c.hi ? hi : barCells && c.y === 3 && !c.mouth ? bar : ink; g.fillRect(ox + c.x * k, oy + c.y * k, k, k) }
       }
-      // The Z's sit outside the Pill, on the background, in whole cells.
-      const Z = pixelZees(st, small)
-      const zsig = Z.map((z) => `${z.sprite}${z.x},${z.y},${z.a.toFixed(1)}`).join(';') + ty
-      if (zsig !== lastZ) {
-        lastZ = zsig
-        zsvg.innerHTML = Z.map((z) => `<g fill="${pal.z}" opacity="${z.a.toFixed(2)}">${ZSPRITES[z.sprite].map((row, ry) => [...row].map((ch, rx) => ch === '#' ? `<rect x="${ox + (z.x + rx) * k}" y="${oy + (z.y + ry) * k + ty}" width="${k}" height="${k}"/>` : '').join('')).join('')}</g>`).join('')
+      // Marks: pixel sprites outside the Pill, in whole mark pixels.
+      const M = marks(st, { cls: o.cls, mouth: o.mouth, glass: false })
+      const snap = (v) => Math.round(v / sp) * sp
+      let html = ''
+      const sprite = (rowsS, x, y, col, a) => {
+        let r = ''
+        rowsS.forEach((row, ry) => [...row].forEach((ch, rx) => { if (ch === '#') r += `<rect x="${x + rx * sp}" y="${y + ry * sp}" width="${sp}" height="${sp}"/>` }))
+        return `<g fill="${col}" opacity="${a.toFixed(2)}">${r}</g>`
       }
+      const place = (rowsS) => ({ x: o.cls === 'peek' ? Math.min(corner.x, W + 1 - rowsS[0].length * sp) : corner.x, y: corner.y - rowsS.length * sp })
+      for (const r of M.rings) {
+        const d = r.kind === 'call' ? 1 + Math.round(r.u * 2) : 1
+        html += `<g fill="${pal.sym}" opacity="${r.a.toFixed(2)}">${outline(body, d).map(([x, y]) => `<rect x="${ox + x * k}" y="${oy + y * k}" width="${k}" height="${k}"/>`).join('')}</g>`
+      }
+      for (const z of M.zs) {
+        const name = o.cls === 'big' ? (z.size < 0.75 ? 'z3' : z.size < 0.95 ? 'z4' : 'z5') : o.cls === 'peek' ? 'z4' : 'z3'
+        const at = place(ZSPRITES[name])
+        html += sprite(ZSPRITES[name], snap(at.x + z.x * Spx), snap(at.y + z.y * Spx), pal.sym, z.a)
+      }
+      for (const c of M.confetti) {
+        // Pieces are two mark pixels wide (one for dots), so they show even in the peek.
+        const w = c.shape === 'dot' ? sp : sp * 2
+        const reach = o.cls === 'peek' ? 0.55 : o.cls === 'header' ? 0.7 : 1
+        html += `<rect x="${snap(Math.min(corner.x + c.x * Spx * reach, W + 1 - w))}" y="${snap(corner.y - Spx * 0.2 + c.y * Spx * reach)}" width="${w}" height="${sp}" fill="${pal.confetti[c.c]}" opacity="${c.a.toFixed(2)}"/>`
+      }
+      if (M.symbol) {
+        const rowsS = SET[M.symbol.kind], at = place(rowsS)
+        const lift = M.symbol.kind === 'drop' ? snap(M.symbol.dy * slide) : M.symbol.s < 0.6 ? sp : 0
+        html += sprite(rowsS, snap(at.x), snap(at.y) + lift, M.symbol.kind === 'drop' ? pal.drop : pal.sym, M.symbol.a)
+        // The badge's "!" is cut out: its holes are filled with the desktop's color.
+        if (M.symbol.kind === 'bang') html += sprite(rowsS.map((r, i) => (i === 0 || i === rowsS.length - 1 ? r.replace(/./g, '.') : r.replace(/#/g, ' ').replace(/\./g, '#').replace(/ /g, '.'))), snap(at.x), snap(at.y) + lift, BACKDROP(o.light), M.symbol.a)
+      }
+      if (html !== lastM) { lastM = html; msvg.innerHTML = html }
     },
   }
 }
