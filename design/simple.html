@@ -46,7 +46,7 @@ h3{margin:22px 0 10px;font-size:13px;font-weight:800;color:var(--muted);text-tra
 <body>
 <div class="wrap">
   <h1>Simple</h1>
-  <p class="lead">One shape, one color, two eyes. Then one small twist each.</p>
+  <p class="lead">One shape, one color, two eyes. Then a blocky pixel set, and one small twist each.</p>
   <div class="bar">
     <div class="swatches" id="sw"><span class="lbl">Color</span></div>
     <div class="bases" id="bases"><span class="lbl">Shape for the twists</span></div>
@@ -54,6 +54,10 @@ h3{margin:22px 0 10px;font-size:13px;font-weight:800;color:var(--muted);text-tra
 
   <h2>Shapes</h2>
   <div class="grid" id="shapes"></div>
+
+  <h2>Blocky</h2>
+  <p class="lead">In the spirit of the Claude Code sprite: one color, chunky pixels, eyes that are holes cut through the body. Each one has its own outline so none of them reads as a copy of it.</p>
+  <div class="grid small" id="blocks"></div>
 
   <h2>Twists</h2>
   <p class="lead">Change one thing, and only keep it if it still shows at the real 50×44 peek size. Pick a shape in the bar above to try every twist on it.</p>
@@ -170,6 +174,94 @@ const card = (p, name, note) => `
     <div class="txt"><div class="name">${name}</div>${note ? `<div class="note">${note}</div>` : ''}</div>
   </div>`
 
+/* ---------------- blocky sprites ---------------- */
+// '#' is body, '.' is empty. Eyes are simply cells left empty inside the body, so the background shows through.
+const BLOCKS = [
+  { name: 'Bit', note: 'A tall block with a bent antenna and two stubby legs.', grid: [
+    '.......#....',
+    '......#.....',
+    '......#.....',
+    '.##########.',
+    '############',
+    '###.####.###',
+    '###.####.###',
+    '############',
+    '############',
+    '.##########.',
+    '..##....##..'] },
+  { name: 'Chat', note: 'A pixel speech bubble with eyes. It talks to you.', grid: [
+    '...########...',
+    '.############.',
+    '##############',
+    '####.####.####',
+    '####.####.####',
+    '##############',
+    '.############.',
+    '..##########..',
+    '..##..........',
+    '.#............'] },
+  { name: 'Loaf', note: 'Long and low with a single curl on top. Fills the wide peek slot.', grid: [
+    '.........##.....',
+    '........#.......',
+    '..############..',
+    '.##############.',
+    '################',
+    '####.######.####',
+    '####.######.####',
+    '################',
+    '.##############.'] },
+  { name: 'Drip', note: 'A droplet: pointed on top, round at the bottom.', grid: [
+    '.....##.....',
+    '....####....',
+    '...######...',
+    '..########..',
+    '.##########.',
+    '.##########.',
+    '###.####.###',
+    '###.####.###',
+    '############',
+    '.##########.',
+    '..########..'] },
+  { name: 'Peek', note: 'A dome with two paws over the edge, like it is climbing up to look.', grid: [
+    '....######....',
+    '..##########..',
+    '.############.',
+    '.############.',
+    '####.####.####',
+    '####.####.####',
+    '##############',
+    '##############',
+    '.###......###.'] },
+  { name: 'Kit', note: 'Two pointed ears. Reads as a cat, the most common notch pet.', grid: [
+    '.#..........#.',
+    '.##........##.',
+    '.###......###.',
+    '.############.',
+    '##############',
+    '###.######.###',
+    '###.######.###',
+    '##############',
+    '.############.',
+    '..##########..'] },
+]
+function blockSvg(b, W, H, c) {
+  const cols = b.grid[0].length, rows = b.grid.length
+  const k = Math.max(1, Math.floor(Math.min(W / cols, H / rows)))
+  const ox = Math.floor((W - cols * k) / 2) / k, oy = Math.floor((H - rows * k) / 2) / k
+  let r = ''
+  b.grid.forEach((row, y) => { for (let x = 0; x < cols; x++) if (row[x] === '#') r += `<rect x="${x}" y="${y}" width="1.02" height="1.02"/>` })
+  return `<svg viewBox="${-ox} ${-oy} ${W / k} ${H / k}" shape-rendering="crispEdges" fill="${c}">${r}</svg>`
+}
+const blockCard = (b, c) => `
+  <div class="card">
+    <div class="big">${blockSvg(b, 132, 132, c)}</div>
+    <div class="row">
+      <div class="peek">${blockSvg(b, 50, 44, c)}</div>
+      <div class="head">${blockSvg(b, 64, 54, c)}</div>
+    </div>
+    <div class="txt"><div class="name">${b.name}</div><div class="note">${b.note}</div></div>
+  </div>`
+
 /* ---------------- page ---------------- */
 const S = { color: COLORS[0], base: 'circle' }
 try { Object.assign(S, JSON.parse(localStorage.getItem('steward-simple') || '{}')) } catch {}
@@ -181,6 +273,7 @@ function render() {
   document.getElementById('sw').innerHTML = '<span class="lbl">Color</span>' + COLORS.map((c) => `<button style="background:${c}" aria-pressed="${c === S.color}" data-c="${c}" aria-label="Color ${c}"></button>`).join('')
   document.getElementById('bases').innerHTML = '<span class="lbl">Shape for the twists</span>' + Object.entries(SHAPES).map(([k, s]) => `<button aria-pressed="${k === S.base}" data-b="${k}">${s.name}</button>`).join('')
   document.getElementById('shapes').innerHTML = DEFS + Object.entries(SHAPES).map(([k, s]) => card(compose(k, null, S.color), s.name)).join('')
+  document.getElementById('blocks').innerHTML = BLOCKS.map((b) => blockCard(b, S.color)).join('')
   const groups = [...new Set(TWISTS.map((t) => t.group))]
   document.getElementById('twists').innerHTML = groups.map((g) => `
     <h3>${g}</h3>
