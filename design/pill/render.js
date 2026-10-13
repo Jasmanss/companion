@@ -1,7 +1,7 @@
 // The plain Pill in three versions, each with live eyes: glass (a real lens over whatever is behind it),
 // flat (one solid color) and blocky (pixels). makeView() builds one at a fixed size; view.update(state) redraws
-// its eyes and body pose from an eyes.js state every frame.
-import { vectorEyes, pixelEyes } from './eyes.js'
+// its eyes and body pose from an eyes.js state every frame, and view.standby(on) runs resting's slow glow.
+import { vectorEyes, pixelEyes, zees, pixelZees, ZSPRITES } from './eyes.js'
 
 /** The classic Pill in a 100 x 100 design box. */
 export const GEO = { x0: 6, y0: 26, x1: 94, y1: 74, W: 88, H: 48, cx: 50, cy: 50 }
@@ -17,11 +17,48 @@ const GRID = [
   '...##########...',
 ]
 export const INK = '#1d1a2b'
+const WHITE = '#ffffff'
 const NS = 'http://www.w3.org/2000/svg'
 
-/* ---------------- color and shape helpers ---------------- */
+/** The palette: the original six, then the rest. */
+export const COLORS = [
+  { name: 'Lilac', hex: '#c9bcff' }, { name: 'Sky', hex: '#94c5f5' }, { name: 'Mint', hex: '#8fe0c0' },
+  { name: 'Peach', hex: '#f6ab8c' }, { name: 'Yellow', hex: '#f3d06a' }, { name: 'Pink', hex: '#ff9fc6' },
+  { name: 'Ice', hex: '#d6ecff' }, { name: 'Graphite', hex: '#4a4f5c' }, { name: 'Coral', hex: '#ff7f6b' },
+  { name: 'Teal', hex: '#3bbfb2' }, { name: 'Lime', hex: '#bfe85a' }, { name: 'Orange', hex: '#ff9a3d' },
+  { name: 'Rose', hex: '#e8748f' }, { name: 'Silver', hex: '#c7ccd5' },
+]
+
+/* ---------------- color helpers ---------------- */
 const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255] }
+const hex = (a) => '#' + a.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')
 const rgba = (h, a) => `rgba(${rgb(h).join(',')},${a})`
+export const mix = (a, b, t) => { const x = rgb(a), y = rgb(b); return hex(x.map((v, i) => v + (y[i] - v) * t)) }
+export const lighten = (h, t) => mix(h, WHITE, t)
+export const darken = (h, t) => mix(h, '#000000', t)
+const luminance = (h) => { const c = rgb(h).map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
+export const contrast = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
+
+/** What a glass Pill roughly looks like over the desktop: the blurred backdrop, then the tint over it. */
+// The tint reads stronger through the lens than its alpha suggests, so light desktops count it at 0.7.
+const glassFace = (o) => mix(o.light ? '#e8e6ef' : '#1d1f2b', o.tinted ? o.color : WHITE, o.tinted ? (o.light ? 0.7 : 0.42) : (o.light ? 0.16 : 0.06))
+/**
+ * The eye color for a Pill, picked from how bright it is: dark ink, or white, whichever stands out more.
+ * Returns { eye, light, glint, z }: z is for the Z's, which sit on the background next to the Pill, not on it.
+ */
+export function palette(kind, o) {
+  const face = kind === 'glass' ? glassFace(o) : o.color
+  const light = contrast(WHITE, face) > contrast(INK, face)
+  const backLight = kind === 'glass' && o.light // flat and blocky sit on the dark tab
+  return {
+    face, light,
+    eye: light ? WHITE : INK,
+    glint: WHITE,
+    z: backLight ? darken(o.color, 0.6) : lighten(o.color, 0.55),
+  }
+}
+
+/* ---------------- shape helpers ---------------- */
 const K = 0.5523
 const capsule = (x0, y0, x1, y1) => { const r = (y1 - y0) / 2, k = r * K
   return `M${x0 + r} ${y0} L${x1 - r} ${y0} C${x1 - r + k} ${y0} ${x1} ${y0 + r - k} ${x1} ${y0 + r} C${x1} ${y0 + r + k} ${x1 - r + k} ${y1} ${x1 - r} ${y1} L${x0 + r} ${y1} C${x0 + r - k} ${y1} ${x0} ${y0 + r + k} ${x0} ${y0 + r} C${x0} ${y0 + r - k} ${x0 + r - k} ${y0} ${x0 + r} ${y0} Z` }
@@ -32,6 +69,7 @@ function fitBox([x0, y0, x1, y1], aspect) {
   return [(x0 + x1) / 2 - w / 2, (y0 + y1) / 2 - h / 2, w, h]
 }
 const toPx = (path, [vx, vy], s) => { let n = 0; return path.replace(/-?\d*\.?\d+/g, (v) => ((n++ % 2 === 0 ? +v - vx : +v - vy) * s).toFixed(2)) }
+const zPath = (z) => `M${(z.x).toFixed(2)} ${(z.y).toFixed(2)} L${(z.x + z.s * 0.8).toFixed(2)} ${(z.y).toFixed(2)} L${(z.x).toFixed(2)} ${(z.y + z.s).toFixed(2)} L${(z.x + z.s * 0.8).toFixed(2)} ${(z.y + z.s).toFixed(2)}`
 
 /* ---------------- the lens ---------------- */
 // A displacement map: blur the shape's mask, take the slope, push samples outward where it is steep.
@@ -81,6 +119,15 @@ function filterHost() {
   }
   return s
 }
+// Resting's standby glow is a CSS opacity animation, so it costs nothing per frame. It dims the paint layers,
+// never the lens itself: an ancestor with opacity would cut the lens off from the desktop behind it.
+function addStyles() {
+  if (document.getElementById('pill-styles')) return
+  const s = document.createElement('style')
+  s.id = 'pill-styles'
+  s.textContent = '@keyframes pv-standby{0%,100%{opacity:1}50%{opacity:.45}}.pv.standby .pv-dim{animation:pv-standby 4.8s ease-in-out infinite}'
+  document.head.append(s)
+}
 
 /* ---------------- views ---------------- */
 let uid = 0
@@ -88,21 +135,25 @@ const bodyCss = (st, W, H) => `translate(${(st.body.tx * W).toFixed(2)}px,${(st.
 
 /**
  * One Pill view. kind: 'glass' | 'flat' | 'blocky'. o: { color, tinted, light } where light says the desktop
- * behind a glass Pill is light (its eyes turn dark there to stay readable).
+ * behind a glass Pill is light. Views of 80 px wide or less show a single Z when sleepy.
  */
 export function makeView(kind, W, H, o) {
+  addStyles()
   const el = document.createElement('div')
   el.className = 'pv'
   el.style.cssText = `position:relative;width:${W}px;height:${H}px;flex:none`
-  return kind === 'blocky' ? blockyView(el, W, H, o) : vectorView(kind, el, W, H, o)
+  const view = kind === 'blocky' ? blockyView(el, W, H, o) : vectorView(kind, el, W, H, o)
+  let on = false
+  view.standby = (v) => { if (v !== on) { on = v; el.classList.toggle('standby', v) } }
+  return view
 }
 
 function vectorView(kind, el, W, H, o) {
   const id = `pv${uid++}`
   const [vx, vy, vw, vh] = fitBox(BOX, W / H), s = W / vw
   const vb = `${vx.toFixed(2)} ${vy.toFixed(2)} ${vw.toFixed(2)} ${vh.toFixed(2)}`
-  const glass = kind === 'glass'
-  const lightEyes = glass && !o.light
+  const glass = kind === 'glass', small = W <= 80
+  const pal = palette(kind, o)
   let base = ''
   if (glass) {
     // The filter goes in first: Chrome does not pick up a backdrop filter that is added after its element.
@@ -115,7 +166,7 @@ function vectorView(kind, el, W, H, o) {
       <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><defs><filter id="${id}b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${(G.H * 0.05).toFixed(2)}"/></filter></defs>
         <ellipse cx="${G.cx}" cy="${G.y1 + G.H * 0.04}" rx="${G.W * 0.36}" ry="${G.H * 0.07}" fill="#000" opacity="${o.light ? 0.16 : 0.35}" filter="url(#${id}b)"/></svg>
       <div style="position:absolute;inset:0;clip-path:path('${px}');backdrop-filter:${bf};-webkit-backdrop-filter:${bf}"></div>
-      <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
+      <svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
         <defs>
           <clipPath id="${id}c"><path d="${PATH}"/></clipPath>
           <linearGradient id="${id}r" gradientUnits="userSpaceOnUse" x1="0" y1="${G.y0}" x2="0" y2="${G.y1}"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".3" stop-color="#fff" stop-opacity=".18"/><stop offset=".72" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity=".5"/></linearGradient>
@@ -130,31 +181,76 @@ function vectorView(kind, el, W, H, o) {
         <path d="${PATH}" fill="none" stroke="rgba(255,255,255,${o.light ? 0.7 : 0.35})" stroke-width="${(0.9 / s).toFixed(2)}"/>
       </svg>`
   } else {
-    base = `<svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><path d="${PATH}" fill="${o.color}"/></svg>`
+    base = `<svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><path d="${PATH}" fill="${o.color}"/></svg>`
   }
-  const eyeCol = lightEyes ? '#ffffff' : INK
-  const glow = lightEyes ? `<filter id="${id}e" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="${(GEO.H * 0.06).toFixed(2)}" result="b"/><feFlood flood-color="${o.tinted ? o.color : '#ffffff'}" flood-opacity=".9"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` : ''
+  // Glass eyes glow when they are light. While merging, glass eyes also go through a "goo" filter (blur, then a
+  // hard alpha threshold) so the two shapes join like drops of liquid instead of just overlapping.
+  const glowOn = glass && pal.light
+  const glowCol = o.tinted ? lighten(o.color, 0.35) : WHITE
+  const glowChain = (src) => `<feGaussianBlur in="${src}" stdDeviation="${(GEO.H * 0.06).toFixed(2)}" result="gb"/><feFlood flood-color="${glowCol}" flood-opacity=".9"/><feComposite in2="gb" operator="in" result="gl"/><feMerge><feMergeNode in="gl"/><feMergeNode in="${src}"/></feMerge>`
+  const defs = `
+    ${glowOn ? `<filter id="${id}e" x="-80%" y="-80%" width="260%" height="260%">${glowChain('SourceGraphic')}</filter>` : ''}
+    ${glass ? `<filter id="${id}g" x="-60%" y="-250%" width="220%" height="600%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2.6" result="bl"/><feColorMatrix in="bl" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo"/>${glowOn ? glowChain('goo') : ''}</filter>` : ''}
+    <filter id="${id}z" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="0.6"/></filter>
+    <clipPath id="${id}l"><path/></clipPath><clipPath id="${id}rr"><path/></clipPath>
+    <clipPath id="${id}bar"><rect/><rect/></clipPath>`
+  const eyeFilter = glowOn ? `url(#${id}e)` : ''
   el.innerHTML = `<div class="pv-body" style="position:absolute;inset:0;transform-origin:50% 62%">${base}
-    <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
-      <defs>${glow}<clipPath id="${id}l"><path/></clipPath><clipPath id="${id}rr"><path/></clipPath></defs>
-      <g${glow ? ` filter="url(#${id}e)"` : ''} fill="${eyeCol}">
+    <svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
+      <defs>${defs}</defs>
+      <g class="open" fill="${pal.eye}"${eyeFilter ? ` filter="${eyeFilter}"` : ''}>
         <g clip-path="url(#${id}l)"><rect/></g>
         <g clip-path="url(#${id}rr)"><rect/></g>
       </g>
-    </svg></div>`
+      <g class="shut" fill="none" stroke="${pal.eye}" stroke-linecap="round" opacity="0"${eyeFilter ? ` filter="${eyeFilter}"` : ''}><path/><path/></g>
+      <g class="glint" clip-path="url(#${id}bar)" opacity="0"><ellipse fill="${pal.glint}"/></g>
+      <circle class="ring" fill="none" stroke="${pal.glint}" opacity="0"/>
+    </svg></div>
+    <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible;pointer-events:none">
+      <g class="zz" fill="none" stroke="${pal.z}" stroke-linecap="round" stroke-linejoin="round"><path/><path/><path/></g>
+    </svg>`
   const body = el.firstElementChild
-  const clips = [el.querySelector(`#${id}l path`), el.querySelector(`#${id}rr path`)]
-  const groups = [...el.querySelectorAll(`g[clip-path]`)].slice(-2)
-  const rects = groups.map((g) => g.firstElementChild)
+  const eyeSvg = body.lastElementChild
+  const open = eyeSvg.querySelector('.open'), shut = eyeSvg.querySelector('.shut')
+  const groups = [...open.children], rects = groups.map((g) => g.firstElementChild)
+  const clips = [eyeSvg.querySelector(`#${id}l path`), eyeSvg.querySelector(`#${id}rr path`)]
+  const barRects = [...eyeSvg.querySelectorAll(`#${id}bar rect`)]
+  const arcs = [...shut.children]
+  const glint = eyeSvg.querySelector('.glint'), glintE = glint.firstElementChild, ring = eyeSvg.querySelector('.ring')
+  const zs = [...el.querySelectorAll('.zz path')]
+  let gooOn = false
+  const f = (v) => v.toFixed(2)
   return {
     el,
     update(st) {
-      vectorEyes(st, GEO).forEach((e, i) => {
+      const { eyes, merge, glint: gl } = vectorEyes(st, GEO)
+      const closed = (eyes[0].closed + eyes[1].closed) / 2
+      eyes.forEach((e, i) => {
         clips[i].setAttribute('d', e.clip)
-        const r = rects[i]
-        r.setAttribute('x', (e.x - e.w / 2).toFixed(2)); r.setAttribute('y', (e.y - e.h / 2).toFixed(2))
-        r.setAttribute('width', e.w.toFixed(2)); r.setAttribute('height', e.h.toFixed(2)); r.setAttribute('rx', e.r.toFixed(2))
-        groups[i].setAttribute('transform', Math.abs(e.rot) > 0.01 ? `rotate(${e.rot.toFixed(2)} ${e.x.toFixed(2)} ${e.y.toFixed(2)})` : '')
+        for (const r of [rects[i], barRects[i]]) {
+          r.setAttribute('x', f(e.x - e.w / 2)); r.setAttribute('y', f(e.y - e.h / 2))
+          r.setAttribute('width', f(e.w)); r.setAttribute('height', f(e.h)); r.setAttribute('rx', f(e.r))
+        }
+        groups[i].setAttribute('transform', Math.abs(e.rot) > 0.01 ? `rotate(${f(e.rot)} ${f(e.cx)} ${f(e.y)})` : '')
+        if (closed > 0.01) { arcs[i].setAttribute('d', e.arc); arcs[i].setAttribute('stroke-width', f(e.arcWidth)) }
+      })
+      // Light eyes dim to half while merged, so the white glint still stands out on the bar.
+      open.setAttribute('opacity', f((1 - closed) * (pal.light ? 1 - 0.5 * Math.min(1, merge) : 1)))
+      shut.setAttribute('opacity', f(closed))
+      const wantGoo = glass && merge > 0.02
+      if (wantGoo !== gooOn) { gooOn = wantGoo; if (wantGoo) open.setAttribute('filter', `url(#${id}g)`); else if (eyeFilter) open.setAttribute('filter', eyeFilter); else open.removeAttribute('filter') }
+      if (gl && gl.kind !== 'search') {
+        glint.setAttribute('opacity', f(gl.alpha * 0.95)); ring.setAttribute('opacity', '0')
+        glintE.setAttribute('cx', f(gl.x)); glintE.setAttribute('cy', f(gl.y)); glintE.setAttribute('rx', f(gl.size * 0.95)); glintE.setAttribute('ry', f(gl.size * 0.5))
+      } else if (gl) {
+        ring.setAttribute('opacity', f(gl.alpha)); glint.setAttribute('opacity', '0')
+        ring.setAttribute('cx', f(gl.x)); ring.setAttribute('cy', f(gl.y)); ring.setAttribute('r', f(gl.size * 0.85)); ring.setAttribute('stroke-width', f(Math.max(1.4 / s, gl.size * 0.34)))
+      } else { glint.setAttribute('opacity', '0'); ring.setAttribute('opacity', '0') }
+      const Z = zees(st, GEO, small)
+      zs.forEach((p, i) => {
+        const z = Z[i]
+        if (!z) { p.setAttribute('d', ''); return }
+        p.setAttribute('d', zPath(z)); p.setAttribute('opacity', f(z.a)); p.setAttribute('stroke-width', f(Math.max(1.3 / s, z.s * 0.17)))
       })
       body.style.transform = bodyCss(st, W, H)
     },
@@ -163,30 +259,49 @@ function vectorView(kind, el, W, H, o) {
 
 function blockyView(el, W, H, o) {
   const cols = GRID[0].length, rows = GRID.length
-  const k = Math.max(1, Math.floor(Math.min((W * 0.92) / cols, (H * 0.92) / rows)))
+  // Whole pixels per cell: 3 in the 50 x 44 peek, 4 in the 64 x 54 header.
+  const k = Math.max(1, Math.floor(Math.min(W / cols, (H * 0.92) / rows)))
   const ox = Math.floor((W - cols * k) / 2), oy = Math.floor((H - rows * k) / 2)
   const dpr = Math.min(3, window.devicePixelRatio || 1)
-  const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr) })
-  cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;transform-origin:50% 62%`
-  el.append(cv)
+  const pal = palette('blocky', o)
+  // On the bar, light eyes get a softer bar so the white highlight still shows.
+  const ink = pal.eye, bar = pal.light ? lighten(o.color, 0.5) : INK, hi = pal.light ? WHITE : lighten(o.color, 0.75)
+  const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr), className: 'pv-dim' })
+  cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px`
+  const zsvg = document.createElementNS(NS, 'svg')
+  zsvg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+  zsvg.setAttribute('shape-rendering', 'crispEdges')
+  zsvg.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible;pointer-events:none`
+  el.append(cv, zsvg)
   const g = cv.getContext('2d')
-  const inBody = (x, y) => y >= 0 && y < rows && GRID[y][x] === '#'
-  let last = ''
+  const small = W <= 80
+  const inBody = (x, y) => y >= 0 && y < rows && x >= 0 && x < cols && GRID[y][x] === '#'
+  let last = '', lastZ = ''
   return {
     el,
     update(st) {
       // Pixels move in whole steps and never rotate or scale, or they stop looking like pixels.
-      cv.style.transform = `translate(${Math.round(st.body.tx * W / k) * k}px,${Math.round(st.body.ty * H / k) * k}px)`
-      const eyes = pixelEyes(st).filter(([x, y]) => inBody(x, y))
-      const sig = eyes.join(';')
-      if (sig === last) return
-      last = sig
-      g.setTransform(dpr, 0, 0, dpr, 0, 0)
-      g.clearRect(0, 0, W, H)
-      g.fillStyle = o.color
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (GRID[y][x] === '#') g.fillRect(ox + x * k, oy + y * k, k, k)
-      g.fillStyle = INK
-      for (const [x, y] of eyes) g.fillRect(ox + x * k, oy + y * k, k, k)
+      const tx = Math.round((st.body.tx * W) / k) * k, ty = Math.round((st.body.ty * H) / k) * k
+      const t = `translate(${tx}px,${ty}px)`
+      if (cv.style.transform !== t) cv.style.transform = t
+      const cells = pixelEyes(st).filter((c) => inBody(c.x, c.y))
+      const barCells = cells.length >= 8 && cells.filter((c) => c.y === 3).length >= 8
+      const sig = cells.map((c) => `${c.x},${c.y},${c.hi ? 1 : 0}`).join(';')
+      if (sig !== last) {
+        last = sig
+        g.setTransform(dpr, 0, 0, dpr, 0, 0)
+        g.clearRect(0, 0, W, H)
+        g.fillStyle = o.color
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (GRID[y][x] === '#') g.fillRect(ox + x * k, oy + y * k, k, k)
+        for (const c of cells) { g.fillStyle = c.hi ? hi : barCells && c.y === 3 ? bar : ink; g.fillRect(ox + c.x * k, oy + c.y * k, k, k) }
+      }
+      // The Z's sit outside the Pill, on the background, in whole cells.
+      const Z = pixelZees(st, small)
+      const zsig = Z.map((z) => `${z.sprite}${z.x},${z.y},${z.a.toFixed(1)}`).join(';') + ty
+      if (zsig !== lastZ) {
+        lastZ = zsig
+        zsvg.innerHTML = Z.map((z) => `<g fill="${pal.z}" opacity="${z.a.toFixed(2)}">${ZSPRITES[z.sprite].map((row, ry) => [...row].map((ch, rx) => ch === '#' ? `<rect x="${ox + (z.x + rx) * k}" y="${oy + (z.y + ry) * k + ty}" width="${k}" height="${k}"/>` : '').join('')).join('')}</g>`).join('')
+      }
     },
   }
 }

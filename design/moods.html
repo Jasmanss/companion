@@ -11,23 +11,25 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:28px 16px 64px}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 64px}
 h1{margin:0;font-size:28px;font-weight:800}
-h2{margin:28px 0 4px;font-size:20px;font-weight:800}
-.lead{margin:4px 0 0;color:var(--muted);font-size:15px;max-width:780px}
+h2{margin:30px 0 4px;font-size:20px;font-weight:800}
+.lead{margin:4px 0 0;color:var(--muted);font-size:15px;max-width:800px}
 .bar{position:sticky;top:0;z-index:20;background:rgba(17,18,22,.92);backdrop-filter:blur(10px);margin:16px -16px 0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;border-bottom:1px solid var(--line)}
 .lbl{font-size:13px;font-weight:800;color:var(--muted);margin-right:4px}
 .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 button.c{font:inherit;font-size:13px;font-weight:800;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
 button.c[aria-pressed="true"]{background:var(--text);color:var(--bg)}
-button.sw{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid transparent;cursor:pointer}
+button.sw{width:24px;height:24px;padding:0;border-radius:50%;border:2px solid transparent;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
 button.sw[aria-pressed="true"]{border-color:#fff}
+.cname{font-size:13px;font-weight:800;min-width:64px}
 .main{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;margin-top:14px}
 .stages{display:grid;gap:12px;grid-template-columns:repeat(var(--n),1fr)}
 @media (max-width:860px){.stages{grid-template-columns:1fr}}
 .vl{font-size:15px;font-weight:800;margin-bottom:6px}
 .stage{position:relative;height:210px;border-radius:14px;overflow:hidden;display:grid;place-items:center}
 .plain{background:#15161c}
+.solidbg{background:rgba(16,17,22,.97)}
 .wl{background:radial-gradient(90% 70% at 15% 15%,#ffd6e7 0%,transparent 60%),radial-gradient(80% 70% at 90% 85%,#c9defe 0%,transparent 60%),#f4efe8}
 .wd{background:radial-gradient(90% 70% at 15% 10%,#5b3fa3 0%,transparent 60%),radial-gradient(80% 70% at 95% 90%,#0e5b7c 0%,transparent 60%),#151726}
 .lines{position:absolute;left:8%;right:8%;top:28%;height:44%;background:
@@ -57,6 +59,22 @@ button.sw[aria-pressed="true"]{border-color:#fff}
 .sec{margin-top:14px}
 .sec .gl2{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .new{font-size:10px;font-weight:800;color:var(--bg);background:var(--accent);border-radius:999px;padding:1px 6px;margin-left:5px;vertical-align:1px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px;margin-top:12px;overflow-x:auto}
+table.grid{border-collapse:separate;border-spacing:8px;margin:-8px}
+table.grid th{font-size:12.5px;font-weight:800;color:var(--muted);text-align:left;white-space:nowrap;padding:0 4px}
+table.grid td{vertical-align:middle}
+.pair{display:flex;gap:8px;align-items:center}
+.cellbox{position:relative;width:76px;height:70px;border-radius:10px;overflow:hidden;display:grid;place-items:center}
+.cellbox .pv{position:relative;z-index:1}
+.peekbox{position:relative;width:62px;height:70px;border-radius:10px;overflow:hidden;flex:none}
+.peekbox .tab{top:-29px}
+.peekbox .pv{position:absolute!important;right:3px;top:15px;z-index:1}
+.crow{display:flex;gap:10px;align-items:flex-start;margin-top:10px}
+.crow:first-child{margin-top:0}
+.crow .ck{width:52px;flex:none;font-size:12.5px;font-weight:800;color:var(--muted);padding-top:24px}
+.cgrid{display:flex;flex-wrap:wrap;gap:8px}
+.cgrid figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.cgrid figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
 .sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer}
 .tile:hover{border-color:#4a4e5a}
@@ -64,14 +82,14 @@ button.sw[aria-pressed="true"]{border-color:#fff}
 .tile .views>.cell{position:relative;flex:1;height:100%;display:grid;place-items:center;border-radius:8px;overflow:hidden}
 .tile .n{font-size:15px;font-weight:800;margin-top:8px}
 .tile .d{font-size:12.5px;color:var(--muted);line-height:1.35}
-.notes{margin:10px 0 0;padding:0;list-style:none;font-size:14px;line-height:1.45;max-width:820px}
+.notes{margin:10px 0 0;padding:0;list-style:none;font-size:14px;line-height:1.45;max-width:840px}
 .notes li{margin-top:6px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Pill Moods</h1>
-  <p class="lead">The eyes react to what Steward is doing: bigger when happy, angry lids when something breaks, round and wide when it needs you. Pick a mood, or play a short task and watch it react. All three versions run the same moods, so you can switch any time.</p>
+  <p class="lead">The eyes react to what Steward is doing: bigger when happy, angry lids when something breaks, one bar with a moving glint while thinking, Z's when asleep. Pick a mood, or play a short task and watch it react. All three versions run the same moods, so you can switch any time.</p>
   <div class="bar">
     <div class="grp" id="g-ver"></div>
     <div class="grp" id="g-color"></div>
@@ -87,6 +105,14 @@ button.sw[aria-pressed="true"]{border-color:#fff}
     <div class="sec"><div class="gl2">Play a task</div><div class="grp" id="stories"></div></div>
   </div>
 
+  <h2>Thinking, Resting and Sleepy at real size</h2>
+  <p class="lead">The three quiet moods side by side, each in the 50×44 peek tab and at the 64×54 header size, so you can check they never look alike.</p>
+  <div class="panel"><table class="grid" id="trio"></table></div>
+
+  <h2 id="all-title">All colors</h2>
+  <p class="lead">The mood that is showing above, in every color, at the real 64×54 size. Switch Desktop to Light or Dark to check both. The eye color is picked from how bright each pill is.</p>
+  <div class="panel" id="allc"></div>
+
   <h2>Every mood at real size</h2>
   <p class="lead">Each tile runs on its own at the real 64×54 header size. Click one to show it above.</p>
   <div class="sheet" id="sheet"></div>
@@ -94,52 +120,66 @@ button.sw[aria-pressed="true"]{border-color:#fff}
   <h2>How it works</h2>
   <ul class="notes">
     <li>Each eye is a pill cut by two lids. The top lid drops and tilts: inner corners down is mad, inner corners up is worried. The bottom lid pushes up into an arch for happy.</li>
+    <li>Thinking is the one mood where the eyes join: they stretch into a single bar and a glint moves along it. A smooth sweep is thinking, a stepped sweep is reading a file, a small circle is searching the web. In glass the two eyes melt together like drops; leaving thinking, the bar splits with a pop.</li>
+    <li>Sleepy closes the eyes into soft curves and floats Z's up from the top right corner, outside the pill. Small sizes show one Z. The pill breathes slowly.</li>
+    <li>Resting stays awake but quiet: heavy lids, a slow standby glow like a sleeping Mac's light, a lazy glance every 8 to 12 seconds, and a little wake-up when your cursor comes near. It is kept cheap: the glow is a CSS opacity animation and everything else updates 10 times a second.</li>
     <li>Every value springs to its new target with a little overshoot, so a change of mood pops instead of sliding.</li>
-    <li>It blinks on its own (sometimes twice), follows your cursor when idle or listening, scans while thinking, and bounces its eyes while talking.</li>
-    <li>Blocky uses hand-drawn pixel eyes for each mood rather than a shrunk copy, because a pixel eye only has a few cells to work with.</li>
-    <li>Reduce motion keeps each mood's face but drops the blinks, glances, springs and body moves.</li>
+    <li>Blocky uses hand-drawn pixel eyes and Z's rather than a shrunk copy, because a pixel eye only has a few cells to work with.</li>
+    <li>Reduced motion keeps each mood's face but drops the movement: thinking shows the bar with a still glint, sleepy shows the Z's without drifting, resting shows only the heavy lids.</li>
   </ul>
 </div>
 <script type="module">
 import { MOODS, STORIES, createEyes, setMood, stepEyes } from './pill/eyes.js'
-import { makeView } from './pill/render.js'
+import { makeView, COLORS } from './pill/render.js'
 
-const COLORS = ['#c9bcff', '#94c5f5', '#8fe0c0', '#f6ab8c', '#f3d06a', '#ff9fc6']
 const VERSIONS = [['all', 'All three'], ['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]
-const S = { ver: 'all', color: COLORS[0], desk: 'dark', glass: 'tinted', rm: false, mood: 'idle' }
+const NAMES = { glass: 'Glass', flat: 'Flat', blocky: 'Blocky' }
+const S = { ver: 'all', color: COLORS[0].hex, desk: 'dark', glass: 'tinted', rm: false, mood: 'idle' }
 try { Object.assign(S, JSON.parse(localStorage.getItem('steward-moods') || '{}')) } catch {}
+if (!COLORS.some((c) => c.hex === S.color)) S.color = COLORS[0].hex
 const osRM = matchMedia('(prefers-reduced-motion: reduce)')
 const save = () => { try { localStorage.setItem('steward-moods', JSON.stringify(S)) } catch {} }
+const kinds = () => (S.ver === 'all' ? ['glass', 'flat', 'blocky'] : [S.ver])
+const reduced = () => S.rm || osRM.matches
 
 /* ---------------- groups of views that share one eyes state ---------------- */
+// main: the big stages (every frame). Others run at 30 frames a second, resting at 10, and only while on screen.
 let groups = []
-const main = { st: createEyes(1), views: [], anchor: null }
-function addView(group, kind, host, W, H) {
-  const v = makeView(kind, W, H, { color: S.color, tinted: S.glass === 'tinted', light: S.desk === 'light' })
+const main = { st: createEyes(1), views: [], anchor: null, main: true, acc: 0, seen: true }
+const seen = new IntersectionObserver((list) => { for (const e of list) for (const g of groups) if (g.anchor === e.target) g.seen = e.isIntersecting })
+function addView(group, kind, host, W, H, color = S.color) {
+  const v = makeView(kind, W, H, { color, tinted: S.glass === 'tinted', light: S.desk === 'light' })
   host.append(v.el)
   group.views.push(v)
   return v
 }
-const kinds = () => (S.ver === 'all' ? ['glass', 'flat', 'blocky'] : [S.ver])
-const NAMES = { glass: 'Glass', flat: 'Flat', blocky: 'Blocky' }
+function newGroup(seed, anchor, mood) {
+  const g = { st: createEyes(seed), views: [], anchor, acc: 0, seen: false }
+  if (mood) { g.fixed = mood; setMood(g.st, mood) }
+  groups.push(g)
+  seen.observe(anchor)
+  return g
+}
 
 function build() {
   document.getElementById('pill-filters')?.replaceChildren()
+  seen.disconnect()
   const light = S.desk === 'light', wall = light ? 'wl' : 'wd', tabGlass = light ? 'gl' : 'gd'
-  // The bar.
   const chip = (k, v, label, on) => `<button class="c" data-k="${k}" data-v="${v}" aria-pressed="${on}">${label}</button>`
+  const cname = COLORS.find((c) => c.hex === S.color)?.name ?? ''
   document.getElementById('g-ver').innerHTML = '<span class="lbl">Version</span>' + VERSIONS.map(([v, l]) => chip('ver', v, l, S.ver === v)).join('')
-  document.getElementById('g-color').innerHTML = '<span class="lbl">Color</span>' + COLORS.map((c) => `<button class="sw" data-k="color" data-v="${c}" aria-pressed="${c === S.color}" style="background:${c}" aria-label="Color ${c}"></button>`).join('')
+  document.getElementById('g-color').innerHTML = '<span class="lbl">Color</span>' + COLORS.map((c) => `<button class="sw" data-k="color" data-v="${c.hex}" aria-pressed="${c.hex === S.color}" style="background:${c.hex}" title="${c.name}" aria-label="${c.name}"></button>`).join('') + `<span class="cname">${cname}</span>`
   document.getElementById('g-desk').innerHTML = '<span class="lbl">Desktop</span>' + chip('desk', 'light', 'Light', light) + chip('desk', 'dark', 'Dark', !light)
-  const g = document.getElementById('g-glass')
-  g.hidden = !kinds().includes('glass')
-  g.innerHTML = '<span class="lbl">Glass</span>' + chip('glass', 'clear', 'Clear', S.glass === 'clear') + chip('glass', 'tinted', 'Tinted', S.glass === 'tinted')
+  const gg = document.getElementById('g-glass')
+  gg.hidden = !kinds().includes('glass')
+  gg.innerHTML = '<span class="lbl">Glass</span>' + chip('glass', 'clear', 'Clear', S.glass === 'clear') + chip('glass', 'tinted', 'Tinted', S.glass === 'tinted')
   document.getElementById('g-motion').innerHTML = '<span class="lbl">Motion</span>' + chip('rm', 'false', 'Full', !S.rm) + chip('rm', 'true', 'Reduced', S.rm)
-  document.getElementById('moods').innerHTML = MOODS.map((m) => `<button class="c" data-mood="${m.id}" aria-pressed="${m.id === S.mood && !story}">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</button>`).join('')
-  document.getElementById('stories').innerHTML = STORIES.map((s) => `<button class="c" data-story="${s.id}" aria-pressed="${story?.id === s.id}">${s.label}</button>`).join('')
+  document.getElementById('moods').innerHTML = MOODS.map((m) => `<button class="c" data-mood="${m.id}">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</button>`).join('')
+  document.getElementById('stories').innerHTML = STORIES.map((s) => `<button class="c" data-story="${s.id}">${s.label}</button>`).join('')
 
   // The big stages, each with its real-size peek tab and panel header.
   main.views = []
+  groups = [main]
   const stages = document.getElementById('stages')
   stages.style.setProperty('--n', kinds().length)
   stages.replaceChildren()
@@ -158,8 +198,61 @@ function build() {
   }
   main.anchor = stages
 
+  // A cell: a 64 x 54 view on the right background, optionally with the 50 x 44 peek in its tab next to it.
+  const cell = (grp, kind, host, color, withPeek) => {
+    const glass = kind === 'glass'
+    const wrap = document.createElement('div')
+    wrap.className = 'pair'
+    if (withPeek) {
+      const pk = document.createElement('div')
+      pk.className = `peekbox ${wall}`
+      pk.innerHTML = `<div class="tab ${glass ? tabGlass : 'solid'}"></div>`
+      wrap.append(pk)
+      addView(grp, kind, pk, 50, 44, color)
+    }
+    const box = document.createElement('div')
+    box.className = `cellbox ${glass ? wall : 'solidbg'}`
+    if (glass) box.innerHTML = '<div class="lines" style="opacity:.6"></div>'
+    wrap.append(box)
+    addView(grp, kind, box, 64, 54, color)
+    host.append(wrap)
+  }
+
+  // Thinking, Resting and Sleepy side by side.
+  const trio = document.getElementById('trio')
+  const QUIET = ['thinking', 'resting', 'sleepy']
+  trio.innerHTML = `<tr><th></th>${QUIET.map((m) => `<th>${MOODS.find((x) => x.id === m).label}: peek and header</th>`).join('')}</tr>`
+  kinds().forEach((kind, ki) => {
+    const tr = document.createElement('tr')
+    tr.innerHTML = `<th>${NAMES[kind]}</th>`
+    QUIET.forEach((m, mi) => {
+      const td = document.createElement('td')
+      tr.append(td)
+      const grp = newGroup(40 + ki * 3 + mi, td, m)
+      cell(grp, kind, td, S.color, true)
+    })
+    trio.append(tr)
+  })
+
+  // All colors, following the mood shown above.
+  const allc = document.getElementById('allc')
+  allc.replaceChildren()
+  kinds().forEach((kind, ki) => {
+    const row = document.createElement('div')
+    row.className = 'crow'
+    row.innerHTML = `<div class="ck">${NAMES[kind]}</div><div class="cgrid"></div>`
+    allc.append(row)
+    const grp = newGroup(80 + ki, row)
+    grp.follow = true
+    for (const c of COLORS) {
+      const fig = document.createElement('figure')
+      row.lastElementChild.append(fig)
+      cell(grp, kind, fig, c.hex, false)
+      fig.insertAdjacentHTML('beforeend', `<figcaption>${c.name}</figcaption>`)
+    }
+  })
+
   // The sheet: one tile per mood, each with its own eyes.
-  groups = [main]
   const sheet = document.getElementById('sheet')
   sheet.replaceChildren()
   MOODS.forEach((m, i) => {
@@ -167,17 +260,15 @@ function build() {
     tile.className = 'tile'
     tile.dataset.mood = m.id
     tile.innerHTML = `<div class="views"></div><div class="n">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</div><div class="d">${m.when}</div>`
-    const grp = { st: createEyes(i + 7), views: [], anchor: tile, fixed: m.id }
-    setMood(grp.st, m.id)
-    for (const kind of kinds()) {
-      const cell = document.createElement('div')
-      cell.className = `cell ${kind === 'glass' ? wall : 'plain'}`
-      if (kind === 'glass') cell.innerHTML = '<div class="lines"></div>'
-      tile.querySelector('.views').append(cell)
-      addView(grp, kind, cell, 64, 54)
-    }
     sheet.append(tile)
-    groups.push(grp)
+    const grp = newGroup(i + 7, tile, m.id)
+    for (const kind of kinds()) {
+      const c = document.createElement('div')
+      c.className = `cell ${kind === 'glass' ? wall : 'solidbg'}`
+      if (kind === 'glass') c.innerHTML = '<div class="lines"></div>'
+      tile.querySelector('.views').append(c)
+      addView(grp, kind, c, 64, 54)
+    }
   })
   caption()
 }
@@ -190,12 +281,13 @@ function caption() {
   document.getElementById('now-w').textContent = m.when
   const step = story ? story.steps[storyStep][2] : ''
   document.getElementById('now-step').textContent = step
+  document.getElementById('all-title').textContent = `All colors: ${m.label}`
   document.querySelectorAll('[data-now]').forEach((n) => (n.textContent = step || m.label))
   document.querySelectorAll('#moods button').forEach((b) => b.setAttribute('aria-pressed', String(!story && b.dataset.mood === main.st.mood)))
   document.querySelectorAll('#stories button').forEach((b) => b.setAttribute('aria-pressed', String(story?.id === b.dataset.story)))
 }
 function pick(mood) { story = null; S.mood = mood; save(); setMood(main.st, mood); caption() }
-function play(id) { story = STORIES.find((s) => s.id === id); storyStep = 0; storyAt = now(); setMood(main.st, story.steps[0][0]); caption() }
+function play(id) { story = STORIES.find((s) => s.id === id); storyStep = 0; storyAt = window.__moods?.now() ?? now(); const [m, , , gl] = story.steps[0]; setMood(main.st, m, gl); caption() }
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button')
@@ -207,37 +299,66 @@ document.addEventListener('click', (e) => {
     S[k] = k === 'rm' ? b.dataset.v === 'true' : b.dataset.v
     save(); build(); return
   }
-  if (tile) { pick(tile.dataset.mood); main.anchor.scrollIntoView({ behavior: S.rm ? 'auto' : 'smooth', block: 'center' }) }
+  if (tile) { pick(tile.dataset.mood); main.anchor.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }) }
 })
 
 /* ---------------- the frame loop ---------------- */
 const now = () => performance.now() / 1000
 let pointer = null
 addEventListener('pointermove', (e) => { pointer = { x: e.clientX, y: e.clientY } })
+/** The cursor relative to the nearest view in a group, in units of that view's size. */
+function pointerFor(grp) {
+  if (!pointer) return null
+  const els = grp.main ? grp.views.map((v) => v.el) : [grp.anchor]
+  let best = null
+  for (const el of els) {
+    const r = el.getBoundingClientRect()
+    const p = { x: (pointer.x - (r.left + r.width / 2)) / Math.max(90, r.width), y: (pointer.y - (r.top + r.height / 2)) / Math.max(70, r.height) }
+    if (!best || Math.hypot(p.x, p.y) < Math.hypot(best.x, best.y)) best = p
+  }
+  return best
+}
 let last = now()
 // ?awake=1 keeps it running in a hidden tab, for screenshots.
 const awake = new URLSearchParams(location.search).has('awake')
+// ?debug exposes a pause, the groups, and run(seconds) to drive simulated frames when the tab gets none.
+let paused = false, simAll = false
 function frame() {
   requestAnimationFrame(frame)
   const t = now(), dt = t - last
   last = t
-  if (document.hidden && !awake) return
-  const rm = S.rm || osRM.matches
+  if ((document.hidden && !awake) || paused) return
+  tick(t, dt)
+}
+function tick(t, dt) {
+  const rm = reduced()
   if (story && t - storyAt > story.steps[storyStep][1]) {
     storyStep++
     storyAt = t
     if (storyStep >= story.steps.length) { story = null; setMood(main.st, 'idle') }
-    else setMood(main.st, story.steps[storyStep][0])
+    else { const [m, , , gl] = story.steps[storyStep]; setMood(main.st, m, gl) }
     caption()
   }
   for (const grp of groups) {
-    let p = null
-    if (pointer && grp.anchor) {
-      const r = grp.anchor.getBoundingClientRect()
-      p = { x: (pointer.x - (r.left + r.width / 2)) / Math.max(200, r.width / 2), y: (pointer.y - (r.top + r.height / 2)) / Math.max(150, r.height / 2) }
-    }
-    stepEyes(grp.st, t, dt, p, rm)
-    for (const v of grp.views) v.update(grp.st)
+    if (grp.follow) setMood(grp.st, main.st.mood, main.st.glint)
+    grp.acc += dt
+    if (!grp.main && !grp.seen && !simAll) continue // offscreen groups wait (a simulated run draws them all)
+    const resting = grp.st.mood === 'resting' && !rm
+    const every = resting ? 0.099 : grp.main ? 0 : 1 / 30 // resting: 10 frames a second
+    if (grp.acc < every) continue
+    stepEyes(grp.st, t, grp.acc, pointerFor(grp), rm)
+    grp.acc = 0
+    for (const v of grp.views) { v.standby(resting); v.update(grp.st) }
+  }
+}
+if (new URLSearchParams(location.search).has('debug')) {
+  let simT = 0
+  window.__moods = {
+    main, groups: () => groups, pause: (v) => { paused = v },
+    redraw: () => { for (const g of groups) for (const v of g.views) v.update(g.st) },
+    /** Run simulated frames: seconds of time at fps frames a second. Pauses the real loop. */
+    run(seconds, fps = 60) { paused = true; simAll = true; if (!simT) simT = now(); const n = Math.round(seconds * fps); for (let i = 0; i < n; i++) { simT += 1 / fps; tick(simT, 1 / fps) } return simT },
+    now: () => simT || now(),
   }
 }
 setMood(main.st, S.mood)
