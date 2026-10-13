@@ -140,21 +140,50 @@ instructions.
 
 ## Character
 
-Not picked yet. Explorations live in `design/`:
-- `design/faces-3d.html`: Orb, Screen, Butler bot (all with the shared face)
-- `design/assistant-3d.html`: Core, Unit, Halo (faceless)
-- `design/characters-3d.html`, `design/steward-3d.html`: plush directions
+Picked: **the Pill**, a rounded capsule with two eyes, in three versions you can switch between: Glass (a real
+lens over the desktop), Flat (one solid color) and Blocky (pixels). It comes in 14 colors, and every mood reads
+at the 50×44 peek without a label. Thinking shows three dots in a wave (lit one at a time while reading a file,
+circling while searching the web). The design lives in `design/moods.html` with `design/pill/eyes.js` and
+`design/pill/render.js`; it replaces today's face in the app in the redesign's phase 4, along with its Settings
+options.
 
-Leading candidates: **Butler bot** (the tray and approval card fit him
-naturally) and **Screen**.
+---
+
+## The look
+
+- **Glass.** The open panel is frosted by macOS itself (vibrancy), so it blurs the desktop behind it; CSS can only
+  blur what's inside the window. Over the frost, CSS paints a light tint, a bright top edge, a fine rim and a soft
+  inner glow; the deep shadow is the window's own. Shapes inside the panel are tinted insets, never a second
+  frosted layer. Text is near black (light) or near white (dark), with the tint's ink for secondary text, a little
+  heavier than usual, never flat gray.
+- **Solid where frost can't go.** The peek and the nudge are tab-shaped and macOS frosts whole windows, so they're
+  solid. Reduce Transparency (Accessibility) makes everything solid. There is no native Liquid Glass material in
+  Electron yet (checked in Electron 44.7), so none is used.
+- **Light and dark** follow the Mac. The tokens at the top of `styles.css` have both versions; the tint is Ice for
+  now.
+- **Activity.** Every step of the agent's work is an event `{ id, kind, label, target?, status, detail? }`, sent
+  when it starts and again when it finishes (plus `results` for search results and `image` for a new tray item).
+  Kinds: thinking, read-file, list-files, search-web, fetch-page, run-command, screenshot, add-image, read-logs,
+  search-photos. Each has its own small animation: a light sweeping across "Thinking", a magnifier with an
+  orbiting dot and result sites popping in, a file chip being scanned, a site chip with a shimmering progress
+  line, a command with output ticking in and a ✓ or ✗ exit badge, a screenshot's shutter flash and its thumbnail
+  flying into the tray. Replies stream in word by word, each word coming into focus, with a soft glowing cursor.
+- **Finished steps fold** into one quiet line, like "Read 3 files · Searched the web · Ran npm test", which opens
+  to list them. Each step stays in full for a moment after it finishes, so its ending is seen.
+- **Motion.** Loops are CSS keyframes. Panels, popovers and cards use one spring with no bounce (about 0.35s);
+  popovers grow from the control that opened them and leave the way they came. Only transform and opacity
+  animate. Reduce Motion swaps movement for fades and still icons. Nothing animates while Steward is tucked away
+  or hidden: the panel isn't drawn, and the face stops once it has settled.
+- **Trying it.** In development, sending `/demo` plays a made-up request with every kind of step, without calling
+  the API.
 
 ---
 
 ## Tech plan
 
-- **App:** Electron (or Tauri) with a transparent, frameless, always-on-top
-  window anchored to the right edge. The 3D character renders with Three.js
-  inside it, reusing the face and state system from the design files.
+- **App:** Electron with a transparent, frameless, always-on-top window
+  anchored to the right edge. The character is drawn in 2D, ported from the
+  Pill design files (no Three.js).
 - **Brain:** Claude Agent SDK (TypeScript) in the app's main process. Built-in
   tools for shell commands, files, and web search, plus custom tools:
   `add_to_tray`, `save_tray_to_project`, `screenshot_page`.

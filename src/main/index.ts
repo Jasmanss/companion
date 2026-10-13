@@ -1,9 +1,9 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, protocol, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, screen, shell, Tray } from 'electron'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { AlertView, ClaudeHookStatus, DeployStatus, DockState, Project } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Project } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -44,6 +44,9 @@ const OPEN_HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
 const AWAY_MS = 2 * 60 * 60 * 1000
 const HIDE_HOTKEYS = ['Alt+Shift+Space', 'Control+Alt+Shift+Space']
 const SMOKE_OUT = process.env.STEWARD_SMOKE_OUT
+/** Smoke check extras: force light or dark, and play the demo request, capturing the panel at these seconds. */
+const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
+const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -98,6 +101,8 @@ function setDock(state: DockState): void {
   dock = state
   if (wasOpen && !isOpen(state)) void appState?.update({ lastSeenAt: Date.now() })
   if (!wasOpen && isOpen(state)) onPanelOpened()
+  // The material first, so the panel's very first frame is drawn for it (frosted or solid).
+  applyMaterial()
   win.webContents.send('dock:state', state)
   updateMenuBar()
   if (state === 'hidden') return win.hide()
@@ -111,6 +116,27 @@ function setDock(state: DockState): void {
     // Opening the panel shows any batched alerts now rather than later.
     alerts?.flush()
   }
+}
+
+/**
+ * The open panel is frosted by macOS itself (vibrancy), which blurs whatever is behind the window; CSS can only blur
+ * what's inside it. The peek and the nudge stay solid: vibrancy fills the whole window, and they're shaped as a tab.
+ * Reduce transparency (System Settings, Accessibility) turns the frost off everywhere.
+ */
+function appearance(): Appearance {
+  return { vibrant: process.platform === 'darwin' && isOpen(dock) && !nativeTheme.prefersReducedTransparency }
+}
+
+let applied: boolean | null = null
+function applyMaterial(): void {
+  if (!win) return
+  const { vibrant } = appearance()
+  if (vibrant === applied) return
+  applied = vibrant
+  win.setVibrancy(vibrant ? 'popover' : null)
+  // The deep shadow under the glass is the window's own, so it follows the window's shape.
+  win.setHasShadow(vibrant)
+  win.webContents.send('appearance:changed', { vibrant })
 }
 
 function toggleDock(): void {
@@ -179,6 +205,8 @@ function createWindow(): BrowserWindow {
     skipTaskbar: true,
     alwaysOnTop: true,
     acceptFirstMouse: true,
+    // Keep the frost lively even though the panel rarely becomes the key window.
+    visualEffectState: 'active',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -385,6 +413,7 @@ function registerIpc(): void {
   ipcMain.handle('dock:pin', (_e, value: boolean) => {
     pinned = value
   })
+  ipcMain.handle('appearance:get', () => appearance())
 
   ipcMain.handle('tray:list', () => tray.list())
   ipcMain.handle('tray:addPaths', async (_e, paths: string[]) => {
@@ -531,6 +560,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await fs.writeFile(out, image.toPNG())
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
+      if (SMOKE_DEMO) await captureDemo(w, out, SMOKE_DEMO)
       app.exit(0)
     } catch (err) {
       fail(String(err))
@@ -538,7 +568,42 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
   })
 }
 
+/** Plays the demo request and captures the panel at the given seconds, next to the smoke screenshot. */
+async function captureDemo(w: BrowserWindow, out: string, seconds: string): Promise<void> {
+  const times = seconds.split(',').map(Number).filter((n) => n >= 0)
+  const started = Date.now()
+  void agent.send('/demo')
+  for (const [i, t] of times.entries()) {
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, started + t * 1000 - Date.now())))
+    const file = out.replace(/\.png$/, `-demo-${i + 1}.png`)
+    await fs.writeFile(file, (await w.webContents.capturePage()).toPNG())
+    console.log(`smoke: demo ${t}s -> ${file}`)
+  }
+}
+
+/** A made-up screenshot for the demo request: a soft gradient, like a page header. */
+function demoImage(): Buffer {
+  const width = 480
+  const height = 300
+  const bitmap = Buffer.alloc(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      const u = x / width
+      const v = y / height
+      const header = y < 28
+      // BGRA
+      bitmap[i] = header ? 238 : Math.round(255 - 40 * v)
+      bitmap[i + 1] = header ? 234 : Math.round(196 + 40 * u)
+      bitmap[i + 2] = header ? 232 : Math.round(124 + 110 * u * (1 - v))
+      bitmap[i + 3] = 255
+    }
+  }
+  return nativeImage.createFromBitmap(bitmap, { width, height }).toPNG()
+}
+
 app.whenReady().then(async () => {
+  if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
   hotkeys = { open: registerHotkey(OPEN_HOTKEYS, toggleDock), hide: registerHotkey(HIDE_HOTKEYS, toggleHidden) }
   settings = new SettingsStore(path.join(userData, 'settings.json'), hotkeys)
@@ -567,6 +632,8 @@ app.whenReady().then(async () => {
     capturePage,
     deployLogs,
     onDeployCommand: () => deploys.boost(),
+    // Typing /demo plays a made-up request with every kind of step, without calling the API. Development only.
+    demoImage: app.isPackaged && !SMOKE_OUT ? undefined : demoImage,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
       // Peek out when the agent needs a decision; the approval card is in the panel.
@@ -611,6 +678,11 @@ app.whenReady().then(async () => {
   }
 
   screen.on('display-metrics-changed', () => win?.setBounds(boundsFor(dock)))
+  // Reduce transparency can change while Steward runs.
+  nativeTheme.on('updated', () => {
+    applied = null
+    applyMaterial()
+  })
 })
 
 app.on('second-instance', () => setDock('expanded'))

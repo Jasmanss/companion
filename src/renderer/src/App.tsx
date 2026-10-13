@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { ChatLog, Composer, type Entry } from './Chat'
+import type { StepEntry } from './chat-groups'
 import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
@@ -72,8 +73,13 @@ export function App() {
       setBrief(b)
       setLeftOff(null)
     })
+    // Frosted by macOS (vibrant) or solid: the CSS draws the glass to match.
+    const showAppearance = ({ vibrant }: { vibrant: boolean }) => document.documentElement.toggleAttribute('data-vibrant', vibrant)
+    api.appearance.get().then(showAppearance, () => {})
+    const offAppearance = api.appearance.onChange(showAppearance)
     const clock = setInterval(() => setLateNight(isLateNight(new Date())), 60_000)
     return () => {
+      offAppearance()
       offMood()
       offLeftOff()
       offBrief()
@@ -120,11 +126,30 @@ export function App() {
         setEntries((prev) => {
           const last = prev.at(-1)
           if (last?.kind === 'assistant') return [...prev.slice(0, -1), { ...last, text: last.text + event.delta }]
-          return [...prev, { kind: 'assistant', id: nextId++, text: event.delta }]
+          return [...prev, { kind: 'assistant', id: nextId++, text: event.delta, streaming: true }]
         })
         break
-      case 'activity':
-        setEntries((prev) => [...prev, { kind: 'activity', id: nextId++, text: event.text }])
+      case 'activity': {
+        const activity = event.activity
+        setEntries((prev) => {
+          const i = prev.findIndex((e) => e.kind === 'step' && e.activity.id === activity.id)
+          // Thinking that's over leaves no trace.
+          if (activity.kind === 'thinking' && activity.status !== 'running') return i < 0 ? prev : prev.toSpliced(i, 1)
+          const finishedAt = activity.status === 'running' ? undefined : Date.now()
+          if (i < 0) return [...prev, { kind: 'step', id: nextId++, activity, finishedAt }]
+          const step = prev[i] as StepEntry
+          return prev.with(i, { ...step, activity, finishedAt: step.finishedAt ?? finishedAt })
+        })
+        break
+      }
+      case 'output':
+        setEntries((prev) =>
+          prev.map((e) => {
+            if (e.kind !== 'step' || e.activity.id !== event.activityId) return e
+            if (event.exitCode !== undefined) return { ...e, output: event.text ?? e.output, exitCode: event.exitCode }
+            return { ...e, output: ((e.output ?? '') + (event.chunk ?? '')).slice(-8000) }
+          }),
+        )
         break
       case 'approval':
         setEntries((prev) => [
@@ -137,13 +162,14 @@ export function App() {
           prev.map((e) => (e.kind === 'approval' && e.approvalId === event.id ? { ...e, status: event.approved ? 'approved' : 'declined' } : e)),
         )
         break
-      case 'output':
-        setEntries((prev) => [...prev, { kind: 'output', id: nextId++, command: event.command, exitCode: event.exitCode, text: event.text }])
+      case 'stopped':
+        setEntries((prev) => [...prev, { kind: 'notice', id: nextId++, text: 'Stopped.' }])
         break
       case 'error':
         setEntries((prev) => [...prev, { kind: 'error', id: nextId++, text: event.message }])
         break
       case 'done':
+        setEntries((prev) => prev.map((e) => (e.kind === 'assistant' && e.streaming ? { ...e, streaming: false } : e)))
         setBusy(false)
         setAgentMood('done')
         doneTimer.current = setTimeout(() => setAgentMood(null), 2500)
@@ -294,7 +320,7 @@ export function App() {
   if (dock === 'collapsed' || dock === 'hidden') {
     return (
       <button className="peek" data-app onClick={() => api.dock.expand()} title="Steward (⌥ Space)">
-        <Face mood={mood} width={50} height={44} />
+        <Face mood={mood} width={50} height={44} idle />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )

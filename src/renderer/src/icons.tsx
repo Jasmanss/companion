@@ -62,3 +62,67 @@ export const ExternalIcon = () => (
     <path d="M9.5 2.5h4v4M13.5 2.5L8 8M12 9.5v3a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1h3" />
   </svg>
 )
+
+/* ---------- activity steps ---------- */
+export const FileIcon = () => (
+  <svg {...base}>
+    <path d="M9.5 1.8H4.5a1 1 0 00-1 1v10.4a1 1 0 001 1h7a1 1 0 001-1V4.8z" />
+    <path d="M9.5 1.8v3h3" />
+  </svg>
+)
+
+export const FolderIcon = () => (
+  <svg {...base}>
+    <path d="M1.8 4.5a1 1 0 011-1h3.2l1.5 1.5h5.7a1 1 0 011 1v6.5a1 1 0 01-1 1H2.8a1 1 0 01-1-1z" />
+  </svg>
+)
+
+export const SearchIcon = () => (
+  <svg {...base}>
+    <circle cx="7" cy="7" r="4.3" />
+    <path d="M10.2 10.2l3.6 3.6" />
+  </svg>
+)
+
+export const GlobeIcon = () => (
+  <svg {...base}>
+    <circle cx="8" cy="8" r="6.2" />
+    <path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z" />
+  </svg>
+)
+
+export const TerminalIcon = () => (
+  <svg {...base}>
+    <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" />
+    <path d="M4.5 6.2L6.6 8 4.5 9.8M8.2 10h3.3" />
+  </svg>
+)
+
+export const CameraIcon = () => (
+  <svg {...base}>
+    <path d="M2 5.2a1 1 0 011-1h2l1.2-1.6h3.6L11 4.2h2a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1z" />
+    <circle cx="8" cy="8.6" r="2.4" />
+  </svg>
+)
+
+export const ImageIcon = () => (
+  <svg {...base}>
+    <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" />
+    <circle cx="5.6" cy="6.3" r="1.2" />
+    <path d="M2.2 11.6l3.6-3.4 2.6 2.4 2.2-2 3.2 3" />
+  </svg>
+)
+
+export const LogsIcon = () => (
+  <svg {...base}>
+    <path d="M3 3.5h10M3 6.5h10M3 9.5h6.5M3 12.5h8" />
+  </svg>
+)
+
+export const PhotosIcon = () => (
+  <svg {...base}>
+    <rect x="3.8" y="1.8" width="10.4" height="8.6" rx="1.4" />
+    <path d="M2 5.6v7.1a1.5 1.5 0 001.5 1.5h7.1" />
+    <path d="M4.2 9l3-2.6 2.2 1.9 1.6-1.4 2.8 2.4" />
+  </svg>
+)

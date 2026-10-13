@@ -143,15 +143,57 @@ export interface SaveResult {
   snippet: string
 }
 
+/** What a step of the agent's work is. read-file and list-files arrive with the file tools in phase 2. */
+export type ActivityKind =
+  | 'thinking'
+  | 'read-file'
+  | 'list-files'
+  | 'search-web'
+  | 'fetch-page'
+  | 'run-command'
+  | 'screenshot'
+  | 'add-image'
+  | 'read-logs'
+  | 'search-photos'
+
+export type ActivityStatus = 'running' | 'done' | 'failed'
+
+/**
+ * One step of the agent's work. It's sent when it starts and again, with the same id, when it finishes
+ * (and in between when there's more to show, like a search query arriving).
+ */
+export interface Activity {
+  id: string
+  kind: ActivityKind
+  /** What's happening, in the right tense: "Searching the web", then "Searched the web". */
+  label: string
+  /** The file, query, URL, command, host or project it's about. */
+  target?: string
+  status: ActivityStatus
+  /** Why it failed, or a short note like "exit 1". */
+  detail?: string
+  /** Search results: the sites (search-web), or photo thumbnail URLs (search-photos). */
+  results?: string[]
+  /** A tray item it made (screenshot, add-image), so the panel can fly its thumbnail into the tray. */
+  image?: string
+}
+
 export type AgentEvent =
   | { type: 'mood'; mood: Mood }
   | { type: 'text'; delta: string }
-  | { type: 'activity'; text: string }
+  | { type: 'activity'; activity: Activity }
   | { type: 'approval'; id: string; command: string; cwd: string; why?: string }
   | { type: 'approval-resolved'; id: string; approved: boolean }
-  | { type: 'output'; command: string; exitCode: number | null; text: string }
+  /** Command output as it arrives (chunk), then all of it once the command ends (exitCode set). */
+  | { type: 'output'; activityId: string; command: string; chunk?: string; exitCode?: number | null; text?: string }
+  | { type: 'stopped' }
   | { type: 'done' }
   | { type: 'error'; message: string }
+
+/** How the panel is drawn: vibrant when macOS frosts the window behind the page, otherwise solid. */
+export interface Appearance {
+  vibrant: boolean
+}
 
 type Unsubscribe = () => void
 
@@ -225,6 +267,10 @@ export interface StewardAPI {
     preview(): Promise<string>
     connect(): Promise<ClaudeHookStatus>
     disconnect(): Promise<ClaudeHookStatus>
+  }
+  appearance: {
+    get(): Promise<Appearance>
+    onChange(cb: (appearance: Appearance) => void): Unsubscribe
   }
   copyText(text: string): Promise<void>
 }

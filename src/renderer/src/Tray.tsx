@@ -44,7 +44,7 @@ export function Tray({ items, saveResult, onDragOut, onOpen, onSave, onDismissSa
       ) : (
         <ul className="tray-grid">
           {items.map((item, i) => (
-            <li key={item.id} className="thumb" title={[item.name, item.note, item.credit, item.source].filter(Boolean).join('\n')}>
+            <li key={item.id} className="thumb" data-tray-id={item.id} title={[item.name, item.note, item.credit, item.source].filter(Boolean).join('\n')}>
               <img src={`tray://${item.id}`} alt={item.name} draggable onDragStart={onDragOut([item.id])} onClick={() => onOpen(i)} />
               <button className="thumb-remove" aria-label={`Remove ${item.name}`} onClick={() => api().tray.remove(item.id).catch(fail)}>
                 <CloseIcon />

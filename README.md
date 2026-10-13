@@ -56,9 +56,12 @@ search. Keys are stored encrypted in your macOS keychain.
 | `npm run dev` | Run with hot reload |
 | `npm run lint` / `typecheck` / `test` | The checks CI runs |
 | `npm run design` | Serve `design/` at http://127.0.0.1:4321 (or the next free port) and reload open pages when files change (including after a `git pull`). `npm run design -- <folder>` serves any other folder the same way |
-| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png`, exit |
+| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png`, exit. `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds |
 | `npm run pack` | Build an unsigned `.app` in `dist/` |
 | `npm run dist` | Build the DMG and zip in `dist/` |
+
+In `npm run dev`, sending `/demo` in the chat plays a made-up request with every kind of step (thinking, a web
+search, a page read, a file read, a command, a screenshot, a streamed reply) without calling the API.
 
 ## How it's built
 

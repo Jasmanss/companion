@@ -1,19 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { StepsGroup, ThinkingRow } from './Activity'
+import { groupEntries, type Entry } from './chat-groups'
 import { Markdown } from './Markdown'
 
-export type Entry =
-  | { kind: 'user'; id: number; text: string }
-  | { kind: 'assistant'; id: number; text: string }
-  | { kind: 'activity'; id: number; text: string }
-  | { kind: 'approval'; id: number; approvalId: string; command: string; cwd: string; why?: string; status: 'pending' | 'approved' | 'declined' }
-  | { kind: 'output'; id: number; command: string; exitCode: number | null; text: string }
-  | { kind: 'error'; id: number; text: string }
+export type { Entry }
 
 export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (approvalId: string, approved: boolean) => void }) {
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => {
     void end.current?.scrollIntoView({ block: 'end' })
   }, [entries])
+  const blocks = useMemo(() => groupEntries(entries), [entries])
 
   return (
     <div className="log" role="log" aria-live="polite">
@@ -27,7 +24,10 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
           </ul>
         </div>
       )}
-      {entries.map((entry) => {
+      {blocks.map((block) => {
+        if (block.type === 'thinking') return <ThinkingRow key={block.entry.id} />
+        if (block.type === 'steps') return <StepsGroup key={block.key} steps={block.steps} />
+        const entry = block.entry
         switch (entry.kind) {
           case 'user':
             return (
@@ -38,12 +38,12 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
           case 'assistant':
             return (
               <div key={entry.id} className="msg assistant">
-                <Markdown text={entry.text} />
+                <Markdown text={entry.text} streaming={entry.streaming} />
               </div>
             )
-          case 'activity':
+          case 'notice':
             return (
-              <p key={entry.id} className="activity">
+              <p key={entry.id} className="msg notice-line">
                 {entry.text}
               </p>
             )
@@ -52,15 +52,6 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
               <p key={entry.id} className="msg error" role="alert">
                 {entry.text}
               </p>
-            )
-          case 'output':
-            return (
-              <details key={entry.id} className="output">
-                <summary>
-                  Output of <code>{entry.command}</code> {entry.exitCode === 0 ? '· ok' : `· exit ${entry.exitCode ?? '?'}`}
-                </summary>
-                <pre>{entry.text || '(no output)'}</pre>
-              </details>
             )
           case 'approval':
             return (

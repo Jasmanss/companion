@@ -1,15 +1,67 @@
+/* ==========================================================================
+   Tokens. Light and dark follow the Mac (nativeTheme), through prefers-color-scheme.
+   Colors that take an alpha are RGB triplets: rgba(var(--ink), 0.1).
+   ========================================================================== */
 :root {
-  --bg: rgba(16, 17, 22, 0.97);
-  --surface: #1b1d24;
-  --surface-2: #23262f;
-  --line: #2d313c;
-  --text: #eef0f4;
-  --muted: #9aa0ad;
-  --accent: #c9bcff;
-  --accent-ink: #15121f;
-  --danger: #ff8a8a;
+  /* The tint, Ice for now; Settings offers the others in a later phase. */
+  --tint: 200, 228, 255;
+  --glow: 96, 190, 255;
+  --ink: 18, 70, 120;
+  --soft: 178, 220, 255;
+
+  /* Text: near black, then the tint's ink. Never flat gray on glass. */
+  --t1: #0d1015;
+  --t2: rgb(var(--ink));
+  --t3: rgba(var(--ink), 0.78);
+  /* Glass: a translucent fill (how milky: --frost), a bright top edge, a fine rim, a soft inner glow. */
+  --fill: 255, 255, 255;
+  --frost: 0.42;
+  --edge: rgba(255, 255, 255, 0.85);
+  --edge2: rgba(255, 255, 255, 0.35);
+  /* Shapes inside the glass are tinted insets, never a second frosted layer. */
+  --inset: rgba(var(--ink), 0.07);
+  --inset2: rgba(var(--ink), 0.14);
+  --line: rgba(var(--ink), 0.12);
+  /* Solid surfaces: no frost behind them (the peek, the nudge, Reduce Transparency). */
+  --solid: 244, 246, 250;
+  /* Icons, spinners, the face: ink on light glass, the glow on dark. */
+  --hi: rgb(var(--ink));
+  --face: rgb(var(--ink));
+  --warm: #b06400;
+  --ok: #1f8a4c;
+  --bad: #c4372f;
+  --btn: rgb(var(--ink));
+  --btn-t: #ffffff;
+  --code: #0f1117;
+  --code-t: #e7e9ee;
+  --shadow: rgba(20, 30, 60, 0.28);
+  /* Motion: one spring with no bounce, about 0.35s. */
+  --spring: cubic-bezier(0.2, 0.8, 0.2, 1);
   --radius: 14px;
-  color-scheme: dark;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --t1: #f5f7fa;
+    --t2: rgb(var(--soft));
+    --t3: rgba(var(--soft), 0.78);
+    --fill: 24, 27, 34;
+    --edge: rgba(255, 255, 255, 0.26);
+    --edge2: rgba(255, 255, 255, 0.1);
+    --inset: rgba(255, 255, 255, 0.07);
+    --inset2: rgba(255, 255, 255, 0.12);
+    --line: rgba(255, 255, 255, 0.1);
+    --solid: 28, 31, 39;
+    --hi: rgb(var(--glow));
+    --face: rgb(var(--glow));
+    --warm: #ffc46b;
+    --ok: #5fd68e;
+    --bad: #ff8a8a;
+    --btn: rgb(var(--glow));
+    --btn-t: #0b0d12;
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
 }
 
 * {
@@ -26,9 +78,10 @@ body,
 }
 
 body {
-  font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  color: var(--text);
+  font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  color: var(--t1);
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -45,12 +98,62 @@ button {
 
 code,
 pre {
-  font: 12px/1.45 ui-monospace, 'SF Mono', Menlo, monospace;
+  font: 500 12px/1.45 ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid rgb(var(--glow));
   outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Glass
+   ========================================================================== */
+
+/* The open panel and the viewer. macOS frosts the desktop behind the window (vibrancy); this paints the tint,
+   the bright top edge, the rim and the inner glow over it. The deep shadow is the window's own. */
+.panel,
+.viewer {
+  background: linear-gradient(180deg, rgba(var(--tint), 0.26), rgba(var(--tint), 0.1)), rgba(var(--fill), var(--frost));
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 0.5px var(--edge2),
+    inset 0 0 28px rgba(var(--glow), 0.14);
+}
+
+/* With no frost behind the window, a see-through fill would show the raw desktop: go solid instead.
+   The peek and the nudge are always solid (they're tab-shaped, and macOS frosts whole windows). */
+:root:not([data-vibrant]) .panel,
+:root:not([data-vibrant]) .viewer,
+.peek,
+.nudge,
+.crash {
+  background: linear-gradient(180deg, rgba(var(--tint), 0.16), rgba(var(--tint), 0.05)), rgb(var(--solid));
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 0.5px var(--edge2);
+}
+
+/* Small things floating over the panel blur what's under them, lighter than the panel itself. */
+.toast,
+.viewer-nav,
+.drop-overlay {
+  backdrop-filter: blur(12px) saturate(1.7);
+  -webkit-backdrop-filter: blur(12px) saturate(1.7);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .panel,
+  .viewer {
+    background: rgb(var(--solid)) !important;
+  }
+
+  .toast,
+  .viewer-nav,
+  .drop-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 /* ---------- crash fallback ---------- */
@@ -62,15 +165,13 @@ pre {
   justify-content: center;
   gap: 8px;
   padding: 16px;
-  border: 1px solid var(--line);
   border-radius: 18px;
-  background: var(--bg);
   text-align: center;
 }
 
 .crash p {
   margin: 0;
-  color: var(--muted);
+  color: var(--t3);
 }
 
 /* At peek size there's only room for the button. */
@@ -98,14 +199,12 @@ pre {
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid var(--line);
-  border-right: none;
+  border: none;
   border-radius: 18px 0 0 18px;
-  background: var(--bg);
 }
 
 .peek:hover {
-  background: #191b22;
+  background: linear-gradient(180deg, rgba(var(--tint), 0.24), rgba(var(--tint), 0.1)), rgb(var(--solid));
 }
 
 .peek-count {
@@ -116,10 +215,10 @@ pre {
   min-width: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--btn);
+  color: var(--btn-t);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 18px;
   text-align: center;
 }
@@ -132,15 +231,15 @@ pre {
   align-items: center;
   gap: 10px;
   padding: 0 34px 0 10px;
-  border: 1px solid var(--line);
-  border-right: none;
   border-radius: 18px 0 0 18px;
-  background: var(--bg);
   cursor: pointer;
+  animation: nudge-in 0.35s var(--spring) both;
 }
 
 .nudge.urgent {
-  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 1.5px rgba(var(--glow), 0.9);
 }
 
 .nudge-text {
@@ -152,7 +251,7 @@ pre {
 }
 
 .nudge-title {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .nudge-detail {
@@ -160,21 +259,20 @@ pre {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: var(--muted);
+  color: var(--t2);
   font-size: 12px;
   word-break: break-word;
 }
 
 .nudge-more {
-  color: var(--accent);
+  color: var(--hi);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .nudge .nudge-action {
   align-self: flex-start;
   margin-top: 4px;
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .nudge-close {
@@ -189,12 +287,12 @@ pre {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .nudge-close:hover {
-  background: var(--surface-2);
-  color: var(--text);
+  background: var(--inset2);
+  color: var(--t1);
 }
 
 .nudge-close svg {
@@ -208,10 +306,9 @@ pre {
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--bg);
+  border-radius: 12px;
   overflow: hidden;
+  animation: panel-in 0.35s var(--spring) both;
 }
 
 .panel-head {
@@ -231,8 +328,9 @@ pre {
 }
 
 .name {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
+  letter-spacing: -0.01em;
 }
 
 .project-select {
@@ -242,11 +340,12 @@ pre {
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--t2);
+  font-weight: 600;
 }
 
 .project-select:hover {
-  border-color: var(--line);
+  background: var(--inset);
 }
 
 .head-actions {
@@ -262,13 +361,13 @@ pre {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .icon-btn:hover,
 .icon-btn.on {
-  background: var(--surface-2);
-  color: var(--text);
+  background: var(--inset2);
+  color: var(--t1);
 }
 
 .icon-btn:disabled {
@@ -282,39 +381,57 @@ pre {
   align-items: center;
   gap: 5px;
   padding: 4px 9px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--inset);
   font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .chip:hover {
-  border-color: #454a58;
+  background: var(--inset2);
 }
 
 .chip.quiet {
   background: transparent;
-  color: var(--muted);
+  color: var(--t2);
+}
+
+.chip.quiet:hover {
+  background: var(--inset);
 }
 
 .btn {
   padding: 6px 12px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 10px;
-  background: var(--surface-2);
-  font-weight: 500;
+  background: var(--inset2);
+  font-weight: 600;
+}
+
+.btn:hover {
+  background: rgba(var(--ink), 0.2);
 }
 
 .btn.primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--btn);
+  color: var(--btn-t);
 }
 
 .btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .btn.primary:hover {
+    background: rgb(var(--soft));
+  }
 }
 
 /* ---------- sessions ---------- */
@@ -338,52 +455,54 @@ pre {
   align-items: center;
   gap: 6px;
   padding: 4px 9px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--inset);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .session-chip.on,
 .session-chip:hover {
-  border-color: #454a58;
+  background: var(--inset2);
 }
 
 .session-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--t3);
 }
 
 .session-chip.needs-approval .session-dot,
 .session-chip.needs-input .session-dot {
-  background: #ffc46b;
-  box-shadow: 0 0 6px #ffc46b;
+  background: var(--warm);
+  box-shadow: 0 0 6px var(--warm);
 }
 
 .session-chip.working .session-dot {
-  background: var(--accent);
+  background: rgb(var(--glow));
 }
 
 .session-chip.finished .session-dot {
-  background: #7ddc9a;
+  background: var(--ok);
 }
 
 .session-name {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .session-state {
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .session-detail {
   margin-top: 8px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--inset);
+  transform-origin: top left;
+  animation: grow-in 0.3s var(--spring) both;
 }
 
 .session-detail p {
@@ -397,7 +516,7 @@ pre {
 
 .session-cwd {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--t2);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -409,14 +528,15 @@ pre {
   gap: 2px;
   margin: 8px 12px 0;
   padding: 8px 10px;
-  border: 1px solid var(--accent);
   border-radius: 10px;
-  background: rgba(201, 188, 255, 0.07);
+  background: rgba(var(--glow), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--glow), 0.55);
   text-align: left;
+  animation: popin 0.3s var(--spring) both;
 }
 
 .banner span {
-  color: var(--muted);
+  color: var(--t2);
   font-size: 12px;
 }
 
@@ -439,13 +559,13 @@ pre {
 }
 
 .tray-title {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .count {
   margin-left: 6px;
-  color: var(--muted);
-  font-weight: 400;
+  color: var(--t2);
+  font-weight: 600;
 }
 
 .tray-actions {
@@ -459,7 +579,7 @@ pre {
 
 .tray-empty {
   margin: 8px 0 2px;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .tray-grid {
@@ -478,7 +598,7 @@ pre {
   aspect-ratio: 1;
   border-radius: 10px;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--inset);
 }
 
 .thumb img {
@@ -519,9 +639,9 @@ pre {
 .saved {
   margin-top: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--inset);
+  animation: popin 0.3s var(--spring) both;
 }
 
 .saved-head {
@@ -533,7 +653,7 @@ pre {
 
 .saved code {
   word-break: break-all;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .snippet {
@@ -541,7 +661,8 @@ pre {
   margin: 6px 0;
   padding: 6px 8px;
   border-radius: 8px;
-  background: #0f1014;
+  background: var(--code);
+  color: var(--code-t);
   overflow: auto;
   user-select: text;
   white-space: pre;
@@ -570,12 +691,12 @@ pre {
 .card {
   margin: 10px 12px 0;
   padding: 10px 12px;
-  border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--surface);
+  background: var(--inset);
   max-height: 46%;
   overflow-y: auto;
   user-select: text;
+  animation: popin 0.3s var(--spring) both;
 }
 
 .card-head {
@@ -583,18 +704,18 @@ pre {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .card-head strong {
-  color: var(--text);
+  color: var(--t1);
 }
 
 .card h3 {
   margin: 10px 0 4px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
+  font-weight: 700;
+  color: var(--t2);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -609,7 +730,7 @@ pre {
 }
 
 .leftoff-status {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .leftoff-commits {
@@ -617,15 +738,15 @@ pre {
 }
 
 .leftoff-commits code {
-  color: var(--accent);
+  color: var(--hi);
   font-size: 11px;
 }
 
 .leftoff-claude {
   margin: 6px 0 0;
   padding: 6px 10px;
-  border-left: 2px solid var(--accent);
-  background: rgba(201, 188, 255, 0.05);
+  border-left: 2px solid rgb(var(--glow));
+  background: var(--inset);
 }
 
 .leftoff-claude p {
@@ -640,7 +761,7 @@ pre {
   margin: 10px 12px 0;
   padding: 8px 10px;
   border-radius: 10px;
-  background: var(--surface-2);
+  background: var(--inset2);
 }
 
 .log {
@@ -651,7 +772,7 @@ pre {
 }
 
 .hint {
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .hint p {
@@ -673,7 +794,9 @@ pre {
   margin-left: 48px;
   padding: 7px 10px;
   border-radius: 12px 12px 4px 12px;
-  background: var(--surface-2);
+  background: var(--inset2);
+  transform-origin: bottom right;
+  animation: popin 0.3s var(--spring) both;
 }
 
 .msg.assistant {
@@ -707,96 +830,78 @@ pre {
 .msg.assistant code {
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--surface-2);
+  background: var(--inset2);
   font-size: 12px;
 }
 
 .msg.assistant pre {
   padding: 6px 8px;
   border-radius: 8px;
-  background: #0f1014;
+  background: var(--code);
+  color: var(--code-t);
   overflow-x: auto;
   white-space: pre;
 }
 
 .md-heading {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .msg.assistant a {
-  color: var(--accent);
+  color: var(--hi);
+  font-weight: 600;
 }
 
 .msg.error {
-  color: var(--danger);
+  color: var(--bad);
+  font-weight: 600;
 }
 
-.activity {
-  margin: 0 0 8px;
-  color: var(--muted);
+.msg.notice-line {
+  color: var(--t2);
   font-size: 12px;
-}
-
-.activity::before {
-  content: '› ';
-  color: var(--accent);
-}
-
-.output {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.output pre {
-  max-height: 160px;
-  margin: 6px 0 0;
-  padding: 8px;
-  border-radius: 8px;
-  background: #0f1014;
-  color: var(--text);
-  overflow: auto;
-  white-space: pre-wrap;
 }
 
 .approval {
   margin: 0 0 10px;
   padding: 10px;
-  border: 1px solid var(--accent);
   border-radius: 12px;
-  background: rgba(201, 188, 255, 0.07);
+  background: rgba(var(--glow), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--glow), 0.6);
+  animation: popin 0.3s var(--spring) both;
 }
 
 .approval.approved,
 .approval.declined {
-  border-color: var(--line);
   background: transparent;
-  opacity: 0.75;
+  box-shadow: inset 0 0 0 1px var(--line);
+  opacity: 0.8;
 }
 
 .approval-title {
   margin: 0 0 6px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .cwd {
   margin-left: 6px;
-  color: var(--muted);
-  font-weight: 400;
+  color: var(--t2);
+  font-weight: 500;
 }
 
 .command {
   margin: 0;
   padding: 6px 8px;
   border-radius: 8px;
-  background: #0f1014;
+  background: var(--code);
+  color: var(--code-t);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .why {
   margin: 6px 0 0;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .approval-actions {
@@ -817,15 +922,630 @@ pre {
   flex: 1;
   resize: none;
   padding: 7px 10px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
   outline: none;
   user-select: text;
 }
 
+.composer textarea::placeholder {
+  color: var(--t3);
+}
+
 .composer textarea:focus {
-  border-color: #4a4f5e;
+  box-shadow: inset 0 0 0 1.5px rgba(var(--glow), 0.8);
+}
+
+/* ---------- streaming reply ---------- */
+/* Each new word fades in while a blurred copy of it fades out on top (the blur itself never animates). */
+.w {
+  position: relative;
+  animation: fadein 0.45s ease-out both;
+}
+
+.w::after {
+  content: attr(data-w);
+  position: absolute;
+  left: 0;
+  top: 0;
+  filter: blur(3px);
+  opacity: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: ghost 0.45s ease-out both;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 3px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: rgb(var(--glow));
+  box-shadow: 0 0 10px 2px rgba(var(--glow), 0.7);
+  animation: breath 1.1s ease-in-out infinite;
+}
+
+/* ---------- activity steps ---------- */
+.steps-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.act {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+  animation: popin 0.3s var(--spring) both;
+}
+
+.act .ai {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--hi);
+}
+
+.act .at {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.act .l {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.act .st {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 20px;
+  font-size: 13px;
+}
+
+.act.done .st {
+  color: var(--ok);
+}
+
+.act.failed .st {
+  color: var(--bad);
+}
+
+.act .st b {
+  animation: popin 0.35s var(--spring) both;
+}
+
+.spin {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--inset2);
+  border-top-color: rgb(var(--glow));
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.q {
+  color: var(--t2);
+  font-weight: 500;
+}
+
+.q::before {
+  content: '“';
+}
+
+.q::after {
+  content: '”';
+}
+
+.tgt {
+  overflow: hidden;
+  color: var(--t2);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+code.tgt {
+  font-size: 11.5px;
+}
+
+.fail-why {
+  color: var(--bad);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Thinking: a light sweeps across the letters (only transforms move). */
+.act.think {
+  font-weight: 700;
+}
+
+.shine {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.shine .base {
+  color: var(--t2);
+}
+
+.shine .win {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 35%, #000 65%, transparent);
+  animation: shine-win 1.7s linear infinite;
+}
+
+.shine .lit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--t1);
+  animation: shine-lit 1.7s linear infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .shine .base {
+    opacity: 0.65;
+  }
+
+  .shine .lit {
+    color: #fff;
+  }
+}
+
+/* Reading a file: a chip whose mini page is scanned top to bottom. */
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 10px 5px 5px;
+  border-radius: 10px;
+  background: var(--inset);
+}
+
+.mini {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5px;
+  width: 20px;
+  height: 25px;
+  padding: 5px 3px;
+  border-radius: 4px;
+  background: rgba(var(--fill), 0.95);
+  box-shadow: inset 0 0 0 1px var(--inset2);
+  overflow: hidden;
+}
+
+.mini i {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--inset2);
+}
+
+.mini i:nth-child(2) {
+  width: 70%;
+}
+
+.mini i:nth-child(4) {
+  width: 55%;
+}
+
+.mini .scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 8px;
+  background: linear-gradient(180deg, transparent, rgba(var(--glow), 0.85), transparent);
+  animation: scan 1s ease-in-out infinite;
+}
+
+.fn {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fp {
+  overflow: hidden;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Searching the web: a magnifier with a dot orbiting it; result sites pop in one at a time. */
+.orbit {
+  position: absolute;
+  inset: -2px;
+  animation: spin 1.1s linear infinite;
+}
+
+.orbit i {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: rgb(var(--glow));
+  box-shadow: 0 0 6px rgb(var(--glow));
+}
+
+.doms,
+.ents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.dom {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 3px;
+  border-radius: 999px;
+  background: var(--inset);
+  font-size: 12px;
+  font-weight: 600;
+  animation: popin 0.35s var(--spring) both;
+}
+
+.fav {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.ent {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--inset);
+  font: 600 11.5px ui-monospace, 'SF Mono', Menlo, monospace;
+  animation: popin 0.3s var(--spring) both;
+}
+
+/* Reading a page: a site chip with a shimmering progress line. */
+.site {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px 3px 4px;
+  border-radius: 999px;
+  background: var(--inset);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.site span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prog {
+  position: relative;
+  max-width: 240px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--inset2);
+  overflow: hidden;
+}
+
+.prog .fill {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--glow));
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 0.45s var(--spring);
+}
+
+.prog.full .fill {
+  transform: scaleX(1);
+}
+
+.prog .shim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(var(--glow)), transparent);
+  animation: shim 1.1s linear infinite;
+}
+
+.prog.full .shim {
+  animation: fadeout 0.3s both;
+}
+
+/* Running a command: the command with a blinking cursor, output ticking in, an exit badge. */
+.term {
+  position: relative;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--code);
+  color: var(--code-t);
+  font: 500 12px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.term .p {
+  color: #7fd4ff;
+}
+
+.tcur {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--code-t);
+  animation: blink 1s steps(1) infinite;
+}
+
+.ol {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  animation: fadeup 0.25s ease-out both;
+}
+
+.ol.g {
+  color: #7fe0a0;
+}
+
+.ol.r {
+  color: #ff9090;
+}
+
+.ol.d {
+  color: #8a90a0;
+}
+
+.exit {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: 700 11px -apple-system, system-ui, sans-serif;
+  animation: popin 0.35s var(--spring) both;
+}
+
+.exit.ok {
+  background: #1f9d55;
+  color: #fff;
+}
+
+.exit.bad {
+  background: #d64545;
+  color: #fff;
+}
+
+.all-output {
+  color: var(--t2);
+  font-size: 12px;
+}
+
+.all-output summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.all-output pre {
+  max-height: 160px;
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--code);
+  color: var(--code-t);
+  overflow: auto;
+  white-space: pre-wrap;
+  transform-origin: top left;
+  animation: grow-in 0.3s var(--spring) both;
+}
+
+/* Screenshot: a shutter flash, then the picture flies up into the tray. */
+.shot {
+  position: relative;
+  display: block;
+  width: 150px;
+  height: 92px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--inset2);
+}
+
+.shot.small {
+  width: 90px;
+  height: 60px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  animation: fadein 0.2s both;
+}
+
+.pagemock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px;
+}
+
+.pagemock i {
+  display: block;
+  border-radius: 3px;
+  background: var(--inset2);
+  animation: breath-soft 1.2s ease-in-out infinite;
+}
+
+.pagemock i:nth-child(1) {
+  width: 50%;
+  height: 8px;
+}
+
+.pagemock i:nth-child(2) {
+  height: 34px;
+}
+
+.pagemock i:nth-child(3) {
+  width: 80%;
+  height: 6px;
+}
+
+.pagemock i:nth-child(4) {
+  width: 60%;
+  height: 6px;
+}
+
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  animation: flash 0.5s ease-out both;
+}
+
+.flyer {
+  position: fixed;
+  z-index: 50;
+  border-radius: 8px;
+  overflow: hidden;
+  pointer-events: none;
+  transform-origin: 0 0;
+  transition:
+    transform 0.6s var(--spring),
+    opacity 0.6s ease;
+  box-shadow: 0 10px 30px var(--shadow);
+}
+
+.landed {
+  animation: popin 0.35s var(--spring) both;
+}
+
+/* Searching photos: thumbnails pop in. */
+.photos {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  max-width: 240px;
+}
+
+.photos i {
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  background: var(--inset2) center / cover no-repeat;
+  animation: popin 0.35s var(--spring) both;
+}
+
+/* Finished steps fold into one quiet line, which opens to list them. */
+.summary {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  color: var(--t2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: fadein 0.3s both;
+}
+
+.summary:focus-visible {
+  outline: 2px solid rgb(var(--glow));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.summary .chev {
+  display: inline-block;
+  transition: transform 0.3s var(--spring);
+}
+
+.summary[aria-expanded='true'] .chev {
+  transform: rotate(90deg);
+}
+
+.summary .bad {
+  color: var(--bad);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 5px;
+  padding-left: 6px;
+  border-left: 2px solid var(--inset2);
+  transform-origin: top left;
+  animation: grow-in 0.3s var(--spring) both;
+}
+
+.steps.leaving {
+  animation: grow-out 0.22s var(--spring) both;
+}
+
+.steps .act {
+  font-size: 12.5px;
+  font-weight: 500;
+  animation: none;
+}
+
+.step-in {
+  animation: fadeup 0.3s var(--spring) both;
 }
 
 /* ---------- settings ---------- */
@@ -840,11 +1560,12 @@ pre {
 .settings h2 {
   margin: 0 0 2px;
   font-size: 13px;
+  font-weight: 700;
 }
 
 .muted {
   margin: 0 0 6px;
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .small {
@@ -862,9 +1583,10 @@ pre {
   width: 100%;
   margin-bottom: 6px;
   padding: 6px 9px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
   user-select: text;
 }
 
@@ -891,7 +1613,7 @@ pre {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .hook-preview {
@@ -903,7 +1625,8 @@ pre {
   margin: 6px 0 8px;
   padding: 8px;
   border-radius: 8px;
-  background: #0f1014;
+  background: var(--code);
+  color: var(--code-t);
   overflow: auto;
   font-size: 11px;
   user-select: text;
@@ -922,13 +1645,14 @@ pre {
   inset: 6px;
   display: grid;
   place-items: center;
-  border: 2px dashed var(--accent);
+  border: 2px dashed rgb(var(--glow));
   border-radius: 14px;
-  background: rgba(16, 17, 22, 0.85);
-  color: var(--accent);
+  background: rgba(var(--fill), 0.75);
+  color: var(--hi);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   pointer-events: none;
+  animation: fadein 0.2s both;
 }
 
 .toast {
@@ -937,11 +1661,16 @@ pre {
   right: 12px;
   bottom: 64px;
   padding: 8px 10px;
-  border: 1px solid #5a2f35;
   border-radius: 10px;
-  background: #2a1619;
-  color: var(--danger);
+  background: rgba(var(--fill), 0.86);
+  box-shadow:
+    inset 0 0 0 1px rgba(214, 69, 69, 0.55),
+    0 8px 22px -6px var(--shadow);
+  color: var(--bad);
+  font-weight: 600;
   white-space: pre-wrap;
+  transform-origin: bottom center;
+  animation: popin 0.3s var(--spring) both;
 }
 
 /* ---------- viewer ---------- */
@@ -949,10 +1678,9 @@ pre {
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--bg);
+  border-radius: 12px;
   overflow: hidden;
+  animation: panel-in 0.35s var(--spring) both;
 }
 
 .viewer-head {
@@ -978,22 +1706,22 @@ pre {
 }
 
 .viewer-name {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .viewer-note {
-  color: var(--muted);
+  color: var(--t2);
   font-size: 12px;
 }
 
 .viewer-count {
   margin-right: 6px;
-  color: var(--muted);
+  color: var(--t2);
   font-variant-numeric: tabular-nums;
 }
 
 a.icon-btn {
-  color: var(--muted);
+  color: var(--t2);
 }
 
 .viewer-body {
@@ -1033,14 +1761,18 @@ a.icon-btn {
   height: 40px;
   margin-top: -20px;
   padding: 0;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 50%;
-  background: rgba(16, 17, 22, 0.85);
-  color: var(--text);
+  background: rgba(var(--fill), 0.7);
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 0.5px var(--edge2),
+    0 8px 22px -6px var(--shadow);
+  color: var(--t1);
 }
 
 .viewer-nav:hover {
-  background: var(--surface-2);
+  background: rgba(var(--fill), 0.9);
 }
 
 .viewer-nav.prev {
@@ -1069,7 +1801,7 @@ a.icon-btn {
   border: 2px solid transparent;
   border-radius: 8px;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--inset);
   opacity: 0.6;
 }
 
@@ -1078,7 +1810,7 @@ a.icon-btn {
 }
 
 .viewer-strip button.on {
-  border-color: var(--accent);
+  border-color: rgb(var(--glow));
   opacity: 1;
 }
 
@@ -1087,4 +1819,207 @@ a.icon-btn {
   height: 100%;
   object-fit: cover;
   object-position: top;
+}
+
+/* ==========================================================================
+   Motion. Loops are keyframes; only transform and opacity ever animate.
+   ========================================================================== */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes nudge-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes popin {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(4px);
+  }
+}
+
+@keyframes grow-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+
+@keyframes grow-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeout {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeup {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes ghost {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes breath {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes breath-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes shine-win {
+  from {
+    transform: translateX(-30px);
+  }
+  to {
+    transform: translateX(var(--sw, 80px));
+  }
+}
+
+@keyframes shine-lit {
+  from {
+    transform: translateX(30px);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--sw, 80px)));
+  }
+}
+
+@keyframes scan {
+  from {
+    transform: translateY(-8px);
+  }
+  to {
+    transform: translateY(25px);
+  }
+}
+
+@keyframes shim {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes flash {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: static icons, and fades instead of movement. */
+@media (prefers-reduced-motion: reduce) {
+  .orbit,
+  .mini .scan,
+  .shine .win,
+  .prog .shim,
+  .w::after {
+    display: none;
+  }
+
+  .spin {
+    animation: none;
+    border-color: rgb(var(--glow));
+  }
+
+  .tcur,
+  .cursor,
+  .pagemock i {
+    animation: none;
+  }
+
+  .panel,
+  .viewer,
+  .nudge,
+  .act,
+  .dom,
+  .ent,
+  .photos i,
+  .msg.user,
+  .exit,
+  .landed,
+  .act .st b,
+  .ol,
+  .banner,
+  .card,
+  .approval,
+  .saved,
+  .toast,
+  .steps,
+  .step-in,
+  .session-detail,
+  .all-output pre {
+    animation-name: fadein !important;
+  }
+
+  .steps.leaving {
+    animation-name: fadeout !important;
+  }
+
+  .summary .chev,
+  .prog .fill {
+    transition: none;
+  }
 }

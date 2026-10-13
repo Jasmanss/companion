@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -72,6 +72,10 @@ const api: StewardAPI = {
     preview: () => ipcRenderer.invoke('claude:preview'),
     connect: () => ipcRenderer.invoke('claude:connect'),
     disconnect: () => ipcRenderer.invoke('claude:disconnect'),
+  },
+  appearance: {
+    get: () => ipcRenderer.invoke('appearance:get'),
+    onChange: (cb) => subscribe<Appearance>('appearance:changed', cb),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }
