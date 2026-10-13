@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steward Look Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap">
+<style>
+:root{--bg:#F3F4F7;--card:#FFFFFF;--line:#E2E4EA;--text:#1C1F25;--muted:#596070;--accent:#2F6FEB;--chip:#F0F1F5}
+@media (prefers-color-scheme:dark){:root{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--accent:#7EA8FF;--chip:#23262E}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 64px}
+h1{margin:0;font-size:30px;font-weight:800}
+.lead{margin:6px 0 0;color:var(--muted);font-size:15px;max-width:760px}
+h2{margin:34px 0 12px;font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+a{color:var(--accent)}
+.rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin:0;padding:0;list-style:none}
+.rules li{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.4}
+.rules b{display:block;font-size:15px;margin-bottom:2px}
+
+/* the real slots, copied from src/renderer/src/styles.css */
+.desk{position:relative;width:132px;height:168px;border-radius:12px;overflow:hidden;
+  background:radial-gradient(120% 90% at 10% 0%,#3b2f6b 0%,transparent 60%),radial-gradient(90% 80% at 100% 100%,#1d4d6b 0%,transparent 60%),#20222c}
+.desk .win{position:absolute;left:10px;top:20px;width:84px;height:120px;border-radius:8px;background:#f4f4f6;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.desk .win::before{content:"";position:absolute;left:8px;right:8px;top:12px;height:5px;border-radius:3px;background:#d9dbe2;box-shadow:0 12px 0 #e4e6ec,0 24px 0 #e4e6ec,0 36px 0 #e4e6ec}
+.peek{position:absolute;right:0;top:18px;width:56px;height:132px;display:grid;place-items:center;
+  border:1px solid #2d313c;border-right:none;border-radius:18px 0 0 18px;background:rgba(16,17,22,.97)}
+.peek svg{width:50px;height:44px;display:block}
+.head{display:flex;align-items:center;gap:6px;width:200px;height:70px;padding:0 10px 0 6px;border-radius:14px;background:#1b1d24;border:1px solid #2d313c;color:#eef0f4}
+.head svg{width:64px;height:54px;flex:none;display:block}
+.head .t{font-size:15px;font-weight:800;line-height:1.1}
+.head .s{font-size:12px;color:#9aa0ad;font-weight:600}
+
+.lineup{display:flex;flex-wrap:wrap;gap:18px}
+.lineup .one{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lineup .lbl{font-size:13px;font-weight:800}
+.lineup .lbl span{display:block;font-weight:600;color:var(--muted);font-size:12px;text-align:center}
+.heads{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(540px,1fr));gap:16px}
+@media (max-width:600px){.cards{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px}
+.card h3{margin:0;font-size:22px;font-weight:800;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.card h3 .tag{font-size:12px;font-weight:800;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--muted)}
+.card p{margin:6px 0 0;font-size:14px;line-height:1.45}
+.card .based{color:var(--muted);font-size:13px}
+.stage{display:grid;grid-template-columns:220px 1fr;gap:12px;margin-top:14px}
+@media (max-width:600px){.stage{grid-template-columns:1fr}}
+.hero{width:220px;height:220px;border-radius:16px;background:#15161c;display:grid;place-items:center}
+.hero svg{width:196px;height:196px;display:block}
+.side{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start}
+.mini{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
+.mini .box{height:104px;border-radius:12px;display:grid;place-items:center}
+.mini .box svg{width:92px;height:92px;display:block}
+.mini.light .box{background:linear-gradient(135deg,#eef1f7,#dfe5ef)}
+.mini.sil .box{background:#f4f5f8}
+.mini.sil svg{filter:brightness(0)}
+.real{display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.real .desk{width:120px}
+.notes{margin:12px 0 0;padding:0;list-style:none;font-size:13.5px;line-height:1.4}
+.notes li{padding-left:20px;position:relative;margin-top:4px}
+.notes li::before{position:absolute;left:0;font-weight:800}
+.notes .good::before{content:"+";color:#2fa36b}
+.notes .bad::before{content:"−";color:#e0564a}
+.src{font-size:13px;color:var(--muted);line-height:1.6}
+.pix{shape-rendering:crispEdges}
+.card.pick{border-color:var(--accent);border-width:2px}
+.card h3 .tag.mine{color:var(--accent);border-color:var(--accent)}
+.lineup .lbl{text-align:center;max-width:132px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Look Board</h1>
+  <p class="lead">A fresh start on how Steward looks. Only stills, no animation yet. Six directions, each drawn twice: a big version, and a separate small version for the real 64×54 header and 50×44 peek, the way icon designers redraw small sizes. The app's current face is first, for comparison. The last card is my pick: a mix of two directions.</p>
+
+  <h2>What the research says works</h2>
+  <ul class="rules">
+    <li><b>It lives at emoji size</b>The peek is 50×44 on a near-black tab. That is smaller than a Dock icon. Most of the time this is the only Steward people see.</li>
+    <li><b>Silhouette first</b>Filled solid black, it should still be recognizable. One signature shape (ears, a tail, an antenna) does more than any detail.</li>
+    <li><b>Fewest shapes</b>Duolingo builds characters from one or two rounded shapes for head and body. Every extra shape muddies the outline when small.</li>
+    <li><b>Big eyes, set low and wide</b>The baby schema: a large round head, eyes below the middle, a small mouth. The eyes carry the personality, so they have to survive at 50×44.</li>
+    <li><b>Strong contrast on dark</b>The tab is near black, so the body needs a light or bright value. Dark bodies vanish. This is why coucou's white Mochi reads even at 30 px.</li>
+    <li><b>Redraw the small size</b>Don't just shrink. Drop fine details, thicken lines, enlarge the eyes, and check at real size.</li>
+    <li><b>Stand out from the crowd</b>The Mac notch is now full of pixel cats and dogs (Mac Pet, NotchMate, Notchling, Cute Notch) plus coucou's blob. A clear theme helps; the name Steward suggests service.</li>
+  </ul>
+
+  <h2>At real size, where it actually lives</h2>
+  <div class="lineup" id="lineup"></div>
+  <div class="heads" id="heads"></div>
+
+  <h2>The six directions, and my pick</h2>
+  <div class="cards" id="cards"></div>
+
+  <h2>Sources</h2>
+  <p class="src">
+    <a href="https://blog.duolingo.com/shape-language-duolingos-art-style/">Duolingo: shape language</a> ·
+    <a href="https://blog.duolingo.com/building-character/">Duolingo: building character</a> ·
+    <a href="https://www.tolans.com/relay/designing-tolan-part-1-characters">Designing Tolan, part 1: characters</a> ·
+    <a href="https://www.techradar.com/news/how-to-make-a-robot-with-a-real-personality">TechRadar: Anki's character design for Cozmo</a> ·
+    <a href="https://www.core77.com/posts/54328/Whats-the-One-Design-Element-That-Can-Make-a-Robot-Lovable">Core77: the eyes that make a robot lovable</a> ·
+    <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3260535/">Baby schema research (Glocker et al.)</a> ·
+    <a href="https://www.engadget.com/apollo-reddit-iphone-14-pro-dynamic-island-pixel-pals-update-221206984.html">Engadget: Pixel Pals</a> ·
+    <a href="https://techcrunch.com/2025/10/23/microsofts-mico-is-a-clippy-for-the-ai-era">TechCrunch: Microsoft's Mico</a> ·
+    <a href="https://www.producthunt.com/p/notchling-lives-in-your-notch/notchling">Notchling</a> ·
+    <a href="https://www.hunted.space/product/mac-pet">Mac Pet</a> ·
+    <a href="https://developers.bn.co/views/docs/tutorials/icon-design.html">Redrawing icons for small sizes</a>
+  </p>
+</div>
+
+<script type="module">
+import { LOOKS, TODAY } from './looks/designs.js'
+
+let n = 0
+/** The view box that fits a design's bounds into a slot of the given aspect, with a little air. */
+function fit([x0, y0, x1, y1], aspect, pad = 0.04) {
+  let w = x1 - x0, h = y1 - y0
+  w *= 1 + pad * 2; h *= 1 + pad * 2
+  if (w / h > aspect) h = w / aspect; else w = h * aspect
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+  return [cx - w / 2, cy - h / 2, w, h].map((v) => +v.toFixed(2)).join(' ')
+}
+/** An <svg> of a design for a slot W x H (CSS px). Pixel sprites snap to whole-pixel cells. */
+function svg(d, W, H, variant) {
+  const u = `d${n++}`
+  if (d.pixel) {
+    const cols = d.pixel.grid[0].length, rows = d.pixel.grid.length
+    const s = Math.max(1, Math.floor(Math.min(W / cols, H / rows)))
+    const ox = Math.floor((W - cols * s) / 2) / s, oy = Math.floor((H - rows * s) / 2) / s
+    return `<svg class="pix" viewBox="${-ox} ${-oy} ${W / s} ${H / s}">${d.svg(variant, u)}</svg>`
+  }
+  return `<svg viewBox="${fit(d.bbox, W / H)}">${d.svg(variant, u)}</svg>`
+}
+const small = (d, W, H) => svg(d, W, H, 'small')
+
+const lineup = document.getElementById('lineup')
+const heads = document.getElementById('heads')
+for (const d of [TODAY, ...LOOKS]) {
+  lineup.insertAdjacentHTML('beforeend', `
+    <div class="one">
+      <div class="desk"><div class="win"></div><div class="peek">${small(d, 50, 44)}</div></div>
+      <div class="lbl">${d.name}<span>${d.style}</span></div>
+    </div>`)
+  heads.insertAdjacentHTML('beforeend', `
+    <div class="head">${small(d, 64, 54)}<div><div class="t">Steward</div><div class="s">${d.name}</div></div></div>`)
+}
+
+const cards = document.getElementById('cards')
+for (const d of LOOKS) {
+  const notes = d.notes ?? { good: [], bad: [] }
+  cards.insertAdjacentHTML('beforeend', `
+    <section class="card${d.pick ? ' pick' : ''}" id="${d.id}">
+      <h3>${d.name}<span class="tag">${d.style}</span>${d.pick ? '<span class="tag mine">My pick</span>' : ''}</h3>
+      <p>${d.idea}</p>
+      <p class="based">Based on: ${d.basedOn}</p>
+      <div class="stage">
+        <div class="hero">${svg(d, 196, 196, 'big')}</div>
+        <div class="side">
+          <div class="mini light"><div class="box">${svg(d, 92, 92, 'big')}</div>On a light panel</div>
+          <div class="mini sil"><div class="box">${svg(d, 92, 92, 'small')}</div>Silhouette test</div>
+        </div>
+      </div>
+      <div class="real">
+        <div class="desk"><div class="win"></div><div class="peek">${small(d, 50, 44)}</div></div>
+        <div class="head">${small(d, 64, 54)}<div><div class="t">Steward</div><div class="s">Listening</div></div></div>
+      </div>
+      <ul class="notes">${notes.good.map((t) => `<li class="good">${t}</li>`).join('')}${notes.bad.map((t) => `<li class="bad">${t}</li>`).join('')}</ul>
+    </section>`)
+}
+</script>
+</body>
+</html>
