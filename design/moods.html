@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pill Moods</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap">
+<style>
+:root{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--accent:#c9bcff}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 16px 64px}
+h1{margin:0;font-size:28px;font-weight:800}
+h2{margin:28px 0 4px;font-size:20px;font-weight:800}
+.lead{margin:4px 0 0;color:var(--muted);font-size:15px;max-width:780px}
+.bar{position:sticky;top:0;z-index:20;background:rgba(17,18,22,.92);backdrop-filter:blur(10px);margin:16px -16px 0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;border-bottom:1px solid var(--line)}
+.lbl{font-size:13px;font-weight:800;color:var(--muted);margin-right:4px}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+button.c{font:inherit;font-size:13px;font-weight:800;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
+button.c[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+button.sw{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid transparent;cursor:pointer}
+button.sw[aria-pressed="true"]{border-color:#fff}
+.main{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;margin-top:14px}
+.stages{display:grid;gap:12px;grid-template-columns:repeat(var(--n),1fr)}
+@media (max-width:860px){.stages{grid-template-columns:1fr}}
+.vl{font-size:15px;font-weight:800;margin-bottom:6px}
+.stage{position:relative;height:210px;border-radius:14px;overflow:hidden;display:grid;place-items:center}
+.plain{background:#15161c}
+.wl{background:radial-gradient(90% 70% at 15% 15%,#ffd6e7 0%,transparent 60%),radial-gradient(80% 70% at 90% 85%,#c9defe 0%,transparent 60%),#f4efe8}
+.wd{background:radial-gradient(90% 70% at 15% 10%,#5b3fa3 0%,transparent 60%),radial-gradient(80% 70% at 95% 90%,#0e5b7c 0%,transparent 60%),#151726}
+.lines{position:absolute;left:8%;right:8%;top:28%;height:44%;background:
+  linear-gradient(#f0506a,#f0506a) 0 0/100% 9% no-repeat,linear-gradient(#7ea8ff,#7ea8ff) 0 30%/100% 9% no-repeat,
+  linear-gradient(#3fbf8a,#3fbf8a) 0 60%/100% 9% no-repeat,linear-gradient(#f3c14b,#f3c14b) 0 90%/100% 9% no-repeat}
+.reals{display:flex;gap:8px;margin-top:8px;align-items:stretch}
+.mini{position:relative;width:96px;height:150px;border-radius:10px;overflow:hidden;flex:none}
+.mini .win{position:absolute;left:8px;top:14px;width:60px;height:118px;border-radius:7px}
+.mini.wl .win{background:#fff}
+.mini.wd .win{background:#2a2d36}
+.mini .win::before{content:"";position:absolute;left:7px;right:7px;top:12px;height:5px;border-radius:3px;background:#f0506a;box-shadow:0 12px 0 #7ea8ff,0 24px 0 #3fbf8a,0 36px 0 #f3c14b,0 48px 0 #a98bff}
+.tab{position:absolute;right:0;top:9px;width:56px;height:132px;border-radius:18px 0 0 18px}
+.tab.solid{background:rgba(16,17,22,.97);border:1px solid #2d313c;border-right:none}
+.gl{background:linear-gradient(180deg,rgba(255,255,255,.26),rgba(255,255,255,.12)),rgba(255,255,255,.42);backdrop-filter:blur(16px) saturate(1.8);-webkit-backdrop-filter:blur(16px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 0 0 .5px rgba(255,255,255,.35),0 8px 22px rgba(20,30,60,.22)}
+.gd{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03)),rgba(24,27,34,.45);backdrop-filter:blur(16px) saturate(1.8);-webkit-backdrop-filter:blur(16px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 0 0 .5px rgba(255,255,255,.1),0 8px 22px rgba(0,0,0,.45)}
+.mini .pv{position:absolute!important;right:3px;top:53px}
+.mini .cap{position:absolute;left:5px;bottom:4px;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
+.headbox{flex:1;min-width:0;border-radius:10px;display:flex;align-items:center;gap:6px;padding:0 8px;position:relative;overflow:hidden}
+.headbox .row{position:relative;display:flex;align-items:center;gap:6px}
+.headbox .t{font-size:14px;font-weight:800}
+.headbox .s{font-size:11.5px;font-weight:700;opacity:.65}
+.headbox.solidp{background:#1b1d24;border:1px solid #2d313c;color:#eef0f4}
+.now{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-top:14px;min-height:44px}
+.now .m{font-size:20px;font-weight:800}
+.now .w{font-size:14px;color:var(--muted)}
+.now .step{font-size:14px;font-weight:800;color:var(--accent)}
+.sec{margin-top:14px}
+.sec .gl2{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.new{font-size:10px;font-weight:800;color:var(--bg);background:var(--accent);border-radius:999px;padding:1px 6px;margin-left:5px;vertical-align:1px}
+.sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer}
+.tile:hover{border-color:#4a4e5a}
+.tile .views{display:flex;gap:6px;justify-content:center;align-items:center;height:70px;border-radius:10px;overflow:hidden;position:relative}
+.tile .views>.cell{position:relative;flex:1;height:100%;display:grid;place-items:center;border-radius:8px;overflow:hidden}
+.tile .n{font-size:15px;font-weight:800;margin-top:8px}
+.tile .d{font-size:12.5px;color:var(--muted);line-height:1.35}
+.notes{margin:10px 0 0;padding:0;list-style:none;font-size:14px;line-height:1.45;max-width:820px}
+.notes li{margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pill Moods</h1>
+  <p class="lead">The eyes react to what Steward is doing: bigger when happy, angry lids when something breaks, round and wide when it needs you. Pick a mood, or play a short task and watch it react. All three versions run the same moods, so you can switch any time.</p>
+  <div class="bar">
+    <div class="grp" id="g-ver"></div>
+    <div class="grp" id="g-color"></div>
+    <div class="grp" id="g-desk"></div>
+    <div class="grp" id="g-glass"></div>
+    <div class="grp" id="g-motion"></div>
+  </div>
+
+  <div class="main">
+    <div class="stages" id="stages"></div>
+    <div class="now"><span class="m" id="now-m"></span><span class="step" id="now-step"></span><span class="w" id="now-w"></span></div>
+    <div class="sec"><div class="gl2">Moods</div><div class="grp" id="moods"></div></div>
+    <div class="sec"><div class="gl2">Play a task</div><div class="grp" id="stories"></div></div>
+  </div>
+
+  <h2>Every mood at real size</h2>
+  <p class="lead">Each tile runs on its own at the real 64×54 header size. Click one to show it above.</p>
+  <div class="sheet" id="sheet"></div>
+
+  <h2>How it works</h2>
+  <ul class="notes">
+    <li>Each eye is a pill cut by two lids. The top lid drops and tilts: inner corners down is mad, inner corners up is worried. The bottom lid pushes up into an arch for happy.</li>
+    <li>Every value springs to its new target with a little overshoot, so a change of mood pops instead of sliding.</li>
+    <li>It blinks on its own (sometimes twice), follows your cursor when idle or listening, scans while thinking, and bounces its eyes while talking.</li>
+    <li>Blocky uses hand-drawn pixel eyes for each mood rather than a shrunk copy, because a pixel eye only has a few cells to work with.</li>
+    <li>Reduce motion keeps each mood's face but drops the blinks, glances, springs and body moves.</li>
+  </ul>
+</div>
+<script type="module">
+import { MOODS, STORIES, createEyes, setMood, stepEyes } from './pill/eyes.js'
+import { makeView } from './pill/render.js'
+
+const COLORS = ['#c9bcff', '#94c5f5', '#8fe0c0', '#f6ab8c', '#f3d06a', '#ff9fc6']
+const VERSIONS = [['all', 'All three'], ['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]
+const S = { ver: 'all', color: COLORS[0], desk: 'dark', glass: 'tinted', rm: false, mood: 'idle' }
+try { Object.assign(S, JSON.parse(localStorage.getItem('steward-moods') || '{}')) } catch {}
+const osRM = matchMedia('(prefers-reduced-motion: reduce)')
+const save = () => { try { localStorage.setItem('steward-moods', JSON.stringify(S)) } catch {} }
+
+/* ---------------- groups of views that share one eyes state ---------------- */
+let groups = []
+const main = { st: createEyes(1), views: [], anchor: null }
+function addView(group, kind, host, W, H) {
+  const v = makeView(kind, W, H, { color: S.color, tinted: S.glass === 'tinted', light: S.desk === 'light' })
+  host.append(v.el)
+  group.views.push(v)
+  return v
+}
+const kinds = () => (S.ver === 'all' ? ['glass', 'flat', 'blocky'] : [S.ver])
+const NAMES = { glass: 'Glass', flat: 'Flat', blocky: 'Blocky' }
+
+function build() {
+  document.getElementById('pill-filters')?.replaceChildren()
+  const light = S.desk === 'light', wall = light ? 'wl' : 'wd', tabGlass = light ? 'gl' : 'gd'
+  // The bar.
+  const chip = (k, v, label, on) => `<button class="c" data-k="${k}" data-v="${v}" aria-pressed="${on}">${label}</button>`
+  document.getElementById('g-ver').innerHTML = '<span class="lbl">Version</span>' + VERSIONS.map(([v, l]) => chip('ver', v, l, S.ver === v)).join('')
+  document.getElementById('g-color').innerHTML = '<span class="lbl">Color</span>' + COLORS.map((c) => `<button class="sw" data-k="color" data-v="${c}" aria-pressed="${c === S.color}" style="background:${c}" aria-label="Color ${c}"></button>`).join('')
+  document.getElementById('g-desk').innerHTML = '<span class="lbl">Desktop</span>' + chip('desk', 'light', 'Light', light) + chip('desk', 'dark', 'Dark', !light)
+  const g = document.getElementById('g-glass')
+  g.hidden = !kinds().includes('glass')
+  g.innerHTML = '<span class="lbl">Glass</span>' + chip('glass', 'clear', 'Clear', S.glass === 'clear') + chip('glass', 'tinted', 'Tinted', S.glass === 'tinted')
+  document.getElementById('g-motion').innerHTML = '<span class="lbl">Motion</span>' + chip('rm', 'false', 'Full', !S.rm) + chip('rm', 'true', 'Reduced', S.rm)
+  document.getElementById('moods').innerHTML = MOODS.map((m) => `<button class="c" data-mood="${m.id}" aria-pressed="${m.id === S.mood && !story}">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</button>`).join('')
+  document.getElementById('stories').innerHTML = STORIES.map((s) => `<button class="c" data-story="${s.id}" aria-pressed="${story?.id === s.id}">${s.label}</button>`).join('')
+
+  // The big stages, each with its real-size peek tab and panel header.
+  main.views = []
+  const stages = document.getElementById('stages')
+  stages.style.setProperty('--n', kinds().length)
+  stages.replaceChildren()
+  for (const kind of kinds()) {
+    const col = document.createElement('div')
+    const glass = kind === 'glass'
+    col.innerHTML = `<div class="vl">${NAMES[kind]}</div><div class="stage ${glass ? wall : 'plain'}">${glass ? '<div class="lines"></div>' : ''}</div>
+      <div class="reals"><div class="mini ${wall}"><div class="win"></div><div class="tab ${glass ? tabGlass : 'solid'}"></div><span class="cap">${glass ? 'Glass tab' : "Today's tab"}</span></div>
+      <div class="headbox ${glass ? wall : 'solidp'}">${glass ? `<div class="lines" style="opacity:.5"></div><div class="${tabGlass}" style="position:absolute;inset:6px;border-radius:12px"></div>` : ''}<div class="row" style="color:${glass && light ? '#15161c' : '#eef0f4'}"><span class="hslot"></span><div><div class="t">Steward</div><div class="s" data-now></div></div></div></div></div>`
+    stages.append(col)
+    const W = Math.min(280, Math.max(200, Math.floor((stages.clientWidth - 12 * (kinds().length - 1)) / kinds().length) - 20))
+    addView(main, kind, col.querySelector('.stage'), W, Math.round(W * 0.64))
+    const mini = col.querySelector('.mini')
+    mini.insertBefore(addView(main, kind, document.createElement('div'), 50, 44).el, mini.querySelector('.cap'))
+    addView(main, kind, col.querySelector('.hslot'), 64, 54)
+  }
+  main.anchor = stages
+
+  // The sheet: one tile per mood, each with its own eyes.
+  groups = [main]
+  const sheet = document.getElementById('sheet')
+  sheet.replaceChildren()
+  MOODS.forEach((m, i) => {
+    const tile = document.createElement('div')
+    tile.className = 'tile'
+    tile.dataset.mood = m.id
+    tile.innerHTML = `<div class="views"></div><div class="n">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</div><div class="d">${m.when}</div>`
+    const grp = { st: createEyes(i + 7), views: [], anchor: tile, fixed: m.id }
+    setMood(grp.st, m.id)
+    for (const kind of kinds()) {
+      const cell = document.createElement('div')
+      cell.className = `cell ${kind === 'glass' ? wall : 'plain'}`
+      if (kind === 'glass') cell.innerHTML = '<div class="lines"></div>'
+      tile.querySelector('.views').append(cell)
+      addView(grp, kind, cell, 64, 54)
+    }
+    sheet.append(tile)
+    groups.push(grp)
+  })
+  caption()
+}
+
+/* ---------------- moods and stories ---------------- */
+let story = null, storyStep = 0, storyAt = 0
+function caption() {
+  const m = MOODS.find((x) => x.id === main.st.mood) ?? MOODS[0]
+  document.getElementById('now-m').textContent = m.label
+  document.getElementById('now-w').textContent = m.when
+  const step = story ? story.steps[storyStep][2] : ''
+  document.getElementById('now-step').textContent = step
+  document.querySelectorAll('[data-now]').forEach((n) => (n.textContent = step || m.label))
+  document.querySelectorAll('#moods button').forEach((b) => b.setAttribute('aria-pressed', String(!story && b.dataset.mood === main.st.mood)))
+  document.querySelectorAll('#stories button').forEach((b) => b.setAttribute('aria-pressed', String(story?.id === b.dataset.story)))
+}
+function pick(mood) { story = null; S.mood = mood; save(); setMood(main.st, mood); caption() }
+function play(id) { story = STORIES.find((s) => s.id === id); storyStep = 0; storyAt = now(); setMood(main.st, story.steps[0][0]); caption() }
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  const tile = e.target.closest('.tile')
+  if (b?.dataset.mood) return pick(b.dataset.mood)
+  if (b?.dataset.story) return play(b.dataset.story)
+  if (b?.dataset.k) {
+    const k = b.dataset.k
+    S[k] = k === 'rm' ? b.dataset.v === 'true' : b.dataset.v
+    save(); build(); return
+  }
+  if (tile) { pick(tile.dataset.mood); main.anchor.scrollIntoView({ behavior: S.rm ? 'auto' : 'smooth', block: 'center' }) }
+})
+
+/* ---------------- the frame loop ---------------- */
+const now = () => performance.now() / 1000
+let pointer = null
+addEventListener('pointermove', (e) => { pointer = { x: e.clientX, y: e.clientY } })
+let last = now()
+// ?awake=1 keeps it running in a hidden tab, for screenshots.
+const awake = new URLSearchParams(location.search).has('awake')
+function frame() {
+  requestAnimationFrame(frame)
+  const t = now(), dt = t - last
+  last = t
+  if (document.hidden && !awake) return
+  const rm = S.rm || osRM.matches
+  if (story && t - storyAt > story.steps[storyStep][1]) {
+    storyStep++
+    storyAt = t
+    if (storyStep >= story.steps.length) { story = null; setMood(main.st, 'idle') }
+    else setMood(main.st, story.steps[storyStep][0])
+    caption()
+  }
+  for (const grp of groups) {
+    let p = null
+    if (pointer && grp.anchor) {
+      const r = grp.anchor.getBoundingClientRect()
+      p = { x: (pointer.x - (r.left + r.width / 2)) / Math.max(200, r.width / 2), y: (pointer.y - (r.top + r.height / 2)) / Math.max(150, r.height / 2) }
+    }
+    stepEyes(grp.st, t, dt, p, rm)
+    for (const v of grp.views) v.update(grp.st)
+  }
+}
+setMood(main.st, S.mood)
+build()
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>
