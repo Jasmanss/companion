@@ -36,6 +36,8 @@ export interface SettingsView {
   hasVercelToken: boolean
   /** Registered global shortcuts in Electron accelerator form; empty when another app has them. */
   hotkeys: { open: string; hide: string }
+  /** The home folder, for showing project paths as ~/… */
+  home: string
 }
 
 /** What a Claude Code session is doing, as far as its hooks have said. */
@@ -143,7 +145,7 @@ export interface SaveResult {
   snippet: string
 }
 
-/** What a step of the agent's work is. read-file and list-files arrive with the file tools in phase 2. */
+/** What a step of the agent's work is. */
 export type ActivityKind =
   | 'thinking'
   | 'read-file'
@@ -167,7 +169,10 @@ export interface Activity {
   kind: ActivityKind
   /** What's happening, in the right tense: "Searching the web", then "Searched the web". */
   label: string
-  /** The file, query, URL, command, host or project it's about. */
+  /**
+   * The file, query, URL, command, host or project it's about. Files and folders are relative to the project;
+   * a folder ends in a slash, except the project's top folder, which is the project's name.
+   */
   target?: string
   status: ActivityStatus
   /** Why it failed, or a short note like "exit 1". */
@@ -234,11 +239,15 @@ export interface StewardAPI {
     setUnsplashKey(key: string): Promise<SettingsView>
     setVercelToken(token: string): Promise<SettingsView>
     addProject(): Promise<SettingsView>
+    /** Pick a folder, add it as a project if it's new, and switch to it. */
+    addProjectAndSwitch(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
+    /** Changes made elsewhere, like the agent switching projects. */
+    onChanged(cb: (settings: SettingsView) => void): Unsubscribe
   }
   sessions: {
     list(): Promise<SessionView[]>

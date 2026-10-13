@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
-import type { AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import { touchOf, type Touch } from '../../shared/activity'
+import type { AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
+import { ContextPill, ProjectSwitcher } from './ContextPill'
 import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
@@ -52,6 +55,15 @@ export function App() {
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
+  const [switcher, setSwitcher] = useState(false)
+  const switcherShown = usePresence(switcher)
+  /** What the agent is on during this request, for the context pill. */
+  const [touch, setTouch] = useState<Touch | null>(null)
+  /** The last file the agent read in each project (by path), shown in the pill when it's idle. */
+  const [lastFiles, setLastFiles] = useState<Record<string, string>>({})
+  const currentProject = useRef<string | null>(null)
+  const pill = useRef<HTMLButtonElement>(null)
+  const composer = useRef<HTMLTextAreaElement>(null)
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -61,6 +73,8 @@ export function App() {
     api.tray.list().then(setItems, showError)
     api.settings.get().then(setSettings, showError)
     api.sessions.list().then(setSessions, showError)
+    // The agent can switch projects too.
+    const offSettings = api.settings.onChanged(setSettings)
     const offDock = api.dock.onState(setDock)
     const offTray = api.tray.onChanged(setItems)
     const offAgent = api.agent.onEvent(handleAgentEvent)
@@ -79,6 +93,7 @@ export function App() {
     const offAppearance = api.appearance.onChange(showAppearance)
     const clock = setInterval(() => setLateNight(isLateNight(new Date())), 60_000)
     return () => {
+      offSettings()
       offAppearance()
       offMood()
       offLeftOff()
@@ -105,6 +120,20 @@ export function App() {
     const t = setTimeout(() => setBanner(null), 6000)
     return () => clearTimeout(t)
   }, [banner])
+
+  useEffect(() => {
+    currentProject.current = settings?.currentProject ?? null
+  }, [settings?.currentProject])
+
+  // The switcher belongs to the open panel; tucking away closes it.
+  useEffect(() => {
+    if (dock !== 'expanded') setSwitcher(false)
+  }, [dock])
+
+  const closeSwitcher = useCallback((refocus: boolean) => {
+    setSwitcher(false)
+    if (refocus) pill.current?.focus()
+  }, [])
 
   /** Alerts the main process let through: the nudge shows them when tucked away, a banner when the panel is open. */
   function handleAlerts(list: AlertView[]) {
@@ -140,6 +169,17 @@ export function App() {
           const step = prev[i] as StepEntry
           return prev.with(i, { ...step, activity, finishedAt: step.finishedAt ?? finishedAt })
         })
+        // Working, however the request started (the panel, an alert's offer, the demo).
+        if (activity.status === 'running') setBusy(true)
+        // The pill follows whatever the agent starts on; a step that failed lets go of it.
+        const touched = touchOf(activity)
+        if (touched && activity.status === 'running') setTouch(touched)
+        else if (touched && activity.status === 'failed') setTouch((t) => (t?.text === touched.text ? null : t))
+        const project = currentProject.current
+        if (activity.kind === 'read-file' && activity.status === 'done' && activity.target && project) {
+          const file = activity.target
+          setLastFiles((prev) => ({ ...prev, [project]: file }))
+        }
         break
       }
       case 'output':
@@ -171,6 +211,7 @@ export function App() {
       case 'done':
         setEntries((prev) => prev.map((e) => (e.kind === 'assistant' && e.streaming ? { ...e, streaming: false } : e)))
         setBusy(false)
+        setTouch(null)
         setAgentMood('done')
         doneTimer.current = setTimeout(() => setAgentMood(null), 2500)
         break
@@ -213,6 +254,14 @@ export function App() {
       api.tray.dragEnded()
     }
     const onKey = (e: KeyboardEvent) => {
+      // Already handled, like Esc closing the switcher.
+      if (e.defaultPrevented) return
+      if (e.key.toLowerCase() === 'k' && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        if (dock !== 'expanded') return
+        e.preventDefault()
+        setSwitcher((open) => !open)
+        return
+      }
       if (e.key !== 'Escape') return
       if (dock === 'viewing') void api.dock.expand()
       else void api.dock.collapse()
@@ -281,6 +330,17 @@ export function App() {
     void api.dock.view()
   }
 
+  const pickProject = (project: Project) => {
+    setSwitcher(false)
+    composer.current?.focus()
+    if (project.path !== settings?.currentProject) api.settings.setCurrentProject(project.path).then(setSettings, showError)
+  }
+
+  const addProject = () => {
+    setSwitcher(false)
+    api.settings.addProjectAndSwitch().then(setSettings, showError)
+  }
+
   const newChat = () => {
     setEntries([])
     void api.agent.reset()
@@ -299,6 +359,10 @@ export function App() {
     send(alert.action.prompt)
   }
   const hideKey = settings?.hotkeys.hide ? ` (${formatHotkey(settings.hotkeys.hide)})` : ''
+  const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
+  const lastFile = project ? lastFiles[project.path] : undefined
+  // Working: what it's on right now. Idle: the last file it read here.
+  const pillTouch: Touch | null = (busy && touch) || (lastFile ? { kind: 'file', text: lastFile } : null)
 
   if (dock === 'viewing' && items.length > 0) {
     return (
@@ -331,54 +395,54 @@ export function App() {
       <header className="panel-head">
         <Face mood={mood} width={64} height={54} />
         <div className="head-text">
-          <span className="name">Steward</span>
+          <div className="head-top">
+            <span className="name">Steward</span>
+            <div className="head-actions">
+              <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
+                <NewChatIcon />
+              </button>
+              <button
+                className={`icon-btn ${pinned ? 'on' : ''}`}
+                aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
+                aria-pressed={pinned}
+                onClick={() => {
+                  setPinned(!pinned)
+                  void api.dock.setPinned(!pinned)
+                }}
+              >
+                <PinIcon on={pinned} />
+              </button>
+              <button
+                className={`icon-btn ${view === 'settings' ? 'on' : ''}`}
+                aria-label="Settings"
+                aria-pressed={view === 'settings'}
+                onClick={() => setView(view === 'settings' ? 'chat' : 'settings')}
+              >
+                <GearIcon />
+              </button>
+              <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
+                <HideIcon />
+              </button>
+              <button className="icon-btn" aria-label="Tuck away" title="Tuck away (Esc)" onClick={() => api.dock.collapse()}>
+                <ChevronRightIcon />
+              </button>
+            </div>
+          </div>
           {settings && (
-            <select
-              className="project-select"
-              value={settings.currentProject ?? ''}
-              onChange={(e) => api.settings.setCurrentProject(e.target.value || null).then(setSettings, showError)}
-              aria-label="Current project"
-            >
-              <option value="">No project</option>
-              {settings.projects.map((p) => (
-                <option key={p.path} value={p.path}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <ContextPill project={project} touch={pillTouch} live={busy} open={switcher} onToggle={() => setSwitcher(!switcher)} pillRef={pill} />
           )}
         </div>
-        <div className="head-actions">
-          <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
-            <NewChatIcon />
-          </button>
-          <button
-            className={`icon-btn ${pinned ? 'on' : ''}`}
-            aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
-            aria-pressed={pinned}
-            onClick={() => {
-              setPinned(!pinned)
-              void api.dock.setPinned(!pinned)
-            }}
-          >
-            <PinIcon on={pinned} />
-          </button>
-          <button
-            className={`icon-btn ${view === 'settings' ? 'on' : ''}`}
-            aria-label="Settings"
-            aria-pressed={view === 'settings'}
-            onClick={() => setView(view === 'settings' ? 'chat' : 'settings')}
-          >
-            <GearIcon />
-          </button>
-          <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
-            <HideIcon />
-          </button>
-          <button className="icon-btn" aria-label="Tuck away" title="Tuck away (Esc)" onClick={() => api.dock.collapse()}>
-            <ChevronRightIcon />
-          </button>
-        </div>
       </header>
+      {switcherShown.mounted && settings && (
+        <ProjectSwitcher
+          settings={settings}
+          anchor={pill}
+          leaving={switcherShown.leaving}
+          onPick={pickProject}
+          onAdd={addProject}
+          onClose={closeSwitcher}
+        />
+      )}
 
       <SessionStrip sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
       {banner && (
@@ -430,7 +494,7 @@ export function App() {
             )}
             <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
           </div>
-          <Composer busy={busy} disabled={noKey} onSend={send} onStop={() => api.agent.cancel()} onTyping={setTyping} />
+          <Composer busy={busy} disabled={noKey} onSend={send} onStop={() => api.agent.cancel()} onTyping={setTyping} inputRef={composer} />
         </>
       )}
 

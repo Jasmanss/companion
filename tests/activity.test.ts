@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activityLabel, resultSites, summarize, summaryText } from '../src/shared/activity'
+import { activityLabel, resultSites, summarize, summaryText, touchOf } from '../src/shared/activity'
 import type { Activity, ActivityKind } from '../src/shared/types'
 import { foldSteps, groupEntries, lingerFor, type Entry, type StepEntry } from '../src/renderer/src/chat-groups'
 
@@ -64,6 +64,22 @@ describe('resultSites', () => {
     const many = Array.from({ length: 10 }, (_, i) => ({ url: `https://site${i}.com/` }))
     expect(resultSites(many, 3)).toEqual(['site0.com', 'site1.com', 'site2.com'])
     expect(resultSites({ type: 'web_search_tool_result_error', error_code: 'unavailable' })).toEqual([])
+  })
+})
+
+describe('touchOf', () => {
+  it('names what a step is on for the context pill', () => {
+    expect(touchOf(step('read-file', 'src/app/page.tsx', 'running'))).toEqual({ kind: 'file', text: 'src/app/page.tsx' })
+    expect(touchOf(step('list-files', 'src/components/', 'running'))).toEqual({ kind: 'folder', text: 'src/components/' })
+    expect(touchOf(step('fetch-page', 'https://www.stripe.com/pricing', 'running'))).toEqual({ kind: 'page', text: 'stripe.com/pricing' })
+    expect(touchOf(step('run-command', 'npm test', 'running'))).toEqual({ kind: 'command', text: 'npm test' })
+    expect(touchOf(step('search-web', 'bento grids', 'running'))).toEqual({ kind: 'query', text: 'bento grids' })
+  })
+
+  it('has nothing to show for thinking, a step with no target yet, or the project\'s top folder', () => {
+    expect(touchOf(step('thinking', undefined, 'running'))).toBeNull()
+    expect(touchOf(step('search-web', undefined, 'running'))).toBeNull()
+    expect(touchOf(step('list-files', 'haven', 'running'))).toBeNull()
   })
 })
 

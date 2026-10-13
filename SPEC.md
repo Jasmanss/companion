@@ -70,16 +70,27 @@ The tray survives restarts.
 3. **Run commands**: "run the tests in tally", "start the dev server in
    Portfolio." It shows the exact command on an approval card, runs it after
    you approve, streams the output, and tells you the result in a sentence.
-4. **Small code jobs** (stretch for v1): "add these images to the hero
+4. **Look at the code**: "what does the pricing page do?" It lists folders and
+   reads files in the current project (read-only, and never secret files) before
+   it explains code or suggests a command.
+5. **Small code jobs** (stretch for v1): "add these images to the hero
    section." Shows a diff for approval before editing anything.
 
 ---
 
 ## Projects
 
-- Knows a list of project folders, added in settings (it suggests ones it finds
-  in `~/Documents`).
-- The current project is shown in the panel. Switch by name: "switch to tally."
+- Knows a list of project folders, added in settings or from the switcher (settings
+  suggests ones it finds in `~/Documents` and `~/Desktop`).
+- **The context pill.** The panel's header shows a pill like `haven › src/app/page.tsx`:
+  the current project, then what the agent is on (a file, a folder, a page, a command
+  or a search) with a live dot while it works. When it's idle, it shows the last file
+  the agent read in that project.
+- **Switching.** Click the pill or press ⌘K for a search-as-you-type list of projects
+  (the name first, then a word in it, then anywhere in it, then a folder on its path,
+  then its letters in order). Arrow keys and Enter switch; Esc closes it without
+  tucking the panel away. "Add project…" opens the folder picker and switches to the
+  new project. Or ask: "switch to tally."
 
 ---
 
@@ -88,6 +99,14 @@ The tray survives restarts.
 - **Every command and file edit shows an approval card** with the exact command
   or diff, unless it's on an allowlist I set (e.g. `npm test`, `git status`).
 - Only works inside project folders I've added.
+- **Reading files is read-only and stays in the current project.** `read_file` and
+  `list_files` need no approval, but every read shows as a step. Paths are resolved to
+  where they really lead, so `..` and links can't leave the project. `.env` and every
+  `.env.*` (`.env.example` too), keys (`*.pem`, `*.key`, `*.p8`, …), credential files
+  (`.npmrc`, `.netrc`, `credentials.json`, …) and Git's own folder are never read, by
+  their own name or through a link. Files over 2 MB aren't read; long files come a
+  slice at a time. Listing skips `node_modules`, `.git` and build output. What's in a
+  file is data, never instructions.
 - Never pushes, deletes, or installs anything without approval.
 - Images keep their source and license info; prefers licensed sources.
 
@@ -168,6 +187,10 @@ options.
   flipping while it searches, then the sites it found dealt out as cards, a file chip being scanned, a site chip with a shimmering progress
   line, a command with output ticking in and a ✓ or ✗ exit badge, a screenshot's shutter flash and its thumbnail
   flying into the tray. Replies stream in word by word, each word coming into focus, with a soft glowing cursor.
+- **The context pill and the switcher.** The pill is a tinted inset like the other chips; its live dot sends a
+  ring out while the agent works, and each new thing it shows fades in. A file's folders give way before its name
+  when space runs out. The switcher sits over the glass, so it's thick and mostly opaque (never a second light
+  frost) and blurs what's under it; it grows out of the pill and goes back into it.
 - **Finished steps fold** into one quiet line, like "Read 3 files · Searched the web · Ran npm test", which opens
   to list them. Each step stays in full for a moment after it finishes, so its ending is seen.
 - **Motion.** Loops are CSS keyframes. Panels, popovers and cards use one spring with no bounce (about 0.35s);
@@ -184,9 +207,12 @@ options.
 - **App:** Electron with a transparent, frameless, always-on-top window
   anchored to the right edge. The character is drawn in 2D, ported from the
   Pill design files (no Three.js).
-- **Brain:** Claude Agent SDK (TypeScript) in the app's main process. Built-in
-  tools for shell commands, files, and web search, plus custom tools:
-  `add_to_tray`, `save_tray_to_project`, `screenshot_page`.
+- **Brain:** a streaming tool-use loop on the Claude API in the app's main
+  process (`src/main/agent.ts`): web search and web fetch, plus Steward's own
+  tools: `read_file` and `list_files` (read-only, inside the current project),
+  `run_command` (approval-gated), `screenshot_page`, `add_image_to_tray`,
+  `search_images`, `deploy_logs`, `set_project`, `list_tray` and
+  `remove_from_tray`.
 - **Approvals:** the SDK's permission hook asks the app, which shows the card.
 - **Design research screenshots:** a headless browser (Playwright).
 - **Image search:** Unsplash and Pexels APIs (free keys).

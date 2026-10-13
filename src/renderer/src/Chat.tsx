@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react'
 import { StepsGroup, ThinkingRow } from './Activity'
 import { groupEntries, type Entry } from './chat-groups'
 import { Markdown } from './Markdown'
@@ -87,12 +87,14 @@ export function Composer({
   onSend,
   onStop,
   onTyping,
+  inputRef,
 }: {
   busy: boolean
   disabled: boolean
   onSend: (text: string) => void
   onStop: () => void
   onTyping: (typing: boolean) => void
+  inputRef?: Ref<HTMLTextAreaElement>
 }) {
   const [text, setText] = useState('')
   const send = () => {
@@ -111,6 +113,7 @@ export function Composer({
   return (
     <div className="composer">
       <textarea
+        ref={inputRef}
         value={text}
         rows={Math.min(5, Math.max(1, text.split('\n').length))}
         placeholder={disabled ? 'Add an API key in Settings to chat' : 'Ask for designs, images, or a command…'}

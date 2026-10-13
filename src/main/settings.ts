@@ -44,6 +44,7 @@ export class SettingsStore {
       hasUnsplashKey: Boolean(this.unsplashKey()),
       hasVercelToken: Boolean(this.vercelToken()),
       hotkeys: this.hotkeys,
+      home: os.homedir(),
     }
   }
 

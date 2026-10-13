@@ -311,11 +311,12 @@ function showLeftOff(project: Project): void {
   void whereYouLeftOff(project).then((card) => win?.webContents.send('leftoff:show', card))
 }
 
-/** Switching projects, from the menu or by asking, shows where you left off there. */
-async function switchProject(projectPath: string | null): Promise<void> {
-  const before = settings.currentProject()?.path ?? null
+/** Switching projects, from the switcher or by asking, shows where you left off there. */
+async function switchProject(projectPath: string | null, before = settings.currentProject()?.path ?? null): Promise<void> {
   await settings.setCurrentProject(projectPath)
   const after = settings.currentProject()
+  // The agent can switch too, so the panel hears about it either way.
+  win?.webContents.send('settings:changed', settings.view())
   if (after && after.path !== before) showLeftOff(after)
 }
 
@@ -492,6 +493,16 @@ function registerIpc(): void {
   ipcMain.handle('settings:addProject', async () => {
     const folder = await pickFolder()
     if (folder) await settings.addProject(folder)
+    return settings.view()
+  })
+  ipcMain.handle('settings:addProjectAndSwitch', async () => {
+    const folder = await pickFolder()
+    if (folder) {
+      // Adding the first project makes it current already; it still counts as switching to it.
+      const before = settings.currentProject()?.path ?? null
+      await settings.addProject(folder)
+      await switchProject(folder, before)
+    }
     return settings.view()
   })
   ipcMain.handle('settings:addProjectPath', async (_e, folder: string) => {

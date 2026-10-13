@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -43,11 +43,13 @@ const api: StewardAPI = {
     setUnsplashKey: (key) => ipcRenderer.invoke('settings:setUnsplashKey', key),
     setVercelToken: (token) => ipcRenderer.invoke('settings:setVercelToken', token),
     addProject: () => ipcRenderer.invoke('settings:addProject'),
+    addProjectAndSwitch: () => ipcRenderer.invoke('settings:addProjectAndSwitch'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
+    onChanged: (cb) => subscribe<SettingsView>('settings:changed', cb),
   },
   sessions: {
     list: () => ipcRenderer.invoke('sessions:list'),

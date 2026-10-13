@@ -30,7 +30,7 @@ const REPLY =
 
 /**
  * A made-up request with every kind of step, for seeing the panel's animations without calling the API:
- * thinking, a web search, a page read, a file read, a command with output, a screenshot, and a streamed reply.
+ * thinking, a web search, a page read, a folder listing, a file read, a command with output, a screenshot, and a streamed reply.
  */
 export async function playDemo(s: DemoStage): Promise<void> {
   const wait = (ms: number) =>
@@ -60,6 +60,10 @@ export async function playDemo(s: DemoStage): Promise<void> {
   step = s.start('fetch-page', 'https://developer.apple.com/design/human-interface-guidelines/materials')
   await wait(1600)
   s.finish(step, true)
+
+  step = s.start('list-files', 'src/renderer/')
+  await wait(900)
+  s.finish(step, true, { results: ['src/', 'index.html'] })
 
   step = s.start('read-file', 'src/renderer/src/styles.css')
   await wait(1200)

@@ -41,6 +41,35 @@ export function resultSites(results: unknown, max = 6): string[] {
   return sites
 }
 
+/** What the context pill shows the agent is on: a file, a folder, a page, a command, a search, or something else. */
+export interface Touch {
+  kind: 'file' | 'folder' | 'page' | 'command' | 'query' | 'other'
+  text: string
+}
+
+/** The thing a step is on, for the context pill; null when there's nothing to show (thinking, the project's top folder). */
+export function touchOf(step: Activity): Touch | null {
+  if (!step.target) return null
+  switch (step.kind) {
+    case 'thinking':
+      return null
+    case 'read-file':
+      return { kind: 'file', text: step.target }
+    case 'list-files':
+      // The project's top folder is the project's name, which the pill already shows.
+      return step.target.endsWith('/') ? { kind: 'folder', text: step.target } : null
+    case 'fetch-page':
+      return { kind: 'page', text: step.target.replace(/^https?:\/\/(www\.)?/, '') }
+    case 'run-command':
+      return { kind: 'command', text: step.target }
+    case 'search-web':
+    case 'search-photos':
+      return { kind: 'query', text: step.target }
+    default:
+      return { kind: 'other', text: step.target }
+  }
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const short = (text: string | undefined, max = 32) => (!text ? '' : text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
