@@ -58,6 +58,51 @@ function siteColor(site: string): string {
 
 const stagger = (i: number): CSSProperties => ({ animationDelay: `${i * 0.12}s` })
 
+/** How many found sites are dealt out as cards; the chips under them name all of them. */
+const DEALT = 5
+
+/**
+ * Searching the web: a little deck of pages flips while it searches (the top page slides off and goes to the back).
+ * Then the sites it found are dealt out as cards, one at a time, and named in chips underneath.
+ */
+function SearchDeck({ running, sites }: { running: boolean; sites: string[] }) {
+  const dealt = sites.slice(0, DEALT)
+  if (!running && !sites.length) return null
+  return (
+    <>
+      <span className="deck" aria-hidden="true">
+        {running
+          ? // Each card is one third of the loop apart: one in front, one in the middle, one at the back.
+            [0, 1.4, 0.7].map((lag) => (
+              <span key={lag} className="deck-card" style={{ animationDelay: `-${lag}s` }}>
+                <i /><i /><i /><i />
+              </span>
+            ))
+          : dealt.map((site, i) => (
+              <span key={site} className="deck-card dealt" style={{ '--i': i } as CSSProperties}>
+                <span className="fav" style={{ background: siteColor(site) }}>
+                  {site[0]?.toUpperCase()}
+                </span>
+                <i /><i />
+              </span>
+            ))}
+      </span>
+      {!running && (
+        <span className="doms">
+          {sites.map((site, i) => (
+            <span key={site} className="dom" style={{ animationDelay: `${0.35 + dealt.length * 0.15 + i * 0.08}s` }}>
+              <span className="fav" style={{ background: siteColor(site) }}>
+                {site[0]?.toUpperCase()}
+              </span>
+              {site}
+            </span>
+          ))}
+        </span>
+      )}
+    </>
+  )
+}
+
 /** Command output: the last lines tick in, with a ✓ or ✗ exit badge at the end. */
 function Terminal({ step }: { step: StepEntry }) {
   const lines = (step.output ?? '').replace(/\n+$/, '').split('\n')
@@ -166,22 +211,12 @@ export function ActivityRow({ step, compact = false }: { step: StepEntry; compac
   let extra: ReactNode = null
   switch (a.kind) {
     case 'search-web':
+      if (a.target) target = <span className="q">{a.target}</span>
+      if (!compact) extra = <SearchDeck running={running} sites={results} />
+      break
     case 'search-photos':
       if (a.target) target = <span className="q">{a.target}</span>
-      if (a.kind === 'search-web' && results.length)
-        extra = (
-          <span className="doms">
-            {results.map((site, i) => (
-              <span key={site} className="dom" style={stagger(i)}>
-                <span className="fav" style={{ background: siteColor(site) }}>
-                  {site[0]?.toUpperCase()}
-                </span>
-                {site}
-              </span>
-            ))}
-          </span>
-        )
-      if (a.kind === 'search-photos' && results.length)
+      if (results.length)
         extra = (
           <span className="photos">
             {results.map((url, i) => (
@@ -254,11 +289,6 @@ export function ActivityRow({ step, compact = false }: { step: StepEntry; compac
     <div className={`act ${a.status} k-${a.kind}`}>
       <span className="ai">
         <Icon />
-        {running && a.kind === 'search-web' && (
-          <span className="orbit" aria-hidden="true">
-            <i />
-          </span>
-        )}
       </span>
       <span className="at">
         <span className="l">

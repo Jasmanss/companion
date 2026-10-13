@@ -50,7 +50,7 @@ export function groupEntries(entries: Entry[]): Block[] {
 }
 
 /** How long a finished step stays in full, so its ending (a ✓, the sites popping in, a screenshot flying) is seen. */
-const LINGER: Partial<Record<ActivityKind, number>> = { 'run-command': 2600, screenshot: 2400, 'add-image': 2400, 'search-web': 2200, 'search-photos': 2200 }
+const LINGER: Partial<Record<ActivityKind, number>> = { 'run-command': 2600, screenshot: 2400, 'add-image': 2400, 'search-web': 3000, 'search-photos': 2200 }
 export const lingerFor = (kind: ActivityKind) => LINGER[kind] ?? 1600
 
 /**

@@ -24,6 +24,8 @@
   --line: rgba(var(--ink), 0.12);
   /* Solid surfaces: no frost behind them (the peek, the nudge, Reduce Transparency). */
   --solid: 244, 246, 250;
+  /* Little pages in the activity steps (the deck, the file chip): a step lighter than the glass in dark. */
+  --paper: #ffffff;
   /* Icons, spinners, the face: ink on light glass, the glow on dark. */
   --hi: rgb(var(--ink));
   --face: rgb(var(--ink));
@@ -53,6 +55,7 @@
     --inset2: rgba(255, 255, 255, 0.12);
     --line: rgba(255, 255, 255, 0.1);
     --solid: 28, 31, 39;
+    --paper: #353a47;
     --hi: rgb(var(--glow));
     --face: rgb(var(--glow));
     --warm: #ffc46b;
@@ -1141,7 +1144,7 @@ code.tgt {
   height: 25px;
   padding: 5px 3px;
   border-radius: 4px;
-  background: rgba(var(--fill), 0.95);
+  background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--inset2);
   overflow: hidden;
 }
@@ -1185,23 +1188,54 @@ code.tgt {
   white-space: nowrap;
 }
 
-/* Searching the web: a magnifier with a dot orbiting it; result sites pop in one at a time. */
-.orbit {
-  position: absolute;
-  inset: -2px;
-  animation: spin 1.1s linear infinite;
+/* Searching the web: a little deck of pages flips while it searches, the top page sliding off and going to the back.
+   The sites it found are then dealt out as cards and named in chips underneath. */
+.deck {
+  position: relative;
+  align-self: stretch;
+  height: 48px;
 }
 
-.orbit i {
+.deck-card {
   position: absolute;
-  top: 0;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  margin-left: -2.5px;
-  border-radius: 50%;
-  background: rgb(var(--glow));
-  box-shadow: 0 0 6px rgb(var(--glow));
+  left: 0;
+  top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 40px;
+  height: 42px;
+  padding: 6px;
+  border-radius: 6px;
+  background: var(--paper);
+  box-shadow:
+    inset 0 0 0 1px var(--inset2),
+    0 3px 8px rgba(10, 20, 40, 0.14);
+  animation: deck 2.1s ease-in-out infinite both;
+}
+
+.deck-card i {
+  display: block;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--inset2);
+}
+
+.deck-card i:nth-child(3) {
+  width: 70%;
+}
+
+.deck-card .fav {
+  width: 13px;
+  height: 13px;
+  margin-bottom: 2px;
+  font-size: 7.5px;
+}
+
+.deck-card.dealt {
+  transform: translateX(calc(var(--i) * 50px));
+  animation: deal 0.5s var(--spring) both;
+  animation-delay: calc(var(--i) * 0.15s);
 }
 
 .doms,
@@ -1957,6 +1991,50 @@ a.icon-btn {
   }
 }
 
+/* One card's trip around the deck: in front, slides off and fades, comes back in at the back, moves up. */
+@keyframes deck {
+  0%,
+  24% {
+    z-index: 3;
+    opacity: 1;
+    transform: none;
+  }
+  31% {
+    z-index: 3;
+    opacity: 0;
+    transform: translate(46px, -4px) rotate(9deg);
+  }
+  31.5% {
+    z-index: 1;
+    opacity: 0;
+    transform: translate(6px, 4px) rotate(-4deg);
+  }
+  38%,
+  57% {
+    z-index: 1;
+    opacity: 1;
+    transform: translate(6px, 4px) rotate(-4deg);
+  }
+  65%,
+  91% {
+    z-index: 2;
+    transform: translate(3px, 2px) rotate(-2deg);
+  }
+  99%,
+  100% {
+    z-index: 3;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes deal {
+  from {
+    opacity: 0;
+    transform: translateX(0) rotate(-4deg);
+  }
+}
+
 @keyframes flash {
   0% {
     opacity: 0;
@@ -1971,7 +2049,6 @@ a.icon-btn {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
-  .orbit,
   .mini .scan,
   .shine .win,
   .prog .shim,
@@ -1990,6 +2067,22 @@ a.icon-btn {
     animation: none;
   }
 
+  /* The deck holds still, fanned out a little. */
+  .deck-card:not(.dealt) {
+    z-index: 3;
+    animation: none;
+  }
+
+  .deck-card:nth-child(2):not(.dealt) {
+    z-index: 2;
+    transform: translate(3px, 2px) rotate(-2deg);
+  }
+
+  .deck-card:nth-child(3):not(.dealt) {
+    z-index: 1;
+    transform: translate(6px, 4px) rotate(-4deg);
+  }
+
   .panel,
   .viewer,
   .nudge,
@@ -1999,6 +2092,7 @@ a.icon-btn {
   .photos i,
   .msg.user,
   .exit,
+  .deck-card.dealt,
   .landed,
   .act .st b,
   .ol,

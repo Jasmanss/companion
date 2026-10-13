@@ -164,8 +164,8 @@ options.
 - **Activity.** Every step of the agent's work is an event `{ id, kind, label, target?, status, detail? }`, sent
   when it starts and again when it finishes (plus `results` for search results and `image` for a new tray item).
   Kinds: thinking, read-file, list-files, search-web, fetch-page, run-command, screenshot, add-image, read-logs,
-  search-photos. Each has its own small animation: a light sweeping across "Thinking", a magnifier with an
-  orbiting dot and result sites popping in, a file chip being scanned, a site chip with a shimmering progress
+  search-photos. Each has its own small animation: a light sweeping across "Thinking", a little deck of pages
+  flipping while it searches, then the sites it found dealt out as cards, a file chip being scanned, a site chip with a shimmering progress
   line, a command with output ticking in and a ✓ or ✗ exit badge, a screenshot's shutter flash and its thumbnail
   flying into the tray. Replies stream in word by word, each word coming into focus, with a soft glowing cursor.
 - **Finished steps fold** into one quiet line, like "Read 3 files · Searched the web · Ran npm test", which opens
