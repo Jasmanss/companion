@@ -17,12 +17,17 @@
 //     setLook(look),                        // tint, frost, dark or eyes changed (optional: else it's recreated)
 //     dispose(),
 //   }
-//   look = { tint: {key, name, glass, glow, ink, soft} (THREE.Color), frost: 0..1, dark: bool, eyes, size,
-//            hat: 'none' | 'bowler' | 'top', glasses: 'none' | 'half-moon' | 'round' | 'monocle' }
+//   look = { tint: {key, name, glass, glow, ink, soft, body} (THREE.Color), frost: 0..1, dark: bool, eyes, size,
+//            hat: 'none' | 'bowler' | 'top', glasses: 'none' | 'half-moon' | 'round' | 'monocle',
+//            eye: {key, hex, color, lit, contrast} (eye color, see eyeFor), accent: THREE.Color, accentArms: bool,
+//            think: 'juggle' | 'chin' | 'twirl' (the toy family's thinking loop) }
+//   tint.body is the color a solid character is painted; older characters build their own from glass/glow/ink/soft.
 //
 // face (read-only for characters; Phase 4 ports step() into face-drawing.ts as stepFace):
 //   mood, moodAge (s since the mood changed), prevMood, t, dt, clock (liquid time: runs faster when lively/worried),
 //   open (eyelid 0..1.15), blink (1 open, dips on blinks), lookX/lookY (-1..1), level (mouth while talking 0..1),
+//   droop (upper lids lowered 0..1: resting, sleepy), happy (squinting arc eyes 0..1: done eases back, celebrating),
+//   pulse (0..1, needs-you), think (0..1 phase of the thinking loop, one THINK_PERIOD long: eyes and arms share it),
 //   wob (wobble amount), rip (ripples, talking), swirl (thinking), warm (worried tint), spark (celebrating),
 //   bounce (celebrating hop, world units, <= 0), P (personality amplitude: calm .55, lively 1.35), rm (reduced motion),
 //   activity ('read' | 'search' | null), pointer {x, y}
@@ -44,18 +49,99 @@ export const MOODS = [
   ['sleepy', 'Sleepy', 'after midnight'],
 ]
 
+// name, glass, glow, ink, soft, body. The first five keep their hand-tuned tones; the rest derive them from body.
 const HEX = {
-  ice: ['Ice', '#c8e4ff', '#60beff', '#124678', '#b2dcff'],
-  lilac: ['Lilac', '#ded4ff', '#a88cff', '#462e96', '#d6caff'],
-  mint: ['Mint', '#c6f2e0', '#46d6a0', '#0c5a40', '#aaeed2'],
-  peach: ['Peach', '#ffdac8', '#ff9268', '#883416', '#ffceba'],
-  graphite: ['Graphite', '#a8b0be', '#c8d2e4', '#1e222a', '#d6dce8'],
+  ice: ['Ice', '#c8e4ff', '#60beff', '#124678', '#b2dcff', '#a6d4ff'],
+  lilac: ['Lilac', '#ded4ff', '#a88cff', '#462e96', '#d6caff', '#c2b0ff'],
+  mint: ['Mint', '#c6f2e0', '#46d6a0', '#0c5a40', '#aaeed2', '#8fe2bf'],
+  peach: ['Peach', '#ffdac8', '#ff9268', '#883416', '#ffceba', '#ffbd9b'],
+  graphite: ['Graphite', '#a8b0be', '#c8d2e4', '#1e222a', '#d6dce8', '#59616f'],
+  butter: ['Butter', null, null, null, null, '#ffdf86'],
+  rose: ['Rose', null, null, null, null, '#ffa9c6'],
+  sky: ['Sky', null, null, null, null, '#5fb0ff'],
+  coral: ['Coral', null, null, null, null, '#ff7d6b'],
+  sage: ['Sage', null, null, null, null, '#a6c39a'],
+  cream: ['Cream', null, null, null, null, '#f5ead6'],
 }
 export const TINT_KEYS = Object.keys(HEX)
 export const WARM = new THREE.Color('#ffb870')
+const SRGB = THREE.SRGBColorSpace
+const isHex = (s) => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s)
+const clamp01 = (v) => Math.min(1, Math.max(0, v))
+const hsl = (h, s, l) => new THREE.Color().setHSL(((h % 1) + 1) % 1, clamp01(s), clamp01(l), SRGB)
+const hexOf = (c) => '#' + c.getHexString()
+/** WCAG relative luminance (THREE.Color keeps linear sRGB, which is what the formula wants). */
+export const luminance = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+/** WCAG contrast ratio, 1 to 21. 3 is the floor for big shapes like eyes. */
+export function contrast(a, b) { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
+
+/**
+ * A tint from a preset key or any '#rrggbb'. Hex input derives the whole family from the body color: a pale glass,
+ * a bright glow, a dark ink and a soft tone of the same hue, so older characters work with any color too.
+ */
 export function tint(key) {
-  const [name, glass, glow, ink, soft] = HEX[key] ?? HEX.ice
-  return { key, name, glass: new THREE.Color(glass), glow: new THREE.Color(glow), ink: new THREE.Color(ink), soft: new THREE.Color(soft), hex: { glass, glow, ink, soft } }
+  const custom = isHex(key)
+  const row = custom ? ['Custom', null, null, null, null, key.toLowerCase()] : HEX[key] ?? HEX.ice
+  const body = new THREE.Color(row[5])
+  const { h, s, l } = body.getHSL({}, SRGB)
+  const grey = s < 0.12
+  const derived = {
+    glass: hsl(h, grey ? s : s * 0.9, 0.85),
+    glow: hsl(h, grey ? s * 1.5 : Math.max(0.55, Math.min(1, s * 1.1)), 0.66),
+    ink: hsl(h, grey ? s : Math.min(0.7, s * 0.8), 0.17),
+    soft: hsl(h, grey ? s : s * 0.9, 0.8),
+  }
+  const pick = (i, k) => (row[i] ? new THREE.Color(row[i]) : derived[k])
+  const t = { key: custom ? key.toLowerCase() : HEX[key] ? key : 'ice', name: row[0], glass: pick(1, 'glass'), glow: pick(2, 'glow'), ink: pick(3, 'ink'), soft: pick(4, 'soft'), body, h, s, l }
+  t.hex = { glass: hexOf(t.glass), glow: hexOf(t.glow), ink: hexOf(t.ink), soft: hexOf(t.soft), body: hexOf(body) }
+  return t
+}
+
+/* ---------------- eye and accent colors (the toy family) ---------------- */
+export const EYE_PRESETS = [['auto', 'Auto'], ['ink', 'Ink'], ['white', 'White'], ['glow', 'Glow'], ['warm', 'Warm']]
+const INK = (tn) => hsl(tn.h, Math.min(0.45, tn.s * 0.6), 0.09)
+const WHITE_EYE = new THREE.Color('#fbfcff')
+/**
+ * Eye color for a body tint. auto picks ink or white, whichever reads better on the body. glow and warm adapt their
+ * lightness to the body so they stay readable; ink, white and custom colors are kept as chosen (contrast is reported).
+ */
+export function eyeFor(tn, choice = 'auto') {
+  const body = tn.body, darkBody = luminance(body) < 0.3
+  let color, lit = false, key = choice
+  if (isHex(choice)) color = new THREE.Color(choice)
+  else if (choice === 'ink') color = INK(tn)
+  else if (choice === 'white') color = WHITE_EYE.clone()
+  else if (choice === 'glow') { color = darkBody ? hsl(tn.h, Math.max(0.75, tn.s), 0.74) : hsl(tn.h + 0.5, 0.9, 0.36); lit = true }
+  else if (choice === 'warm') color = darkBody ? new THREE.Color('#ffc261') : new THREE.Color('#4a2716')
+  else { key = 'auto'; const ink = INK(tn); color = contrast(ink, body) >= contrast(WHITE_EYE, body) ? ink : WHITE_EYE.clone() }
+  return { key, color, hex: hexOf(color), lit, contrast: contrast(color, body), light: luminance(color) > 0.4 }
+}
+/** A second color for hands and small trim: the body hue turned around, at a lightness that stands apart from the body. */
+export function accentFor(tn, choice = 'auto') {
+  if (isHex(choice)) return new THREE.Color(choice)
+  if (tn.s < 0.12) return hsl(0.02, 0.75, tn.l > 0.5 ? 0.6 : 0.68) // grey bodies: a coral accent
+  const l = tn.l > 0.62 ? tn.l - 0.16 : tn.l + 0.16
+  return hsl(tn.h + 0.42, Math.min(0.85, Math.max(0.5, tn.s)), Math.min(0.82, Math.max(0.4, l)))
+}
+/** A pleasing random body/eye/accent combo: soft-toy saturation and lightness, no muddy or low-contrast results. */
+export function randomCombo(rand = Math.random) {
+  for (let tries = 0; tries < 40; tries++) {
+    const h = rand(), band = rand()
+    let s, l
+    if (band < 0.45) { s = 0.55 + rand() * 0.35; l = 0.74 + rand() * 0.1 } // pastel
+    else if (band < 0.85) { s = 0.55 + rand() * 0.3; l = 0.58 + rand() * 0.1 } // mid
+    else { s = 0.4 + rand() * 0.25; l = 0.3 + rand() * 0.12 } // deep
+    if (h > 0.1 && h < 0.2 && l < 0.6) continue // olive and brown read as dirty on a toy
+    const body = hexOf(hsl(h, s, l))
+    const tn = tint(body)
+    const eyes = ['auto', 'auto', 'auto', 'glow', 'warm', 'ink', 'white']
+    const eye = eyes[Math.floor(rand() * eyes.length)]
+    if (eyeFor(tn, eye).contrast < 3.5) continue
+    const accent = rand() < 0.5 ? 'auto' : hexOf(hsl(h + [0.08, 0.42, 0.5, 0.58][Math.floor(rand() * 4)], 0.6 + rand() * 0.25, l > 0.6 ? l - 0.18 : l + 0.2))
+    if (contrast(accentFor(tn, accent), tn.body) < 1.25) continue
+    return { body, eye, accent }
+  }
+  return { body: '#ffbd9b', eye: 'auto', accent: 'auto' }
 }
 
 /* ---------------- mood state (shared by every character) ---------------- */
@@ -73,10 +159,18 @@ const FX = {
 }
 const ease = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt))
 const speaking = (t) => Math.min(1, (Math.abs(Math.sin(t * 9.1)) * 0.6 + Math.abs(Math.sin(t * 3.7 + 1.3)) * 0.4) * (0.65 + 0.35 * Math.sin(t * 1.1)))
+/** Stable pseudo-random 0..1, so blinks and glances are irregular but the same on every run. */
+const rnd = (a, b) => { const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return v - Math.floor(v) }
+/** Seconds for one thinking loop: one eye scan across, and one full juggling cycle, so eyes and arms stay in time. */
+export const THINK_PERIOD = 2.4
+// Mean seconds between blinks (irregular around it), and slow blinks for drowsy moods. Default 3.2 s and 0.14 s.
+const BLINK_GAP = { resting: 5, sleepy: 4.6, listening: 4.4, talking: 2.6, thinking: 3.6, 'needs-you': 4, worried: 2.1 }
+const BLINK_LEN = { resting: 0.34, sleepy: 0.46 }
 
 export function newFace(seed = Math.random()) {
   return {
     mood: 'idle', prevMood: 'idle', moodAge: 10, t: 0, dt: 0, clock: seed * 20, open: 1, blink: 1, blinkAt: -9, nextBlink: 1 + seed * 3,
+    blinkLen: 0.14, blinkN: 0, droop: 0, happy: 0, pulse: 0, think: 0, glanceAt: 2 + seed * 3, glanceUntil: 0, gx: 0, gy: 0, sacAt: 0, sx: 0, sy: 0,
     lookX: 0, lookY: 0, level: 0, wob: 0.5, sp: 1, rip: 0, swirl: 0, warm: 0, spark: 0, bounce: 0, P: 0.55, pers: 'calm', rm: false,
     activity: null, pointer: { x: 0, y: 0 }, seed,
   }
@@ -93,12 +187,13 @@ export function step(f, mood, t, dt, pointer, o) {
   f.t = t
   f.dt = dt
   if (f.rm) {
-    // Reduced motion: a still pose per mood. No wobble, blinks or bounce.
+    // Reduced motion: a still pose per mood. No wobble, blinks, glances, loops or bounce; the pose changes stay.
     const lk = mood === 'thinking' ? [0.65, -0.6] : mood === 'resting' || mood === 'sleepy' ? [0, 0.4] : [0, 0]
     Object.assign(f, {
       wob: 0, rip: 0, swirl: fx.swirl ? 0.7 : 0, warm: fx.warm || 0, spark: fx.spark ? 0.8 : 0, bounce: 0, blink: 1,
       level: mood === 'talking' ? 0.6 : 0, lookX: lk[0], lookY: lk[1],
       open: mood === 'sleepy' ? 0.3 : mood === 'worried' ? 0.85 : mood === 'listening' || mood === 'needs-you' ? 1.15 : 1,
+      droop: mood === 'sleepy' ? 0.7 : mood === 'resting' ? 0.45 : 0, happy: mood === 'done' || mood === 'celebrating' ? 1 : 0, pulse: 0, think: 0.2,
     })
     return f
   }
@@ -109,23 +204,57 @@ export function step(f, mood, t, dt, pointer, o) {
   f.warm = ease(f.warm, fx.warm || 0, 3, dt)
   f.spark = ease(f.spark, fx.spark || 0, 5, dt)
   f.clock += dt * f.sp
+  f.think = (((t / THINK_PERIOD) % 1) + 1) % 1
   let look
+  let lr = o.pers === 'lively' ? 10 : 6
   if (f.activity === 'read') look = [Math.sin(t * 2.6) * 0.8, 0.3]
   else if (f.activity === 'search') look = [Math.sin(t * 1.4) * 0.85, Math.cos(t * 2.1) * 0.55]
-  else if (mood === 'thinking') look = [0.65, -0.6]
-  else if (mood === 'resting' || mood === 'sleepy') look = [0, 0.4]
-  else if (mood === 'worried') look = [Math.sin(t * 1.7) * 0.55, 0.15]
-  else if (mood === 'talking') look = [pointer.x * 0.35, pointer.y * 0.25]
-  else look = [pointer.x, pointer.y]
-  const lr = o.pers === 'lively' ? 10 : 6
+  else if (mood === 'thinking') {
+    // Up and to the side, scanning once across per loop, with a small flick at each end. Never a frozen stare.
+    const ph = f.think * Math.PI * 2
+    look = [0.2 + 0.5 * Math.sin(ph) + 0.08 * Math.sin(ph * 3), -0.58 + 0.07 * Math.sin(ph * 2)]
+    lr = 9
+  } else if (mood === 'resting' || mood === 'sleepy') {
+    // Drifting: slow, aimless, a little low.
+    look = [0.24 * Math.sin(t * 0.27 + f.seed * 6), 0.38 + 0.08 * Math.sin(t * 0.19 + f.seed * 3)]
+    lr = 2.2
+  } else if (mood === 'worried') look = [Math.sin(t * 1.7) * 0.55, 0.15]
+  else if (mood === 'talking') {
+    // Engaged with you, with small saccades: quick jumps every third of a second or so.
+    if (t > f.sacAt || f.sacAt - t > 2) { f.sacAt = t + 0.25 + 0.5 * rnd(f.seed, t); f.sx = (rnd(t, f.seed) - 0.5) * 0.36; f.sy = (rnd(f.seed + 1, t) - 0.5) * 0.22 }
+    look = [pointer.x * 0.3 + f.sx, pointer.y * 0.2 + f.sy]
+    lr = 22
+  } else if (mood === 'needs-you') look = [pointer.x * 0.15, pointer.y * 0.1] // straight at you
+  else if (mood === 'idle') {
+    // Relaxed, loosely on you, with an occasional glance away and back.
+    if (f.glanceAt - t > 9) f.glanceAt = t + 1
+    if (t > f.glanceAt) { f.glanceUntil = t + 0.7 + 0.7 * rnd(f.seed, f.glanceAt); f.gx = (rnd(f.glanceAt, f.seed) - 0.5) * 1.6; f.gy = (rnd(f.seed + 2, f.glanceAt) - 0.6) * 0.8; f.glanceAt = f.glanceUntil + 2 + 3.5 * rnd(f.glanceAt, 3) }
+    const glancing = t < f.glanceUntil
+    look = glancing ? [f.gx, f.gy] : [pointer.x * 0.4, pointer.y * 0.3]
+    lr = 12
+  } else look = [pointer.x, pointer.y]
   f.lookX = ease(f.lookX, look[0], lr, dt)
   f.lookY = ease(f.lookY, look[1], lr, dt)
   const open = mood === 'sleepy' ? 0.32 - 0.12 * Math.max(0, Math.sin(t * 0.9)) : mood === 'worried' ? 0.85 : mood === 'listening' || mood === 'needs-you' ? 1.15 : 1
   f.open = ease(f.open, open, mood === 'sleepy' ? 3 : 10, dt)
+  // Lids: resting sits half-lidded; sleepy is heavier and now and then nods nearly shut.
+  const droop = mood === 'resting' ? 0.45 : mood === 'sleepy' ? 0.62 + 0.3 * Math.max(0, Math.sin(t * 0.9)) ** 3 : 0
+  f.droop = ease(f.droop, droop, mood === 'sleepy' || mood === 'resting' ? 2.5 : 8, dt)
+  // Done: a happy squint that holds, then eases back to normal. Celebrating keeps it.
+  const happy = mood === 'celebrating' || (mood === 'done' && f.moodAge < 1.8) ? 1 : 0
+  f.happy = ease(f.happy, happy, happy ? 14 : mood === 'done' ? 2.2 : 8, dt)
+  f.pulse = ease(f.pulse, mood === 'needs-you' ? 0.5 + 0.5 * Math.sin(t * 4.2) : 0, 12, dt)
   f.level = ease(f.level, mood === 'talking' ? speaking(t) : 0, 18, dt)
-  if (t > f.nextBlink) { f.blinkAt = t; f.nextBlink = t + 2.2 + ((f.seed * 7.3 + t * 0.37) % 1) * 3.5 }
-  const b = (t - f.blinkAt) / 0.14
-  f.blink = b >= 0 && b < 1 ? 1 - 0.9 * Math.sin(b * Math.PI) : 1
+  // Blinks: irregular gaps around a per-mood mean, now and then a quick double; drowsy moods blink slowly.
+  if (t > f.nextBlink || f.nextBlink - t > 12) {
+    f.blinkAt = t
+    f.blinkN++
+    f.blinkLen = BLINK_LEN[mood] ?? 0.14
+    const double = !BLINK_LEN[mood] && rnd(f.seed * 13.7, f.blinkN) < 0.18
+    f.nextBlink = double ? t + f.blinkLen + 0.1 : t + (BLINK_GAP[mood] ?? 3.2) * (0.45 + 1.1 * rnd(f.seed * 5.3, f.blinkN + 0.5))
+  }
+  const b = (t - f.blinkAt) / f.blinkLen
+  f.blink = b >= 0 && b < 1 ? 1 - 0.92 * Math.sin(b * Math.PI) : 1
   // Celebrating is the only mood that bounces.
   f.bounce = mood === 'celebrating' ? -Math.abs(Math.sin(t * 6.5)) * (o.pers === 'lively' ? 0.16 : 0.09) : ease(f.bounce, 0, 10, dt)
   return f

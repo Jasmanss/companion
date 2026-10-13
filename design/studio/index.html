@@ -17,6 +17,7 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--star:#F5B544;--accent:#7EA8FF;--chip:#1F2127}}
 :root[data-theme="dark"]{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--star:#F5B544;--accent:#7EA8FF;--chip:#1F2127}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif;overflow-x:hidden}
 .wrap{max-width:1180px;margin:0 auto;padding:0 16px}
 header.top{padding:32px 0 8px}
@@ -73,25 +74,57 @@ main{padding:20px 0 64px}
 .mt[aria-pressed=true]{border-color:var(--text)}
 .mt span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .note{font-size:12px;color:var(--muted);margin:8px 2px 0}
+select.chip{appearance:none;-webkit-appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.pick{position:relative}
+.pick input[type=color]{width:18px;height:18px;padding:0;border:1px solid rgba(0,0,0,.15);border-radius:50%;background:none;cursor:pointer;flex:none}
+.pick input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.pick input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+.pick[aria-pressed=true] input[type=color]{border-color:var(--bg)}
+.warn{font-size:12px;font-weight:700;color:#b4570b}
+:root[data-theme="dark"] .warn{color:#f5b544}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .warn{color:#f5b544}}
+.own{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-left:6px;vertical-align:2px}
+.colbtn{background:none;border:1px solid var(--line);border-radius:999px;height:34px;padding:0 12px;cursor:pointer;color:var(--muted);font:700 12px Nunito,system-ui;flex:none}
+.colbtn[aria-pressed=true]{color:var(--text);border-color:var(--text)}
+.metabtns{display:flex;gap:6px;flex:none}
 :root[data-rm] *{animation:none!important;transition:none!important}
 </style>
 </head>
 <body>
 <header class="wrap top">
   <h1>Character Studio</h1>
-  <p>New 3D directions in real physical glass: light refracts through the body, frost blurs what's inside, and the edges catch light. Each one is shown big, at the real peek size (50×44), in a panel header (64×54), and in all 10 moods. The flat designs are still in the <a href="../glass-lab.html">Glass Lab</a>.</p>
+  <p>3D character directions. The toy family (Bao, Reed, Tofu) comes first: soft vinyl toys with stubby arms and eyes that show what Claude is doing, in any color. Then solid butler characters, then glass ones. Each is shown big, at the real peek size (50×44), in a panel header (64×54), and in all 10 moods. The flat designs are still in the <a href="../glass-lab.html">Glass Lab</a>.</p>
 </header>
 <div class="bar">
   <div class="wrap">
     <div class="row" id="moodChips"></div>
     <div class="row">
-      <span class="lbl">Tint</span><span class="row" id="tintChips" style="gap:6px"></span>
+      <label class="row" style="gap:6px"><span class="lbl">Colors for</span><select id="focus" class="chip" aria-label="Which character the colors apply to"></select></label>
+      <button class="chip" id="resetColors" hidden>Use shared colors</button>
+      <button class="chip" id="randomize" title="A pleasing body, eye and accent combo">Randomize</button>
+      <span class="cap" style="margin:0">Colors remember per character, and the URL shares the combo.</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Body</span><span class="row" id="tintChips" style="gap:6px"></span>
+      <label class="chip pick" id="bodyPickChip" title="Any body color"><input type="color" id="bodyPick" aria-label="Custom body color">Custom</label>
+    </div>
+    <div class="row">
+      <span class="lbl">Eye color</span><span class="row" id="eyeColChips" style="gap:6px"></span>
+      <label class="chip pick" id="eyePickChip" title="Any eye color"><input type="color" id="eyePick" aria-label="Custom eye color">Custom</label>
+      <span class="warn" id="eyeWarn"></span>
       <span class="sep"></span>
+      <button class="chip" id="armsBtn" aria-pressed="false" title="Toy family: tint the hands a second color">Accent arms</button>
+      <label class="chip pick" id="accentPickChip" title="Accent color (hands, bow tie, antenna, hat band)"><input type="color" id="accentPick" aria-label="Accent color">Accent</label>
+      <button class="chip" id="accentAuto" aria-pressed="false" title="Derive the accent from the body">Auto accent</button>
+    </div>
+    <div class="row">
       <label class="row" style="gap:6px" title="Glass characters: clear to frosted. Solid characters: glossy to matte."><span class="lbl">Frost / matte</span><input type="range" id="frost" min="0" max="100" aria-label="Frost"></label>
       <span class="sep"></span>
       <span class="lbl">Eyes</span><span class="row" id="eyeChips" style="gap:6px"></span>
       <span class="sep"></span>
       <span class="lbl">Moves</span><span class="row" id="persChips" style="gap:6px"></span>
+      <span class="sep"></span>
+      <span class="lbl" title="Toy family: the arm loop while waiting on the model">Thinking</span><span class="row" id="thinkChips" style="gap:6px"></span>
     </div>
     <div class="row">
       <span class="lbl">Hat</span><span class="row" id="hatChips" style="gap:6px"></span>
@@ -115,16 +148,27 @@ main{padding:20px 0 64px}
   <p class="note" id="loadNote"></p>
 </main>
 <script type="module">
-import { Studio, MOODS, TINT_KEYS, tint, newFace, step } from './engine.js'
+import { Studio, MOODS, TINT_KEYS, EYE_PRESETS, tint, eyeFor, accentFor, randomCombo, newFace, step } from './engine.js'
 import { CHARACTERS } from './characters/index.js'
 
 const Q = new URLSearchParams(location.search)
 const KEY = 'steward-studio'
-const S = { mood: 'idle', tint: 'ice', frost: 55, eyes: 'pills', pers: 'calm', theme: 'auto', hat: 'none', glasses: 'none', stars: [] }
+// col: colors per character id, with '*' as the shared default. body: preset key or '#hex'; eye: preset or '#hex';
+// accent: 'auto' or '#hex'; arms: accent-colored hands. focus: which entry the color controls edit ('all' = '*').
+const S = { mood: 'idle', tint: 'ice', frost: 55, eyes: 'pills', pers: 'calm', theme: 'auto', hat: 'none', glasses: 'none', think: 'juggle', stars: [], col: {}, focus: 'all' }
 try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')) } catch {}
-for (const k of ['mood', 'tint', 'eyes', 'pers', 'theme', 'hat', 'glasses']) if (Q.get(k)) S[k] = Q.get(k)
+for (const k of ['mood', 'eyes', 'pers', 'theme', 'hat', 'glasses', 'think']) if (Q.get(k)) S[k] = Q.get(k)
 if (Q.get('frost')) S.frost = +Q.get('frost')
-if (!TINT_KEYS.includes(S.tint)) S.tint = 'ice'
+const isHex = (s) => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s)
+const okBody = (b) => TINT_KEYS.includes(b) || isHex(b)
+const okEye = (e) => EYE_PRESETS.some((p) => p[0] === e) || isHex(e)
+const clean = (c) => ({ body: okBody(c?.body) ? c.body : 'ice', eye: okEye(c?.eye) ? c.eye : 'auto', accent: isHex(c?.accent) ? c.accent : 'auto', arms: !!c?.arms })
+// The old single Tint setting becomes the shared default.
+if (!S.col || typeof S.col !== 'object') S.col = {}
+S.col['*'] = clean(S.col['*'] ?? { body: Q.get('tint') || S.tint })
+for (const id of Object.keys(S.col)) S.col[id] = clean(S.col[id])
+if (Q.get('tint') && okBody(Q.get('tint'))) S.col['*'].body = Q.get('tint')
+if (!['juggle', 'chin', 'twirl'].includes(S.think)) S.think = 'juggle'
 if (!MOODS.some((m) => m[0] === S.mood)) S.mood = 'idle'
 const FROZEN = Q.has('t') ? +Q.get('t') : null
 let RM = matchMedia('(prefers-reduced-motion: reduce)').matches || Q.get('rm') === '1'
@@ -150,9 +194,61 @@ defs.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id))
 window.__errors = failed.map((f) => `${f.id}: ${f.error}`)
 $('loadNote').textContent = failed.length ? `Couldn't load: ${failed.map((f) => f.id).join(', ')}` : ''
 
+/* ---------- colors: per character, shareable in the URL ---------- */
+const known = (id) => defs.some((d) => d.id === id)
+if (Q.get('c') && known(Q.get('c'))) S.focus = Q.get('c')
+if (S.focus !== 'all' && !known(S.focus)) S.focus = 'all'
+const colorsFor = (id) => S.col[id] ?? S.col['*']
+const focusKey = () => (S.focus === 'all' ? '*' : S.focus)
+const focusCols = () => colorsFor(focusKey())
+function editColors(patch) {
+  const k = focusKey()
+  S.col[k] = clean({ ...colorsFor(k), ...patch })
+}
+{
+  // ?c=<id>&body=%23ffb870&eye=auto&accent=%23...&arms=1 opens a shared combo.
+  const p = {}
+  if (Q.get('body') && okBody(Q.get('body'))) p.body = Q.get('body')
+  if (Q.get('eye') && okEye(Q.get('eye'))) p.eye = Q.get('eye')
+  if (Q.get('accent') && (Q.get('accent') === 'auto' || isHex(Q.get('accent')))) p.accent = Q.get('accent')
+  if (Q.has('arms')) p.arms = Q.get('arms') === '1'
+  if (Object.keys(p).length) editColors(p)
+}
+function syncURL() {
+  if (FROZEN !== null) return
+  const u = new URL(location.href)
+  for (const k of ['c', 'body', 'eye', 'accent', 'arms', 'tint']) u.searchParams.delete(k)
+  const c = focusCols()
+  if (S.focus !== 'all') u.searchParams.set('c', S.focus)
+  u.searchParams.set('body', c.body)
+  if (c.eye !== 'auto') u.searchParams.set('eye', c.eye)
+  if (c.accent !== 'auto') u.searchParams.set('accent', c.accent)
+  if (c.arms) u.searchParams.set('arms', '1')
+  history.replaceState(null, '', u)
+}
+
 /* ---------- views ---------- */
 const views = []
-const lookFor = (theme, size) => ({ tint: tint(S.tint), frost: S.frost / 100, dark: theme ? theme === 'dark' : isDark(), eyes: S.eyes, hat: S.hat, glasses: S.glasses, size, rm: RM })
+window.__views = views
+let lookVer = 0
+const looks = new Map()
+const lookFor = (theme, size, id) => {
+  const ck = `${lookVer}|${theme}|${size}|${id}|${RM}`
+  if (looks.has(ck)) return looks.get(ck)
+  if (looks.size > 400) looks.clear()
+  const l = makeLook(theme, size, id)
+  looks.set(ck, l)
+  return l
+}
+function makeLook(theme, size, id) {
+  const c = colorsFor(id)
+  const tn = tint(c.body)
+  return {
+    tint: tn, frost: S.frost / 100, dark: theme ? theme === 'dark' : isDark(), eyes: S.eyes, hat: S.hat, glasses: S.glasses, size, rm: RM,
+    eye: eyeFor(tn, c.eye), accent: accentFor(tn, c.accent), accentArms: c.arms, think: S.think,
+  }
+}
+const lookKey = (l) => `${l.tint.key}|${l.frost}|${l.dark}|${l.eyes}|${l.hat}|${l.glasses}|${l.eye.hex}${l.eye.lit}|${l.accent.getHexString()}|${l.accentArms}|${l.think}`
 function addView(card, canvas, def, { size, theme = null, mood = null, fps = 60, still = false }) {
   const v = { card, canvas, ctx: canvas.getContext('2d'), def, size, theme, mood, fps, still, face: newFace((views.length * 0.137) % 1), vis: false, last: 0, st: null, lookKey: '' }
   canvas._v = v
@@ -162,8 +258,8 @@ function addView(card, canvas, def, { size, theme = null, mood = null, fps = 60,
 }
 const io = new IntersectionObserver((es) => es.forEach((e) => { e.target._v.vis = e.isIntersecting }), { rootMargin: '120px' })
 function ensureStage(v) {
-  const look = lookFor(v.theme, v.size)
-  const key = `${look.tint.key}|${look.frost}|${look.dark}|${look.eyes}|${look.hat}|${look.glasses}`
+  const look = lookFor(v.theme, v.size, v.def.id)
+  const key = lookKey(look)
   if (v.st && key === v.lookKey) return look
   try {
     if (v.st && v.st.inst.setLook) {
@@ -200,7 +296,7 @@ function drawStill(v) {
   ensureStage(v)
   if (v.dead) return
   const f = newFace(0.3)
-  const look = lookFor(v.theme, v.size)
+  const look = lookFor(v.theme, v.size, v.def.id)
   const T = FROZEN ?? 1.6
   try {
     for (let t = 0; t <= T; t += 1 / 30) step(f, v.mood, t, 1 / 30, { x: 0.2, y: 0.1 }, { pers: S.pers, rm: RM })
@@ -220,8 +316,7 @@ function frame(now) {
   for (const v of views) {
     if (!v.vis || v.dead || !v.canvas.clientWidth) continue
     if (v.still) {
-      const look = lookFor(v.theme, v.size)
-      const key = `${look.tint.key}|${look.frost}|${look.dark}|${look.eyes}|${look.hat}|${look.glasses}` + S.pers + RM
+      const key = lookKey(lookFor(v.theme, v.size, v.def.id)) + S.pers + RM
       if (v.drawnKey !== key) drawStill(v)
       continue
     }
@@ -244,7 +339,7 @@ const cards = $('cards')
 cards.innerHTML = defs.map(({ id, def }) => `
   <article class="card" data-id="${id}">
     <div class="stage bd-auto"><canvas class="big" aria-label="${esc(def.name)}"></canvas></div>
-    <div class="meta"><div><h2 class="name">${esc(def.name)}</h2><p class="vibe">${esc(def.vibe || '')}</p></div><button class="star" aria-pressed="false" aria-label="Star ${esc(def.name)}">☆</button></div>
+    <div class="meta"><div><h2 class="name">${esc(def.name)}</h2><p class="vibe">${esc(def.vibe || '')}</p></div><div class="metabtns"><button class="colbtn" aria-pressed="false" title="Edit this character's own colors">Colors</button><button class="star" aria-pressed="false" aria-label="Star ${esc(def.name)}">☆</button></div></div>
     <pre class="err" hidden></pre>
     <div class="ctx">
       <figure><div class="box bd-light"><div class="tab light"><canvas data-size="peek" data-theme="light" style="width:50px;height:44px"></canvas></div></div><figcaption>Peek, light</figcaption></figure>
@@ -280,12 +375,30 @@ cards.addEventListener('click', (e) => {
   const card = e.target.closest('.card'); if (!card) return
   if (e.target.closest('.star')) { const id = card.dataset.id; S.stars = S.stars.includes(id) ? S.stars.filter((x) => x !== id) : [...S.stars, id]; changed() }
   const mt = e.target.closest('.mt'); if (mt) { stopCycle(); setMood(mt.dataset.mood) }
+  if (e.target.closest('.colbtn')) { S.focus = S.focus === card.dataset.id ? 'all' : card.dataset.id; changed(); document.querySelector('.bar').scrollIntoView({ block: 'nearest' }) }
 })
 function render() {
   root.toggleAttribute('data-rm', RM)
   if (S.theme === 'auto') root.removeAttribute('data-theme'); else root.dataset.theme = S.theme
   document.querySelectorAll('.bd-auto').forEach((el) => { el.classList.toggle('bd-dark', isDark()); el.classList.toggle('bd-light', !isDark()) })
-  seg($('tintChips'), TINT_KEYS.map((k) => [k, tint(k).name]), S.tint, (k) => { S.tint = k; changed() }, ([k, l]) => `<span class="sw" style="background:${tint(k).hex.glass}"></span>${l}`)
+  lookVer++
+  const fc = focusCols(), ftn = tint(fc.body)
+  $('focus').innerHTML = `<option value="all">All characters</option>` + defs.map(({ id, def }) => `<option value="${id}">${esc(def.name)}${S.col[id] ? ' •' : ''}</option>`).join('')
+  $('focus').value = S.focus
+  $('resetColors').hidden = S.focus === 'all' || !S.col[S.focus]
+  seg($('tintChips'), TINT_KEYS.map((k) => [k, tint(k).name]), fc.body, (k) => { editColors({ body: k }); changed() }, ([k, l]) => `<span class="sw" style="background:${tint(k).hex.body}"></span>${l}`)
+  $('bodyPick').value = ftn.hex.body
+  $('bodyPickChip').setAttribute('aria-pressed', isHex(fc.body))
+  seg($('eyeColChips'), EYE_PRESETS, fc.eye, (k) => { editColors({ eye: k }); changed() }, ([k, l]) => `<span class="sw" style="background:${eyeFor(ftn, k).hex}"></span>${l}`)
+  const fe = eyeFor(ftn, fc.eye)
+  $('eyePick').value = fe.hex
+  $('eyePickChip').setAttribute('aria-pressed', isHex(fc.eye))
+  $('eyeWarn').textContent = fe.contrast < 3 ? `Low contrast on this body (${fe.contrast.toFixed(1)}:1)` : ''
+  $('armsBtn').setAttribute('aria-pressed', fc.arms)
+  $('accentPick').value = '#' + accentFor(ftn, fc.accent).getHexString()
+  $('accentPickChip').setAttribute('aria-pressed', isHex(fc.accent))
+  $('accentAuto').setAttribute('aria-pressed', fc.accent === 'auto')
+  seg($('thinkChips'), [['juggle', 'Juggle'], ['chin', 'Chin tap'], ['twirl', 'Twirl']], S.think, (k) => { S.think = k; changed() })
   seg($('eyeChips'), [['pills', 'Pills'], ['dots', 'Dots'], ['arcs', 'Arcs']], S.eyes, (k) => { S.eyes = k; changed() })
   seg($('persChips'), [['calm', 'Calm'], ['lively', 'Lively']], S.pers, (k) => { S.pers = k; changed() })
   seg($('hatChips'), [['none', 'None'], ['bowler', 'Bowler'], ['top', 'Top hat']], S.hat, (k) => { S.hat = k; changed() })
@@ -297,13 +410,23 @@ function render() {
     const on = S.stars.includes(card.dataset.id)
     card.classList.toggle('starred', on)
     const b = card.querySelector('.star'); b.textContent = on ? '★' : '☆'; b.setAttribute('aria-pressed', on)
+    const cb = card.querySelector('.colbtn'); cb.setAttribute('aria-pressed', S.focus === card.dataset.id); cb.innerHTML = 'Colors' + (S.col[card.dataset.id] ? '<span class="own" title="Has its own colors"></span>' : '')
   })
+  syncURL()
   const names = S.stars.map((id) => defs.find((d) => d.id === id)?.def.name).filter(Boolean)
   $('picks').innerHTML = `Starred <b>${names.length ? esc(names.join(', ')) : 'none yet'}</b>`
 }
 function changed() { save(); render() }
 $('frost').oninput = (e) => { S.frost = +e.target.value; changed() }
 $('rmBtn').onclick = () => { RM = !RM; render() }
+$('focus').onchange = (e) => { S.focus = e.target.value; changed() }
+$('resetColors').onclick = () => { delete S.col[S.focus]; changed() }
+$('bodyPick').oninput = (e) => { editColors({ body: e.target.value.toLowerCase() }); changed() }
+$('eyePick').oninput = (e) => { editColors({ eye: e.target.value.toLowerCase() }); changed() }
+$('accentPick').oninput = (e) => { editColors({ accent: e.target.value.toLowerCase() }); changed() }
+$('accentAuto').onclick = () => { editColors({ accent: 'auto' }); changed() }
+$('armsBtn').onclick = () => { editColors({ arms: !focusCols().arms }); changed() }
+$('randomize').onclick = () => { editColors(randomCombo()); changed() }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', render)
 let cycleT = null
 function stopCycle() { clearInterval(cycleT); cycleT = null; $('cycle').setAttribute('aria-pressed', 'false') }
@@ -317,12 +440,13 @@ $('copyPicks').onclick = async () => {
   let lab = {}
   try { lab = JSON.parse(localStorage.getItem('steward-glass-lab') || '{}') } catch {}
   const names = S.stars.map((id) => defs.find((d) => d.id === id)?.def.name).filter(Boolean)
-  const txt = `Studio starred: ${names.join(', ') || 'none'}. Hat ${S.hat}, glasses ${S.glasses}. Glass Lab: default ${lab.def || 'droplet'}, starred ${(lab.stars || []).join(', ') || 'none'}. Tint ${S.tint}, frost ${S.frost}%, eyes ${S.eyes}, ${S.pers}.`
+  const c = S.col['*'], own = Object.keys(S.col).filter((k) => k !== '*').map((k) => `${defs.find((d) => d.id === k)?.def.name || k} ${S.col[k].body}`)
+  const txt = `Studio starred: ${names.join(', ') || 'none'}. Hat ${S.hat}, glasses ${S.glasses}. Glass Lab: default ${lab.def || 'droplet'}, starred ${(lab.stars || []).join(', ') || 'none'}. Body ${c.body}, eyes ${c.eye}, accent ${c.accent}${c.arms ? ' (accent arms)' : ''}${own.length ? `, own colors: ${own.join(', ')}` : ''}. Frost ${S.frost}%, eye shape ${S.eyes}, ${S.pers}, thinking ${S.think}. Link: ${location.href}`
   try { await navigator.clipboard.writeText(txt); $('copyPicks').textContent = 'Copied' } catch { prompt('Copy your picks:', txt) }
   setTimeout(() => { $('copyPicks').textContent = 'Copy my picks' }, 1600)
 }
 document.addEventListener('keydown', (e) => {
-  if (e.target.matches('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return
+  if (e.target.matches('input, textarea, select') || e.metaKey || e.ctrlKey || e.altKey) return
   if (/^[0-9]$/.test(e.key)) { stopCycle(); setMood(MOODS[(+e.key + 9) % 10][0]) }
   if (e.key.toLowerCase() === 'c') $('cycle').click()
 })
