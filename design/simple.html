@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steward Simple</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap">
+<style>
+:root{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:28px 16px 64px}
+h1{margin:0;font-size:28px;font-weight:800}
+.lead{margin:4px 0 18px;color:var(--muted);font-size:15px}
+.swatches{display:flex;gap:8px;margin-bottom:20px}
+.swatches button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swatches button[aria-pressed="true"]{border-color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
+.big{height:190px;border-radius:12px;background:#15161c;display:grid;place-items:center}
+.big svg{width:170px;height:170px}
+.row{display:flex;align-items:center;gap:14px;margin-top:12px}
+.name{font-size:17px;font-weight:800}
+.peek{width:56px;height:132px;display:grid;place-items:center;border:1px solid #2d313c;border-right:none;border-radius:18px 0 0 18px;background:rgba(16,17,22,.97);flex:none}
+.peek svg{width:50px;height:44px;display:block}
+.head{width:64px;height:54px;flex:none}
+.head svg{width:64px;height:54px;display:block}
+.sizes{font-size:12px;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Simple</h1>
+  <p class="lead">One shape, one color, two eyes. Nothing else.</p>
+  <div class="swatches" id="sw"></div>
+  <div class="grid" id="grid"></div>
+</div>
+<script type="module">
+// Each shape draws in a 100 x 100 box. eyes: [x, y] of each eye center, with w and h.
+const SHAPES = [
+  { id: 'eyes', name: 'Just eyes', box: [22, 30, 78, 70], glow: true,
+    body: () => '', eyes: { at: [[38, 50], [62, 50]], w: 15, h: 27 } },
+  { id: 'circle', name: 'Circle', box: [10, 12, 90, 92],
+    body: (c) => `<circle cx="50" cy="52" r="39" fill="${c}"/>`, eyes: { at: [[39, 56], [61, 56]], w: 8, h: 15 } },
+  { id: 'squircle', name: 'Squircle', box: [8, 14, 92, 90],
+    body: (c) => `<path d="M50 16 C80 16 90 26 90 52 C90 78 80 88 50 88 C20 88 10 78 10 52 C10 26 20 16 50 16 Z" fill="${c}"/>`, eyes: { at: [[39, 55], [61, 55]], w: 8, h: 15 } },
+  { id: 'drop', name: 'Drop', box: [12, 6, 88, 94],
+    body: (c) => `<path d="M55 8 C60 30 86 42 86 64 C86 82 70 92 50 92 C30 92 14 82 14 64 C14 42 44 32 55 8 Z" fill="${c}"/>`, eyes: { at: [[40, 64], [60, 64]], w: 8, h: 15 } },
+  { id: 'dome', name: 'Dome', box: [6, 24, 94, 90],
+    body: (c) => `<path d="M14 88 C9 88 6 85 6 80 C6 50 26 28 50 28 C74 28 94 50 94 80 C94 85 91 88 86 88 Z" fill="${c}"/>`, eyes: { at: [[39, 62], [61, 62]], w: 8, h: 15 } },
+  { id: 'blob', name: 'Blob', box: [8, 12, 92, 92],
+    body: (c) => `<path d="M48 14 C72 12 91 28 90 53 C89 77 72 91 49 90 C26 89 9 75 10 52 C11 30 27 15 48 14 Z" fill="${c}"/>`, eyes: { at: [[44, 51], [64, 49]], w: 8, h: 15, tilt: -8 } },
+]
+const COLORS = ['#c9bcff', '#f2efe9', '#8fe0c0', '#94c5f5', '#f6ab8c', '#f3d06a']
+const INK = '#1d1a2b'
+let color = COLORS[0]
+try { color = localStorage.getItem('steward-simple-color') || color } catch {}
+
+function eyes(s, c) {
+  const { at, w, h, tilt = 0 } = s.eyes
+  const r = at.map(([x, y]) => `<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="${w / 2}" transform="rotate(${tilt} ${x} ${y})"/>`).join('')
+  if (!s.glow) return `<g fill="${INK}">${r}</g>`
+  return `<g fill="${c}" filter="url(#glow)">${r}</g>`
+}
+function fit([x0, y0, x1, y1], aspect) {
+  let w = x1 - x0, h = y1 - y0
+  if (w / h > aspect) h = w / aspect; else w = h * aspect
+  return `${(x0 + x1) / 2 - w / 2} ${(y0 + y1) / 2 - h / 2} ${w} ${h}`
+}
+const defs = `<defs><filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`
+const svg = (s, aspect) => `<svg viewBox="${fit(s.box, aspect)}">${defs}${s.body(color)}${eyes(s, color)}</svg>`
+
+function render() {
+  document.getElementById('grid').innerHTML = SHAPES.map((s) => `
+    <div class="card">
+      <div class="big">${svg(s, 1)}</div>
+      <div class="row">
+        <div class="peek">${svg(s, 50 / 44)}</div>
+        <div class="head">${svg(s, 64 / 54)}</div>
+        <div><div class="name">${s.name}</div><div class="sizes">Real size:<br>peek 50×44, header 64×54</div></div>
+      </div>
+    </div>`).join('')
+  document.getElementById('sw').innerHTML = COLORS.map((c) => `<button style="background:${c}" aria-pressed="${c === color}" data-c="${c}" aria-label="${c}"></button>`).join('')
+}
+document.getElementById('sw').addEventListener('click', (e) => {
+  const c = e.target.dataset?.c
+  if (!c) return
+  color = c
+  try { localStorage.setItem('steward-simple-color', c) } catch {}
+  render()
+})
+render()
+</script>
+</body>
+</html>
