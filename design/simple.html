@@ -9,85 +9,189 @@
 <style>
 :root{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
 .wrap{max-width:1000px;margin:0 auto;padding:28px 16px 64px}
 h1{margin:0;font-size:28px;font-weight:800}
-.lead{margin:4px 0 18px;color:var(--muted);font-size:15px}
-.swatches{display:flex;gap:8px;margin-bottom:20px}
-.swatches button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+h2{margin:30px 0 4px;font-size:20px;font-weight:800}
+h3{margin:22px 0 10px;font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.lead{margin:4px 0 0;color:var(--muted);font-size:15px}
+.bar{position:sticky;top:0;z-index:5;background:rgba(17,18,22,.92);backdrop-filter:blur(10px);margin:16px -16px 0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;border-bottom:1px solid var(--line)}
+.bar .lbl{font-size:13px;font-weight:800;color:var(--muted);margin-right:4px}
+.swatches,.bases{display:flex;gap:8px;align-items:center}
+.swatches button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .swatches button[aria-pressed="true"]{border-color:#fff}
+.bases button{font:inherit;font-size:13px;font-weight:800;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
+.bases button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.grid.small{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
 .big{height:190px;border-radius:12px;background:#15161c;display:grid;place-items:center}
 .big svg{width:170px;height:170px}
-.row{display:flex;align-items:center;gap:14px;margin-top:12px}
+.grid.small .big{height:150px}
+.grid.small .big svg{width:132px;height:132px}
+.row{display:flex;align-items:center;gap:12px;margin-top:12px}
+.txt{margin-top:10px}
 .name{font-size:17px;font-weight:800}
+.note{font-size:12.5px;color:var(--muted);line-height:1.35;margin-top:2px}
 .peek{width:56px;height:132px;display:grid;place-items:center;border:1px solid #2d313c;border-right:none;border-radius:18px 0 0 18px;background:rgba(16,17,22,.97);flex:none}
 .peek svg{width:50px;height:44px;display:block}
 .head{width:64px;height:54px;flex:none}
 .head svg{width:64px;height:54px;display:block}
-.sizes{font-size:12px;color:var(--muted);line-height:1.5}
+.how{margin:8px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.how li{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px;line-height:1.35}
+.how b{display:block;font-size:14.5px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Simple</h1>
-  <p class="lead">One shape, one color, two eyes. Nothing else.</p>
-  <div class="swatches" id="sw"></div>
-  <div class="grid" id="grid"></div>
+  <p class="lead">One shape, one color, two eyes. Then one small twist each.</p>
+  <div class="bar">
+    <div class="swatches" id="sw"><span class="lbl">Color</span></div>
+    <div class="bases" id="bases"><span class="lbl">Shape for the twists</span></div>
+  </div>
+
+  <h2>Shapes</h2>
+  <div class="grid" id="shapes"></div>
+
+  <h2>Twists</h2>
+  <p class="lead">Change one thing, and only keep it if it still shows at the real 50×44 peek size. Pick a shape in the bar above to try every twist on it.</p>
+  <ul class="how">
+    <li><b>The outline</b>Give the shape one feature: a speech-bubble tail, a ghost hem, paws on the edge.</li>
+    <li><b>One thing on top</b>A single curl, leaf, pair of ears or antenna. Changes the silhouette the most.</li>
+    <li><b>The eyes</b>Same shape, different personality: a sparkle, sleepy lids, a sideways look.</li>
+    <li><b>The finish</b>Two tones, outline only, or one tiny detail like a bow tie.</li>
+  </ul>
+  <div id="twists"></div>
 </div>
 <script type="module">
-// Each shape draws in a 100 x 100 box. eyes: [x, y] of each eye center, with w and h.
-const SHAPES = [
-  { id: 'eyes', name: 'Just eyes', box: [22, 30, 78, 70], glow: true,
-    body: () => '', eyes: { at: [[38, 50], [62, 50]], w: 15, h: 27 } },
-  { id: 'circle', name: 'Circle', box: [10, 12, 90, 92],
-    body: (c) => `<circle cx="50" cy="52" r="39" fill="${c}"/>`, eyes: { at: [[39, 56], [61, 56]], w: 8, h: 15 } },
-  { id: 'squircle', name: 'Squircle', box: [8, 14, 92, 90],
-    body: (c) => `<path d="M50 16 C80 16 90 26 90 52 C90 78 80 88 50 88 C20 88 10 78 10 52 C10 26 20 16 50 16 Z" fill="${c}"/>`, eyes: { at: [[39, 55], [61, 55]], w: 8, h: 15 } },
-  { id: 'drop', name: 'Drop', box: [12, 6, 88, 94],
-    body: (c) => `<path d="M55 8 C60 30 86 42 86 64 C86 82 70 92 50 92 C30 92 14 82 14 64 C14 42 44 32 55 8 Z" fill="${c}"/>`, eyes: { at: [[40, 64], [60, 64]], w: 8, h: 15 } },
-  { id: 'dome', name: 'Dome', box: [6, 24, 94, 90],
-    body: (c) => `<path d="M14 88 C9 88 6 85 6 80 C6 50 26 28 50 28 C74 28 94 50 94 80 C94 85 91 88 86 88 Z" fill="${c}"/>`, eyes: { at: [[39, 62], [61, 62]], w: 8, h: 15 } },
-  { id: 'blob', name: 'Blob', box: [8, 12, 92, 92],
-    body: (c) => `<path d="M48 14 C72 12 91 28 90 53 C89 77 72 91 49 90 C26 89 9 75 10 52 C11 30 27 15 48 14 Z" fill="${c}"/>`, eyes: { at: [[44, 51], [64, 49]], w: 8, h: 15, tilt: -8 } },
-]
+/* ---------------- color ---------------- */
 const COLORS = ['#c9bcff', '#f2efe9', '#8fe0c0', '#94c5f5', '#f6ab8c', '#f3d06a']
 const INK = '#1d1a2b'
-let color = COLORS[0]
-try { color = localStorage.getItem('steward-simple-color') || color } catch {}
+const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
+const darken = (h, t) => '#' + hex2rgb(h).map((v) => Math.round(v * (1 - t)).toString(16).padStart(2, '0')).join('')
+const lighten = (h, t) => '#' + hex2rgb(h).map((v) => Math.round(v + (255 - v) * t).toString(16).padStart(2, '0')).join('')
 
-function eyes(s, c) {
-  const { at, w, h, tilt = 0 } = s.eyes
-  const r = at.map(([x, y]) => `<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="${w / 2}" transform="rotate(${tilt} ${x} ${y})"/>`).join('')
-  if (!s.glow) return `<g fill="${INK}">${r}</g>`
-  return `<g fill="${c}" filter="url(#glow)">${r}</g>`
+/* ---------------- shapes, in a 100 x 100 box ---------------- */
+// top: where a curl, leaf or antenna sits. ears: the two spots for ears. eyes: centers, size and tilt.
+const SHAPES = {
+  eyes: { name: 'Just eyes', box: [22, 30, 78, 70], glow: true, d: '', top: [50, 30], ears: [[30, 30], [70, 30]], eyes: { at: [[38, 50], [62, 50]], w: 15, h: 27 } },
+  circle: { name: 'Circle', box: [11, 13, 89, 91], d: 'M11 52 A39 39 0 1 0 89 52 A39 39 0 1 0 11 52 Z', top: [50, 13], ears: [[28, 22], [72, 22]], eyes: { at: [[39, 56], [61, 56]], w: 8, h: 15 } },
+  squircle: { name: 'Squircle', box: [10, 16, 90, 88], d: 'M50 16 C80 16 90 26 90 52 C90 78 80 88 50 88 C20 88 10 78 10 52 C10 26 20 16 50 16 Z', top: [50, 16], ears: [[24, 22], [76, 22]], eyes: { at: [[39, 55], [61, 55]], w: 8, h: 15 } },
+  drop: { name: 'Drop', box: [14, 8, 86, 92], d: 'M55 8 C60 30 86 42 86 64 C86 82 70 92 50 92 C30 92 14 82 14 64 C14 42 44 32 55 8 Z', top: [55, 8], ears: [[27, 46], [77, 44]], eyes: { at: [[40, 64], [60, 64]], w: 8, h: 15 } },
+  dome: { name: 'Dome', box: [6, 28, 94, 88], d: 'M14 88 C9 88 6 85 6 80 C6 50 26 28 50 28 C74 28 94 50 94 80 C94 85 91 88 86 88 Z', top: [50, 28], ears: [[26, 40], [74, 40]], eyes: { at: [[39, 62], [61, 62]], w: 8, h: 15 } },
+  blob: { name: 'Blob', box: [10, 13, 90, 90], d: 'M48 14 C72 12 91 28 90 53 C89 77 72 91 49 90 C26 89 9 75 10 52 C11 30 27 15 48 14 Z', top: [48, 14], ears: [[27, 24], [70, 21]], eyes: { at: [[44, 51], [64, 49]], w: 8, h: 15, tilt: -8 } },
 }
-function fit([x0, y0, x1, y1], aspect) {
-  let w = x1 - x0, h = y1 - y0
+// Shapes that replace the base outline (the "outline" twists).
+const OUTLINES = {
+  bubble: { box: [10, 13, 89, 92], d: 'M50 13 C72 13 89 30 89 52 C89 74 72 91 50 91 C42 91 35 89 29 86 L15 92 L20 79 C14 72 11 62 11 52 C11 30 28 13 50 13 Z', eyes: { at: [[39, 52], [61, 52]], w: 8, h: 15 } },
+  hem: { box: [16, 18, 84, 98], d: 'M16 84 L16 52 A34 34 0 0 1 84 52 L84 84 A11.33 11.33 0 0 1 61.33 84 A11.33 11.33 0 0 1 38.67 84 A11.33 11.33 0 0 1 16 84 Z', eyes: { at: [[40, 56], [60, 56]], w: 8, h: 15 } },
+}
+
+/* ---------------- twists ---------------- */
+// Each returns parts to draw: under (behind the body), over (on top), and optional replacements for the body,
+// the eyes, or how the body is painted. pad grows the view box: [left, top, right, bottom].
+const TWISTS = [
+  { group: 'The outline', id: 'bubble', name: 'Bubble', note: 'The body is a speech bubble. It talks to you, after all.', own: 'bubble' },
+  { group: 'The outline', id: 'hem', name: 'Hem', note: 'A ghost hem: it drifts in from the edge of the screen.', own: 'hem' },
+  { group: 'The outline', id: 'paws', name: 'Paws', note: 'Two paws on the ledge, like it is peeking over.', own: 'dome',
+    make: (s, c) => ({ over: [33, 67].map((x) => `<ellipse cx="${x}" cy="89" rx="8.5" ry="6" fill="${lighten(c, 0.55)}"/>`).join(''), pad: [0, 0, 0, 7] }) },
+
+  { group: 'One thing on top', id: 'curl', name: 'Curl', note: 'A single cowlick. The smallest change with the biggest silhouette.',
+    make: (s, c) => { const [x, y] = s.top; return { under: `<path d="M${x} ${y + 4} C${x - 1} ${y - 8} ${x + 10} ${y - 13} ${x + 10} ${y - 4}" stroke="${s.glow ? c : c}" stroke-width="${s.glow ? 4 : 5.5}" stroke-linecap="round" fill="none"/>`, pad: [0, 14, 0, 0] } } },
+  { group: 'One thing on top', id: 'leaf', name: 'Leaf', note: 'One leaf. Adds a second color, and a bit of life.',
+    make: (s) => { const [x, y] = s.top; return { under: `<path d="M${x} ${y + 3} Q${x} ${y - 4} ${x + 2} ${y - 8}" stroke="#5dbb7a" stroke-width="3.2" stroke-linecap="round" fill="none"/><path d="M${x + 2} ${y - 8} C${x + 4} ${y - 18} ${x + 15} ${y - 21} ${x + 20} ${y - 18} C${x + 17} ${y - 10} ${x + 9} ${y - 6} ${x + 2} ${y - 8} Z" fill="#7fd69a"/>`, pad: [0, 22, 6, 0] } } },
+  { group: 'One thing on top', id: 'ears', name: 'Ears', note: 'Two round nubs. Reads as an animal without saying which.',
+    make: (s, c) => ({ under: s.ears.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${s.glow ? 6 : 10}" fill="${c}"/>`).join(''), pad: [4, 10, 4, 0] }) },
+  { group: 'One thing on top', id: 'antenna', name: 'Antenna', note: 'A stalk and a dot. Says helper, a little techy.',
+    make: (s, c) => { const [x, y] = s.top; return { under: `<line x1="${x}" y1="${y + 3}" x2="${x}" y2="${y - 11}" stroke="${c}" stroke-width="3.6" stroke-linecap="round"/><circle cx="${x}" cy="${y - 14}" r="5.5" fill="${c}"/>`, pad: [0, 20, 0, 0] } } },
+
+  { group: 'The eyes', id: 'sparkle', name: 'Sparkle', note: 'A white glint in each eye. Instantly more alive.',
+    make: (s) => ({ over: s.glow ? '' : s.eyes.at.map(([x, y]) => `<circle cx="${x + 1.4}" cy="${y - 3.6}" r="2" fill="#fff"/>`).join('') }) },
+  { group: 'The eyes', id: 'sleepy', name: 'Calm', note: 'Flat-topped lids. Relaxed and unbothered, never in your face.',
+    make: () => ({ lids: true }) },
+  { group: 'The eyes', id: 'side', name: 'Glance', note: 'Eyes to one side, looking into your screen from the edge.',
+    make: (s) => ({ eyes: { ...s.eyes, at: s.eyes.at.map(([x, y]) => [x - (s.glow ? 7 : 6), y - 1.5]) } }) },
+  { group: 'The eyes', id: 'dots', name: 'Dots', note: 'Round dots instead of pills. Softer and younger.',
+    make: (s) => ({ eyes: { ...s.eyes, w: s.eyes.w * (s.glow ? 1.1 : 1.2), h: s.eyes.w * (s.glow ? 1.1 : 1.2) } }) },
+
+  { group: 'The finish', id: 'two', name: 'Two-tone', note: 'A darker base, as if dipped in paint.',
+    make: (s, c) => ({ inner: `<rect x="0" y="${s.box[3] - (s.box[3] - s.box[1]) * 0.3}" width="100" height="100" fill="${darken(c, 0.16)}"/>` }) },
+  { group: 'The finish', id: 'line', name: 'Outline', note: 'No fill, just a thick line. Looks like a Mac menu bar icon.',
+    make: () => ({ outline: true }) },
+  { group: 'The finish', id: 'bow', name: 'Bow tie', note: 'One tiny bow tie. The only nod to "Steward".',
+    make: (s) => { const x = (s.eyes.at[0][0] + s.eyes.at[1][0]) / 2, y = s.eyes.at[0][1] + 17; return { over: `<path d="M${x} ${y} L${x - 8} ${y - 5} L${x - 8} ${y + 5} Z M${x} ${y} L${x + 8} ${y - 5} L${x + 8} ${y + 5} Z" fill="${INK}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>` } } },
+]
+
+/* ---------------- drawing ---------------- */
+function eyeShapes({ at, w, h, tilt = 0 }, lids) {
+  return at.map(([x, y]) => {
+    const r = w / 2, rot = `transform="rotate(${tilt} ${x} ${y})"`
+    if (w === h) return `<circle cx="${x}" cy="${y}" r="${r}" ${rot}/>`
+    if (!lids) return `<rect x="${x - r}" y="${y - h / 2}" width="${w}" height="${h}" rx="${r}" ${rot}/>`
+    const top = y - h * 0.08, bot = y + h / 2
+    return `<path d="M${x - r} ${top} L${x + r} ${top} L${x + r} ${bot - r} A${r} ${r} 0 0 1 ${x - r} ${bot - r} Z" ${rot}/>`
+  }).join('')
+}
+let uid = 0
+/** Inner SVG and bounds for a shape (key) with an optional twist, in color c. */
+function compose(key, twist, c) {
+  let s = SHAPES[key]
+  if (twist?.own) s = { ...SHAPES[key], ...(OUTLINES[twist.own] ?? SHAPES[twist.own]), glow: false }
+  const t = twist?.make ? twist.make(s, c) : {}
+  const eyes = t.eyes ?? s.eyes
+  const id = `c${uid++}`
+  const pad = t.pad ?? [0, 0, 0, 0]
+  const box = [s.box[0] - pad[0], s.box[1] - pad[1], s.box[2] + pad[2], s.box[3] + pad[3]]
+  let body = ''
+  if (s.d) {
+    if (t.outline) body = `<path d="${s.d}" fill="none" stroke="${c}" stroke-width="6.5" stroke-linejoin="round"/>`
+    else body = `<path d="${s.d}" fill="${c}"/>` + (t.inner ? `<clipPath id="${id}"><path d="${s.d}"/></clipPath><g clip-path="url(#${id})">${t.inner}</g>` : '')
+  }
+  const eyeFill = s.glow ? c : t.outline ? c : INK
+  const eyeSvg = `<g fill="${eyeFill}"${s.glow ? ' filter="url(#glow)"' : ''}>${eyeShapes(eyes, t.lids)}</g>`
+  return { box, svg: (t.under ?? '') + body + eyeSvg + (t.over ?? '') }
+}
+function fit([x0, y0, x1, y1], aspect, pad = 0.03) {
+  let w = (x1 - x0) * (1 + pad * 2), h = (y1 - y0) * (1 + pad * 2)
   if (w / h > aspect) h = w / aspect; else w = h * aspect
-  return `${(x0 + x1) / 2 - w / 2} ${(y0 + y1) / 2 - h / 2} ${w} ${h}`
+  return `${((x0 + x1) / 2 - w / 2).toFixed(2)} ${((y0 + y1) / 2 - h / 2).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)}`
 }
-const defs = `<defs><filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`
-const svg = (s, aspect) => `<svg viewBox="${fit(s.box, aspect)}">${defs}${s.body(color)}${eyes(s, color)}</svg>`
+const DEFS = `<svg width="0" height="0" style="position:absolute"><defs><filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs></svg>`
+const svg = (p, aspect) => `<svg viewBox="${fit(p.box, aspect)}">${p.svg}</svg>`
+const card = (p, name, note) => `
+  <div class="card">
+    <div class="big">${svg(p, 1)}</div>
+    <div class="row">
+      <div class="peek">${svg(p, 50 / 44)}</div>
+      <div class="head">${svg(p, 64 / 54)}</div>
+    </div>
+    <div class="txt"><div class="name">${name}</div>${note ? `<div class="note">${note}</div>` : ''}</div>
+  </div>`
+
+/* ---------------- page ---------------- */
+const S = { color: COLORS[0], base: 'circle' }
+try { Object.assign(S, JSON.parse(localStorage.getItem('steward-simple') || '{}')) } catch {}
+if (!SHAPES[S.base]) S.base = 'circle'
+const save = () => { try { localStorage.setItem('steward-simple', JSON.stringify(S)) } catch {} }
 
 function render() {
-  document.getElementById('grid').innerHTML = SHAPES.map((s) => `
-    <div class="card">
-      <div class="big">${svg(s, 1)}</div>
-      <div class="row">
-        <div class="peek">${svg(s, 50 / 44)}</div>
-        <div class="head">${svg(s, 64 / 54)}</div>
-        <div><div class="name">${s.name}</div><div class="sizes">Real size:<br>peek 50×44, header 64×54</div></div>
-      </div>
-    </div>`).join('')
-  document.getElementById('sw').innerHTML = COLORS.map((c) => `<button style="background:${c}" aria-pressed="${c === color}" data-c="${c}" aria-label="${c}"></button>`).join('')
+  uid = 0
+  document.getElementById('sw').innerHTML = '<span class="lbl">Color</span>' + COLORS.map((c) => `<button style="background:${c}" aria-pressed="${c === S.color}" data-c="${c}" aria-label="Color ${c}"></button>`).join('')
+  document.getElementById('bases').innerHTML = '<span class="lbl">Shape for the twists</span>' + Object.entries(SHAPES).map(([k, s]) => `<button aria-pressed="${k === S.base}" data-b="${k}">${s.name}</button>`).join('')
+  document.getElementById('shapes').innerHTML = DEFS + Object.entries(SHAPES).map(([k, s]) => card(compose(k, null, S.color), s.name)).join('')
+  const groups = [...new Set(TWISTS.map((t) => t.group))]
+  document.getElementById('twists').innerHTML = groups.map((g) => `
+    <h3>${g}</h3>
+    <div class="grid small">${TWISTS.filter((t) => t.group === g).map((t) => card(compose(S.base, t, S.color), t.name, t.note)).join('')}</div>`).join('')
 }
-document.getElementById('sw').addEventListener('click', (e) => {
-  const c = e.target.dataset?.c
-  if (!c) return
-  color = c
-  try { localStorage.setItem('steward-simple-color', c) } catch {}
+document.querySelector('.bar').addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  if (!b) return
+  if (b.dataset.c) S.color = b.dataset.c
+  if (b.dataset.b) S.base = b.dataset.b
+  save()
   render()
 })
 render()
