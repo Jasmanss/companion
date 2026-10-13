@@ -95,12 +95,13 @@ table.grid td{vertical-align:middle}
 <body>
 <div class="wrap">
   <h1>Pill Moods</h1>
-  <p class="lead">The eyes react to what Steward is doing: bigger when happy, angry lids when something breaks, one bar with a moving glint while thinking, Z's when asleep. Pick a mood, or play a short task and watch it react. All three versions run the same moods, so you can switch any time.</p>
+  <p class="lead">The eyes react to what Steward is doing: they slide apart to listen, turn into three dots while thinking, get a mouth to talk, grow when happy and get angry lids when something breaks. Pick a mood, or play a short task and watch it react. All three versions run the same moods, so you can switch any time.</p>
   <div class="bar">
     <div class="grp" id="g-ver"></div>
     <div class="grp" id="g-color"></div>
     <div class="grp" id="g-desk"></div>
     <div class="grp" id="g-glass"></div>
+    <div class="grp" id="g-think"></div>
     <div class="grp" id="g-mouth"></div>
     <div class="grp" id="g-motion"></div>
     <button class="c" id="type" title="Simulate a burst of keystrokes while listening">Type</button>
@@ -117,6 +118,10 @@ table.grid td{vertical-align:middle}
   <p class="lead">The three quiet moods side by side, each in the 50×44 peek tab and at the 64×54 header size, so you can check they never look alike.</p>
   <div class="panel"><table class="grid" id="trio"></table></div>
 
+  <h2>Thinking: dots or bar</h2>
+  <p class="lead">Both thinking styles side by side, each in its three kinds: thinking, reading a file and searching the web. The Thinking switch at the top picks which one the rest of the page uses.</p>
+  <div class="panel"><table class="grid" id="styles"></table></div>
+
   <h2 id="all-title">All colors</h2>
   <p class="lead">The mood that is showing above, in every color, at the real 64×54 size. Switch Desktop to Light or Dark to check both. The eye color is picked from how bright each pill is.</p>
   <div class="panel" id="allc"></div>
@@ -129,21 +134,23 @@ table.grid td{vertical-align:middle}
   <h2>How it works</h2>
   <ul class="notes">
     <li>Each eye is a pill cut by two lids. The top lid drops and tilts: inner corners down is mad, inner corners up is worried. The bottom lid pushes up into an arch for happy.</li>
-    <li>Thinking is the one mood where the eyes join: they stretch into a single bar and a glint moves along it. A smooth sweep is thinking, a stepped sweep is reading a file, a small circle is searching the web. In glass the two eyes melt together like drops; leaving thinking, the bar splits with a pop.</li>
+    <li>Listening slides the eyes apart toward the pill's edges and makes them a little taller, like ears turned toward you. Each key you type nods them down a couple of pixels and back. Nothing else moves, so the wide-apart eyes carry it even in a still frame.</li>
+    <li>Thinking has two styles. Dots (the default): the eyes shrink into three dots that hop in a wave like a typing indicator; reading a file lights them up one at a time, searching the web sends them round a small circle. Bar: the eyes join into one thick bar with a soft shimmer sliding inside it (stepping along for a file, a round spot circling for the web). In glass both glow. Leaving thinking, the eyes pop back.</li>
+    <li>Talking has a mouth that hangs below the eyes and changes shape with the words: a closed line, wide open, or a round "o". The eyes squint a little on stressed words. The mouth only ever opens downward, so it never touches the eyes. With the mouth off, the eyes bounce with the words instead and glass sends out ripples.</li>
     <li>Sleepy closes the eyes into soft curves and floats Z's up from the top right corner, outside the pill. Small sizes show one Z. The pill breathes slowly.</li>
     <li>Resting stays awake but quiet: heavy lids, a slow standby glow like a sleeping Mac's light, a lazy glance every 8 to 12 seconds, and a little wake-up when your cursor comes near. It is kept cheap: the glow is a CSS opacity animation and everything else updates 10 times a second.</li>
     <li>Every value springs to its new target with a little overshoot, so a change of mood pops instead of sliding.</li>
     <li>Blocky uses hand-drawn pixel eyes and Z's rather than a shrunk copy, because a pixel eye only has a few cells to work with.</li>
-    <li>Reduced motion keeps each mood's face but drops the movement: thinking shows the bar with a still glint, sleepy shows the Z's without drifting, resting shows only the heavy lids.</li>
+    <li>Reduced motion keeps each mood's face but drops the movement: listening keeps its eyes apart with no nod, thinking shows three still dots (or the bar with a still shimmer), talking a still open mouth, sleepy the Z's without drifting, resting only the heavy lids.</li>
   </ul>
 </div>
 <script type="module">
-import { MOODS, STORIES, createEyes, setMood, stepEyes, pressKey } from './pill/eyes.js'
+import { MOODS, STORIES, createEyes, setMood, setStyle, stepEyes, pressKey } from './pill/eyes.js'
 import { makeView, COLORS } from './pill/render.js'
 
 const VERSIONS = [['all', 'All three'], ['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]
 const NAMES = { glass: 'Glass', flat: 'Flat', blocky: 'Blocky' }
-const S = { ver: 'all', color: COLORS[0].hex, desk: 'dark', glass: 'tinted', rm: false, mood: 'idle', mouth: true, anon: false, sheetSize: 'header' }
+const S = { ver: 'all', color: COLORS[0].hex, desk: 'dark', glass: 'tinted', rm: false, mood: 'idle', mouth: true, think: 'dots', anon: false, sheetSize: 'header' }
 try { Object.assign(S, JSON.parse(localStorage.getItem('steward-moods') || '{}')) } catch {}
 if (!COLORS.some((c) => c.hex === S.color)) S.color = COLORS[0].hex
 const osRM = matchMedia('(prefers-reduced-motion: reduce)')
@@ -162,10 +169,11 @@ function addView(group, kind, host, W, H, color = S.color) {
   group.views.push(v)
   return v
 }
-function newGroup(seed, anchor, mood) {
+function newGroup(seed, anchor, mood, glint, think = S.think) {
   const g = { st: createEyes(seed), views: [], anchor, acc: 0, seen: false }
+  setStyle(g.st, { think, mouth: S.mouth })
   g.st.t = window.__moods?.now() ?? now() // start the mood now, so its intro (a pop, the first bursts) plays
-  if (mood) { g.fixed = mood; setMood(g.st, mood) }
+  if (mood) { g.fixed = mood; setMood(g.st, mood, glint) }
   groups.push(g)
   seen.observe(anchor)
   return g
@@ -184,6 +192,7 @@ function build() {
   gg.hidden = !kinds().includes('glass')
   gg.innerHTML = '<span class="lbl">Glass</span>' + chip('glass', 'clear', 'Clear', S.glass === 'clear') + chip('glass', 'tinted', 'Tinted', S.glass === 'tinted')
   document.getElementById('g-motion').innerHTML = '<span class="lbl">Motion</span>' + chip('rm', 'false', 'Full', !S.rm) + chip('rm', 'true', 'Reduced', S.rm)
+  document.getElementById('g-think').innerHTML = '<span class="lbl">Thinking</span>' + chip('think', 'dots', 'Dots', S.think !== 'bar') + chip('think', 'bar', 'Bar', S.think === 'bar')
   document.getElementById('g-mouth').innerHTML = '<span class="lbl">Mouth</span>' + chip('mouth', 'true', 'On', S.mouth) + chip('mouth', 'false', 'Off', !S.mouth)
   document.getElementById('sheet-opts').innerHTML = '<span class="lbl">Names</span>' + chip('anon', 'false', 'Show', !S.anon) + chip('anon', 'true', 'Hide', S.anon)
     + '<span class="lbl" style="margin-left:14px">Size</span>' + chip('sheetSize', 'header', 'Header 64×54', S.sheetSize === 'header') + chip('sheetSize', 'peek', 'Peek 50×44', S.sheetSize === 'peek')
@@ -194,6 +203,7 @@ function build() {
   // The big stages, each with its real-size peek tab and panel header.
   main.views = []
   groups = [main]
+  setStyle(main.st, { think: S.think, mouth: S.mouth })
   const stages = document.getElementById('stages')
   stages.style.setProperty('--n', kinds().length)
   stages.replaceChildren()
@@ -248,6 +258,22 @@ function build() {
       cell(grp, kind, td, S.color, true)
     })
     trio.append(tr)
+  })
+
+  // Both thinking styles, in all three kinds.
+  const styles = document.getElementById('styles')
+  const KINDS = [['sweep', 'thinking'], ['step', 'reading a file'], ['search', 'searching']]
+  const STYLES = [['dots', 'Dots'], ['bar', 'Bar']]
+  styles.innerHTML = `<tr><th></th>${STYLES.map(([, sl]) => KINDS.map(([, kl]) => `<th>${sl}: ${kl}</th>`).join('')).join('')}</tr>`
+  kinds().forEach((kind, ki) => {
+    const tr = document.createElement('tr')
+    tr.innerHTML = `<th>${NAMES[kind]}</th>`
+    STYLES.forEach(([think], si) => KINDS.forEach(([glint], gi) => {
+      const td = document.createElement('td')
+      tr.append(td)
+      cell(newGroup(60 + ki * 7 + si * 3 + gi, td, 'thinking', glint, think), kind, td, S.color, true)
+    }))
+    styles.append(tr)
   })
 
   // All colors, following the mood shown above.

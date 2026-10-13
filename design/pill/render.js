@@ -3,6 +3,7 @@
 // its eyes and body pose from an eyes.js state every frame, and view.standby(on) runs resting's slow glow.
 // Marks outside the Pill (the "!", "?", sweat drop, confetti, Z's and rings) are drawn in screen pixels, so the
 // 50 x 44 peek can get bigger, bolder ones than the 64 x 54 header, and they are colored against the desktop.
+// Thinking draws as three dots or one thick bar (the eyes state picks), and glows in glass either way.
 import { vectorEyes, pixelEyes, marks, ZSPRITES, MARK_SPRITES } from './eyes.js'
 
 /** The classic Pill in a 100 x 100 design box. */
@@ -94,6 +95,11 @@ function fitBox([x0, y0, x1, y1], aspect) {
   return [(x0 + x1) / 2 - w / 2, (y0 + y1) / 2 - h / 2, w, h]
 }
 const toPx = (path, [vx, vy], s) => { let n = 0; return path.replace(/-?\d*\.?\d+/g, (v) => ((n++ % 2 === 0 ? +v - vx : +v - vy) * s).toFixed(2)) }
+/** Talking's mouth, hanging from its top line. flat 1 is wide open (flat on top, round below), 0 an "o"; h 0 a line. */
+function mouthPath(x, top, w, h, flat) {
+  const f = (v) => v.toFixed(2), hw = w / 2, ht = h * 0.5 * (1 - flat), y = top + ht, hb = h - ht
+  return `M${f(x - hw)} ${f(y)} C${f(x - hw)} ${f(y - ht * K)} ${f(x - hw * K)} ${f(y - ht)} ${f(x)} ${f(y - ht)} C${f(x + hw * K)} ${f(y - ht)} ${f(x + hw)} ${f(y - ht * K)} ${f(x + hw)} ${f(y)} C${f(x + hw)} ${f(y + hb * K)} ${f(x + hw * K)} ${f(y + hb)} ${f(x)} ${f(y + hb)} C${f(x - hw * K)} ${f(y + hb)} ${f(x - hw)} ${f(y + hb * K)} ${f(x - hw)} ${f(y)} Z`
+}
 const zPath = (z) => `M${(z.x).toFixed(2)} ${(z.y).toFixed(2)} L${(z.x + z.s * 0.8).toFixed(2)} ${(z.y).toFixed(2)} L${(z.x).toFixed(2)} ${(z.y + z.s).toFixed(2)} L${(z.x + z.s * 0.8).toFixed(2)} ${(z.y + z.s).toFixed(2)}`
 
 /* ---------------- the lens ---------------- */
@@ -219,10 +225,19 @@ function vectorView(kind, el, W, H, o) {
   // hard alpha threshold) so the two shapes join like drops of liquid instead of just overlapping.
   const glowOn = glass && pal.light
   const glowCol = o.tinted ? lighten(o.color, 0.35) : WHITE
+  // While thinking, glass also glows behind the dots or the bar: a light glow behind light eyes, and a strong
+  // tint of the Pill's own color behind dark ones, which a light glow would not show on.
+  const [hue, sat] = toHsl(o.color)
+  const haloCol = pal.light ? (o.tinted ? lighten(o.color, 0.45) : WHITE) : fromHsl(hue, Math.max(0.75, sat), 0.6)
+  // The bar's shimmer: white over a light bar; over a dark bar, the Pill's own color, softer, like light through it.
+  const shCol = pal.light ? WHITE : lighten(o.color, 0.3), shMax = pal.light ? 0.9 : 0.7
   const glowChain = (src) => `<feGaussianBlur in="${src}" stdDeviation="${(GEO.H * 0.06).toFixed(2)}" result="gb"/><feFlood flood-color="${glowCol}" flood-opacity=".9"/><feComposite in2="gb" operator="in" result="gl"/><feMerge><feMergeNode in="gl"/><feMergeNode in="${src}"/></feMerge>`
   const defs = `
     ${glowOn ? `<filter id="${id}e" x="-80%" y="-80%" width="260%" height="260%">${glowChain('SourceGraphic')}</filter>` : ''}
     ${glass ? `<filter id="${id}g" x="-60%" y="-250%" width="220%" height="600%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2.6" result="bl"/><feColorMatrix in="bl" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo"/>${glowOn ? glowChain('goo') : ''}</filter>` : ''}
+    ${glass ? `<filter id="${id}h" x="-100%" y="-200%" width="300%" height="500%"><feGaussianBlur stdDeviation="${(GEO.H * 0.075).toFixed(2)}"/></filter>` : ''}
+    <linearGradient id="${id}sh" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="${shCol}" stop-opacity="0"/><stop offset=".5" stop-color="${shCol}" stop-opacity="${shMax}"/><stop offset="1" stop-color="${shCol}" stop-opacity="0"/></linearGradient>
+    <radialGradient id="${id}sp"><stop offset="0" stop-color="${shCol}" stop-opacity="${shMax}"/><stop offset=".45" stop-color="${shCol}" stop-opacity="${(shMax * 0.7).toFixed(2)}"/><stop offset="1" stop-color="${shCol}" stop-opacity="0"/></radialGradient>
     <clipPath id="${id}l"><path/></clipPath><clipPath id="${id}rr"><path/></clipPath>
     <clipPath id="${id}bar"><rect/><rect/></clipPath>`
   const eyeFilter = glowOn ? `url(#${id}e)` : ''
@@ -235,14 +250,15 @@ function vectorView(kind, el, W, H, o) {
   el.innerHTML = `<div class="pv-body" style="position:absolute;inset:0;transform-origin:50% 62%">${base}
     <svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
       <defs>${defs}</defs>
+      ${glass ? `<g class="halo" fill="${haloCol}" filter="url(#${id}h)" opacity="0"><circle/><circle/><circle/><rect/></g>` : ''}
       <g class="open" fill="${pal.eye}"${eyeFilter ? ` filter="${eyeFilter}"` : ''}>
         <g clip-path="url(#${id}l)"><rect/></g>
         <g clip-path="url(#${id}rr)"><rect/></g>
+        <circle class="mid" r="0"/>
       </g>
       <g class="shut" fill="none" stroke="${pal.eye}" stroke-linecap="round" opacity="0"${eyeFilter ? ` filter="${eyeFilter}"` : ''}><path/><path/></g>
-      <rect class="mouth" fill="${pal.eye}" opacity="0"${eyeFilter ? ` filter="${eyeFilter}"` : ''}/>
-      <g class="glint" clip-path="url(#${id}bar)" opacity="0"><ellipse fill="${pal.glint}"/></g>
-      <circle class="ring" fill="none" stroke="${pal.glint}" opacity="0"/>
+      <path class="mouth" fill="${pal.eye}" stroke="${pal.eye}" stroke-linejoin="round" opacity="0"${eyeFilter ? ` filter="${eyeFilter}"` : ''}/>
+      <g class="glint" clip-path="url(#${id}bar)" opacity="0"><rect fill="url(#${id}sh)"/><ellipse fill="url(#${id}sp)"/></g>
     </svg>
     <svg class="marks" viewBox="0 0 ${W} ${H}" style="position:absolute;inset:0;overflow:visible;pointer-events:none">
       <g class="rings" fill="none" stroke="${pal.sym}" stroke-linejoin="round"><path/><path/><path/></g>
@@ -253,11 +269,12 @@ function vectorView(kind, el, W, H, o) {
   const body = el.firstElementChild
   const eyeSvg = body.children[body.children.length - 2]
   const open = eyeSvg.querySelector('.open'), shut = eyeSvg.querySelector('.shut'), mouthEl = eyeSvg.querySelector('.mouth')
-  const groups = [...open.children], rects = groups.map((g) => g.firstElementChild)
+  const groups = [...open.children].slice(0, 2), rects = groups.map((g) => g.firstElementChild), midEl = open.querySelector('.mid')
+  const halo = eyeSvg.querySelector('.halo'), haloEls = halo ? [...halo.children] : []
   const clips = [eyeSvg.querySelector(`#${id}l path`), eyeSvg.querySelector(`#${id}rr path`)]
   const barRects = [...eyeSvg.querySelectorAll(`#${id}bar rect`)]
   const arcs = [...shut.children]
-  const glint = eyeSvg.querySelector('.glint'), glintE = glint.firstElementChild, ring = eyeSvg.querySelector('.ring')
+  const glint = eyeSvg.querySelector('.glint'), [band, spot] = [...glint.children]
   const mk = body.lastElementChild
   const ringEls = [...mk.querySelector('.rings').children], zs = [...mk.querySelector('.zz').children]
   const confEls = [...mk.querySelector('.conf').children], symG = mk.querySelector('.sym')
@@ -275,7 +292,7 @@ function vectorView(kind, el, W, H, o) {
   return {
     el,
     update(st) {
-      const { eyes, merge, glint: gl, mouth } = vectorEyes(st, GEO)
+      const { eyes, merge, dots, shimmer: sh, mouth } = vectorEyes(st, GEO)
       const closed = (eyes[0].closed + eyes[1].closed) / 2
       eyes.forEach((e, i) => {
         clips[i].setAttribute('d', e.clip)
@@ -284,6 +301,7 @@ function vectorView(kind, el, W, H, o) {
           r.setAttribute('width', f(e.w)); r.setAttribute('height', f(e.h)); r.setAttribute('rx', f(e.r))
         }
         groups[i].setAttribute('transform', Math.abs(e.rot) > 0.01 ? `rotate(${f(e.rot)} ${f(e.cx)} ${f(e.y)})` : '')
+        groups[i].setAttribute('opacity', f(e.a))
         if (closed > 0.01) { arcs[i].setAttribute('d', e.arc); arcs[i].setAttribute('stroke-width', f(e.arcWidth)) }
       })
       // Light eyes dim to half while merged, so the white glint still stands out on the bar.
@@ -291,19 +309,40 @@ function vectorView(kind, el, W, H, o) {
       shut.setAttribute('opacity', f(closed))
       const wantGoo = glass && merge > 0.02
       if (wantGoo !== gooOn) { gooOn = wantGoo; if (wantGoo) open.setAttribute('filter', `url(#${id}g)`); else if (eyeFilter) open.setAttribute('filter', eyeFilter); else open.removeAttribute('filter') }
-      if (gl && gl.kind !== 'search') {
-        glint.setAttribute('opacity', f(gl.alpha * 0.95)); ring.setAttribute('opacity', '0')
-        glintE.setAttribute('cx', f(gl.x)); glintE.setAttribute('cy', f(gl.y)); glintE.setAttribute('rx', f(gl.size * 0.95)); glintE.setAttribute('ry', f(gl.size * 0.5))
-      } else if (gl) {
-        ring.setAttribute('opacity', f(gl.alpha)); glint.setAttribute('opacity', '0')
-        ring.setAttribute('cx', f(gl.x)); ring.setAttribute('cy', f(gl.y)); ring.setAttribute('r', f(gl.size * 0.85)); ring.setAttribute('stroke-width', f(Math.max(1.4 / s, gl.size * 0.34)))
-      } else { glint.setAttribute('opacity', '0'); ring.setAttribute('opacity', '0') }
+      // Thinking in dots: the middle dot grows in between the other two.
+      if (dots) { midEl.setAttribute('cx', f(dots.mid.x)); midEl.setAttribute('cy', f(dots.mid.y)); midEl.setAttribute('r', f(Math.max(0, dots.mid.r))); midEl.setAttribute('opacity', f(dots.mid.a)) }
+      else midEl.setAttribute('r', '0')
+      // Thinking as a bar: a soft band (or, searching, a round spot) slides inside it, clipped to the bar's shape.
+      if (sh) {
+        glint.setAttribute('opacity', f(sh.alpha))
+        const spotOn = sh.kind === 'search'
+        band.setAttribute('x', f(sh.x - sh.w / 2)); band.setAttribute('y', f(sh.y0 - 2)); band.setAttribute('width', f(spotOn ? 0 : sh.w)); band.setAttribute('height', f(sh.h + 4))
+        spot.setAttribute('cx', f(sh.x)); spot.setAttribute('cy', f(sh.y)); spot.setAttribute('rx', f(spotOn ? sh.h * 0.8 : 0)); spot.setAttribute('ry', f(spotOn ? sh.h * 0.8 : 0))
+      } else glint.setAttribute('opacity', '0')
+      // The glass glow behind them.
+      if (halo) {
+        if (dots && dots.k > 0.05) {
+          const at = [eyes[0], dots.mid, eyes[1]]
+          at.forEach((q, i) => { const c = haloEls[i]; c.setAttribute('cx', f(q.x)); c.setAttribute('cy', f(q.y)); c.setAttribute('r', f((q.r ?? q.w / 2) * 1.5)); c.setAttribute('opacity', f(0.3 + 0.7 * dots.glow[i])) })
+          haloEls[3].setAttribute('width', '0')
+          halo.setAttribute('opacity', f(dots.k * 0.9))
+        } else if (merge > 0.3 && st.mood === 'thinking') {
+          const [a, b] = eyes, x0 = a.x - a.w / 2, x1 = b.x + b.w / 2, y0 = Math.min(a.y - a.h / 2, b.y - b.h / 2), y1 = Math.max(a.y + a.h / 2, b.y + b.h / 2)
+          for (const c of haloEls.slice(0, 3)) c.setAttribute('r', '0')
+          const r = haloEls[3]
+          r.setAttribute('x', f(x0 - 1.5)); r.setAttribute('y', f(y0 - 1.5)); r.setAttribute('width', f(x1 - x0 + 3)); r.setAttribute('height', f(y1 - y0 + 3)); r.setAttribute('rx', f((y1 - y0 + 3) / 2))
+          halo.setAttribute('opacity', f(Math.min(1, merge) * 0.75))
+        } else halo.setAttribute('opacity', '0')
+      }
       if (mouth && o.mouth) {
-        // The mouth grows at the small sizes so it still reads at 50 x 44.
-        const k2 = o.cls === 'peek' ? 1.4 : o.cls === 'header' ? 1.15 : 1, mw = mouth.w * k2, mh = mouth.h * k2
+        // The mouth gets wider at the small sizes so it still reads at 50 x 44. Its stroke turns a closed mouth into a
+        // rounded line, and it never grows past the Pill's bottom edge.
+        const kz = o.cls === 'peek' ? 1.3 : o.cls === 'header' ? 1.12 : 1
+        const lw = Math.max(GEO.H * 0.05, (o.cls === 'peek' ? 1.7 : 1.6) / s) * Math.min(1, mouth.talk * 1.5)
+        const top = mouth.top + lw / 2, room = GEO.y1 - GEO.H * 0.06 - lw / 2 - top
         mouthEl.setAttribute('opacity', '1')
-        mouthEl.setAttribute('x', f(mouth.x - mw / 2)); mouthEl.setAttribute('y', f(mouth.y - mh / 2))
-        mouthEl.setAttribute('width', f(mw)); mouthEl.setAttribute('height', f(mh)); mouthEl.setAttribute('rx', f(Math.min(mw, mh) / 2))
+        mouthEl.setAttribute('d', mouthPath(mouth.x, top, mouth.w * kz, Math.min(mouth.h * kz, Math.max(0, room)), mouth.flat))
+        mouthEl.setAttribute('stroke-width', f(lw))
       } else mouthEl.setAttribute('opacity', '0')
 
       // Marks outside the Pill.
@@ -311,11 +350,11 @@ function vectorView(kind, el, W, H, o) {
       ringEls.forEach((p, i) => {
         const r = M.rings[i]
         if (!r) { p.setAttribute('d', ''); return }
-        const reach = r.kind === 'call' ? ph * (o.cls === 'peek' ? 0.55 : 0.45) : r.kind === 'key' ? ph * 0.22 : ph * 0.35
+        const reach = r.kind === 'call' ? ph * (o.cls === 'peek' ? 0.55 : 0.45) : ph * 0.35
         const d = 1.5 + r.u * reach
         p.setAttribute('d', capsule(P.x0 - d, P.y0 - d, P.x1 + d, P.y1 + d))
         p.setAttribute('opacity', f(r.a))
-        p.setAttribute('stroke-width', f(r.kind === 'call' ? S * 0.13 * bold : r.kind === 'key' ? 1.3 : 1.6 * (1 - r.u * 0.5)))
+        p.setAttribute('stroke-width', f(r.kind === 'call' ? S * 0.13 * bold : 1.6 * (1 - r.u * 0.5)))
       })
       zs.forEach((p, i) => {
         const z = M.zs[i]
@@ -398,8 +437,10 @@ function blockyView(el, W, H, o) {
   const ox = Math.floor((W - cols * k) / 2), oy = Math.floor((H - rows * k) / 2)
   const dpr = Math.min(3, window.devicePixelRatio || 1)
   const pal = palette('blocky', o)
-  // On the bar, light eyes get a softer bar so the white highlight still shows.
-  const ink = pal.eye, bar = pal.light ? lighten(o.color, 0.5) : INK, hi = pal.light ? WHITE : lighten(o.color, 0.75)
+  // On the bar, light eyes get a softer bar so the white shimmer still shows. Unlit thinking dots sit half way to the Pill.
+  const ink = pal.eye, bar = pal.light ? lighten(o.color, 0.5) : INK, hi = pal.light ? WHITE : mix(INK, o.color, 0.78)
+  const soft = mix(bar, hi, 0.5), dim = mix(ink, o.color, 0.62)
+  const colorOf = (c) => (c.bar ? (c.hi >= 1 ? hi : c.hi > 0 ? soft : bar) : c.dim ? dim : ink)
   const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr), className: 'pv-dim' })
   cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible`
   const msvg = document.createElementNS(NS, 'svg')
@@ -427,15 +468,14 @@ function blockyView(el, W, H, o) {
       const t = `translate(${tx}px,${ty}px)`
       if (cv.style.transform !== t) { cv.style.transform = t; msvg.style.transform = t }
       const cells = pixelEyes(st, { mouth: o.mouth }).filter((c) => inBody.has(c.x + ',' + c.y))
-      const barCells = cells.filter((c) => c.y === 3 && !c.mouth).length >= 8
-      const sig = angle + '|' + cells.map((c) => `${c.x},${c.y},${c.hi ? 1 : 0}`).join(';')
+      const sig = angle + '|' + cells.map((c) => `${c.x},${c.y},${colorOf(c)}`).join(';')
       if (sig !== last) {
         last = sig
         g.setTransform(dpr, 0, 0, dpr, 0, 0)
         g.clearRect(0, 0, W, H)
         g.fillStyle = o.color
         for (const [x, y] of body) g.fillRect(ox + x * k, oy + y * k, k, k)
-        for (const c of cells) { g.fillStyle = c.hi ? hi : barCells && c.y === 3 && !c.mouth ? bar : ink; g.fillRect(ox + c.x * k, oy + c.y * k, k, k) }
+        for (const c of cells) { g.fillStyle = colorOf(c); g.fillRect(ox + c.x * k, oy + c.y * k, k, k) }
       }
       // Marks: pixel sprites outside the Pill, in whole mark pixels.
       const M = marks(st, { cls: o.cls, mouth: o.mouth, glass: false })
