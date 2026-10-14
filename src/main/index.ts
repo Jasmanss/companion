@@ -5,7 +5,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Project, SettingsSection, SettingsView } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -30,6 +30,8 @@ import { HookServer } from './hook-server'
 import { whereYouLeftOff } from './left-off'
 import { LEGACY_APP_NAME, markSecretsDone, migrateUserData, readLegacyKeychainPassword, secretsPending } from './migrate'
 import { MoodBoard } from './moods'
+import { findNotch, probeScreens } from './notch'
+import { NotchDock } from './notch-window'
 import { SessionTracker } from './sessions'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
@@ -85,6 +87,11 @@ let hookServer: HookServer | null = null
 let deploys: DeployWatcher
 let gh: GhRunner | null = null
 const merges = new MergeTracker()
+/** Steward in the MacBook notch, and where the notch is (null: no screen has one right now). */
+let notch: NotchDock
+let notchGeo: NotchGeometry | null = null
+/** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
+const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
 
 /** Where the window goes in each state: against the screen edge you picked, centered top to bottom. */
 function boundsFor(state: DockState): Electron.Rectangle {
@@ -102,7 +109,38 @@ function boundsFor(state: DockState): Electron.Rectangle {
   return { x: x(width, 8), y: y(height), width, height }
 }
 
+const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy']
+const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
+
+/**
+ * Steward shows in the notch while it's tucked away (and while a nudge peeks out, which for now still peeks from the
+ * edge); the panel opens from the edge. Not in the notch: the tab is back at the edge.
+ */
+function placeNotch(): void {
+  notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge'))
+}
+
+/** Ask macOS where the notch is (at launch, and whenever a display changes), and put Steward where it belongs. */
+async function refreshNotch(): Promise<void> {
+  const found = findNotch(await probeScreens(), screen.getAllDisplays())
+  if (JSON.stringify(found) === JSON.stringify(notchGeo)) return
+  notchGeo = found
+  notch?.setNotch(found)
+  for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('notch:geometry', found)
+  replaceForNotch()
+}
+
+/** The notch came or went, or was picked or unpicked: the tab leaves the edge for the notch, or comes back. */
+function replaceForNotch(): void {
+  placeNotch()
+  if (!win || win.isDestroyed() || dock !== 'collapsed') return
+  if (inNotch()) win.hide()
+  else {
+    win.setBounds(boundsFor('collapsed'))
+    if (!win.isVisible()) win.showInactive()
+  }
+}
 
 function setDock(state: DockState): void {
   if (!win || dock === state) return
@@ -115,11 +153,14 @@ function setDock(state: DockState): void {
   applyMaterial()
   win.webContents.send('dock:state', state)
   updateMenuBar()
+  placeNotch()
   if (state === 'hidden') return win.hide()
   win.setBounds(boundsFor(state), !wasHidden)
   if (state === 'collapsed' || state === 'nudge') {
+    // In the notch there's no tab at the edge: the notch window is the character.
+    if (state === 'collapsed' && inNotch()) win.hide()
     // Peeking never takes keyboard focus, so it can't interrupt typing.
-    if (!win.isVisible()) win.showInactive()
+    else if (!win.isVisible()) win.showInactive()
   } else {
     if (!win.isVisible()) win.show()
     win.focus()
@@ -236,6 +277,8 @@ function createWindow(): BrowserWindow {
   w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   // ready-to-show doesn't always fire for transparent windows, so also show once the page loads.
   const reveal = () => {
+    // Docked in the notch, the notch window shows instead.
+    if (dock === 'collapsed' && inNotch()) return
     if (!w.isDestroyed() && !w.isVisible()) w.showInactive()
   }
   w.once('ready-to-show', reveal)
@@ -265,7 +308,7 @@ function createWindow(): BrowserWindow {
 }
 
 /** A page of the renderer: from the dev server while developing, from the build otherwise. */
-function loadPage(w: BrowserWindow, page: 'index.html' | 'settings.html', hash?: string): void {
+function loadPage(w: BrowserWindow, page: 'index.html' | 'settings.html' | 'notch.html', hash?: string): void {
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${page}${hash ? `#${hash}` : ''}`)
   else void w.loadFile(path.join(__dirname, '../renderer', page), hash ? { hash } : undefined)
 }
@@ -368,6 +411,7 @@ function loginItem(): SettingsView['openAtLogin'] {
 function broadcastSettings(): void {
   const view = settings.view()
   for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('settings:changed', view)
+  notch?.post('settings:changed', view)
 }
 
 async function withModal<T>(fn: () => Promise<T>): Promise<T> {
@@ -536,6 +580,12 @@ const FALLBACK_DRAG_ICON = nativeImage.createFromBitmap(Buffer.alloc(16 * 16 * 4
 
 function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
+  ipcMain.handle('notch:geometry', () => notchGeo)
+  ipcMain.handle('notch:state', () => notch.state())
+  ipcMain.on('notch:click', () => setDock('expanded'))
+  ipcMain.on('notch:reportMood', (_e, mood: unknown, glint: unknown) => {
+    if (MOODS.includes(mood as Mood) && GLINTS.includes(glint as PillGlint)) notch.setMood(mood as Mood, glint as PillGlint)
+  })
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
   ipcMain.handle('dock:hide', () => setDock('hidden'))
   ipcMain.handle('dock:view', () => setDock('viewing'))
@@ -659,6 +709,9 @@ function registerIpc(): void {
     // The other screen edge, or another size: the window moves there now.
     const after = settings.steward()
     if (win && !win.isDestroyed() && dock !== 'hidden' && (after.edge !== before.edge || after.size !== before.size)) win.setBounds(boundsFor(dock))
+    // Into the notch or out of it, or the other notch style.
+    if (after.notch !== before.notch || after.edge !== before.edge) replaceForNotch()
+    if (after.notchStyle !== before.notchStyle) notch.restyle()
     return settings.view()
   })
   ipcMain.handle('settings:setShortcut', (_e, id: unknown, accelerator: unknown) => setShortcut(id, accelerator))
@@ -768,11 +821,52 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 20_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 1000)
+      await checkNotch(out)
+      clearTimeout(notchTimer)
       app.exit(0)
     } catch (err) {
       fail(String(err))
     }
   })
+}
+
+/**
+ * On a Mac whose screen has a notch: docks Steward there in both styles, checks the tab left the edge and the notch
+ * window drew something, and saves what it drew next to the smoke screenshot. STEWARD_SMOKE_IDLE=seconds then leaves
+ * it resting that long and reports how much CPU it used. Elsewhere (CI), it says so and skips.
+ */
+async function checkNotch(out: string): Promise<void> {
+  if (!notchGeo) return void console.log('smoke: no notch on this screen, skipped the notch')
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  setDock('collapsed')
+  for (const notchStyle of ['chin', 'wings'] as const) {
+    await settings.update({ steward: { notch: true, notchStyle } })
+    replaceForNotch()
+    notch.restyle()
+    await sleep(1500)
+    const image = await notch.capture()
+    if (!image || image.isEmpty()) throw new Error(`the notch (${notchStyle}) rendered empty`)
+    if (win?.isVisible()) throw new Error('the tab still shows at the edge while docked in the notch')
+    if (!notch.visible) throw new Error('the notch window is not showing')
+    const file = out.replace(/\.png$/, `-notch-${notchStyle}.png`)
+    await fs.writeFile(file, image.toPNG())
+    const b = notch.windowBounds()
+    console.log(`smoke: notch ${notchStyle}: notch ${notchGeo.width}x${notchGeo.height} at x ${notchGeo.x}; window ${b?.width}x${b?.height} at ${b?.x},${b?.y} -> ${file}`)
+  }
+  const idle = Number(process.env.STEWARD_SMOKE_IDLE ?? 0)
+  if (idle > 0) {
+    const pid = notch.pid()
+    app.getAppMetrics()
+    await sleep(idle * 1000)
+    const m = app.getAppMetrics()
+    const cpu = (p: number | null | undefined) => m.find((x) => x.pid === p)?.cpu.percentCPUUsage.toFixed(2)
+    console.log(`smoke: notch idle ${idle}s: notch page ${cpu(pid)}% CPU, main ${cpu(process.pid)}% CPU, GPU ${m.find((x) => x.type === 'GPU')?.cpu.percentCPUUsage.toFixed(2)}%`)
+  }
+  await settings.update({ steward: { notch: false } })
+  replaceForNotch()
+  if (!win?.isVisible()) throw new Error('the tab did not come back to the edge')
+  console.log('smoke: notch off, the tab is back at the edge')
 }
 
 /** Opens Settings and screenshots it (every section with STEWARD_SMOKE_SECTIONS), next to the smoke screenshot. */
@@ -889,6 +983,9 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') app.dock?.hide()
 
   registerIpc()
+  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle })
+  // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
+  await refreshNotch()
   win = createWindow()
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
   else {
@@ -914,6 +1011,15 @@ app.whenReady().then(async () => {
   }
 
   screen.on('display-metrics-changed', () => win?.setBounds(boundsFor(dock)))
+  // A display added or removed, the lid closed or opened, or another resolution: look for the notch again.
+  let recheck: ReturnType<typeof setTimeout> | undefined
+  const notchLater = () => {
+    clearTimeout(recheck)
+    recheck = setTimeout(() => void refreshNotch(), 400)
+  }
+  screen.on('display-added', notchLater)
+  screen.on('display-removed', notchLater)
+  screen.on('display-metrics-changed', notchLater)
   // Reduce transparency, and light or dark, can change while Steward runs.
   nativeTheme.on('updated', () => {
     applied = null

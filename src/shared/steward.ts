@@ -62,6 +62,8 @@ export const DEFAULT_STEWARD: StewardPrefs = {
   personality: 'lively',
   name: DEFAULT_NAME,
   edge: 'right',
+  notch: false,
+  notchStyle: 'chin',
   size: 'small',
   tint: 'ice',
   frost: DEFAULT_FROST,

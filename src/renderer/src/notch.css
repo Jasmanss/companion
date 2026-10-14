@@ -1,0 +1,47 @@
+/* Steward in the notch (the notch window): one black shape with the real notch, and the eyes lit on it. The shape is
+   overlapping black pieces that slide or scale, so it changes shape with transform alone; black on black, the
+   overlaps don't show. With reduced motion, the shape fades out and back in instead (see Notch.tsx). */
+.notch-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.nt {
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: 0;
+  transition: opacity 0.18s linear;
+}
+.nt.rm-out {
+  opacity: 0;
+  transition-duration: 0.14s;
+}
+.nt.snap,
+.nt.snap * {
+  transition: none !important;
+}
+.nt .blob {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.nt .bp {
+  position: absolute;
+  background: #000;
+  transition: transform 0.38s cubic-bezier(0.34, 1.36, 0.5, 1);
+}
+.nt-eyes {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  transition: opacity 0.18s linear;
+}
+.nt-eyes.on {
+  opacity: 1;
+}

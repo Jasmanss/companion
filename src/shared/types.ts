@@ -18,6 +18,33 @@ export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphit
 /** The color the panel's glass is tinted with. */
 export type PanelTint = 'ice' | 'lilac' | 'mint' | 'peach' | 'graphite'
 
+export type NotchStyle = 'chin' | 'wings'
+
+/** The notch on a display that has one, in screen points (Electron's coordinates). Read from macOS, never guessed. */
+export interface NotchGeometry {
+  displayId: number
+  /** The notch's left side and the screen's top. */
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** The notch's size, and where its center is in the notch window. */
+export interface NotchLayout {
+  cx: number
+  width: number
+  height: number
+}
+/** What thinking is busy with: a wave, reading a file, or searching. */
+export type PillGlint = 'sweep' | 'step' | 'search'
+/** What the notch window shows: where the notch is, and the character's mood. */
+export interface NotchState {
+  layout: NotchLayout | null
+  mood: Mood
+  glint: PillGlint
+}
+
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
 export interface StewardPrefs {
   version: PillVersion
@@ -30,7 +57,12 @@ export interface StewardPrefs {
   personality: 'calm' | 'lively'
   /** Shown in the panel, and what the agent answers to. */
   name: string
+  /** The side of the screen it docks on; also where it goes when it can't be in the notch. */
   edge: 'right' | 'left'
+  /** Dock in the MacBook notch instead, on screens that have one. Elsewhere it stays on the edge above. */
+  notch: boolean
+  /** In the notch: a chin below it with the eyes in it, or one eye on each side of it in the menu bar. */
+  notchStyle: NotchStyle
   /** How big the tab at the screen edge is. */
   size: 'small' | 'medium'
   /** The panel's glass: its tint, and how frosted it is, 0 (clear) to 100 (frosted). */
@@ -364,6 +396,19 @@ export interface StewardAPI {
   appearance: {
     get(): Promise<Appearance>
     onChange(cb: (appearance: Appearance) => void): Unsubscribe
+  }
+  /** The MacBook notch, and Steward docked in it. */
+  notch: {
+    /** The notch on this Mac's screens right now, or null when none has one. */
+    geometry(): Promise<NotchGeometry | null>
+    onGeometry(cb: (notch: NotchGeometry | null) => void): Unsubscribe
+    /** From the panel: the character's mood, so the notch shows the same one. */
+    reportMood(mood: Mood, glint: PillGlint): void
+    /** In the notch window: what to show, the cursor relative to the window (null when it's far), and a click. */
+    state(): Promise<NotchState>
+    onState(cb: (state: NotchState) => void): Unsubscribe
+    onCursor(cb: (p: { x: number; y: number } | null) => void): Unsubscribe
+    click(): void
   }
   copyText(text: string): Promise<void>
 }

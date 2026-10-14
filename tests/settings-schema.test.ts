@@ -42,7 +42,7 @@ describe('migrateSettings', () => {
 
   it('gives a file from before the character arrived the default one: glass, silver, on the right', () => {
     const migrated = migrateSettings({ projects: [], keepPanelOpen: true })
-    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', size: 'small', tint: 'ice', frost: 50 })
+    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', notch: false, notchStyle: 'chin', size: 'small', tint: 'ice', frost: 50 })
   })
 
   it("keeps each of the character's options it knows, one at a time, and tidies the name", () => {
@@ -54,6 +54,12 @@ describe('migrateSettings', () => {
     expect(migrateSettings({ steward: { color: 'coral' } }).steward.color).toBe('silver')
     expect(migrateSettings({ steward: { name: '   ' } }).steward.name).toBe('Steward')
     for (const junk of [null, 'glass', 7, ['flat']]) expect(migrateSettings({ steward: junk }).steward).toEqual(DEFAULT_STEWARD)
+  })
+
+  it('keeps the notch choice and its style, and starts files from before the notch on their edge, as a chin', () => {
+    expect(migrateSettings({ steward: { edge: 'left' } }).steward).toMatchObject({ edge: 'left', notch: false, notchStyle: 'chin' })
+    expect(migrateSettings({ steward: { notch: true, notchStyle: 'wings' } }).steward).toMatchObject({ notch: true, notchStyle: 'wings' })
+    expect(migrateSettings({ steward: { notch: 'yes', notchStyle: 'ears' } }).steward).toMatchObject({ notch: false, notchStyle: 'chin' })
   })
 
   it("keeps the panel's tint and frost, a frost made a whole number from 0 to 100", () => {
@@ -101,6 +107,7 @@ describe('parseSettingsPatch', () => {
     expect(parseSettingsPatch({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })).toEqual({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })
     expect(parseSettingsPatch({ steward: { tint: 'graphite', frost: 0 } })).toEqual({ steward: { tint: 'graphite', frost: 0 } })
     expect(parseSettingsPatch({ steward: { frost: 100 } })).toEqual({ steward: { frost: 100 } })
+    expect(parseSettingsPatch({ steward: { notch: true, notchStyle: 'wings' } })).toEqual({ steward: { notch: true, notchStyle: 'wings' } })
   })
 
   it('refuses anything else, so the window can only change what it shows', () => {
@@ -114,6 +121,9 @@ describe('parseSettingsPatch', () => {
       { steward: { version: 'droplet' } },
       { steward: { hat: 'top' } },
       { steward: { tint: 'sky' } },
+      { steward: { notch: 'yes' } },
+      { steward: { notchStyle: 'ears' } },
+      { steward: { edge: 'notch' } },
       { steward: { frost: 101 } },
       { steward: { frost: -1 } },
       { steward: { frost: 42.5 } },

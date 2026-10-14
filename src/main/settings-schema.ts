@@ -51,6 +51,7 @@ const STEWARD_CHOICES = {
   glass: ['tinted', 'clear'],
   personality: ['calm', 'lively'],
   edge: ['right', 'left'],
+  notchStyle: ['chin', 'wings'],
   size: ['small', 'medium'],
   tint: PANEL_TINT_IDS,
 } as const
@@ -69,6 +70,8 @@ function migrateSteward(raw: unknown): StewardPrefs {
     personality: pick(r.personality, STEWARD_CHOICES.personality, d.personality),
     name: typeof r.name === 'string' ? cleanName(r.name) : d.name,
     edge: pick(r.edge, STEWARD_CHOICES.edge, d.edge),
+    notch: typeof r.notch === 'boolean' ? r.notch : d.notch,
+    notchStyle: pick(r.notchStyle, STEWARD_CHOICES.notchStyle, d.notchStyle),
     size: pick(r.size, STEWARD_CHOICES.size, d.size),
     tint: pick(r.tint, STEWARD_CHOICES.tint, d.tint),
     frost: r.frost === undefined ? d.frost : cleanFrost(r.frost),
@@ -142,6 +145,8 @@ const Patch = z.strictObject({
       // Tidied (and an empty one made Steward again) when it's saved.
       name: z.string().max(MAX_NAME * 4),
       edge: z.enum(STEWARD_CHOICES.edge),
+      notch: z.boolean(),
+      notchStyle: z.enum(STEWARD_CHOICES.notchStyle),
       size: z.enum(STEWARD_CHOICES.size),
       tint: z.enum(STEWARD_CHOICES.tint),
       frost: z.number().int().min(0).max(100),

@@ -380,6 +380,8 @@ export function App() {
   const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
   const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
   const glint = glintFor(work)
+  // Docked in the notch, the notch window shows the character: it gets the same mood.
+  useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
   const noKey = settings?.apiKeySource === 'none'
 

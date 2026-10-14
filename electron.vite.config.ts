@@ -9,12 +9,13 @@ export default defineConfig({
   preload: {},
   renderer: {
     plugins: [react()],
-    // Two pages: the panel, and the Settings window.
+    // Three pages: the panel, the Settings window, and Steward in the notch.
     build: {
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
           settings: resolve(__dirname, 'src/renderer/settings.html'),
+          notch: resolve(__dirname, 'src/renderer/notch.html'),
         },
       },
     },
