@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
-import { DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PILL_COLORS, TAB_SIZES } from '../../shared/steward'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, PillColor, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
+import { DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, TAB_SIZES, panelTint } from '../../shared/steward'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
 import type { Glint } from './pill/eyes'
@@ -133,20 +133,20 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
   )
 }
 
-/** The six colors, as swatches. */
-function ColorPicker({ value, onChange }: { value: PillColor; onChange: (color: PillColor) => void }) {
+/** Colors as swatches, one picked: the character's colors, or the panel's tints. The arrow keys move the pick. */
+function Swatches<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; name: string; color: string }[]; onChange: (value: T) => void }) {
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
     if (!step) return
     e.preventDefault()
-    const i = PILL_COLORS.findIndex((c) => c.id === value)
-    const next = PILL_COLORS[(i + step + PILL_COLORS.length) % PILL_COLORS.length].id
+    const i = options.findIndex((c) => c.id === value)
+    const next = options[(i + step + options.length) % options.length].id
     onChange(next)
     e.currentTarget.querySelector<HTMLButtonElement>(`[data-value="${next}"]`)?.focus()
   }
   return (
-    <div className="set-colors" role="radiogroup" aria-label="Color" onKeyDown={onKey}>
-      {PILL_COLORS.map((c) => (
+    <div className="set-colors" role="radiogroup" aria-label={label} onKeyDown={onKey}>
+      {options.map((c) => (
         <button
           key={c.id}
           role="radio"
@@ -155,10 +155,71 @@ function ColorPicker({ value, onChange }: { value: PillColor; onChange: (color: 
           aria-label={c.name}
           title={c.name}
           tabIndex={c.id === value ? 0 : -1}
-          style={{ background: c.hex }}
+          style={{ background: c.color }}
           onClick={() => onChange(c.id)}
         />
       ))}
+    </div>
+  )
+}
+
+const COLOR_SWATCHES = PILL_COLORS.map((c) => ({ id: c.id, name: c.name, color: c.hex }))
+const TINT_SWATCHES = PANEL_TINTS.map((t) => ({ id: t.id, name: t.name, color: `rgb(${t.tint})` }))
+
+/**
+ * How frosted the panel is, clear to frosted. The panel follows while you drag: a change goes out at most ten
+ * times a second, and the last one always does. While you drag, saved values coming back don't move the slider.
+ */
+function FrostSlider({ value, onChange }: { value: number; onChange: (frost: number) => void }) {
+  const [shown, setShown] = useState(value)
+  const sent = useRef(value)
+  const latest = useRef(value)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dragging = useRef(false)
+  const change = useRef(onChange)
+  useEffect(() => {
+    change.current = onChange
+  })
+  useEffect(() => {
+    if (!dragging.current) setShown(value)
+  }, [value])
+  // Leaving Settings mid-drag still saves where the slider ended up.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+      if (latest.current !== sent.current) change.current(latest.current)
+    },
+    [],
+  )
+  const flush = () => {
+    timer.current = null
+    if (latest.current === sent.current) return
+    sent.current = latest.current
+    change.current(latest.current)
+    timer.current = setTimeout(flush, 100)
+  }
+  return (
+    <div className="set-range">
+      <span aria-hidden="true">Clear</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={shown}
+        aria-label="Frost"
+        aria-valuetext={`${shown}% frosted`}
+        onPointerDown={() => (dragging.current = true)}
+        onPointerUp={() => (dragging.current = false)}
+        onPointerCancel={() => (dragging.current = false)}
+        onChange={(e) => {
+          const frost = Number(e.target.value)
+          setShown(frost)
+          latest.current = frost
+          if (!timer.current) flush()
+        }}
+      />
+      <span aria-hidden="true">Frosted</span>
     </div>
   )
 }
@@ -228,8 +289,8 @@ function useMakeBelieveTyping(on: boolean) {
 
 /** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
 export function StewardSection(props: SectionProps) {
-  // (A main process from before the character arrived sends no steward: show the defaults.)
-  const look = props.settings.steward ?? DEFAULT_STEWARD
+  // (A main process from before the character, or before the panel's tint, sends less: the defaults fill in.)
+  const look = { ...DEFAULT_STEWARD, ...props.settings.steward }
   const run = runner(props)
   const set = (patch: Partial<StewardPrefs>) => run(api().settings.update({ steward: patch }))
   const [preview, setPreview] = useState(PREVIEWS[0])
@@ -261,7 +322,7 @@ export function StewardSection(props: SectionProps) {
           <Segmented label="Version" value={look.version} options={[['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]} onChange={(version) => set({ version })} />
         </Row>
         <Row label="Color" note={PILL_COLORS.find((c) => c.id === look.color)?.name}>
-          <ColorPicker value={look.color} onChange={(color) => set({ color })} />
+          <Swatches label="Color" value={look.color} options={COLOR_SWATCHES} onChange={(color) => set({ color })} />
         </Row>
         {look.version === 'glass' && (
           <Row label="Glass" note={look.glass === 'clear' ? 'No tint: the color only shows in its marks, like the “!”' : undefined}>
@@ -289,6 +350,15 @@ export function StewardSection(props: SectionProps) {
         </Row>
         <Row label="Size" note="How big the tab at the screen edge is.">
           <Segmented label="Size" value={look.size} options={[['small', 'Small'], ['medium', 'Medium']]} onChange={(size) => set({ size })} />
+        </Row>
+      </Group>
+
+      <Group title="The panel">
+        <Row label="Tint" note={panelTint(look.tint).name}>
+          <Swatches label="Tint" value={look.tint} options={TINT_SWATCHES} onChange={(tint) => set({ tint })} />
+        </Row>
+        <Row label="Frost" note="How milky the glass is. With Reduce Transparency on, the panel is solid.">
+          <FrostSlider value={look.frost} onChange={(frost) => set({ frost })} />
         </Row>
       </Group>
     </>

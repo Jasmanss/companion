@@ -4,6 +4,7 @@
 // Marks outside the Pill (the "!", "?", sweat drop, confetti, Z's and rings) are drawn in screen pixels, so the
 // 50 x 44 peek can get bigger, bolder ones than the 64 x 54 header, and they are colored against the desktop.
 // Thinking draws as three dots or one thick bar (the eyes state picks).
+// o.lit draws just the eyes, lit in the Pill's color, for the black notch: no body, and the marks colored for black.
 import { vectorEyes, pixelEyes, marks, ZSPRITES, MARK_SPRITES } from './eyes.js'
 
 /** The classic Pill in a 100 x 100 design box. */
@@ -62,6 +63,12 @@ function onDesktop(base, light, min) {
   return light ? '#111111' : '#ffffff'
 }
 
+/** On black (the notch), push a color lighter until it reaches the contrast asked for. */
+function onBlack(base, min) {
+  for (let t = 0; t <= 1.001; t += 0.05) { const c = lighten(base, t); if (contrast(c, '#000000') >= min) return c }
+  return WHITE
+}
+
 /** What a glass Pill roughly looks like over the desktop: the blurred backdrop, then the tint over it. */
 // The tint reads stronger through the lens than its alpha suggests, so light desktops count it at 0.7.
 const glassFace = (o) => mix(o.light ? '#e8e6ef' : '#1d1f2b', o.tinted ? o.color : WHITE, o.tinted ? (o.light ? 0.7 : 0.42) : (o.light ? 0.16 : 0.06))
@@ -70,6 +77,18 @@ const glassFace = (o) => mix(o.light ? '#e8e6ef' : '#1d1f2b', o.tinted ? o.color
  * Returns { eye, light, glint, z }: z is for the Z's, which sit on the background next to the Pill, not on it.
  */
 export function palette(kind, o) {
+  // Lit on the black notch: the body is the notch, and the Pill's color becomes the light of its eyes.
+  if (o.lit) {
+    const lit = onBlack(o.color, 4.5), [hl] = toHsl(o.color)
+    return {
+      face: '#000000', light: true, lit,
+      eye: kind === 'glass' ? lighten(lit, 0.5) : lit,
+      glint: WHITE,
+      sym: onBlack(o.color, 7),
+      drop: onBlack('#5aa9f0', 4.5),
+      confetti: [0, 0.34, 0.6].map((dh) => onBlack(fromHsl(hl + dh, 0.85, 0.62), 4.5)),
+    }
+  }
   const face = kind === 'glass' ? glassFace(o) : o.color
   const light = contrast(WHITE, face) > contrast(INK, face)
   const [h] = toHsl(o.color)
@@ -169,6 +188,8 @@ const bodyCss = (st, W, H) => `translate(${(st.body.tx * W).toFixed(2)}px,${(st.
  * One Pill view. kind: 'glass' | 'flat' | 'blocky'. o: { color, tinted, light, mouth } where light says the desktop
  * behind the Pill is light and mouth turns talking's mouth on. The size class follows the width: 56 px or less is
  * the peek, 80 px or less the header, anything bigger the big stage.
+ * For the notch: lit (eyes lit in the color, no body), symAt (where the corner symbol goes, in view pixels: its
+ * center, or for blocky its sprite's bottom left), markSize (the vector symbol's size) and markPx (blocky's mark pixel).
  */
 export function makeView(kind, W, H, o) {
   addStyles()
@@ -193,7 +214,8 @@ function vectorView(kind, el, W, H, o) {
   const glass = kind === 'glass'
   const pal = palette(kind, o)
   let base = ''
-  if (glass) {
+  if (o.lit) base = ''
+  else if (glass) {
     // The filter goes in first: Chrome does not pick up a backdrop filter that is added after its element.
     const px = toPx(PATH, [vx, vy], s)
     filterHost().insertAdjacentHTML('beforeend', `<filter id="${id}" x="0" y="0" width="${W}" height="${H}" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feImage href="${lensMap(px, W, H)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="${(GEO.H * s * 0.5).toFixed(1)}" xChannelSelector="R" yChannelSelector="G"/></filter>`)
@@ -224,10 +246,10 @@ function vectorView(kind, el, W, H, o) {
   // Glass eyes glow when they are light. While merging, glass eyes also go through a "goo" filter (blur, then a
   // hard alpha threshold) so the two shapes join like drops of liquid instead of just overlapping.
   const glowOn = glass && pal.light
-  const glowCol = o.tinted ? lighten(o.color, 0.35) : WHITE
+  const glowCol = o.lit ? pal.lit : o.tinted ? lighten(o.color, 0.35) : WHITE
   // The bar's shimmer: white over a light bar; over a dark bar, the Pill's own color, softer, like light through it.
   const shCol = pal.light ? WHITE : lighten(o.color, 0.3), shMax = pal.light ? 0.9 : 0.7
-  const glowChain = (src) => `<feGaussianBlur in="${src}" stdDeviation="${(GEO.H * 0.06).toFixed(2)}" result="gb"/><feFlood flood-color="${glowCol}" flood-opacity=".9"/><feComposite in2="gb" operator="in" result="gl"/><feMerge><feMergeNode in="gl"/><feMergeNode in="${src}"/></feMerge>`
+  const glowChain = (src) => `<feGaussianBlur in="${src}" stdDeviation="${(GEO.H * (o.lit ? 0.085 : 0.06)).toFixed(2)}" result="gb"/><feFlood flood-color="${glowCol}" flood-opacity=".9"/><feComposite in2="gb" operator="in" result="gl"/><feMerge><feMergeNode in="gl"/><feMergeNode in="${src}"/></feMerge>`
   const defs = `
     ${glowOn ? `<filter id="${id}e" x="-80%" y="-80%" width="260%" height="260%">${glowChain('SourceGraphic')}</filter>` : ''}
     ${glass ? `<filter id="${id}g" x="-60%" y="-250%" width="220%" height="600%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2.6" result="bl"/><feColorMatrix in="bl" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo"/>${glowOn ? glowChain('goo') : ''}</filter>` : ''}
@@ -238,9 +260,9 @@ function vectorView(kind, el, W, H, o) {
   const eyeFilter = glowOn ? `url(#${id}e)` : ''
   // The marks layer works in screen pixels: P is the Pill's box in pixels, S the symbol size for this view.
   const P = { x0: (GEO.x0 - vx) * s, y0: (GEO.y0 - vy) * s, x1: (GEO.x1 - vx) * s, y1: (GEO.y1 - vy) * s }
-  const ph = P.y1 - P.y0, S = markSize(o.cls, ph), bold = markBold(o.cls)
+  const ph = P.y1 - P.y0, S = o.markSize ?? markSize(o.cls, ph), bold = markBold(o.cls)
   const shoulder = { x: P.x1 - 0.293 * (ph / 2), y: P.y0 + 0.293 * (ph / 2) }
-  const symAt = o.cls === 'peek' ? { x: Math.min(shoulder.x + S * 0.15, W + 1 - S * 0.3), y: shoulder.y - S * 0.62 } : { x: shoulder.x + S * 0.3, y: shoulder.y - S * 0.55 }
+  const symAt = o.symAt ?? (o.cls === 'peek' ? { x: Math.min(shoulder.x + S * 0.15, W + 1 - S * 0.3), y: shoulder.y - S * 0.62 } : { x: shoulder.x + S * 0.3, y: shoulder.y - S * 0.55 })
   const POOL = 16
   el.innerHTML = `<div class="pv-body" style="position:absolute;inset:0;transform-origin:50% 62%">${base}
     <svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
@@ -277,7 +299,7 @@ function vectorView(kind, el, W, H, o) {
   const glyph = (kind) => {
     const w = S * 0.17 * bold
     // "!" sits in a solid badge, with the "!" in the desktop's own color: the loudest mark, for needs-you.
-    if (kind === 'bang') { const cut = BACKDROP(o.light); return `<circle cx="0" cy="0" r="${f(S * 0.52)}" fill="${pal.sym}"/><rect x="${f(-S * 0.08 * bold)}" y="${f(-S * 0.33)}" width="${f(S * 0.16 * bold)}" height="${f(S * 0.4)}" rx="${f(S * 0.08 * bold)}" fill="${cut}"/><circle cx="0" cy="${f(S * 0.24)}" r="${f(S * 0.085 * bold)}" fill="${cut}"/>` }
+    if (kind === 'bang') { const cut = o.lit ? '#000000' : BACKDROP(o.light); return `<circle cx="0" cy="0" r="${f(S * 0.52)}" fill="${pal.sym}"/><rect x="${f(-S * 0.08 * bold)}" y="${f(-S * 0.33)}" width="${f(S * 0.16 * bold)}" height="${f(S * 0.4)}" rx="${f(S * 0.08 * bold)}" fill="${cut}"/><circle cx="0" cy="${f(S * 0.24)}" r="${f(S * 0.085 * bold)}" fill="${cut}"/>` }
     if (kind === 'q') return `<path d="M${f(-S * 0.27)} ${f(-S * 0.2)} C${f(-S * 0.27)} ${f(-S * 0.58)} ${f(S * 0.28)} ${f(-S * 0.6)} ${f(S * 0.28)} ${f(-S * 0.24)} C${f(S * 0.28)} ${f(-S * 0.02)} 0 ${f(-S * 0.02)} 0 ${f(S * 0.16)}" fill="none" stroke="${pal.sym}" stroke-width="${f(w * 1.2)}" stroke-linecap="round"/><circle cx="0" cy="${f(S * 0.4)}" r="${f(S * 0.12 * bold)}" fill="${pal.sym}"/>`
     return `<path d="M0 ${f(-S * 0.5)} C${f(S * 0.3)} ${f(-S * 0.1)} ${f(S * 0.34)} ${f(S * 0.08)} ${f(S * 0.34)} ${f(S * 0.2)} C${f(S * 0.34)} ${f(S * 0.42)} ${f(S * 0.16)} ${f(S * 0.54)} 0 ${f(S * 0.54)} C${f(-S * 0.16)} ${f(S * 0.54)} ${f(-S * 0.34)} ${f(S * 0.42)} ${f(-S * 0.34)} ${f(S * 0.2)} C${f(-S * 0.34)} ${f(S * 0.08)} ${f(-S * 0.3)} ${f(-S * 0.1)} 0 ${f(-S * 0.5)} Z" fill="${pal.drop}"/>`
   }
@@ -326,7 +348,7 @@ function vectorView(kind, el, W, H, o) {
       // Marks outside the Pill.
       const M = marks(st, { cls: o.cls, mouth: o.mouth, glass })
       ringEls.forEach((p, i) => {
-        const r = M.rings[i]
+        const r = o.lit ? null : M.rings[i]
         if (!r) { p.setAttribute('d', ''); return }
         const reach = r.kind === 'call' ? ph * (o.cls === 'peek' ? 0.55 : 0.45) : ph * 0.35
         const d = 1.5 + r.u * reach
@@ -416,8 +438,8 @@ function blockyView(el, W, H, o) {
   const dpr = Math.min(3, window.devicePixelRatio || 1)
   const pal = palette('blocky', o)
   // On the bar, light eyes get a softer bar so the white shimmer still shows. Unlit thinking dots sit half way to the Pill.
-  const ink = pal.eye, bar = pal.light ? lighten(o.color, 0.5) : INK, hi = pal.light ? WHITE : mix(INK, o.color, 0.78)
-  const soft = mix(bar, hi, 0.5), dim = mix(ink, o.color, 0.62)
+  const ink = pal.eye, bar = o.lit ? mix(pal.lit, '#000000', 0.55) : pal.light ? lighten(o.color, 0.5) : INK, hi = pal.light ? WHITE : mix(INK, o.color, 0.78)
+  const soft = mix(bar, hi, 0.5), dim = o.lit ? mix(pal.lit, '#000000', 0.6) : mix(ink, o.color, 0.62)
   const colorOf = (c) => (c.bar ? (c.hi >= 1 ? hi : c.hi > 0 ? soft : bar) : c.dim ? dim : ink)
   const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr), className: 'pv-dim' })
   cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible`
@@ -428,10 +450,10 @@ function blockyView(el, W, H, o) {
   el.append(cv, msvg)
   const g = cv.getContext('2d')
   // Marks use their own pixel size: 3 in the peek, 2 in the header (so the peek's are bigger), a body cell when big.
-  const sp = o.cls === 'peek' ? 3 : o.cls === 'header' ? 2 : Math.max(2, Math.round(k * 0.6))
-  const SET = o.cls === 'peek' ? { ...MARK_SPRITES, ...MARK_SPRITES.bold } : MARK_SPRITES
+  const sp = o.markPx ?? (o.cls === 'peek' ? 3 : o.cls === 'header' ? 2 : Math.max(2, Math.round(k * 0.6)))
+  const SET = o.cls === 'peek' && !o.markPx ? { ...MARK_SPRITES, ...MARK_SPRITES.bold } : MARK_SPRITES
   const Spx = sp * 5
-  const corner = { x: ox + 13 * k, y: oy + Math.round(0.4 * k) }
+  const corner = o.symAt ?? { x: ox + 13 * k, y: oy + Math.round(0.4 * k) }
   // Blocky fills the view's width, so a sliding drop has only the space above the Pill: it slides a little less.
   const slide = o.cls === 'peek' ? 3 : o.cls === 'header' ? 4 : rows * k * 0.35
   let last = '', lastM = ''
@@ -452,7 +474,7 @@ function blockyView(el, W, H, o) {
         g.setTransform(dpr, 0, 0, dpr, 0, 0)
         g.clearRect(0, 0, W, H)
         g.fillStyle = o.color
-        for (const [x, y] of body) g.fillRect(ox + x * k, oy + y * k, k, k)
+        if (!o.lit) for (const [x, y] of body) g.fillRect(ox + x * k, oy + y * k, k, k)
         for (const c of cells) { g.fillStyle = colorOf(c); g.fillRect(ox + c.x * k, oy + c.y * k, k, k) }
       }
       // Marks: pixel sprites outside the Pill, in whole mark pixels.
@@ -465,7 +487,7 @@ function blockyView(el, W, H, o) {
         return `<g fill="${col}" opacity="${a.toFixed(2)}">${r}</g>`
       }
       const place = (rowsS) => ({ x: o.cls === 'peek' ? Math.min(corner.x, W + 1 - rowsS[0].length * sp) : corner.x, y: corner.y - rowsS.length * sp })
-      for (const r of M.rings) {
+      for (const r of o.lit ? [] : M.rings) {
         const d = r.kind === 'call' ? 1 + Math.round(r.u * 2) : 1
         html += `<g fill="${pal.sym}" opacity="${r.a.toFixed(2)}">${outline(body, d).map(([x, y]) => `<rect x="${ox + x * k}" y="${oy + y * k}" width="${k}" height="${k}"/>`).join('')}</g>`
       }
@@ -485,7 +507,7 @@ function blockyView(el, W, H, o) {
         const lift = M.symbol.kind === 'drop' ? snap(M.symbol.dy * slide) : M.symbol.s < 0.6 ? sp : 0
         html += sprite(rowsS, snap(at.x), snap(at.y) + lift, M.symbol.kind === 'drop' ? pal.drop : pal.sym, M.symbol.a)
         // The badge's "!" is cut out: its holes are filled with the desktop's color.
-        if (M.symbol.kind === 'bang') html += sprite(rowsS.map((r, i) => (i === 0 || i === rowsS.length - 1 ? r.replace(/./g, '.') : r.replace(/#/g, ' ').replace(/\./g, '#').replace(/ /g, '.'))), snap(at.x), snap(at.y) + lift, BACKDROP(o.light), M.symbol.a)
+        if (M.symbol.kind === 'bang') html += sprite(rowsS.map((r, i) => (i === 0 || i === rowsS.length - 1 ? r.replace(/./g, '.') : r.replace(/#/g, ' ').replace(/\./g, '#').replace(/ /g, '.'))), snap(at.x), snap(at.y) + lift, o.lit ? '#000000' : BACKDROP(o.light), M.symbol.a)
       }
       if (html !== lastM) { lastM = html; msvg.innerHTML = html }
     },

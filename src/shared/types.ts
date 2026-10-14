@@ -15,6 +15,9 @@ export type PillVersion = 'glass' | 'flat' | 'blocky'
 
 export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphite'
 
+/** The color the panel's glass is tinted with. */
+export type PanelTint = 'ice' | 'lilac' | 'mint' | 'peach' | 'graphite'
+
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
 export interface StewardPrefs {
   version: PillVersion
@@ -30,6 +33,9 @@ export interface StewardPrefs {
   edge: 'right' | 'left'
   /** How big the tab at the screen edge is. */
   size: 'small' | 'medium'
+  /** The panel's glass: its tint, and how frosted it is, 0 (clear) to 100 (frosted). */
+  tint: PanelTint
+  frost: number
 }
 
 export interface TrayItem {

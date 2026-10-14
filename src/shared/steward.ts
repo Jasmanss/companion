@@ -1,4 +1,4 @@
-import type { PillColor, StewardPrefs } from './types'
+import type { PanelTint, PillColor, StewardPrefs } from './types'
 
 /** The character's colors, at most six. Silver comes first: it's the default. */
 export const PILL_COLOR_IDS = ['silver', 'sky', 'lilac', 'mint', 'peach', 'graphite'] as const satisfies readonly PillColor[]
@@ -12,6 +12,45 @@ export const PILL_COLORS: { id: PillColor; name: string; hex: string }[] = [
   { id: 'graphite', name: 'Graphite', hex: '#4a4f5c' },
 ]
 
+/**
+ * The panel's tints, from the glass redesign. Each is RGB triplets for the CSS tokens: tint (the glass), glow
+ * (accents, and text on dark glass), ink (text on light glass), soft (quiet text on dark glass) and live (the live
+ * dot and switches on light glass, a deeper glow). Ice comes first: it's the default.
+ */
+export const PANEL_TINT_IDS = ['ice', 'lilac', 'mint', 'peach', 'graphite'] as const satisfies readonly PanelTint[]
+
+export const PANEL_TINTS: { id: PanelTint; name: string; tint: string; glow: string; ink: string; soft: string; live: string }[] = [
+  { id: 'ice', name: 'Ice', tint: '200, 228, 255', glow: '96, 190, 255', ink: '18, 70, 120', soft: '178, 220, 255', live: '26, 140, 255' },
+  { id: 'lilac', name: 'Lilac', tint: '222, 212, 255', glow: '168, 140, 255', ink: '70, 46, 150', soft: '214, 202, 255', live: '124, 92, 255' },
+  { id: 'mint', name: 'Mint', tint: '198, 242, 224', glow: '70, 214, 160', ink: '12, 90, 64', soft: '170, 238, 210', live: '14, 150, 98' },
+  { id: 'peach', name: 'Peach', tint: '255, 218, 200', glow: '255, 146, 104', ink: '136, 52, 22', soft: '255, 206, 186', live: '222, 88, 40' },
+  // The design's graphite glow is a very light gray, which all but vanishes as a focus ring on light glass; this is a
+  // step deeper, and still light enough for accents on dark glass.
+  { id: 'graphite', name: 'Graphite', tint: '168, 176, 190', glow: '160, 172, 194', ink: '30, 34, 42', soft: '214, 220, 232', live: '86, 96, 116' },
+]
+
+export const panelTint = (id: PanelTint) => PANEL_TINTS.find((t) => t.id === id) ?? PANEL_TINTS[0]
+
+/** Frost runs from 0 (clear) to 100 (frosted); 50 is the panel as it was before it could change. */
+export const DEFAULT_FROST = 50
+
+/** A frost value from anywhere, made whole: a whole number from 0 to 100, or the default if it isn't a number. */
+export function cleanFrost(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw) ? Math.round(Math.min(100, Math.max(0, raw))) : DEFAULT_FROST
+}
+
+/**
+ * How opaque the panel's fill is over macOS's frost, for a frost value: 0.12 when clear, 0.72 when frosted, 0.42 by
+ * default. macOS does the blur itself, so this is how milky the glass looks, not how blurred.
+ */
+export const frostFill = (frost: number): number => Math.round((0.12 + (0.6 * cleanFrost(frost)) / 100) * 1000) / 1000
+
+/** The CSS custom properties for the panel's tint and frost. */
+export function panelVars({ tint, frost }: Pick<StewardPrefs, 'tint' | 'frost'>): Record<string, string> {
+  const t = panelTint(tint)
+  return { '--tint': t.tint, '--glow': t.glow, '--ink': t.ink, '--soft': t.soft, '--live-light': t.live, '--frost': String(frostFill(frost)) }
+}
+
 export const DEFAULT_NAME = 'Steward'
 export const MAX_NAME = 24
 
@@ -24,6 +63,8 @@ export const DEFAULT_STEWARD: StewardPrefs = {
   name: DEFAULT_NAME,
   edge: 'right',
   size: 'small',
+  tint: 'ice',
+  frost: DEFAULT_FROST,
 }
 
 export const colorHex = (id: PillColor): string => (PILL_COLORS.find((c) => c.id === id) ?? PILL_COLORS[0]).hex

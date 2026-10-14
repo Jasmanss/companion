@@ -11,6 +11,7 @@ import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './ic
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
 import { Nudge } from './Nudge'
+import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
@@ -128,11 +129,15 @@ export function App() {
     currentProject.current = settings?.currentProject ?? null
   }, [settings?.currentProject])
 
+  // Settings → Steward, with the defaults for anything an older main process doesn't send.
+  const look = { ...DEFAULT_STEWARD, ...settings?.steward }
   // The tab and the panel's animations face away from the screen edge it sits on.
-  const look = settings?.steward ?? DEFAULT_STEWARD
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
   }, [look.edge])
+
+  // The glass's tint and frost, from Settings → Steward.
+  useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])
 
   // The switcher belongs to the open panel; tucking away closes it.
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
-import { cleanName, DEFAULT_STEWARD, MAX_NAME, PILL_COLOR_IDS } from '../shared/steward'
+import { cleanFrost, cleanName, DEFAULT_STEWARD, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
 import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StewardPrefs } from '../shared/types'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
@@ -44,7 +44,7 @@ export const defaultSettings = (): StoredSettings => ({
 
 const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 'string' && typeof (p as Project)?.path === 'string'
 
-/** The choices each of the character's options has (the name is free text). */
+/** The choices each of the character's options has (the name is free text, the frost a number). */
 const STEWARD_CHOICES = {
   version: ['glass', 'flat', 'blocky'],
   color: PILL_COLOR_IDS,
@@ -52,6 +52,7 @@ const STEWARD_CHOICES = {
   personality: ['calm', 'lively'],
   edge: ['right', 'left'],
   size: ['small', 'medium'],
+  tint: PANEL_TINT_IDS,
 } as const
 
 const pick = <T extends string>(value: unknown, choices: readonly T[], fallback: T): T => ((choices as readonly unknown[]).includes(value) ? (value as T) : fallback)
@@ -69,6 +70,8 @@ function migrateSteward(raw: unknown): StewardPrefs {
     name: typeof r.name === 'string' ? cleanName(r.name) : d.name,
     edge: pick(r.edge, STEWARD_CHOICES.edge, d.edge),
     size: pick(r.size, STEWARD_CHOICES.size, d.size),
+    tint: pick(r.tint, STEWARD_CHOICES.tint, d.tint),
+    frost: r.frost === undefined ? d.frost : cleanFrost(r.frost),
   }
 }
 
@@ -140,6 +143,8 @@ const Patch = z.strictObject({
       name: z.string().max(MAX_NAME * 4),
       edge: z.enum(STEWARD_CHOICES.edge),
       size: z.enum(STEWARD_CHOICES.size),
+      tint: z.enum(STEWARD_CHOICES.tint),
+      frost: z.number().int().min(0).max(100),
     })
     .partial()
     .optional(),

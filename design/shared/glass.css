@@ -1,0 +1,72 @@
+/* The panel's liquid glass and a busy fake desktop to show it on. Shared by glass-lab.html, search-web.html and
+   showcase.html. The material matches the app's (src/renderer/src/styles.css): a tinted fill (how milky is
+   --frost), a bright top edge, a fine rim and a soft inner glow. In the app the blur behind it is macOS vibrancy;
+   here backdrop-filter fakes it over the in-page desktop.
+
+   Put .gx on the box that holds a scene or a demo: it sets the colors for anything on the glass, following
+   :root[data-dark], or forced with .gx.light / .gx.dark. The tint (--tint, --glow, --ink, --soft, Ice by default) and
+   --frost come from glass.js (applyTint), set on the .gx box or above it. :root[data-rt] (or .gx.rt) is Reduce Transparency: every glass goes solid. */
+
+:root{--tint:200,228,255;--glow:96,190,255;--ink:18,70,120;--soft:178,220,255;--frost:.52}
+/* Tokens that use the tint are worked out where they're declared, so set the tint on .gx or above it. */
+.gx{--t1:#0d1015;--t2:rgb(var(--ink));--t3:rgba(var(--ink),.78);--fill:255,255,255;--edge:rgba(255,255,255,.85);--edge2:rgba(255,255,255,.35);
+  --inset:rgba(var(--ink),.07);--inset2:rgba(var(--ink),.14);--line:rgba(var(--ink),.12);--solid:244,246,250;--paper:#fff;--hi:rgb(var(--ink));
+  --ok:#1f8a4c;--bad:#c4372f;--warm:#b06400;--btn:rgb(var(--ink));--btn-t:#fff;--code:#0f1117;--code-t:#e7e9ee;--shadow:rgba(20,30,60,.3);
+  --spring:cubic-bezier(.2,.8,.2,1);
+  --w1:#ff9ec9;--w2:#7cc4ff;--w3:#8ef0b0;--w4:#ffd47a;--w5:#dfe6f5;--win:#f6f7f9;--wintb:#e8eaef;--urlbg:rgba(0,0,0,.07);--urlt:#555;
+  color:var(--t1)}
+:root[data-dark] .gx:not(.light),.gx.dark{
+  --t1:#f5f7fa;--t2:rgb(var(--soft));--t3:rgba(var(--soft),.78);--fill:24,27,34;--edge:rgba(255,255,255,.26);--edge2:rgba(255,255,255,.1);
+  --inset:rgba(255,255,255,.07);--inset2:rgba(255,255,255,.12);--line:rgba(255,255,255,.1);--solid:28,31,39;--paper:#353a47;--hi:rgb(var(--glow));
+  --ok:#5fd68e;--bad:#ff8a8a;--warm:#ffc46b;--btn:rgb(var(--glow));--btn-t:#0b0d12;--shadow:rgba(0,0,0,.5);
+  --w1:#7a1f55;--w2:#123f7a;--w3:#0e5a3a;--w4:#6b4a10;--w5:#0b0d14;--win:#202229;--wintb:#2b2d35;--urlbg:rgba(255,255,255,.08);--urlt:#aaa}
+
+/* ---------- the desktop ---------- */
+.wall{position:absolute;inset:0;background:
+  radial-gradient(ellipse at 15% 20%,var(--w1) 0,transparent 45%),radial-gradient(ellipse at 85% 15%,var(--w2) 0,transparent 45%),
+  radial-gradient(ellipse at 70% 85%,var(--w3) 0,transparent 45%),radial-gradient(ellipse at 25% 90%,var(--w4) 0,transparent 40%),
+  repeating-linear-gradient(135deg,rgba(128,128,160,.07) 0 12px,transparent 12px 24px),var(--w5)}
+.menubar{position:absolute;left:0;right:0;top:0;height:26px;display:flex;align-items:center;gap:18px;padding:0 14px;font-size:13px;font-weight:600;color:var(--t1);
+  background:rgba(var(--fill),.45);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6)}
+.menubar .grow{flex:1}
+.dwin{position:absolute;border-radius:12px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.3);border:1px solid rgba(0,0,0,.18)}
+.dwin .tb{height:30px;display:flex;align-items:center;gap:7px;padding:0 12px}
+.dwin .tb i{width:11px;height:11px;border-radius:50%;display:block}
+.tl-r{background:#ff5f57}.tl-y{background:#febc2e}.tl-g{background:#28c840}
+.editor{left:36px;top:58px;width:600px;height:430px;background:#1e1f26}
+.editor .tb{background:#272832;color:#aeb4c2;font-size:12px}
+.editor .tb span{margin-left:14px;background:#1e1f26;padding:6px 12px;border-radius:6px 6px 0 0;align-self:flex-end}
+.editor .code{padding:12px 16px;font:12px/1.75 ui-monospace,"SF Mono",Menlo,monospace}
+.editor .code div{white-space:nowrap}
+.editor .code b{display:inline-block;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.editor .code .ln{display:inline-block;width:22px;color:#555b6b;font-weight:400}
+.browser{left:330px;top:300px;width:470px;height:340px;background:var(--win)}
+.browser .tb{background:var(--wintb)}
+.browser .url{flex:1;margin-left:16px;height:20px;border-radius:6px;background:var(--urlbg);font-size:11px;color:var(--urlt);display:flex;align-items:center;padding:0 8px}
+.browser .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px}
+.browser .tiles i{display:block;height:84px;border-radius:10px}
+.sticky{position:absolute;left:660px;top:90px;width:150px;height:130px;background:#ffe27a;border-radius:4px;transform:rotate(-4deg);box-shadow:0 10px 24px rgba(0,0,0,.2);padding:14px;font:600 15px/1.35 "Marker Felt","Comic Sans MS",cursive;color:#5a4300}
+.dock{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:9px;padding:8px 10px;border-radius:20px;
+  background:rgba(var(--fill),.35);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);box-shadow:inset 0 1px 0 var(--edge),0 10px 30px rgba(0,0,0,.2)}
+.dock>i{width:42px;height:42px;border-radius:11px;display:block}
+/* A smaller backdrop for demo cards: the same wallpaper, no windows. */
+.desk{position:relative;overflow:hidden;border-radius:14px}
+.desk>.wall{z-index:0}
+
+/* ---------- glass ---------- */
+.glass{color:var(--t1);
+  background:linear-gradient(180deg,rgba(var(--tint),.26),rgba(var(--tint),.1)),rgba(var(--fill),calc(.08 + .66 * var(--frost)));
+  backdrop-filter:blur(calc(4px + 32px * var(--frost))) saturate(1.8);-webkit-backdrop-filter:blur(calc(4px + 32px * var(--frost))) saturate(1.8);
+  box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2),inset 0 0 28px rgba(var(--glow),.14),0 30px 70px -12px var(--shadow),0 8px 22px rgba(0,0,0,.14)}
+/* Small things floating over the panel blur less than the panel itself. */
+.glass.sm{backdrop-filter:blur(calc(4px + 10px * var(--frost))) saturate(1.7);-webkit-backdrop-filter:blur(calc(4px + 10px * var(--frost))) saturate(1.7);
+  box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2),inset 0 0 12px rgba(var(--glow),.16),0 10px 24px -6px var(--shadow)}
+/* Popovers float over other glass, so they use a thick, mostly opaque fill instead of stacking a second light layer. */
+.glass.thick{background:linear-gradient(180deg,rgba(var(--tint),.18),rgba(var(--tint),.08)),rgba(var(--fill),.86);
+  backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8)}
+/* Solid surfaces: the peek tab and the nudge (macOS frosts whole windows, and these are tab-shaped). */
+.solid{color:var(--t1);background:linear-gradient(180deg,rgba(var(--tint),.16),rgba(var(--tint),.05)),rgb(var(--solid));box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2),0 8px 22px -6px var(--shadow)}
+
+/* Reduce Transparency: nothing see-through, nothing blurred. A .see box keeps its glass anyway, for comparisons. */
+:root[data-rt] .glass:not(.see .glass),.gx.rt .glass{background:rgb(var(--solid));backdrop-filter:none;-webkit-backdrop-filter:none}
+:root[data-rt] .menubar,:root[data-rt] .dock,.gx.rt .menubar,.gx.rt .dock{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgb(var(--solid))}
