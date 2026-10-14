@@ -49,11 +49,12 @@ export function createStage({ reduced = () => false, before, awake = false } = {
     /**
      * A group of views sharing one eyes state. anchor: the element watched for being on screen (no anchor: always
      * drawn). main: drawn every frame instead of 30 times a second. owner: a tag, so a section can clear() just its own groups. follow(): a mood to copy
-     * every frame, as [mood, glint].
+     * every frame, as [mood, glint]. look(): where the eyes look instead of the real cursor (null: the real cursor), in
+     * the same units as the cursor's.
      */
-    group({ seed = 1, anchor = null, mood, glint, think = 'dots', mouth = true, main = false, owner = null, follow = null } = {}) {
+    group({ seed = 1, anchor = null, mood, glint, think = 'dots', mouth = true, main = false, owner = null, follow = null, look = null } = {}) {
       // With an anchor, a group (even a main one) only draws while it's on screen.
-      const g = { st: createEyes(seed), views: [], anchor, main, owner, follow, acc: 0, seen: !anchor, nextKey: 0, burst: 0 }
+      const g = { st: createEyes(seed), views: [], anchor, main, owner, follow, look, acc: 0, seen: !anchor, nextKey: 0, burst: 0 }
       setStyle(g.st, { think, mouth })
       g.st.t = now() // start the mood now, so its intro (a pop, the first bursts) plays
       if (mood) setMood(g.st, mood, glint)
@@ -91,7 +92,7 @@ export function createStage({ reduced = () => false, before, awake = false } = {
         const resting = g.st.mood === 'resting' && !rm
         const every = resting ? 0.099 : g.main ? 0 : 1 / 30
         if (g.acc < every) continue
-        stepEyes(g.st, t, g.acc, pointerFor(g), rm)
+        stepEyes(g.st, t, g.acc, g.look?.() ?? pointerFor(g), rm)
         g.acc = 0
         for (const v of g.views) { v.standby(resting); v.update(g.st) }
       }
