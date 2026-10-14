@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { DEFAULT_FROST } from '../../shared/steward'
 import type { SettingsSection, SettingsView } from '../../shared/types'
 import { BellIcon, FaceIcon, FolderIcon, KeyboardIcon, PlugIcon, SlidersIcon } from './icons'
+import { applyPanelLook } from './panel-look'
 import { ConnectionsSection, GeneralSection, NotificationsSection, ProjectsSection, ShortcutsSection, StewardSection, type SectionProps } from './Settings'
 
 const api = window.steward
@@ -52,6 +54,13 @@ export function SettingsWindow() {
       offAppearance()
     }
   }, [])
+
+  // The window takes the panel's tint too, so a new one shows here as you pick it.
+  const tint = settings?.steward?.tint
+  const frost = settings?.steward?.frost
+  useEffect(() => {
+    if (tint) applyPanelLook({ tint, frost: frost ?? DEFAULT_FROST })
+  }, [tint, frost])
 
   useEffect(() => {
     try {

@@ -551,6 +551,21 @@
   outline-color: rgb(var(--glow));
 }
 
+/* Frost: a slider between its two ends. */
+.set-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--t2);
+  font-size: 12px;
+}
+
+.set-range input {
+  width: 150px;
+  margin: 0;
+  accent-color: rgb(var(--live));
+}
+
 .set-window input.set-name {
   width: 170px;
   padding: 4px 8px;

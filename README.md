@@ -26,7 +26,8 @@ code. Pull it out to collect images, research designs, and run commands.
   while it reads a file, circling while it searches), talks while the reply
   streams in, and peeks out with a "!" when it needs you. Settings → Steward
   picks its version (Glass, Flat, Blocky), one of six colors, its personality,
-  its name, and which screen edge it sits on.
+  its name, and which screen edge it sits on, plus the panel's tint (five) and
+  how frosted its glass is.
 
 **v1.1: Claude Code does the work. Steward keeps you on top of everything.**
 

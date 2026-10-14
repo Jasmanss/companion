@@ -113,7 +113,9 @@ hands focus back to the panel.
 - **Steward:** a live preview of the character in any mood, next to the tab at its real size against the screen
   edge it's on, then its options: version (Glass, Flat, Blocky), color (six: Silver, Sky, Lilac, Mint, Peach and
   Graphite), glass tinted or clear, a mouth when it talks, personality (Calm or Lively), its name (shown in the panel,
-  and the chat answers to it), screen edge (left or right) and size of the tab (small or medium).
+  and the chat answers to it), screen edge (left or right) and size of the tab (small or medium). Under "The panel":
+  the panel's tint (Ice, Lilac, Mint, Peach or Graphite; the Settings window takes it too) and its frost, a slider
+  from clear to frosted. The panel follows the slider as you drag it.
 - **Projects:** your projects (make one current, remove one, add a folder), folders found in Documents and Desktop,
   and the commands that skip approval.
 - **Shortcuts:** open or tuck away the panel (⌥ Space) and hide from the screen edge (⌥⇧ Space), which work in
@@ -231,14 +233,17 @@ the panel.
 
 - **Glass.** The open panel is frosted by macOS itself (vibrancy), so it blurs the desktop behind it; CSS can only
   blur what's inside the window. Over the frost, CSS paints a light tint, a bright top edge, a fine rim and a soft
-  inner glow; the deep shadow is the window's own. Shapes inside the panel are tinted insets, never a second
+  inner glow. How opaque that fill is comes from Settings → Steward → Frost: 0.12 when clear, 0.72 when frosted, 0.42
+  by default. macOS's blur itself can't be changed, so frost is how milky the glass looks, not how blurred; the deep shadow is the window's own. Shapes inside the panel are tinted insets, never a second
   frosted layer. Text is near black (light) or near white (dark), with the tint's ink for secondary text, a little
   heavier than usual, never flat gray.
 - **Solid where frost can't go.** The peek and the nudge are tab-shaped and macOS frosts whole windows, so they're
   solid. Reduce Transparency (Accessibility) makes everything solid. There is no native Liquid Glass material in
   Electron yet (checked in Electron 44.7), so none is used.
-- **Light and dark** follow the Mac. The tokens at the top of `styles.css` have both versions; the panel's tint is
-  Ice (the character's color doesn't change it).
+- **Light and dark** follow the Mac. The tokens at the top of `styles.css` have both versions. The panel's tint is
+  Ice unless Settings picks another; each tint (in `src/shared/steward.ts`) sets the glass color, the glow, the ink for
+  text on light glass, the soft color for text on dark glass, and a deeper glow for the live dot and switches, all
+  checked for contrast in the tests. The character's color doesn't change the tint.
 - **Activity.** Every step of the agent's work is an event `{ id, kind, label, target?, status, detail? }`, sent
   when it starts and again when it finishes (plus `results` for search results and `image` for a new tray item).
   Kinds: thinking, read-file, list-files, search-web, fetch-page, run-command, screenshot, add-image, read-logs,

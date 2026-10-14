@@ -3,19 +3,22 @@
    Colors that take an alpha are RGB triplets: rgba(var(--ink), 0.1).
    ========================================================================== */
 :root {
-  /* The tint, Ice for now; Settings offers the others in a later phase. */
+  /* The tint, Ice by default. Settings → Steward picks another: the panel sets these, --live-light and --frost on
+     the root from src/shared/steward.ts (panelVars). */
   --tint: 200, 228, 255;
   --glow: 96, 190, 255;
   --ink: 18, 70, 120;
   --soft: 178, 220, 255;
   /* The live dot: the glow, a step deeper on light glass so it holds up there. */
-  --live: 26, 140, 255;
+  --live-light: 26, 140, 255;
+  --live: var(--live-light);
 
   /* Text: near black, then the tint's ink. Never flat gray on glass. */
   --t1: #0d1015;
   --t2: rgb(var(--ink));
   --t3: rgba(var(--ink), 0.78);
-  /* Glass: a translucent fill (how milky: --frost), a bright top edge, a fine rim, a soft inner glow. */
+  /* Glass: a translucent fill (how milky: --frost, from Settings → Steward), a bright top edge, a fine rim, a soft
+     inner glow. */
   --fill: 255, 255, 255;
   --frost: 0.42;
   --edge: rgba(255, 255, 255, 0.85);

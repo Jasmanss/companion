@@ -42,7 +42,7 @@ describe('migrateSettings', () => {
 
   it('gives a file from before the character arrived the default one: glass, silver, on the right', () => {
     const migrated = migrateSettings({ projects: [], keepPanelOpen: true })
-    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', size: 'small' })
+    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', size: 'small', tint: 'ice', frost: 50 })
   })
 
   it("keeps each of the character's options it knows, one at a time, and tidies the name", () => {
@@ -54,6 +54,16 @@ describe('migrateSettings', () => {
     expect(migrateSettings({ steward: { color: 'coral' } }).steward.color).toBe('silver')
     expect(migrateSettings({ steward: { name: '   ' } }).steward.name).toBe('Steward')
     for (const junk of [null, 'glass', 7, ['flat']]) expect(migrateSettings({ steward: junk }).steward).toEqual(DEFAULT_STEWARD)
+  })
+
+  it("keeps the panel's tint and frost, a frost made a whole number from 0 to 100", () => {
+    const older = migrateSettings({ steward: { version: 'flat', color: 'mint' } })
+    expect([older.steward.tint, older.steward.frost]).toEqual(['ice', 50])
+    expect(migrateSettings({ steward: { tint: 'peach', frost: 80 } }).steward).toMatchObject({ tint: 'peach', frost: 80 })
+    expect(migrateSettings({ steward: { tint: 'sky' } }).steward.tint).toBe('ice')
+    const frost = (value: unknown) => migrateSettings({ steward: { frost: value } }).steward.frost
+    expect([frost(-20), frost(140), frost(33.4), frost(0)]).toEqual([0, 100, 33, 0])
+    for (const junk of ['80', null, NaN, Infinity, true]) expect(frost(junk), String(junk)).toBe(50)
   })
 
   it('keeps the shortcuts you changed, tidied up, and drops ones it can’t use', () => {
@@ -89,6 +99,8 @@ describe('parseSettingsPatch', () => {
     expect(parseSettingsPatch({ notifications: { morningBrief: false, leftOff: true } })).toEqual({ notifications: { morningBrief: false, leftOff: true } })
     expect(parseSettingsPatch({ steward: { color: 'graphite', version: 'flat' } })).toEqual({ steward: { color: 'graphite', version: 'flat' } })
     expect(parseSettingsPatch({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })).toEqual({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })
+    expect(parseSettingsPatch({ steward: { tint: 'graphite', frost: 0 } })).toEqual({ steward: { tint: 'graphite', frost: 0 } })
+    expect(parseSettingsPatch({ steward: { frost: 100 } })).toEqual({ steward: { frost: 100 } })
   })
 
   it('refuses anything else, so the window can only change what it shows', () => {
@@ -101,6 +113,11 @@ describe('parseSettingsPatch', () => {
       { steward: { color: 'coral' } },
       { steward: { version: 'droplet' } },
       { steward: { hat: 'top' } },
+      { steward: { tint: 'sky' } },
+      { steward: { frost: 101 } },
+      { steward: { frost: -1 } },
+      { steward: { frost: 42.5 } },
+      { steward: { frost: '50' } },
       { steward: { name: 7 } },
       { steward: { name: 'x'.repeat(200) } },
       null,

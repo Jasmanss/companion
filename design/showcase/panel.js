@@ -5,6 +5,7 @@ import { setMood } from '../pill/eyes.js'
 import { wait, demo, h, esc, stepRow, finish, GRADS, collapse } from '../shared/activity.js'
 import { ICONS } from '../shared/icons.js'
 import { filterProjects, switcherRows, PROJECTS } from '../shared/switcher.js'
+import { TINTS, applyTint } from '../shared/glass.js'
 import { S, set, onChange, stage, pill, look, card, PILL_COLORS, VERSIONS } from './state.js'
 import { headHTML, composerHTML, setCtx } from './mock.js'
 
@@ -239,7 +240,7 @@ function nudge(host) {
 /* ---------------- settings window ---------------- */
 const SECTIONS = [['general', 'General', 'sliders'], ['steward', 'Steward', 'face'], ['projects', 'Projects', 'folder'], ['shortcuts', 'Shortcuts', 'key'], ['connections', 'Connections', 'plug'], ['notifications', 'Notifications', 'bell']]
 const PREVIEWS = [['idle', 'Idle', 'idle'], ['listening', 'Listening', 'listening'], ['thinking', 'Thinking', 'thinking'], ['reading', 'Reading a file', 'thinking', 'step'], ['searching', 'Searching the web', 'thinking', 'search'], ['talking', 'Talking', 'talking'], ['done', 'Happy', 'done'], ['needs-you', 'Needs you', 'needs-you'], ['mad', 'Mad', 'mad'], ['sleepy', 'Sleepy', 'sleepy']]
-const loc = { sec: 'steward', preview: 'idle', glass: 'tinted', personality: 'lively', name: 'Steward', edge: 'right', size: 'small' }
+const loc = { sec: 'steward', preview: 'idle', glass: 'tinted', personality: 'lively', name: 'Steward', edge: 'right', size: 'small', tint: 'ice', frost: 50 }
 const TAB = { small: { tab: [56, 132], pill: [50, 44] }, medium: { tab: [70, 160], pill: [64, 56] } }
 let previewGroup
 function settings(host) {
@@ -256,7 +257,10 @@ function settings(host) {
       drawSettings()
     }
   })
-  win.addEventListener('input', (e) => { if (e.target.dataset.name !== undefined) { loc.name = e.target.value.trim() || 'Steward'; win.querySelector('.set-title').textContent = loc.name } })
+  win.addEventListener('input', (e) => {
+    if (e.target.dataset.name !== undefined) { loc.name = e.target.value.trim() || 'Steward'; win.querySelector('.set-title').textContent = loc.name }
+    if (e.target.dataset.frost !== undefined) loc.frost = +e.target.value
+  })
   drawSettings()
 }
 function drawSettings() {
@@ -276,7 +280,9 @@ function drawSettings() {
         (S.version === 'glass' ? row('Glass', seg('glass', [['tinted', 'Tinted'], ['clear', 'Clear']], loc.glass), loc.glass === 'clear' ? 'No tint: the color only shows in its marks, like the “!”' : '') : '') +
         row('A mouth when it talks', sw(S.mouth, 'mouth'), 'Without one, its eyes bounce with the words.'))}
       ${group('Personality', row('Personality', seg('personality', [['calm', 'Calm'], ['lively', 'Lively']], loc.personality), 'How much it moves') + row('Name', `<input class="sname" data-name value="${esc(loc.name)}" maxlength="24" aria-label="Name">`, 'Shown in the panel. The chat answers to it too.'))}
-      ${group('At the screen edge', row('Screen edge', seg('edge', [['left', 'Left'], ['right', 'Right']], loc.edge)) + row('Size', seg('size', [['small', 'Small'], ['medium', 'Medium']], loc.size), 'How big the tab at the screen edge is.'))}`
+      ${group('At the screen edge', row('Screen edge', seg('edge', [['left', 'Left'], ['right', 'Right']], loc.edge)) + row('Size', seg('size', [['small', 'Small'], ['medium', 'Medium']], loc.size), 'How big the tab at the screen edge is.'))}
+      ${group('The panel', row('Tint', `<span class="scolors">${Object.entries(TINTS).map(([k, t]) => `<button data-k="tint" data-v="${k}" aria-pressed="${k === loc.tint}" title="${t.name}" aria-label="${t.name}" style="background:rgb(${t.glass})"></button>`).join('')}</span>`, TINTS[loc.tint].name) +
+        row('Frost', `<span class="srange"><small>Clear</small><input type="range" min="0" max="100" step="5" value="${loc.frost}" data-frost aria-label="Frost"><small>Frosted</small></span>`, 'How milky the glass is. With Reduce Transparency on, the panel is solid.'))}`
   } else {
     body = {
       general: group('', row('Open Steward at login', sw(true)) + row('Tuck the panel away when I click elsewhere', sw(true)) + row('Appearance', '<span class="sval">Matches your Mac</span>', 'Light and dark follow System Settings, and so do Reduce Transparency and Reduce Motion.')),
@@ -288,6 +294,8 @@ function drawSettings() {
       notifications: group('', row('Peek out when a session needs me', sw(true)) + row('Failed builds', sw(true)) + row('Finished sessions', sw(true)) + row('Morning brief', sw(true))),
     }[loc.sec]
   }
+  // Like the real window, this one takes the panel's tint.
+  applyTint(win.closest('.demo'), TINTS[loc.tint])
   win.innerHTML = `<nav class="sside"><div class="lights"><i class="tl-r"></i><i class="tl-y"></i><i class="tl-g"></i></div>${SECTIONS.map(([k, l, ic]) => `<button class="snav" data-sec="${k}" aria-current="${k === loc.sec}">${ICONS[ic]}${l}</button>`).join('')}<span class="sver">Steward 0.1.0</span></nav>
     <div class="smain"><h3 class="set-title">${loc.sec === 'steward' ? esc(loc.name) : SECTIONS.find((s) => s[0] === loc.sec)[1]}</h3>${body}</div>`
   settingsPreview()

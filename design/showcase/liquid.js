@@ -30,10 +30,10 @@ export function render(host) {
       <span class="sep"></span><span class="lbl">Pill colors</span><span class="tints">${Object.entries(ALL).filter(([k]) => k.startsWith('c-')).map(tintBtn).join('')}</span>
       <span class="sep"></span><label class="frost"><span class="lbl">Frost</span><small>clear</small><input type="range" id="g-frost" min="0" max="100" aria-label="Frost"><small>frosted</small></label>
     </div>
-    <p class="note">These two only change this section. Light or Dark and Reduce Transparency come from the top bar.</p>
+    <p class="note">These two only change this section, the way Settings → Steward → The panel changes the app. Light or Dark and Reduce Transparency come from the top bar.</p>
     <div class="grid">
     ${card({ id: 'glass-panel', section: 4, title: 'The panel in glass', status: 'app', from: ['glass-lab.html', 'src/renderer/src/styles.css'], cls: 'wide',
-      desc: 'The panel, the ⌘K switcher (a thick, mostly solid fill, so glass never stacks on glass) and a small toast, on a busy desktop. The app ships the Ice tint; the other tints are not in Settings yet.',
+      desc: 'The panel, the ⌘K switcher (a thick, mostly solid fill, so glass never stacks on glass) and a small toast, on a busy desktop. The five tints and the frost are in Settings → Steward, with Ice as the default. Tints made from the Pill colors are only here.',
       body: '<div class="scenewrap" id="g-wrap"><div class="scene gx" id="g-scene"></div></div>' })}
     ${card({ id: 'glass-layers', section: 4, title: 'Glass, layer by layer', status: 'app', from: 'src/renderer/src/styles.css', cls: 'wide',
       desc: 'The same material built up one layer at a time, so you can see what each part adds.',
@@ -59,7 +59,7 @@ export function render(host) {
 function apply() {
   applyTint(section, ALL[local.tint], local.frost / 100)
   section.querySelectorAll('[data-tint]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tint === local.tint)))
-  section.querySelector('#g-tname').textContent = ALL[local.tint].name + (local.tint === 'ice' ? ' (in the app)' : '')
+  section.querySelector('#g-tname').textContent = ALL[local.tint].name + (TINTS[local.tint] ? ' (in the app)' : ' (not in the app)')
 }
 
 function build() {
