@@ -98,8 +98,8 @@ search, a page read, a folder listing, a file read, a command, a screenshot, a s
 
 - **CI** (`.github/workflows/ci.yml`), on every push to `main` and every PR:
   lint, typecheck, and unit tests on Linux, then on macOS a real build, a launch
-  smoke test (the screenshot is uploaded as an artifact), and an unsigned
-  package.
+  smoke test (screenshots of the panel and the Settings window are uploaded as
+  an artifact), and an unsigned package.
 - **Release** (`.github/workflows/release.yml`): bump `version` in
   `package.json`, then push a matching tag:
 

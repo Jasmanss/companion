@@ -41,13 +41,13 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Launch the app and screenshot its panel
+      - name: Launch the app and screenshot its panel and Settings
         run: npm run smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: smoke-screenshot
-          path: out/smoke.png
+          name: smoke-screenshots
+          path: out/smoke*.png
           if-no-files-found: ignore
       - name: Package (unsigned)
         run: npx electron-builder --mac --dir
