@@ -2,46 +2,48 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { safeStorage } from 'electron'
-import type { Project, SettingsView } from '../shared/types'
+import { resolveShortcuts, type GlobalShortcutId } from '../shared/shortcuts'
+import { cleanName } from '../shared/steward'
+import type { NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../shared/types'
+import { decryptLegacySecret } from './migrate'
+import { defaultSettings, migrateSettings, type SecretKind, type StoredSettings } from './settings-schema'
 
-export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
-
-type SecretKind = 'anthropic' | 'unsplash'
-
-interface Stored {
-  projects: Project[]
-  currentProject: string | null
-  allowlist: string[]
-  /** Encrypted with the macOS keychain via safeStorage, base64. */
-  secrets: Partial<Record<SecretKind, string>>
-}
-
-const defaults = (): Stored => ({ projects: [], currentProject: null, allowlist: [...DEFAULT_ALLOWLIST], secrets: {} })
+/** What the view shows that the settings file doesn't hold, including which global shortcuts macOS gave Steward. */
+export type SystemInfo = Pick<SettingsView, 'openAtLogin' | 'version'> & { registered: Partial<Record<GlobalShortcutId, string>> }
 
 export class SettingsStore {
-  private data: Stored = defaults()
+  private data: StoredSettings = defaultSettings()
 
   constructor(
     private readonly file: string,
-    readonly hotkey: string,
+    private readonly system: () => SystemInfo,
+    /** After every saved change, so every window can show it. */
+    private readonly onChange: () => void = () => {},
   ) {}
 
   async load(): Promise<void> {
     try {
-      this.data = { ...defaults(), ...JSON.parse(await fs.readFile(this.file, 'utf8')) }
+      this.data = migrateSettings(JSON.parse(await fs.readFile(this.file, 'utf8')))
     } catch {
-      this.data = defaults()
+      this.data = defaultSettings()
     }
   }
 
   view(): SettingsView {
+    const { registered, ...system } = this.system()
     return {
       projects: this.data.projects,
       currentProject: this.data.currentProject,
       allowlist: this.data.allowlist,
       apiKeySource: process.env.ANTHROPIC_API_KEY ? 'env' : this.data.secrets.anthropic ? 'saved' : 'none',
       hasUnsplashKey: Boolean(this.unsplashKey()),
-      hotkey: this.hotkey,
+      hasVercelToken: Boolean(this.vercelToken()),
+      keepPanelOpen: this.data.keepPanelOpen,
+      notifications: this.data.notifications,
+      shortcuts: resolveShortcuts(this.data.shortcuts, registered),
+      steward: this.data.steward,
+      ...system,
+      home: os.homedir(),
     }
   }
 
@@ -51,6 +53,10 @@ export class SettingsStore {
 
   unsplashKey(): string | undefined {
     return process.env.UNSPLASH_ACCESS_KEY || this.decrypt(this.data.secrets.unsplash)
+  }
+
+  vercelToken(): string | undefined {
+    return process.env.VERCEL_TOKEN || this.decrypt(this.data.secrets.vercel)
   }
 
   async setSecret(kind: SecretKind, value: string): Promise<void> {
@@ -69,6 +75,41 @@ export class SettingsStore {
 
   allowlist(): string[] {
     return this.data.allowlist
+  }
+
+  keepPanelOpen(): boolean {
+    return this.data.keepPanelOpen
+  }
+
+  notifications(): NotificationPrefs {
+    return this.data.notifications
+  }
+
+  steward(): StewardPrefs {
+    return this.data.steward
+  }
+
+  /** The shortcuts you changed (an accelerator, or '' for off). */
+  shortcuts(): Partial<Record<ShortcutId, string>> {
+    return this.data.shortcuts
+  }
+
+  /** Set a shortcut, or with undefined go back to Steward's default. The caller checks it first. */
+  async setShortcut(id: ShortcutId, accelerator: string | undefined): Promise<void> {
+    if (accelerator === undefined) delete this.data.shortcuts[id]
+    else this.data.shortcuts[id] = accelerator
+    await this.save()
+  }
+
+  /** The switches in Settings. Open at login lives in macOS, so the caller handles that one. */
+  async update(patch: Omit<SettingsPatch, 'openAtLogin'>): Promise<void> {
+    if (patch.keepPanelOpen !== undefined) this.data.keepPanelOpen = patch.keepPanelOpen
+    if (patch.notifications) this.data.notifications = { ...this.data.notifications, ...patch.notifications }
+    if (patch.steward) {
+      const { name, ...rest } = patch.steward
+      this.data.steward = { ...this.data.steward, ...rest, ...(name !== undefined ? { name: cleanName(name) } : {}) }
+    }
+    await this.save()
   }
 
   async addProject(projectPath: string): Promise<void> {
@@ -112,9 +153,30 @@ export class SettingsStore {
     return found
   }
 
+  /**
+   * After the rename, the copied keys are still encrypted for the old app's keychain entry. Re-encrypt each one
+   * for Steward's; any that can't be read stay as they are, and Settings asks for them again. Returns how many moved.
+   */
+  async migrateLegacySecrets(legacyKeychainPassword: string): Promise<number> {
+    let moved = 0
+    for (const kind of Object.keys(this.data.secrets) as SecretKind[]) {
+      const value = this.data.secrets[kind]
+      if (!value) continue
+      try {
+        this.data.secrets[kind] = this.encrypt(decryptLegacySecret(Buffer.from(value, 'base64'), legacyKeychainPassword))
+        moved++
+      } catch {
+        // left as is
+      }
+    }
+    if (moved) await this.save()
+    return moved
+  }
+
   private async save(): Promise<void> {
     await fs.mkdir(path.dirname(this.file), { recursive: true })
     await fs.writeFile(this.file, JSON.stringify(this.data, null, 2))
+    this.onChange()
   }
 
   private encrypt(value: string): string {

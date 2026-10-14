@@ -1,0 +1,921 @@
+/* ==========================================================================
+   The Settings window. The sidebar is frosted by macOS (vibrancy 'sidebar') and only tinted here; the content side
+   is solid. Its tokens and buttons come from styles.css.
+   ========================================================================== */
+:root {
+  /* The rounded boxes rows sit in, a step lighter than the content side. */
+  --group: #ffffff;
+  /* The keyboard in the shortcut recorder: its deck, its keys, and the keys' lower edge. */
+  --kb-deck: #dde1e8;
+  --kb-key: #ffffff;
+  --kb-edge: rgba(15, 20, 30, 0.2);
+  --kb-line: rgba(15, 20, 30, 0.06);
+  /* The picked choice in a segmented control. */
+  --seg-on: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --group: rgba(255, 255, 255, 0.05);
+    --kb-deck: #14161b;
+    --kb-key: #2d3038;
+    --kb-edge: rgba(0, 0, 0, 0.65);
+    --kb-line: rgba(255, 255, 255, 0.05);
+    --seg-on: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.set-window {
+  display: flex;
+  height: 100%;
+  user-select: none;
+}
+
+/* ---------- sidebar ---------- */
+.set-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 200px;
+  padding: 0 10px 12px;
+  background: rgba(var(--tint), 0.12);
+  border-right: 0.5px solid var(--line);
+}
+
+/* No frost behind it: solid, a shade apart from the content side. */
+:root:not([data-vibrant]) .set-side {
+  background: linear-gradient(180deg, rgba(var(--tint), 0.16), rgba(var(--tint), 0.08)), rgb(var(--solid));
+}
+
+.set-drag {
+  flex: none;
+  height: 52px;
+  -webkit-app-region: drag;
+}
+
+.set-nav {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--t1);
+  font-weight: 600;
+  text-align: left;
+}
+
+.set-nav:hover {
+  background: var(--inset);
+}
+
+.set-nav[aria-current='page'] {
+  background: rgba(var(--glow), 0.3);
+}
+
+.set-nav-icon {
+  display: grid;
+  place-items: center;
+  color: var(--hi);
+}
+
+.set-nav-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.set-version {
+  margin-top: auto;
+  padding: 0 8px;
+  color: var(--t3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---------- content ---------- */
+.set-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--solid));
+}
+
+.set-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 24px;
+  border-bottom: 0.5px solid var(--line);
+  -webkit-app-region: drag;
+}
+
+.set-head h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.set-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 24px 28px;
+  animation: fadein 0.2s backwards;
+}
+
+.set-group {
+  margin-bottom: 20px;
+}
+
+.set-group h2 {
+  margin: 0 0 6px 4px;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.set-box {
+  border-radius: 10px;
+  background: var(--group);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+
+.set-note {
+  margin: 7px 4px 0;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.set-note.flush {
+  margin: 0;
+}
+
+.set-note code,
+.set-label code {
+  font-size: 11px;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.set-row + .set-row {
+  border-top: 0.5px solid var(--line);
+}
+
+.set-row.column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.set-row.clickable {
+  cursor: pointer;
+}
+
+.set-row.disabled .set-label {
+  opacity: 0.5;
+}
+
+.set-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.set-label > span {
+  font-weight: 600;
+}
+
+.set-label small {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.set-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.set-value {
+  color: var(--t2);
+  font-weight: 600;
+}
+
+.set-or {
+  color: var(--t3);
+  font-size: 12px;
+}
+
+/* ---------- switches ---------- */
+/* The color fades and the knob slides: only opacity and transform move. */
+.set-switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--inset2);
+  cursor: pointer;
+}
+
+.set-switch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(var(--live));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.set-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.25s var(--spring);
+}
+
+.set-switch:checked::before {
+  opacity: 1;
+}
+
+.set-switch:checked::after {
+  transform: translateX(14px);
+}
+
+.set-switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---------- buttons, fields, keys ---------- */
+.btn.small {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.btn.quiet {
+  background: transparent;
+  color: var(--t2);
+}
+
+.btn.quiet:hover {
+  background: var(--inset);
+  color: var(--t1);
+}
+
+.chip.on {
+  background: rgba(var(--glow), 0.32);
+}
+
+.set-window input[type='password'],
+.set-window textarea {
+  width: 100%;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 8px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
+  user-select: text;
+}
+
+.set-window textarea {
+  display: block;
+  resize: vertical;
+  font: 500 12px/1.5 ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.set-inline {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+}
+
+.set-field {
+  padding: 10px 12px;
+}
+
+.set-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.set-row .set-actions {
+  margin-top: 0;
+}
+
+.set-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.set-keys {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.set-keys kbd {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--inset);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    inset 0 -1px 0 var(--line);
+  color: var(--t1);
+  font: 600 12px/1.3 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  text-align: center;
+}
+
+.set-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--glow), 0.28);
+  color: var(--t1);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.set-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.set-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--inset2);
+}
+
+.set-status.on {
+  color: var(--t1);
+}
+
+.set-status.on::before {
+  background: var(--ok);
+}
+
+.set-code {
+  max-height: 200px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--code);
+  color: var(--code-t);
+  overflow: auto;
+  font-size: 11px;
+  user-select: text;
+  white-space: pre;
+}
+
+/* A project: its colored initial, then its name and folder. */
+.set-project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.set-project .badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* ---------- Steward ---------- */
+.set-preview {
+  display: flex;
+  gap: 12px;
+  height: 172px;
+}
+
+/* The character on a piece of the panel's glass. */
+.set-stage {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(var(--tint), 0.32), rgba(var(--tint), 0.12)), rgba(var(--fill), 0.7);
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 0.5px var(--edge2),
+    inset 0 0 28px rgba(var(--glow), 0.16);
+}
+
+/* A strip of desktop with the tab against its edge, at the tab's real size. */
+.set-screen {
+  position: relative;
+  flex: none;
+  width: 116px;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 70% at 15% 15%, rgba(255, 214, 231, 0.9), transparent 60%),
+    radial-gradient(80% 70% at 90% 85%, rgba(201, 222, 254, 0.9), transparent 60%),
+    #f1ece6;
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+@media (prefers-color-scheme: dark) {
+  .set-screen {
+    background:
+      radial-gradient(90% 70% at 15% 10%, rgba(91, 63, 163, 0.9), transparent 60%),
+      radial-gradient(80% 70% at 95% 90%, rgba(14, 91, 124, 0.9), transparent 60%),
+      #151726;
+  }
+}
+
+.set-tab {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 18px 0 0 18px;
+  background: linear-gradient(180deg, rgba(var(--tint), 0.16), rgba(var(--tint), 0.05)), rgb(var(--solid));
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 0.5px var(--edge2),
+    0 6px 18px -6px var(--shadow);
+  transform: translateY(-50%);
+}
+
+.set-screen.left .set-tab {
+  right: auto;
+  left: 0;
+  border-radius: 0 18px 18px 0;
+}
+
+.set-moods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 22px;
+}
+
+/* Segmented choices: the picked one is raised. */
+.set-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.set-seg button {
+  padding: 3px 11px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--t1);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.set-seg button:hover {
+  background: var(--inset);
+}
+
+.set-seg button[aria-checked='true'] {
+  background: var(--seg-on);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 0 0 0.5px var(--line);
+}
+
+/* The colors: round swatches, the picked one ringed. */
+.set-colors {
+  display: flex;
+  gap: 9px;
+}
+
+.set-colors button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+
+.set-colors button[aria-checked='true'] {
+  outline: 2px solid var(--t1);
+  outline-offset: 2px;
+}
+
+.set-colors button:focus-visible {
+  outline-color: rgb(var(--glow));
+}
+
+.set-window input.set-name {
+  width: 170px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 7px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
+  user-select: text;
+}
+
+/* ---------- shortcuts ---------- */
+.set-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.set-keys.dim {
+  opacity: 0.45;
+}
+
+.set-keys kbd.waiting {
+  color: var(--t3);
+}
+
+/* Changing a shortcut: a card over the window, grown out of the Change button. Every part of it is clickable,
+   including what sits over the window's draggable title area. */
+.rec-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(10, 14, 22, 0.3);
+  -webkit-app-region: no-drag;
+  animation: fadein 0.2s ease both;
+}
+
+.rec-backdrop.leaving {
+  animation: fadeout 0.2s ease both;
+}
+
+.rec-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(680px, 100%);
+  max-height: 100%;
+  padding: 16px 18px;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: rgb(var(--solid));
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    0 0 0 0.5px var(--line),
+    0 24px 60px -16px rgba(0, 0, 0, 0.45);
+  outline: none;
+  -webkit-app-region: no-drag;
+  animation: rec-in 0.35s var(--spring) both;
+}
+
+.rec-backdrop.leaving .rec-card {
+  animation: rec-out 0.2s var(--spring) both;
+}
+
+.rec-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rec-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.rec-head p {
+  margin: 2px 0 0;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rec-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.rec-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 70px;
+}
+
+.rec-readout .set-keys kbd {
+  min-width: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 17px;
+}
+
+.rec-off {
+  color: var(--t3);
+  font-weight: 600;
+}
+
+.rec-readout .rec-off {
+  font-size: 17px;
+  line-height: 37px;
+}
+
+.rec-check {
+  margin: 0;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.rec-check.ok {
+  color: var(--ok);
+}
+
+.rec-check.warning {
+  color: var(--warm);
+}
+
+.rec-check.error {
+  color: var(--bad);
+}
+
+/* The keyboard. Key widths come from flex-grow, in key widths; every row adds up to 15. */
+.kb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--kb-deck);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.kb-row {
+  display: flex;
+  gap: 4px;
+  height: 30px;
+}
+
+.kb-row.short {
+  height: 18px;
+}
+
+.kb-stack {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kb-key {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border: none;
+  border-radius: 5px;
+  background: var(--kb-key);
+  box-shadow:
+    0 1px 0 var(--kb-edge),
+    0 0 0 0.5px var(--kb-line);
+  color: var(--t1);
+  font: 600 11px/1.05 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  white-space: nowrap;
+  transition: transform 0.08s ease;
+}
+
+.kb-row.short .kb-key {
+  font-size: 9px;
+}
+
+.kb-key.left {
+  align-items: flex-start;
+}
+
+.kb-key.right {
+  align-items: flex-end;
+}
+
+.kb-key small {
+  color: var(--t3);
+  font-size: 8.5px;
+}
+
+.kb-key .kb-sym {
+  font-size: 12px;
+}
+
+.kb-key:hover:not(:disabled) {
+  background: color-mix(in srgb, rgb(var(--ink)) 7%, var(--kb-key));
+}
+
+.kb-key.dead {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A shortcut ends here: tinted in its color, with a dot per shortcut. */
+.kb-key.marked {
+  background: color-mix(in srgb, var(--mark) 20%, var(--kb-key));
+}
+
+.kb-dots {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  gap: 2px;
+}
+
+.kb-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* A whole shortcut, key and modifiers: the new one, or the one you point at in the list. */
+.kb-key.ring {
+  box-shadow:
+    0 0 0 2px var(--ring),
+    0 1px 0 var(--kb-edge);
+}
+
+/* Held, or just pressed. */
+.kb-key.down {
+  background: color-mix(in srgb, rgb(var(--live)) 42%, var(--kb-key));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
+  transform: translateY(1px);
+}
+
+.rec-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rec-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rec-legend li:hover {
+  background: var(--inset);
+}
+
+.rec-legend li.this {
+  background: rgba(var(--glow), 0.18);
+}
+
+.rec-legend i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.rec-legend li > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-legend .set-keys kbd {
+  min-width: 18px;
+  padding: 1px 5px;
+  font-size: 10.5px;
+}
+
+.rec-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-spacer {
+  flex: 1;
+}
+
+@keyframes rec-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes rec-out {
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* ---------- errors ---------- */
+.set-toast {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 16px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgb(var(--solid));
+  box-shadow:
+    inset 0 0 0 1px rgba(214, 69, 69, 0.55),
+    0 8px 22px -6px var(--shadow);
+  color: var(--bad);
+  font-weight: 600;
+  animation: popin 0.3s var(--spring) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .set-body {
+    animation: none;
+  }
+
+  .set-switch::before,
+  .set-switch::after,
+  .kb-key {
+    transition: none;
+  }
+
+  .set-toast,
+  .rec-card {
+    animation-name: fadein;
+  }
+
+  .rec-backdrop.leaving .rec-card {
+    animation-name: fadeout;
+  }
+
+  .kb-key.down {
+    transform: none;
+  }
+}

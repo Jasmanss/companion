@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pill Moods</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap">
+<style>
+:root{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--accent:#c9bcff}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Nunito,ui-rounded,system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 64px}
+h1{margin:0;font-size:28px;font-weight:800}
+h2{margin:30px 0 4px;font-size:20px;font-weight:800}
+.lead{margin:4px 0 0;color:var(--muted);font-size:15px;max-width:800px}
+.bar{position:sticky;top:0;z-index:20;background:rgba(17,18,22,.92);backdrop-filter:blur(10px);margin:16px -16px 0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;border-bottom:1px solid var(--line)}
+.lbl{font-size:13px;font-weight:800;color:var(--muted);margin-right:4px}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+button.c{font:inherit;font-size:13px;font-weight:800;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
+button.c[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+button.sw{width:24px;height:24px;padding:0;border-radius:50%;border:2px solid transparent;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+button.sw[aria-pressed="true"]{border-color:#fff}
+.cname{font-size:13px;font-weight:800;min-width:64px}
+.main{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;margin-top:14px}
+.stages{display:grid;gap:12px;grid-template-columns:repeat(var(--n),1fr)}
+@media (max-width:860px){.stages{grid-template-columns:1fr}}
+.vl{font-size:15px;font-weight:800;margin-bottom:6px}
+.stage{position:relative;height:210px;border-radius:14px;overflow:hidden;display:grid;place-items:center}
+.plain{background:#15161c}
+.plainl{background:#efedf4}
+.solidbg{background:rgba(16,17,22,.97)}
+.lightbg{background:linear-gradient(180deg,#f3f1f7,#e7e4ee)}
+.wl{background:radial-gradient(90% 70% at 15% 15%,#ffd6e7 0%,transparent 60%),radial-gradient(80% 70% at 90% 85%,#c9defe 0%,transparent 60%),#f4efe8}
+.wd{background:radial-gradient(90% 70% at 15% 10%,#5b3fa3 0%,transparent 60%),radial-gradient(80% 70% at 95% 90%,#0e5b7c 0%,transparent 60%),#151726}
+.lines{position:absolute;left:8%;right:8%;top:28%;height:44%;background:
+  linear-gradient(#f0506a,#f0506a) 0 0/100% 9% no-repeat,linear-gradient(#7ea8ff,#7ea8ff) 0 30%/100% 9% no-repeat,
+  linear-gradient(#3fbf8a,#3fbf8a) 0 60%/100% 9% no-repeat,linear-gradient(#f3c14b,#f3c14b) 0 90%/100% 9% no-repeat}
+.reals{display:flex;gap:8px;margin-top:8px;align-items:stretch}
+.mini{position:relative;width:96px;height:150px;border-radius:10px;overflow:hidden;flex:none}
+.mini .win{position:absolute;left:8px;top:14px;width:60px;height:118px;border-radius:7px}
+.mini.wl .win{background:#fff}
+.mini.wd .win{background:#2a2d36}
+.mini .win::before{content:"";position:absolute;left:7px;right:7px;top:12px;height:5px;border-radius:3px;background:#f0506a;box-shadow:0 12px 0 #7ea8ff,0 24px 0 #3fbf8a,0 36px 0 #f3c14b,0 48px 0 #a98bff}
+.tab{position:absolute;right:0;top:9px;width:56px;height:132px;border-radius:18px 0 0 18px}
+.tab.solid{background:rgba(16,17,22,.97);border:1px solid #2d313c;border-right:none}
+.gl{background:linear-gradient(180deg,rgba(255,255,255,.26),rgba(255,255,255,.12)),rgba(255,255,255,.42);backdrop-filter:blur(16px) saturate(1.8);-webkit-backdrop-filter:blur(16px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 0 0 .5px rgba(255,255,255,.35),0 8px 22px rgba(20,30,60,.22)}
+.gd{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03)),rgba(24,27,34,.45);backdrop-filter:blur(16px) saturate(1.8);-webkit-backdrop-filter:blur(16px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 0 0 .5px rgba(255,255,255,.1),0 8px 22px rgba(0,0,0,.45)}
+.mini .pv{position:absolute!important;right:3px;top:53px}
+.mini .cap{position:absolute;left:5px;bottom:4px;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
+.headbox{flex:1;min-width:0;border-radius:10px;display:flex;align-items:center;gap:6px;padding:0 8px;position:relative;overflow:hidden}
+.headbox .row{position:relative;display:flex;align-items:center;gap:6px}
+.headbox .t{font-size:14px;font-weight:800}
+.headbox .s{font-size:11.5px;font-weight:700;opacity:.65}
+.headbox.solidp{background:#1b1d24;border:1px solid #2d313c;color:#eef0f4}
+.now{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-top:14px;min-height:44px}
+.now .m{font-size:20px;font-weight:800}
+.now .w{font-size:14px;color:var(--muted)}
+.now .step{font-size:14px;font-weight:800;color:var(--accent)}
+.sec{margin-top:14px}
+.sec .gl2{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.new{font-size:10px;font-weight:800;color:var(--bg);background:var(--accent);border-radius:999px;padding:1px 6px;margin-left:5px;vertical-align:1px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px;margin-top:12px;overflow-x:auto}
+table.grid{border-collapse:separate;border-spacing:8px;margin:-8px}
+table.grid th{font-size:12.5px;font-weight:800;color:var(--muted);text-align:left;white-space:nowrap;padding:0 4px}
+table.grid td{vertical-align:middle}
+.pair{display:flex;gap:8px;align-items:center}
+.cellbox{position:relative;width:76px;height:70px;border-radius:10px;overflow:hidden;display:grid;place-items:center}
+.cellbox .pv{position:relative;z-index:1}
+.peekbox{position:relative;width:62px;height:70px;border-radius:10px;overflow:hidden;flex:none}
+.peekbox .tab{top:-29px}
+.peekbox .pv{position:absolute!important;right:3px;top:15px;z-index:1}
+.crow{display:flex;gap:10px;align-items:flex-start;margin-top:10px}
+.crow:first-child{margin-top:0}
+.crow .ck{width:52px;flex:none;font-size:12.5px;font-weight:800;color:var(--muted);padding-top:24px}
+.cgrid{display:flex;flex-wrap:wrap;gap:8px}
+.cgrid figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.cgrid figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
+.sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer}
+.tile:hover{border-color:#4a4e5a}
+.tile .views{display:flex;gap:6px;justify-content:center;align-items:center;height:70px;border-radius:10px;overflow:hidden;position:relative}
+.tile .views>.cell{position:relative;flex:1;height:100%;display:grid;place-items:center;border-radius:8px;overflow:hidden}
+.tile .n{font-size:15px;font-weight:800;margin-top:8px}
+.tile .d{font-size:12.5px;color:var(--muted);line-height:1.35}
+.tile .num{display:none;font-size:15px;font-weight:800;margin-top:8px;color:var(--muted)}
+.sheet.anon .n,.sheet.anon .d{display:none}
+.sheet.anon .num{display:block}
+.tile .views.peek{height:62px}
+.notes{margin:10px 0 0;padding:0;list-style:none;font-size:14px;line-height:1.45;max-width:840px}
+.notes li{margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pill Moods</h1>
+  <p class="lead">The eyes react to what Steward is doing: they slide apart to listen, turn into three dots while thinking, get a mouth to talk, grow when happy and get angry lids when something breaks. Pick a mood, or play a short task and watch it react. All three versions run the same moods, so you can switch any time.</p>
+  <div class="bar">
+    <div class="grp" id="g-ver"></div>
+    <div class="grp" id="g-color"></div>
+    <div class="grp" id="g-desk"></div>
+    <div class="grp" id="g-glass"></div>
+    <div class="grp" id="g-think"></div>
+    <div class="grp" id="g-mouth"></div>
+    <div class="grp" id="g-motion"></div>
+    <button class="c" id="type" title="Simulate a burst of keystrokes while listening">Type</button>
+  </div>
+
+  <div class="main">
+    <div class="stages" id="stages"></div>
+    <div class="now"><span class="m" id="now-m"></span><span class="step" id="now-step"></span><span class="w" id="now-w"></span></div>
+    <div class="sec"><div class="gl2">Moods</div><div class="grp" id="moods"></div></div>
+    <div class="sec"><div class="gl2">Play a task</div><div class="grp" id="stories"></div></div>
+  </div>
+
+  <h2>Thinking, Resting and Sleepy at real size</h2>
+  <p class="lead">The three quiet moods side by side, each in the 50×44 peek tab and at the 64×54 header size, so you can check they never look alike.</p>
+  <div class="panel"><table class="grid" id="trio"></table></div>
+
+  <h2>Thinking: dots or bar</h2>
+  <p class="lead">Both thinking styles side by side, each in its three kinds: thinking, reading a file and searching the web. The Thinking switch at the top picks which one the rest of the page uses.</p>
+  <div class="panel"><table class="grid" id="styles"></table></div>
+
+  <h2 id="all-title">All colors</h2>
+  <p class="lead">The mood that is showing above, in every color, at the real 64×54 size. Switch Desktop to Light or Dark to check both. The eye color is picked from how bright each pill is.</p>
+  <div class="panel" id="allc"></div>
+
+  <h2>Every mood at real size</h2>
+  <p class="lead">Each tile runs on its own at real size. Hide the names to test whether every mood reads without its label: the tiles get shuffled and numbered. Click one to show it above, with its name.</p>
+  <div class="grp" id="sheet-opts" style="margin-top:10px"></div>
+  <div class="sheet" id="sheet"></div>
+
+  <h2>How it works</h2>
+  <ul class="notes">
+    <li>Each eye is a pill cut by two lids. The top lid drops and tilts: inner corners down is mad, inner corners up is worried. The bottom lid pushes up into an arch for happy.</li>
+    <li>Listening slides the eyes apart toward the pill's edges and makes them a little taller, like ears turned toward you. Each key you type nods them down a couple of pixels and back. Nothing else moves, so the wide-apart eyes carry it even in a still frame.</li>
+    <li>Thinking has two styles. Dots (the default): the eyes shrink into three dots that hop in a wave like a typing indicator; reading a file lights them up one at a time, searching the web sends them round a small circle. Bar: the eyes join into one thick bar with a soft shimmer sliding inside it (stepping along for a file, a round spot circling for the web). Leaving thinking, the eyes pop back.</li>
+    <li>Talking has a mouth that hangs below the eyes and changes shape with the words: a closed line, wide open, or a round "o". The eyes squint a little on stressed words. The mouth only ever opens downward, so it never touches the eyes. With the mouth off, the eyes bounce with the words instead and glass sends out ripples.</li>
+    <li>Sleepy closes the eyes into soft curves and floats Z's up from the top right corner, outside the pill. Small sizes show one Z. The pill breathes slowly.</li>
+    <li>Resting stays awake but quiet: heavy lids, a slow standby glow like a sleeping Mac's light, a lazy glance every 8 to 12 seconds, and a little wake-up when your cursor comes near. It is kept cheap: the glow is a CSS opacity animation and everything else updates 10 times a second.</li>
+    <li>Every value springs to its new target with a little overshoot, so a change of mood pops instead of sliding.</li>
+    <li>Blocky uses hand-drawn pixel eyes and Z's rather than a shrunk copy, because a pixel eye only has a few cells to work with.</li>
+    <li>Reduced motion keeps each mood's face but drops the movement: listening keeps its eyes apart with no nod, thinking shows three still dots (or the bar with a still shimmer), talking a still open mouth, sleepy the Z's without drifting, resting only the heavy lids.</li>
+  </ul>
+</div>
+<script type="module">
+import { MOODS, STORIES, createEyes, setMood, setStyle, stepEyes, pressKey } from './pill/eyes.js'
+import { makeView, COLORS } from './pill/render.js'
+
+const VERSIONS = [['all', 'All three'], ['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]
+const NAMES = { glass: 'Glass', flat: 'Flat', blocky: 'Blocky' }
+const S = { ver: 'all', color: COLORS[0].hex, desk: 'dark', glass: 'tinted', rm: false, mood: 'idle', mouth: true, think: 'dots', anon: false, sheetSize: 'header' }
+try { Object.assign(S, JSON.parse(localStorage.getItem('steward-moods') || '{}')) } catch {}
+if (!COLORS.some((c) => c.hex === S.color)) S.color = COLORS[0].hex
+const osRM = matchMedia('(prefers-reduced-motion: reduce)')
+const save = () => { try { localStorage.setItem('steward-moods', JSON.stringify(S)) } catch {} }
+const kinds = () => (S.ver === 'all' ? ['glass', 'flat', 'blocky'] : [S.ver])
+const reduced = () => S.rm || osRM.matches
+
+/* ---------------- groups of views that share one eyes state ---------------- */
+// main: the big stages (every frame). Others run at 30 frames a second, resting at 10, and only while on screen.
+let groups = []
+const main = { st: createEyes(1), views: [], anchor: null, main: true, acc: 0, seen: true }
+const seen = new IntersectionObserver((list) => { for (const e of list) for (const g of groups) if (g.anchor === e.target) g.seen = e.isIntersecting })
+function addView(group, kind, host, W, H, color = S.color) {
+  const v = makeView(kind, W, H, { color, tinted: S.glass === 'tinted', light: S.desk === 'light', mouth: S.mouth })
+  host.append(v.el)
+  group.views.push(v)
+  return v
+}
+function newGroup(seed, anchor, mood, glint, think = S.think) {
+  const g = { st: createEyes(seed), views: [], anchor, acc: 0, seen: false }
+  setStyle(g.st, { think, mouth: S.mouth })
+  g.st.t = window.__moods?.now() ?? now() // start the mood now, so its intro (a pop, the first bursts) plays
+  if (mood) { g.fixed = mood; setMood(g.st, mood, glint) }
+  groups.push(g)
+  seen.observe(anchor)
+  return g
+}
+
+function build() {
+  document.getElementById('pill-filters')?.replaceChildren()
+  seen.disconnect()
+  const light = S.desk === 'light', wall = light ? 'wl' : 'wd', tabGlass = light ? 'gl' : 'gd'
+  const chip = (k, v, label, on) => `<button class="c" data-k="${k}" data-v="${v}" aria-pressed="${on}">${label}</button>`
+  const cname = COLORS.find((c) => c.hex === S.color)?.name ?? ''
+  document.getElementById('g-ver').innerHTML = '<span class="lbl">Version</span>' + VERSIONS.map(([v, l]) => chip('ver', v, l, S.ver === v)).join('')
+  document.getElementById('g-color').innerHTML = '<span class="lbl">Color</span>' + COLORS.map((c) => `<button class="sw" data-k="color" data-v="${c.hex}" aria-pressed="${c.hex === S.color}" style="background:${c.hex}" title="${c.name}" aria-label="${c.name}"></button>`).join('') + `<span class="cname">${cname}</span>`
+  document.getElementById('g-desk').innerHTML = '<span class="lbl">Desktop</span>' + chip('desk', 'light', 'Light', light) + chip('desk', 'dark', 'Dark', !light)
+  const gg = document.getElementById('g-glass')
+  gg.hidden = !kinds().includes('glass')
+  gg.innerHTML = '<span class="lbl">Glass</span>' + chip('glass', 'clear', 'Clear', S.glass === 'clear') + chip('glass', 'tinted', 'Tinted', S.glass === 'tinted')
+  document.getElementById('g-motion').innerHTML = '<span class="lbl">Motion</span>' + chip('rm', 'false', 'Full', !S.rm) + chip('rm', 'true', 'Reduced', S.rm)
+  document.getElementById('g-think').innerHTML = '<span class="lbl">Thinking</span>' + chip('think', 'dots', 'Dots', S.think !== 'bar') + chip('think', 'bar', 'Bar', S.think === 'bar')
+  document.getElementById('g-mouth').innerHTML = '<span class="lbl">Mouth</span>' + chip('mouth', 'true', 'On', S.mouth) + chip('mouth', 'false', 'Off', !S.mouth)
+  document.getElementById('sheet-opts').innerHTML = '<span class="lbl">Names</span>' + chip('anon', 'false', 'Show', !S.anon) + chip('anon', 'true', 'Hide', S.anon)
+    + '<span class="lbl" style="margin-left:14px">Size</span>' + chip('sheetSize', 'header', 'Header 64×54', S.sheetSize === 'header') + chip('sheetSize', 'peek', 'Peek 50×44', S.sheetSize === 'peek')
+    + (S.anon ? '<button class="c" id="reshuffle" style="margin-left:14px">Reshuffle</button>' : '')
+  document.getElementById('moods').innerHTML = MOODS.map((m) => `<button class="c" data-mood="${m.id}">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</button>`).join('')
+  document.getElementById('stories').innerHTML = STORIES.map((s) => `<button class="c" data-story="${s.id}">${s.label}</button>`).join('')
+
+  // The big stages, each with its real-size peek tab and panel header.
+  main.views = []
+  groups = [main]
+  setStyle(main.st, { think: S.think, mouth: S.mouth })
+  const stages = document.getElementById('stages')
+  stages.style.setProperty('--n', kinds().length)
+  stages.replaceChildren()
+  for (const kind of kinds()) {
+    const col = document.createElement('div')
+    const glass = kind === 'glass'
+    // On a light desktop every version sits on the light glass tab; on a dark one, flat and blocky use today's tab.
+    const glassy = glass || light
+    col.innerHTML = `<div class="vl">${NAMES[kind]}</div><div class="stage ${glass ? wall : light ? 'plainl' : 'plain'}">${glass ? '<div class="lines"></div>' : ''}</div>
+      <div class="reals"><div class="mini ${wall}"><div class="win"></div><div class="tab ${glassy ? tabGlass : 'solid'}"></div><span class="cap">${glassy ? 'Glass tab' : "Today's tab"}</span></div>
+      <div class="headbox ${glassy ? wall : 'solidp'}">${glassy ? `<div class="lines" style="opacity:.5"></div><div class="${tabGlass}" style="position:absolute;inset:6px;border-radius:12px"></div>` : ''}<div class="row" style="color:${light ? '#15161c' : '#eef0f4'}"><span class="hslot"></span><div><div class="t">Steward</div><div class="s" data-now></div></div></div></div></div>`
+    stages.append(col)
+    const W = Math.min(280, Math.max(200, Math.floor((stages.clientWidth - 12 * (kinds().length - 1)) / kinds().length) - 20))
+    addView(main, kind, col.querySelector('.stage'), W, Math.round(W * 0.64))
+    const mini = col.querySelector('.mini')
+    mini.insertBefore(addView(main, kind, document.createElement('div'), 50, 44).el, mini.querySelector('.cap'))
+    addView(main, kind, col.querySelector('.hslot'), 64, 54)
+  }
+  main.anchor = stages
+
+  // A cell: a 64 x 54 view on the right background, optionally with the 50 x 44 peek in its tab next to it.
+  const cell = (grp, kind, host, color, withPeek) => {
+    const glass = kind === 'glass'
+    const wrap = document.createElement('div')
+    wrap.className = 'pair'
+    if (withPeek) {
+      const pk = document.createElement('div')
+      pk.className = `peekbox ${wall}`
+      pk.innerHTML = `<div class="tab ${glass || light ? tabGlass : 'solid'}"></div>`
+      wrap.append(pk)
+      addView(grp, kind, pk, 50, 44, color)
+    }
+    const box = document.createElement('div')
+    box.className = `cellbox ${glass ? wall : light ? 'lightbg' : 'solidbg'}`
+    if (glass) box.innerHTML = '<div class="lines" style="opacity:.6"></div>'
+    wrap.append(box)
+    addView(grp, kind, box, 64, 54, color)
+    host.append(wrap)
+  }
+
+  // Thinking, Resting and Sleepy side by side.
+  const trio = document.getElementById('trio')
+  const QUIET = ['thinking', 'resting', 'sleepy']
+  trio.innerHTML = `<tr><th></th>${QUIET.map((m) => `<th>${MOODS.find((x) => x.id === m).label}: peek and header</th>`).join('')}</tr>`
+  kinds().forEach((kind, ki) => {
+    const tr = document.createElement('tr')
+    tr.innerHTML = `<th>${NAMES[kind]}</th>`
+    QUIET.forEach((m, mi) => {
+      const td = document.createElement('td')
+      tr.append(td)
+      const grp = newGroup(40 + ki * 3 + mi, td, m)
+      cell(grp, kind, td, S.color, true)
+    })
+    trio.append(tr)
+  })
+
+  // Both thinking styles, in all three kinds.
+  const styles = document.getElementById('styles')
+  const KINDS = [['sweep', 'thinking'], ['step', 'reading a file'], ['search', 'searching']]
+  const STYLES = [['dots', 'Dots'], ['bar', 'Bar']]
+  styles.innerHTML = `<tr><th></th>${STYLES.map(([, sl]) => KINDS.map(([, kl]) => `<th>${sl}: ${kl}</th>`).join('')).join('')}</tr>`
+  kinds().forEach((kind, ki) => {
+    const tr = document.createElement('tr')
+    tr.innerHTML = `<th>${NAMES[kind]}</th>`
+    STYLES.forEach(([think], si) => KINDS.forEach(([glint], gi) => {
+      const td = document.createElement('td')
+      tr.append(td)
+      cell(newGroup(60 + ki * 7 + si * 3 + gi, td, 'thinking', glint, think), kind, td, S.color, true)
+    }))
+    styles.append(tr)
+  })
+
+  // All colors, following the mood shown above.
+  const allc = document.getElementById('allc')
+  allc.replaceChildren()
+  kinds().forEach((kind, ki) => {
+    const row = document.createElement('div')
+    row.className = 'crow'
+    row.innerHTML = `<div class="ck">${NAMES[kind]}</div><div class="cgrid"></div>`
+    allc.append(row)
+    const grp = newGroup(80 + ki, row)
+    grp.follow = true
+    for (const c of COLORS) {
+      const fig = document.createElement('figure')
+      row.lastElementChild.append(fig)
+      cell(grp, kind, fig, c.hex, false)
+      fig.insertAdjacentHTML('beforeend', `<figcaption>${c.name}</figcaption>`)
+    }
+  })
+
+  // The sheet: one tile per mood, each with its own eyes. With names hidden, shuffled and numbered.
+  const sheet = document.getElementById('sheet')
+  sheet.replaceChildren()
+  sheet.classList.toggle('anon', S.anon)
+  const peek = S.sheetSize === 'peek'
+  const order = S.anon ? shuffled : MOODS.map((_, i) => i)
+  order.forEach((i, n) => {
+    const m = MOODS[i]
+    const tile = document.createElement('div')
+    tile.className = 'tile'
+    tile.dataset.mood = m.id
+    tile.innerHTML = `<div class="views${peek ? ' peek' : ''}"></div><div class="num">#${n + 1}</div><div class="n">${m.label}${m.isNew ? '<span class="new">New</span>' : ''}</div><div class="d">${m.when}</div>`
+    sheet.append(tile)
+    const grp = newGroup(i + 7, tile, m.id)
+    for (const kind of kinds()) {
+      const c = document.createElement('div')
+      c.className = `cell ${kind === 'glass' ? wall : light ? 'lightbg' : 'solidbg'}`
+      if (kind === 'glass') c.innerHTML = '<div class="lines"></div>'
+      tile.querySelector('.views').append(c)
+      addView(grp, kind, c, peek ? 50 : 64, peek ? 44 : 54)
+    }
+  })
+  caption()
+}
+
+let shuffled = MOODS.map((_, i) => i)
+const reshuffle = () => { shuffled = MOODS.map((_, i) => i).sort(() => Math.random() - 0.5) }
+reshuffle()
+
+/* ---------------- moods and stories ---------------- */
+let story = null, storyStep = 0, storyAt = 0
+function caption() {
+  const m = MOODS.find((x) => x.id === main.st.mood) ?? MOODS[0]
+  document.getElementById('now-m').textContent = m.label
+  document.getElementById('now-w').textContent = m.when
+  const step = story ? story.steps[storyStep][2] : ''
+  document.getElementById('now-step').textContent = step
+  document.getElementById('all-title').textContent = `All colors: ${m.label}`
+  document.querySelectorAll('[data-now]').forEach((n) => (n.textContent = step || m.label))
+  document.querySelectorAll('#moods button').forEach((b) => b.setAttribute('aria-pressed', String(!story && b.dataset.mood === main.st.mood)))
+  document.querySelectorAll('#stories button').forEach((b) => b.setAttribute('aria-pressed', String(story?.id === b.dataset.story)))
+}
+function pick(mood) { story = null; S.mood = mood; save(); setMood(main.st, mood); caption() }
+function play(id) { story = STORIES.find((s) => s.id === id); storyStep = 0; storyAt = window.__moods?.now() ?? now(); const [m, , , gl] = story.steps[0]; setMood(main.st, m, gl); caption() }
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  const tile = e.target.closest('.tile')
+  if (b?.dataset.mood) return pick(b.dataset.mood)
+  if (b?.dataset.story) return play(b.dataset.story)
+  if (b?.id === 'type') { for (const g of groups) if (g.st.mood === 'listening') { g.burst = 10; g.nextKey = 0 } return }
+  if (b?.id === 'reshuffle') { reshuffle(); build(); return }
+  if (b?.dataset.k) {
+    const k = b.dataset.k
+    S[k] = ['rm', 'mouth', 'anon'].includes(k) ? b.dataset.v === 'true' : b.dataset.v
+    if (k === 'anon' && S.anon) reshuffle()
+    save(); build(); return
+  }
+  if (tile) { pick(tile.dataset.mood); main.anchor.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }) }
+})
+
+/* ---------------- the frame loop ---------------- */
+const now = () => performance.now() / 1000
+let pointer = null
+addEventListener('pointermove', (e) => { pointer = { x: e.clientX, y: e.clientY } })
+/** The cursor relative to the nearest view in a group, in units of that view's size. */
+function pointerFor(grp) {
+  if (!pointer) return null
+  const els = grp.main ? grp.views.map((v) => v.el) : [grp.anchor]
+  let best = null
+  for (const el of els) {
+    const r = el.getBoundingClientRect()
+    const p = { x: (pointer.x - (r.left + r.width / 2)) / Math.max(90, r.width), y: (pointer.y - (r.top + r.height / 2)) / Math.max(70, r.height) }
+    if (!best || Math.hypot(p.x, p.y) < Math.hypot(best.x, best.y)) best = p
+  }
+  return best
+}
+let last = now()
+// ?awake=1 keeps it running in a hidden tab, for screenshots.
+const awake = new URLSearchParams(location.search).has('awake')
+// ?debug exposes a pause, the groups, and run(seconds) to drive simulated frames when the tab gets none.
+let paused = false, simAll = false
+function frame() {
+  requestAnimationFrame(frame)
+  const t = now(), dt = t - last
+  last = t
+  if ((document.hidden && !awake) || paused) return
+  tick(t, dt)
+}
+function tick(t, dt) {
+  const rm = reduced()
+  if (story && t - storyAt > story.steps[storyStep][1]) {
+    storyStep++
+    storyAt = t
+    if (storyStep >= story.steps.length) { story = null; setMood(main.st, 'idle') }
+    else { const [m, , , gl] = story.steps[storyStep]; setMood(main.st, m, gl) }
+    caption()
+  }
+  for (const grp of groups) {
+    if (grp.follow) setMood(grp.st, main.st.mood, main.st.glint)
+    if (!rm && grp.st.mood === 'listening') autoType(grp, t)
+    grp.acc += dt
+    if (!grp.main && !grp.seen && !simAll) continue // offscreen groups wait (a simulated run draws them all)
+    const resting = grp.st.mood === 'resting' && !rm
+    const every = resting ? 0.099 : grp.main ? 0 : 1 / 30 // resting: 10 frames a second
+    if (grp.acc < every) continue
+    stepEyes(grp.st, t, grp.acc, pointerFor(grp), rm)
+    grp.acc = 0
+    for (const v of grp.views) { v.standby(resting); v.update(grp.st) }
+  }
+}
+/** Keystrokes while listening: short bursts with pauses, faster during a Type burst. Only runs while listening. */
+function autoType(grp, t) {
+  if (!grp.nextKey || t > grp.nextKey + 5) grp.nextKey = grp.nextKey === 0 ? t : t + 0.3
+  if (t < grp.nextKey) return
+  pressKey(grp.st)
+  if (grp.burst > 0) { grp.burst--; grp.nextKey = t + 0.07 + Math.random() * 0.06 }
+  else grp.nextKey = t + (Math.random() < 0.18 ? 0.9 + Math.random() * 1.2 : 0.12 + Math.random() * 0.2)
+}
+if (new URLSearchParams(location.search).has('debug')) {
+  let simT = 0
+  window.__moods = {
+    main, groups: () => groups, pause: (v) => { paused = v },
+    redraw: () => { for (const g of groups) for (const v of g.views) v.update(g.st) },
+    /** Run simulated frames: seconds of time at fps frames a second. Pauses the real loop. */
+    run(seconds, fps = 60) { paused = true; simAll = true; if (!simT) simT = now(); const n = Math.round(seconds * fps); for (let i = 0; i < n; i++) { simT += 1 / fps; tick(simT, 1 / fps) } return simT },
+    now: () => simT || now(),
+  }
+}
+setMood(main.st, S.mood)
+build()
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>

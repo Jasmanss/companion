@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
-import type { AgentEvent, DockState, Mood, SaveResult, SettingsView, TrayItem } from '../../shared/types'
+import { touchOf, type Touch } from '../../shared/activity'
+import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
+import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
-import { Face } from './Face'
-import { ChevronRightIcon, GearIcon, PinIcon } from './icons'
-import { Settings } from './Settings'
+import type { StepEntry } from './chat-groups'
+import { ContextPill, ProjectSwitcher } from './ContextPill'
+import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
+import { BriefCard } from './BriefCard'
+import { LeftOffCard } from './LeftOffCard'
+import { Nudge } from './Nudge'
+import { isLateNight, pickMood } from './pick-mood'
+import { Pill, pillKey } from './Pill'
+import { glintFor, workingMood } from './pill/glint'
+import { SessionStrip } from './SessionStrip'
 import { Tray } from './Tray'
+import { Viewer } from './Viewer'
 
-const api = window.companion
+const api = window.steward
 let nextId = 1
 
 const message = (err: unknown) => (err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(err))
@@ -28,15 +40,33 @@ export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
   const [items, setItems] = useState<TrayItem[]>([])
   const [settings, setSettings] = useState<SettingsView | null>(null)
-  const [view, setView] = useState<'chat' | 'settings'>('chat')
   const [entries, setEntries] = useState<Entry[]>([])
   const [busy, setBusy] = useState(false)
   const [agentMood, setAgentMood] = useState<Mood | null>(null)
   const [typing, setTyping] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [pinned, setPinned] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null)
+  const [viewIndex, setViewIndex] = useState(0)
+  const [sessions, setSessions] = useState<SessionView[]>([])
+  const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
+  const [banner, setBanner] = useState<AlertView | null>(null)
+  const [eventMood, setEventMood] = useState<Mood | null>(null)
+  const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
+  const [brief, setBrief] = useState<Brief | null>(null)
+  const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
+  const [switcher, setSwitcher] = useState(false)
+  const switcherShown = usePresence(switcher)
+  /** What the agent is on during this request, for the context pill. */
+  const [touch, setTouch] = useState<Touch | null>(null)
+  /** The last file the agent read in each project (by path), shown in the pill when it's idle. */
+  const [lastFiles, setLastFiles] = useState<Record<string, string>>({})
+  /** The steps running now, by id, and the kind of the newest: the character mirrors it. */
+  const running = useRef(new Map<string, ActivityKind>())
+  const [work, setWork] = useState<ActivityKind | null>(null)
+  const currentProject = useRef<string | null>(null)
+  const pill = useRef<HTMLButtonElement>(null)
+  const composer = useRef<HTMLTextAreaElement>(null)
   const draggingOut = useRef(false)
   const doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -45,15 +75,40 @@ export function App() {
   useEffect(() => {
     api.tray.list().then(setItems, showError)
     api.settings.get().then(setSettings, showError)
+    api.sessions.list().then(setSessions, showError)
+    // The agent can switch projects too.
+    const offSettings = api.settings.onChanged(setSettings)
     const offDock = api.dock.onState(setDock)
     const offTray = api.tray.onChanged(setItems)
     const offAgent = api.agent.onEvent(handleAgentEvent)
+    const offSessions = api.sessions.onChanged(setSessions)
+    const offAlerts = api.alerts.onShow(handleAlerts)
+    const offMood = api.alerts.onMood(setEventMood)
+    const offLeftOff = api.leftOff.onShow(setLeftOff)
+    // The brief already includes where you left off.
+    const offBrief = api.brief.onShow((b) => {
+      setBrief(b)
+      setLeftOff(null)
+    })
+    // Frosted by macOS (vibrant) or solid: the CSS draws the glass to match.
+    const showAppearance = ({ vibrant }: { vibrant: boolean }) => document.documentElement.toggleAttribute('data-vibrant', vibrant)
+    api.appearance.get().then(showAppearance, () => {})
+    const offAppearance = api.appearance.onChange(showAppearance)
+    const clock = setInterval(() => setLateNight(isLateNight(new Date())), 60_000)
     return () => {
+      offSettings()
+      offAppearance()
+      offMood()
+      offLeftOff()
+      offBrief()
+      clearInterval(clock)
       offDock()
       offTray()
       offAgent()
+      offSessions()
+      offAlerts()
     }
-    // handleAgentEvent only uses state setters, so subscribing once is correct.
+    // The handlers only use state setters and refs, so subscribing once is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -62,6 +117,42 @@ export function App() {
     const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
+
+  useEffect(() => {
+    if (!banner) return
+    const t = setTimeout(() => setBanner(null), 6000)
+    return () => clearTimeout(t)
+  }, [banner])
+
+  useEffect(() => {
+    currentProject.current = settings?.currentProject ?? null
+  }, [settings?.currentProject])
+
+  // The tab and the panel's animations face away from the screen edge it sits on.
+  const look = settings?.steward ?? DEFAULT_STEWARD
+  useEffect(() => {
+    document.documentElement.dataset.edge = look.edge
+  }, [look.edge])
+
+  // The switcher belongs to the open panel; tucking away closes it.
+  useEffect(() => {
+    if (dock !== 'expanded') setSwitcher(false)
+  }, [dock])
+
+  const closeSwitcher = useCallback((refocus: boolean) => {
+    setSwitcher(false)
+    if (refocus) pill.current?.focus()
+  }, [])
+
+  /** Alerts the main process let through: the nudge shows them when tucked away, a banner when the panel is open. */
+  function handleAlerts(list: AlertView[]) {
+    setNudgeAlerts(list)
+    setBanner(list[0] ?? null)
+  }
+
+  const tuckAway = useCallback(() => {
+    void api.dock.collapse()
+  }, [])
 
   function handleAgentEvent(event: AgentEvent) {
     switch (event.type) {
@@ -73,11 +164,44 @@ export function App() {
         setEntries((prev) => {
           const last = prev.at(-1)
           if (last?.kind === 'assistant') return [...prev.slice(0, -1), { ...last, text: last.text + event.delta }]
-          return [...prev, { kind: 'assistant', id: nextId++, text: event.delta }]
+          return [...prev, { kind: 'assistant', id: nextId++, text: event.delta, streaming: true }]
         })
         break
-      case 'activity':
-        setEntries((prev) => [...prev, { kind: 'activity', id: nextId++, text: event.text }])
+      case 'activity': {
+        const activity = event.activity
+        setEntries((prev) => {
+          const i = prev.findIndex((e) => e.kind === 'step' && e.activity.id === activity.id)
+          // Thinking that's over leaves no trace.
+          if (activity.kind === 'thinking' && activity.status !== 'running') return i < 0 ? prev : prev.toSpliced(i, 1)
+          const finishedAt = activity.status === 'running' ? undefined : Date.now()
+          if (i < 0) return [...prev, { kind: 'step', id: nextId++, activity, finishedAt }]
+          const step = prev[i] as StepEntry
+          return prev.with(i, { ...step, activity, finishedAt: step.finishedAt ?? finishedAt })
+        })
+        // Working, however the request started (the panel, an alert's offer, the demo).
+        if (activity.status === 'running') setBusy(true)
+        if (activity.status === 'running') running.current.set(activity.id, activity.kind)
+        else running.current.delete(activity.id)
+        setWork([...running.current.values()].at(-1) ?? null)
+        // The pill follows whatever the agent starts on; a step that failed lets go of it.
+        const touched = touchOf(activity)
+        if (touched && activity.status === 'running') setTouch(touched)
+        else if (touched && activity.status === 'failed') setTouch((t) => (t?.text === touched.text ? null : t))
+        const project = currentProject.current
+        if (activity.kind === 'read-file' && activity.status === 'done' && activity.target && project) {
+          const file = activity.target
+          setLastFiles((prev) => ({ ...prev, [project]: file }))
+        }
+        break
+      }
+      case 'output':
+        setEntries((prev) =>
+          prev.map((e) => {
+            if (e.kind !== 'step' || e.activity.id !== event.activityId) return e
+            if (event.exitCode !== undefined) return { ...e, output: event.text ?? e.output, exitCode: event.exitCode }
+            return { ...e, output: ((e.output ?? '') + (event.chunk ?? '')).slice(-8000) }
+          }),
+        )
         break
       case 'approval':
         setEntries((prev) => [
@@ -90,14 +214,18 @@ export function App() {
           prev.map((e) => (e.kind === 'approval' && e.approvalId === event.id ? { ...e, status: event.approved ? 'approved' : 'declined' } : e)),
         )
         break
-      case 'output':
-        setEntries((prev) => [...prev, { kind: 'output', id: nextId++, command: event.command, exitCode: event.exitCode, text: event.text }])
+      case 'stopped':
+        setEntries((prev) => [...prev, { kind: 'notice', id: nextId++, text: 'Stopped.' }])
         break
       case 'error':
         setEntries((prev) => [...prev, { kind: 'error', id: nextId++, text: event.message }])
         break
       case 'done':
+        setEntries((prev) => prev.map((e) => (e.kind === 'assistant' && e.streaming ? { ...e, streaming: false } : e)))
         setBusy(false)
+        setTouch(null)
+        running.current.clear()
+        setWork(null)
         setAgentMood('done')
         doneTimer.current = setTimeout(() => setAgentMood(null), 2500)
         break
@@ -105,6 +233,10 @@ export function App() {
   }
 
   // Dropping images in from Finder or a browser. Dragging toward the peek pops the panel open.
+  // The panel's own shortcuts, as you set them in Settings.
+  const switchKey = settings?.shortcuts?.switchProject.accelerator ?? ''
+  const settingsKey = settings?.shortcuts?.openSettings.accelerator ?? ''
+
   useEffect(() => {
     const onEnter = (e: globalThis.DragEvent) => {
       if (draggingOut.current || !canDrop(e)) return
@@ -140,7 +272,23 @@ export function App() {
       api.tray.dragEnded()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void api.dock.collapse()
+      // Already handled, like Esc closing the switcher.
+      if (e.defaultPrevented) return
+      const pressed = acceleratorFromKey(e)
+      if (pressed && pressed === switchKey) {
+        if (dock !== 'expanded') return
+        e.preventDefault()
+        setSwitcher((open) => !open)
+        return
+      }
+      if (pressed && pressed === settingsKey) {
+        e.preventDefault()
+        void api.settings.open()
+        return
+      }
+      if (e.key !== 'Escape') return
+      if (dock === 'viewing') void api.dock.expand()
+      else void api.dock.collapse()
     }
     // ⌘V outside the message box adds whatever's on the clipboard: files, an image, or an image link.
     const onPaste = async (e: ClipboardEvent) => {
@@ -177,7 +325,7 @@ export function App() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [dock, showError])
+  }, [dock, showError, switchKey, settingsKey])
 
   const dragOut = (ids: string[]) => (e: DragEvent) => {
     e.preventDefault()
@@ -201,13 +349,76 @@ export function App() {
     }, showError)
   }
 
-  const mood: Mood = agentMood ?? (dragOver || typing ? 'listening' : dock === 'collapsed' ? 'resting' : 'idle')
+  const openViewer = (index: number) => {
+    setViewIndex(index)
+    void api.dock.view()
+  }
+
+  const pickProject = (project: Project) => {
+    setSwitcher(false)
+    composer.current?.focus()
+    if (project.path !== settings?.currentProject) api.settings.setCurrentProject(project.path).then(setSettings, showError)
+  }
+
+  const addProject = () => {
+    setSwitcher(false)
+    api.settings.addProjectAndSwitch().then(setSettings, showError)
+  }
+
+  const newChat = () => {
+    setEntries([])
+    void api.agent.reset()
+  }
+
+  // The pin is the "tuck away when I click elsewhere" setting, so Settings shows it too.
+  const pinned = settings?.keepPanelOpen ?? false
+  const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
+  const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
+  const glint = glintFor(work)
+  const tab = TAB_SIZES[look.size].pill
   const noKey = settings?.apiKeySource === 'none'
 
-  if (dock === 'collapsed') {
+  /** "Want me to look?" and the like: open the panel and ask the agent. */
+  const runAction = (alert: AlertView) => {
+    if (!alert.action) return
+    setBanner(null)
+    void api.dock.expand()
+    if (noKey) return setToast('Add your Anthropic API key in Settings first.')
+    send(alert.action.prompt)
+  }
+  const hide = settings?.shortcuts?.hideFromEdge
+  const hideKey = hide?.active ? ` (${formatAccelerator(hide.accelerator)})` : ''
+  const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
+  const lastFile = project ? lastFiles[project.path] : undefined
+  // Working: what it's on right now. Idle: the last file it read here.
+  const pillTouch: Touch | null = (busy && touch) || (lastFile ? { kind: 'file', text: lastFile } : null)
+
+  if (dock === 'viewing' && items.length > 0) {
     return (
-      <button className="peek" data-app onClick={() => api.dock.expand()} title="Companion (⌥ Space)">
-        <Face mood={mood} width={50} height={44} />
+      <Viewer
+        items={items}
+        index={Math.min(viewIndex, items.length - 1)}
+        onIndex={setViewIndex}
+        onClose={() => api.dock.expand()}
+        onRemove={(id) => api.tray.remove(id).catch(showError)}
+        onDragOut={dragOut}
+      />
+    )
+  }
+
+  if (dock === 'nudge') {
+    return (
+      <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
+      </Nudge>
+    )
+  }
+
+  if (dock === 'collapsed' || dock === 'hidden') {
+    const open = settings?.shortcuts?.togglePanel
+    return (
+      <button className="peek" data-app onClick={() => api.dock.expand()} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )
@@ -216,93 +427,110 @@ export function App() {
   return (
     <div className={`panel ${dragOver ? 'drag-over' : ''}`} data-app>
       <header className="panel-head">
-        <Face mood={mood} width={64} height={54} />
+        <Pill mood={mood} glint={glint} width={64} height={54} cls="header" look={look} />
         <div className="head-text">
-          <span className="name">Companion</span>
+          <div className="head-top">
+            <span className="name">{look.name}</span>
+            <div className="head-actions">
+              <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
+                <NewChatIcon />
+              </button>
+              <button
+                className={`icon-btn ${pinned ? 'on' : ''}`}
+                aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
+                aria-pressed={pinned}
+                onClick={() => api.settings.update({ keepPanelOpen: !pinned }).then(setSettings, showError)}
+              >
+                <PinIcon on={pinned} />
+              </button>
+              <button className="icon-btn" aria-label="Settings" title={settingsKey ? `Settings (${formatAccelerator(settingsKey)})` : 'Settings'} onClick={() => api.settings.open()}>
+                <GearIcon />
+              </button>
+              <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
+                <HideIcon />
+              </button>
+              <button className="icon-btn" aria-label="Tuck away" title="Tuck away (Esc)" onClick={() => api.dock.collapse()}>
+                <ChevronRightIcon />
+              </button>
+            </div>
+          </div>
           {settings && (
-            <select
-              className="project-select"
-              value={settings.currentProject ?? ''}
-              onChange={(e) => api.settings.setCurrentProject(e.target.value || null).then(setSettings, showError)}
-              aria-label="Current project"
-            >
-              <option value="">No project</option>
-              {settings.projects.map((p) => (
-                <option key={p.path} value={p.path}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <ContextPill
+              project={project}
+              touch={pillTouch}
+              live={busy}
+              open={switcher}
+              shortcut={switchKey && formatAccelerator(switchKey)}
+              onToggle={() => setSwitcher(!switcher)}
+              pillRef={pill}
+            />
           )}
         </div>
-        <div className="head-actions">
-          <button
-            className={`icon-btn ${pinned ? 'on' : ''}`}
-            aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
-            aria-pressed={pinned}
-            onClick={() => {
-              setPinned(!pinned)
-              void api.dock.setPinned(!pinned)
-            }}
-          >
-            <PinIcon on={pinned} />
-          </button>
-          <button
-            className={`icon-btn ${view === 'settings' ? 'on' : ''}`}
-            aria-label="Settings"
-            aria-pressed={view === 'settings'}
-            onClick={() => setView(view === 'settings' ? 'chat' : 'settings')}
-          >
-            <GearIcon />
-          </button>
-          <button className="icon-btn" aria-label="Tuck away" onClick={() => api.dock.collapse()}>
-            <ChevronRightIcon />
-          </button>
-        </div>
       </header>
-
-      {view === 'settings' && settings ? (
-        <div className="body scroll">
-          <button className="chip back" onClick={() => setView('chat')}>
-            ← Back to chat
-          </button>
-          <Settings settings={settings} onChange={setSettings} onError={showError} />
-        </div>
-      ) : (
-        <>
-          <Tray
-            items={items}
-            saveResult={saveResult}
-            onDragOut={dragOut}
-            onSave={saveToProject}
-            onDismissSave={() => setSaveResult(null)}
-            onError={showError}
-          />
-          <div className="body">
-            {entries.length > 0 && !busy && (
-              <button
-                className="chip quiet new-chat"
-                onClick={() => {
-                  setEntries([])
-                  void api.agent.reset()
-                }}
-              >
-                New chat
-              </button>
-            )}
-            {noKey && (
-              <div className="notice">
-                Add your Anthropic API key to start chatting.
-                <button className="chip" onClick={() => setView('settings')}>
-                  Open settings
-                </button>
-              </div>
-            )}
-            <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
-          </div>
-          <Composer busy={busy} disabled={noKey} onSend={send} onStop={() => api.agent.cancel()} onTyping={setTyping} />
-        </>
+      {switcherShown.mounted && settings && (
+        <ProjectSwitcher
+          settings={settings}
+          anchor={pill}
+          leaving={switcherShown.leaving}
+          onPick={pickProject}
+          onAdd={addProject}
+          onClose={closeSwitcher}
+        />
       )}
+
+      <SessionStrip sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
+      {banner && (
+        <div className="banner" role="status" onClick={() => setBanner(null)}>
+          <strong>{banner.title}</strong>
+          {banner.detail && <span>{banner.detail}</span>}
+          {banner.action && (
+            <button
+              className="chip"
+              onClick={(e) => {
+                e.stopPropagation()
+                runAction(banner)
+              }}
+            >
+              {banner.action.label}
+            </button>
+          )}
+        </div>
+      )}
+
+      <Tray
+        items={items}
+        saveResult={saveResult}
+        onDragOut={dragOut}
+        onOpen={openViewer}
+        onSave={saveToProject}
+        onDismissSave={() => setSaveResult(null)}
+        onError={showError}
+      />
+      <div className="body">
+        {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
+        {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
+        {noKey && (
+          <div className="notice">
+            Add your Anthropic API key to start chatting.
+            <button className="chip" onClick={() => api.settings.open('connections')}>
+              Open settings
+            </button>
+          </div>
+        )}
+        <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
+      </div>
+      <Composer
+        busy={busy}
+        disabled={noKey}
+        onSend={send}
+        onStop={() => api.agent.cancel()}
+        onTyping={(on) => {
+          setTyping(on)
+          // Each key you type, it nods along.
+          if (on) pillKey()
+        }}
+        inputRef={composer}
+      />
 
       {dragOver && <div className="drop-overlay">Drop to add to the tray</div>}
       {toast && (

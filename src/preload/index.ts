@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, CompanionAPI, DockState, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -7,11 +7,12 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   return () => ipcRenderer.removeListener(channel, listener)
 }
 
-const api: CompanionAPI = {
+const api: StewardAPI = {
   dock: {
     expand: () => ipcRenderer.invoke('dock:expand'),
     collapse: () => ipcRenderer.invoke('dock:collapse'),
-    setPinned: (pinned) => ipcRenderer.invoke('dock:pin', pinned),
+    hide: () => ipcRenderer.invoke('dock:hide'),
+    view: () => ipcRenderer.invoke('dock:view'),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
   },
   tray: {
@@ -39,14 +40,51 @@ const api: CompanionAPI = {
     get: () => ipcRenderer.invoke('settings:get'),
     setApiKey: (key) => ipcRenderer.invoke('settings:setApiKey', key),
     setUnsplashKey: (key) => ipcRenderer.invoke('settings:setUnsplashKey', key),
+    setVercelToken: (token) => ipcRenderer.invoke('settings:setVercelToken', token),
     addProject: () => ipcRenderer.invoke('settings:addProject'),
+    addProjectAndSwitch: () => ipcRenderer.invoke('settings:addProjectAndSwitch'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
+    update: (patch) => ipcRenderer.invoke('settings:update', patch),
+    setShortcut: (id, accelerator) => ipcRenderer.invoke('settings:setShortcut', id, accelerator),
+    recordShortcuts: (recording) => ipcRenderer.invoke('settings:recordShortcuts', recording),
+    onChanged: (cb) => subscribe<SettingsView>('settings:changed', cb),
+    open: (section) => ipcRenderer.invoke('settings:open', section),
+    close: () => ipcRenderer.invoke('settings:close'),
+    onSection: (cb) => subscribe<SettingsSection>('settings:section', cb),
+  },
+  sessions: {
+    list: () => ipcRenderer.invoke('sessions:list'),
+    dismiss: (id) => ipcRenderer.invoke('sessions:dismiss', id),
+    onChanged: (cb) => subscribe<SessionView[]>('sessions:changed', cb),
+  },
+  alerts: {
+    onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
+    onMood: (cb) => subscribe<Mood | null>('alerts:mood', cb),
+  },
+  deploys: {
+    status: () => ipcRenderer.invoke('deploys:status'),
+  },
+  leftOff: {
+    onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
+  },
+  brief: {
+    onShow: (cb) => subscribe<Brief>('brief:show', cb),
+  },
+  claude: {
+    status: () => ipcRenderer.invoke('claude:status'),
+    preview: () => ipcRenderer.invoke('claude:preview'),
+    connect: () => ipcRenderer.invoke('claude:connect'),
+    disconnect: () => ipcRenderer.invoke('claude:disconnect'),
+  },
+  appearance: {
+    get: () => ipcRenderer.invoke('appearance:get'),
+    onChange: (cb) => subscribe<Appearance>('appearance:changed', cb),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }
 
-contextBridge.exposeInMainWorld('companion', api)
+contextBridge.exposeInMainWorld('steward', api)

@@ -1,6 +1,6 @@
 {
-  "name": "companion",
-  "productName": "Companion",
+  "name": "steward",
+  "productName": "Steward",
   "version": "0.1.0",
   "description": "A desktop assistant that lives at the edge of your screen while you code",
   "main": "./out/main/index.js",
@@ -22,6 +22,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "smoke": "electron-vite build && node scripts/smoke.mjs",
+    "design": "node scripts/design-server.mjs",
     "pack": "electron-vite build && electron-builder --mac --dir",
     "dist": "electron-vite build && electron-builder --mac"
   },
