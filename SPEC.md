@@ -110,7 +110,15 @@ hands focus back to the panel.
   version, color, frost, personality, name, screen edge and size.
 - **Projects:** your projects (make one current, remove one, add a folder), folders found in Documents and Desktop,
   and the commands that skip approval.
-- **Shortcuts:** the global hotkeys Steward got, and the keys in the panel and in Settings.
+- **Shortcuts:** open or tuck away the panel (⌥ Space) and hide from the screen edge (⌥⇧ Space), which work in
+  every app, and switch project (⌘K) and Settings (⌘,) in the panel. Each can be changed, turned off, or put back to
+  Steward's default. Changing one opens a Mac keyboard with every shortcut on it, each in its own color; the new one
+  lights up as you press it, or you click it on the keyboard (useful for a combination another app catches first).
+  Steward refuses what every Mac app relies on (⌘C, ⌘Q…), a global ⌘ or ⇧⌘ with a letter (it would take that
+  shortcut from every app), a bare key, and one of its own; it warns about macOS's own (⌘Space for Spotlight).
+  While you record, its global shortcuts let go, so pressing ⌥ Space records it. Paste (⌘V), Esc and ⌘W stay as they
+  are. macOS doesn't refuse a global shortcut another app also has, so Steward can't tell when one is taken; if one
+  doesn't respond, the section says to pick another.
 - **Connections:** the Anthropic, Unsplash and Vercel keys (saved in the keychain, never shown again) and the Claude
   Code hooks.
 - **Notifications:** whether a session that needs you, a finished session, a failed build, or a deploy or merged PR

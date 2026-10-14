@@ -18,7 +18,8 @@ code. Pull it out to collect images, research designs, and run commands.
   ⌘K to switch projects (type to search, arrows and Enter) or add one.
 - **Always there:** it peeks out from the right edge. Click it, press ⌥ Space,
   or drag an image toward it and it slides out. Press ⌥⇧ Space (or use the
-  menu bar icon) to hide it from the edge entirely and bring it back.
+  menu bar icon) to hide it from the edge entirely and bring it back. Change
+  any of these in Settings → Shortcuts, on a keyboard that shows them all.
 
 **v1.1: Claude Code does the work. Steward keeps you on top of everything.**
 

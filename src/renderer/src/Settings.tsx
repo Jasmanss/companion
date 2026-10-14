@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, Project, SettingsPatch, SettingsView } from '../../shared/types'
+import { shortcutInfo } from '../../shared/shortcuts'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId } from '../../shared/types'
+import { usePresence } from './Activity'
 import { Face } from './Face'
-import { formatHotkey } from './hotkeys'
+import { Keys, SHORTCUT_COLORS, ShortcutRecorder } from './ShortcutRecorder'
 import { badgeColors, tildify } from './switcher'
 
 const api = () => window.steward
@@ -229,48 +231,72 @@ export function ProjectsSection(props: SectionProps) {
 
 /* ---------- Shortcuts ---------- */
 
-/** "⌥⇧ Space" as keycaps. */
-function Keys({ combo }: { combo: string }) {
-  const [mods, key] = combo.includes(' ') ? combo.split(' ') : ['', combo]
+/** One shortcut you can change: its keys, whether it works, and the button that opens the keyboard. */
+function ShortcutRow({ id, settings, onChange }: { id: ShortcutId; settings: SettingsView; onChange: (rect: DOMRect) => void }) {
+  const s = settings.shortcuts[id]
+  const info = shortcutInfo(id)
+  const note = !s.accelerator
+    ? 'Turned off'
+    : !s.active
+      ? 'macOS didn’t give it to Steward, so it isn’t working. Pick another.'
+      : id === 'openSettings'
+        ? 'Also in the menu bar icon'
+        : undefined
   return (
-    <span className="set-keys">
-      {[...mods].map((m) => (
-        <kbd key={m}>{m}</kbd>
-      ))}
-      <kbd>{key}</kbd>
-    </span>
+    <Row
+      label={
+        <>
+          <i className="set-swatch" style={{ background: SHORTCUT_COLORS[id] }} aria-hidden="true" />
+          {info.label}
+        </>
+      }
+      note={note}
+    >
+      {s.accelerator ? <Keys accelerator={s.accelerator} dim={!s.active} /> : <span className="set-value">Off</span>}
+      <button className="btn small" onClick={(e) => onChange(e.currentTarget.getBoundingClientRect())} aria-label={`Change the shortcut for ${info.label}`}>
+        Change
+      </button>
+    </Row>
   )
 }
 
-export function ShortcutsSection({ settings }: { settings: SettingsView }) {
-  const global = (accelerator: string) => (accelerator ? <Keys combo={formatHotkey(accelerator)} /> : <span className="set-value">None: another app has it</span>)
+export function ShortcutsSection({ settings, onChange }: SectionProps) {
+  const [editing, setEditing] = useState<{ id: ShortcutId; origin: DOMRect } | null>(null)
+  const shown = usePresence(editing !== null, 200)
+  // Keeps the recorder on screen while it leaves.
+  const [last, setLast] = useState(editing)
+  if (editing && editing !== last) setLast(editing)
+  const open = (id: ShortcutId) => (origin: DOMRect) => setEditing({ id, origin })
+
   return (
     <>
-      <Group title="Anywhere" note="Steward takes the first of these that's free when it starts.">
-        <Row label="Open or tuck away the panel">{global(settings.hotkeys.open)}</Row>
-        <Row label="Hide from the screen edge, and bring it back">{global(settings.hotkeys.hide)}</Row>
+      <Group
+        title="Anywhere"
+        note="These work in every app. Steward can’t see other apps’ shortcuts: if one of these doesn’t respond, another app probably has it, so pick another."
+      >
+        <ShortcutRow id="togglePanel" settings={settings} onChange={open('togglePanel')} />
+        <ShortcutRow id="hideFromEdge" settings={settings} onChange={open('hideFromEdge')} />
       </Group>
       <Group title="In the panel">
-        <Row label="Switch project">
-          <Keys combo="⌘ K" />
-        </Row>
-        <Row label="Settings" note="Also in the menu bar icon">
-          <Keys combo="⌘ ," />
-        </Row>
-        <Row label="Add what's on the clipboard to the tray">
-          <Keys combo="⌘ V" />
+        <ShortcutRow id="switchProject" settings={settings} onChange={open('switchProject')} />
+        <ShortcutRow id="openSettings" settings={settings} onChange={open('openSettings')} />
+        <Row label="Add what's on the clipboard to the tray" note="Every Mac app's paste, so it stays">
+          <Keys accelerator="Command+V" />
         </Row>
         <Row label="Tuck away">
-          <Keys combo="Esc" />
+          <Keys accelerator="Escape" />
         </Row>
       </Group>
       <Group title="In Settings">
         <Row label="Close Settings">
-          <Keys combo="⌘ W" />
+          <Keys accelerator="Command+W" />
           <span className="set-or">or</span>
-          <Keys combo="Esc" />
+          <Keys accelerator="Escape" />
         </Row>
       </Group>
+      {shown.mounted && last && (
+        <ShortcutRecorder id={last.id} settings={settings} origin={last.origin} leaving={shown.leaving} onClose={() => setEditing(null)} onSaved={onChange} />
+      )}
     </>
   )
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { NotificationPrefs, Project, SettingsPatch } from '../shared/types'
+import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
+import type { NotificationPrefs, Project, SettingsPatch, ShortcutId } from '../shared/types'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
@@ -23,6 +24,8 @@ export interface StoredSettings {
   secrets: Partial<Record<SecretKind, string>>
   keepPanelOpen: boolean
   notifications: NotificationPrefs
+  /** Only the ones you changed: an accelerator, or '' for off. The rest use Steward's defaults. */
+  shortcuts: Partial<Record<ShortcutId, string>>
 }
 
 export const defaultSettings = (): StoredSettings => ({
@@ -32,6 +35,7 @@ export const defaultSettings = (): StoredSettings => ({
   secrets: {},
   keepPanelOpen: false,
   notifications: { ...DEFAULT_NOTIFICATIONS },
+  shortcuts: {},
 })
 
 const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 'string' && typeof (p as Project)?.path === 'string'
@@ -58,6 +62,15 @@ export function migrateSettings(raw: unknown): StoredSettings {
       if (typeof value === 'boolean') notifications[key] = value
     }
   }
+  const shortcuts: StoredSettings['shortcuts'] = {}
+  if (r.shortcuts && typeof r.shortcuts === 'object' && !Array.isArray(r.shortcuts)) {
+    for (const [id, value] of Object.entries(r.shortcuts)) {
+      if (!isShortcutId(id) || typeof value !== 'string') continue
+      // '' is "off"; anything else has to be a shortcut Steward can use.
+      const accelerator = value === '' ? '' : normalizeAccelerator(value)
+      if (accelerator !== null) shortcuts[id] = accelerator
+    }
+  }
   return {
     projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(({ name, path }) => ({ name, path })) : d.projects,
     currentProject: typeof r.currentProject === 'string' ? r.currentProject : null,
@@ -65,6 +78,7 @@ export function migrateSettings(raw: unknown): StoredSettings {
     secrets,
     keepPanelOpen: typeof r.keepPanelOpen === 'boolean' ? r.keepPanelOpen : d.keepPanelOpen,
     notifications,
+    shortcuts,
   }
 }
 

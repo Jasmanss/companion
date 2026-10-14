@@ -41,6 +41,18 @@ export interface NotificationPrefs {
   leftOff: boolean
 }
 
+/** The shortcuts you can change. The first two work anywhere on the Mac; the others while the panel has focus. */
+export type ShortcutId = 'togglePanel' | 'hideFromEdge' | 'switchProject' | 'openSettings'
+
+export interface ShortcutView {
+  /** Electron accelerator form ("Alt+Space"); '' when it's turned off. */
+  accelerator: string
+  /** Steward's own choice: you haven't changed it. */
+  isDefault: boolean
+  /** It works now. A global one is inactive when macOS gave it to another app. */
+  active: boolean
+}
+
 /** The sections of the Settings window, in sidebar order. */
 export type SettingsSection = 'general' | 'steward' | 'projects' | 'shortcuts' | 'connections' | 'notifications'
 
@@ -64,8 +76,7 @@ export interface SettingsView {
   notifications: NotificationPrefs
   /** Lives in macOS, not in the settings file. Unavailable while developing (it would register Electron itself). */
   openAtLogin: { available: boolean; enabled: boolean; needsApproval: boolean }
-  /** Registered global shortcuts in Electron accelerator form; empty when another app has them. */
-  hotkeys: { open: string; hide: string }
+  shortcuts: Record<ShortcutId, ShortcutView>
   /** The home folder, for showing project paths as ~/… */
   home: string
   version: string
@@ -277,6 +288,10 @@ export interface StewardAPI {
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
     update(patch: SettingsPatch): Promise<SettingsView>
+    /** Change a shortcut: an accelerator, '' to turn it off, or null for Steward's default. Throws when it can't be used. */
+    setShortcut(id: ShortcutId, accelerator: string | null): Promise<SettingsView>
+    /** While a new shortcut is being pressed, Steward's global ones step aside so the keys reach the window. */
+    recordShortcuts(recording: boolean): Promise<void>
     /** Every change, wherever it was made (the Settings window, the panel, the agent switching projects). */
     onChanged(cb: (settings: SettingsView) => void): Unsubscribe
     /** Open the Settings window, at a section, or bring it forward. */

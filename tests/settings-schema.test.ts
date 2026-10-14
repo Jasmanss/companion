@@ -9,7 +9,7 @@ describe('migrateSettings', () => {
       allowlist: ['npm test'],
       secrets: { anthropic: 'djEwYWJj' },
     }
-    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, notifications: DEFAULT_NOTIFICATIONS })
+    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, notifications: DEFAULT_NOTIFICATIONS, shortcuts: {} })
   })
 
   it('keeps the switches a file has, and fills in the ones it lacks one at a time', () => {
@@ -34,7 +34,16 @@ describe('migrateSettings', () => {
       secrets: { vercel: 'dG9r' },
       keepPanelOpen: false,
       notifications: { ...DEFAULT_NOTIFICATIONS, buildFailed: false },
+      shortcuts: {},
     })
+  })
+
+  it('keeps the shortcuts you changed, tidied up, and drops ones it can’t use', () => {
+    const migrated = migrateSettings({
+      shortcuts: { togglePanel: 'option+space', hideFromEdge: '', switchProject: 'Hyper+K', openSettings: 7, somethingElse: 'Command+J' },
+    })
+    expect(migrated.shortcuts).toEqual({ togglePanel: 'Alt+Space', hideFromEdge: '' })
+    expect(migrateSettings({ shortcuts: ['Command+K'] }).shortcuts).toEqual({})
   })
 
   it('keeps an emptied allowlist empty, and starts over from a file that is not settings at all', () => {

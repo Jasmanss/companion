@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
+import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import type { AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
@@ -12,7 +13,6 @@ import { LeftOffCard } from './LeftOffCard'
 import { Nudge } from './Nudge'
 import { isLateNight, pickMood } from './pick-mood'
 import { SessionStrip } from './SessionStrip'
-import { formatHotkey } from './hotkeys'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -217,6 +217,10 @@ export function App() {
   }
 
   // Dropping images in from Finder or a browser. Dragging toward the peek pops the panel open.
+  // The panel's own shortcuts, as you set them in Settings.
+  const switchKey = settings?.shortcuts?.switchProject.accelerator ?? ''
+  const settingsKey = settings?.shortcuts?.openSettings.accelerator ?? ''
+
   useEffect(() => {
     const onEnter = (e: globalThis.DragEvent) => {
       if (draggingOut.current || !canDrop(e)) return
@@ -254,13 +258,14 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       // Already handled, like Esc closing the switcher.
       if (e.defaultPrevented) return
-      if (e.key.toLowerCase() === 'k' && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      const pressed = acceleratorFromKey(e)
+      if (pressed && pressed === switchKey) {
         if (dock !== 'expanded') return
         e.preventDefault()
         setSwitcher((open) => !open)
         return
       }
-      if (e.key === ',' && e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (pressed && pressed === settingsKey) {
         e.preventDefault()
         void api.settings.open()
         return
@@ -304,7 +309,7 @@ export function App() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [dock, showError])
+  }, [dock, showError, switchKey, settingsKey])
 
   const dragOut = (ids: string[]) => (e: DragEvent) => {
     e.preventDefault()
@@ -363,7 +368,8 @@ export function App() {
     if (noKey) return setToast('Add your Anthropic API key in Settings first.')
     send(alert.action.prompt)
   }
-  const hideKey = settings?.hotkeys.hide ? ` (${formatHotkey(settings.hotkeys.hide)})` : ''
+  const hide = settings?.shortcuts?.hideFromEdge
+  const hideKey = hide?.active ? ` (${formatAccelerator(hide.accelerator)})` : ''
   const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
   const lastFile = project ? lastFiles[project.path] : undefined
   // Working: what it's on right now. Idle: the last file it read here.
@@ -414,7 +420,7 @@ export function App() {
               >
                 <PinIcon on={pinned} />
               </button>
-              <button className="icon-btn" aria-label="Settings" title="Settings (⌘,)" onClick={() => api.settings.open()}>
+              <button className="icon-btn" aria-label="Settings" title={settingsKey ? `Settings (${formatAccelerator(settingsKey)})` : 'Settings'} onClick={() => api.settings.open()}>
                 <GearIcon />
               </button>
               <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
@@ -426,7 +432,15 @@ export function App() {
             </div>
           </div>
           {settings && (
-            <ContextPill project={project} touch={pillTouch} live={busy} open={switcher} onToggle={() => setSwitcher(!switcher)} pillRef={pill} />
+            <ContextPill
+              project={project}
+              touch={pillTouch}
+              live={busy}
+              open={switcher}
+              shortcut={switchKey && formatAccelerator(switchKey)}
+              onToggle={() => setSwitcher(!switcher)}
+              pillRef={pill}
+            />
           )}
         </div>
       </header>

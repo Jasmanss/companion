@@ -34,6 +34,7 @@ export function ContextPill({
   touch,
   live,
   open,
+  shortcut,
   onToggle,
   pillRef,
 }: {
@@ -41,6 +42,8 @@ export function ContextPill({
   touch: Touch | null
   live: boolean
   open: boolean
+  /** The switcher's shortcut as shown ("⌘K"), or '' when it's turned off. */
+  shortcut: string
   onToggle: () => void
   pillRef: RefObject<HTMLButtonElement | null>
 }) {
@@ -50,7 +53,7 @@ export function ContextPill({
       className={`ctx ${live ? 'live' : ''}`}
       aria-haspopup="dialog"
       aria-expanded={open}
-      title="Switch project (⌘K)"
+      title={shortcut ? `Switch project (${shortcut})` : 'Switch project'}
       onClick={onToggle}
     >
       <span className="dot" aria-hidden="true" />
@@ -64,7 +67,7 @@ export function ContextPill({
           <TouchText key={`${touch.kind}:${touch.text}`} touch={touch} />
         </>
       )}
-      <kbd>⌘K</kbd>
+      {shortcut && <kbd>{shortcut}</kbd>}
     </button>
   )
 }

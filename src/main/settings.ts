@@ -2,12 +2,13 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { safeStorage } from 'electron'
-import type { NotificationPrefs, Project, SettingsPatch, SettingsView } from '../shared/types'
+import { resolveShortcuts, type GlobalShortcutId } from '../shared/shortcuts'
+import type { NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId } from '../shared/types'
 import { decryptLegacySecret } from './migrate'
 import { defaultSettings, migrateSettings, type SecretKind, type StoredSettings } from './settings-schema'
 
-/** What the view shows that the settings file doesn't hold. */
-export type SystemInfo = Pick<SettingsView, 'hotkeys' | 'openAtLogin' | 'version'>
+/** What the view shows that the settings file doesn't hold, including which global shortcuts macOS gave Steward. */
+export type SystemInfo = Pick<SettingsView, 'openAtLogin' | 'version'> & { registered: Partial<Record<GlobalShortcutId, string>> }
 
 export class SettingsStore {
   private data: StoredSettings = defaultSettings()
@@ -28,6 +29,7 @@ export class SettingsStore {
   }
 
   view(): SettingsView {
+    const { registered, ...system } = this.system()
     return {
       projects: this.data.projects,
       currentProject: this.data.currentProject,
@@ -37,7 +39,8 @@ export class SettingsStore {
       hasVercelToken: Boolean(this.vercelToken()),
       keepPanelOpen: this.data.keepPanelOpen,
       notifications: this.data.notifications,
-      ...this.system(),
+      shortcuts: resolveShortcuts(this.data.shortcuts, registered),
+      ...system,
       home: os.homedir(),
     }
   }
@@ -78,6 +81,18 @@ export class SettingsStore {
 
   notifications(): NotificationPrefs {
     return this.data.notifications
+  }
+
+  /** The shortcuts you changed (an accelerator, or '' for off). */
+  shortcuts(): Partial<Record<ShortcutId, string>> {
+    return this.data.shortcuts
+  }
+
+  /** Set a shortcut, or with undefined go back to Steward's default. The caller checks it first. */
+  async setShortcut(id: ShortcutId, accelerator: string | undefined): Promise<void> {
+    if (accelerator === undefined) delete this.data.shortcuts[id]
+    else this.data.shortcuts[id] = accelerator
+    await this.save()
   }
 
   /** The switches in Settings. Open at login lives in macOS, so the caller handles that one. */

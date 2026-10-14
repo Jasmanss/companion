@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -39,13 +40,10 @@ const PEEK = { width: 56, height: 132 }
 const NUDGE = { width: 340, height: 132 }
 const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
-const SETTINGS_SIZE = { width: 720, height: 520 }
+const SETTINGS_SIZE = { width: 720, height: 560 }
 const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'steward', 'projects', 'shortcuts', 'connections', 'notifications']
-/** First free one wins. Open toggles the panel; hide takes it off the screen edge and back. */
-const OPEN_HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
 /** Opening the panel after this long away shows where you left off. */
 const AWAY_MS = 2 * 60 * 60 * 1000
-const HIDE_HOTKEYS = ['Alt+Shift+Space', 'Control+Alt+Shift+Space']
 const SMOKE_OUT = process.env.STEWARD_SMOKE_OUT
 /** Smoke check extras: force light or dark, and play the demo request, capturing the panel at these seconds. */
 const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
@@ -68,7 +66,10 @@ let win: BrowserWindow | null = null
 /** The Settings window, while it's open. Only ever one. */
 let settingsWin: BrowserWindow | null = null
 let menuBar: Tray | null = null
-let hotkeys = { open: '', hide: '' }
+/** The global shortcuts macOS gave Steward, by what they do. */
+let registered: Partial<Record<GlobalShortcutId, string>> = {}
+/** A new shortcut is being pressed in Settings: the global ones step aside so the keys reach the window. */
+let recordingShortcut = false
 let dock: DockState = 'collapsed'
 let modalOpen = false
 let draggingOut = false
@@ -189,10 +190,10 @@ function updateMenuBar(): void {
   menuBar.setTitle(dock === 'hidden' && waiting ? String(waiting) : '')
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Steward', accelerator: hotkeys.open || undefined, registerAccelerator: false, click: () => setDock('expanded') },
+      { label: 'Open Steward', accelerator: registered.togglePanel || undefined, registerAccelerator: false, click: () => setDock('expanded') },
       dock === 'hidden'
-        ? { label: 'Show at Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
-        : { label: 'Hide from Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('hidden') },
+        ? { label: 'Show at Screen Edge', accelerator: registered.hideFromEdge || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
+        : { label: 'Hide from Screen Edge', accelerator: registered.hideFromEdge || undefined, registerAccelerator: false, click: () => setDock('hidden') },
       { label: 'Settings…', accelerator: 'Command+,', registerAccelerator: false, click: () => openSettings() },
       { type: 'separator' },
       { label: 'Quit Steward', role: 'quit' },
@@ -332,6 +333,8 @@ function openSettings(section?: SettingsSection): void {
   w.on('blur', tuckIfAway)
   w.on('closed', () => {
     settingsWin = null
+    // Closed in the middle of recording a shortcut: the global ones come back.
+    recordShortcuts(false)
     // Back to the panel if it's still out, so clicking away tucks it again.
     if (win && !win.isDestroyed() && isOpen(dock)) win.focus()
   })
@@ -645,6 +648,8 @@ function registerIpc(): void {
     else broadcastSettings()
     return settings.view()
   })
+  ipcMain.handle('settings:setShortcut', (_e, id: unknown, accelerator: unknown) => setShortcut(id, accelerator))
+  ipcMain.handle('settings:recordShortcuts', (_e, recording: unknown) => recordShortcuts(recording === true))
   ipcMain.handle('settings:open', (_e, section?: unknown) => openSettings(SETTINGS_SECTIONS.find((s) => s === section)))
   ipcMain.handle('settings:close', () => settingsWin?.close())
   ipcMain.handle('clipboard:writeText', (_e, text: string) => clipboard.writeText(text))
@@ -671,6 +676,57 @@ function registerIpc(): void {
 function registerHotkey(candidates: string[], action: () => void): string {
   for (const key of candidates) if (globalShortcut.register(key, action)) return key
   return ''
+}
+
+const GLOBAL_ACTIONS: Record<GlobalShortcutId, () => void> = { togglePanel: () => toggleDock(), hideFromEdge: () => toggleHidden() }
+
+/**
+ * The global shortcuts: the ones you set, or the first of Steward's defaults macOS lets it have. While a new one
+ * is being recorded they're all let go, and what was registered is kept for showing.
+ */
+function registerGlobalShortcuts(): void {
+  globalShortcut.unregisterAll()
+  if (!recordingShortcut) {
+    registered = {}
+    for (const id of GLOBAL_SHORTCUTS) {
+      const set = settings.shortcuts()[id]
+      const got = registerHotkey(set === undefined ? shortcutInfo(id).defaults : set ? [set] : [], GLOBAL_ACTIONS[id])
+      if (got) registered[id] = got
+    }
+  }
+  updateMenuBar()
+  broadcastSettings()
+}
+
+/** While a new shortcut is being pressed in Settings, the global ones let go, so the keys reach the window. */
+function recordShortcuts(on: boolean): void {
+  if (recordingShortcut === on) return
+  recordingShortcut = on
+  registerGlobalShortcuts()
+}
+
+/** Change a shortcut: an accelerator, '' for off, or null for the default. Checked here as well as in the window. */
+async function setShortcut(id: unknown, accelerator: unknown): Promise<SettingsView> {
+  if (!isShortcutId(id)) throw new Error("That isn't one of Steward's shortcuts.")
+  let value: string | undefined
+  if (accelerator === null) value = undefined
+  else if (accelerator === '') value = ''
+  else {
+    const normal = typeof accelerator === 'string' ? normalizeAccelerator(accelerator) : null
+    if (!normal) throw new Error("That isn't a key a shortcut can end in.")
+    const current = Object.fromEntries(Object.entries(settings.view().shortcuts).map(([k, v]) => [k, v.accelerator]))
+    const check = checkShortcut(id, normal, current)
+    if (check.level === 'error') throw new Error(check.message)
+    // Make sure macOS will register it at all. (It doesn't refuse one another app has too; nothing can tell that.)
+    if (isGlobalShortcut(id) && !Object.values(registered).includes(normal)) {
+      if (!globalShortcut.register(normal, () => {})) throw new Error(`macOS wouldn’t give Steward ${formatAccelerator(normal)}. Pick another one.`)
+      globalShortcut.unregister(normal)
+    }
+    value = normal
+  }
+  await settings.setShortcut(id, value)
+  if (isGlobalShortcut(id)) registerGlobalShortcuts()
+  return settings.view()
 }
 
 /** CI/dev check: open the panel, screenshot it, and exit 0 if it rendered. */
@@ -771,9 +827,9 @@ function demoImage(): Buffer {
 app.whenReady().then(async () => {
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
-  hotkeys = { open: registerHotkey(OPEN_HOTKEYS, toggleDock), hide: registerHotkey(HIDE_HOTKEYS, toggleHidden) }
-  settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ hotkeys, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
+  settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ registered, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
   await settings.load()
+  registerGlobalShortcuts()
   if (secretsPending(userData)) {
     // The copied keys were encrypted for the old keychain entry: re-encrypt them once. macOS asks to allow this;
     // if it's denied, the keys simply need entering again in Settings.
