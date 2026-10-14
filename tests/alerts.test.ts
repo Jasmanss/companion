@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AlertQueue } from '../src/main/alerts'
-import type { AlertView } from '../src/shared/types'
+import { AlertQueue, alertSwitch, withNotificationPrefs } from '../src/main/alerts'
+import type { HookPayload } from '../src/main/hook-payload'
+import { SessionTracker } from '../src/main/sessions'
+import { DEFAULT_NOTIFICATIONS } from '../src/main/settings-schema'
+import type { AlertView, NotificationPrefs } from '../src/shared/types'
 
 describe('AlertQueue', () => {
   let shown: AlertView[][]
@@ -46,3 +49,41 @@ describe('AlertQueue', () => {
     expect(queue.recent().map((a) => a.key)).toEqual(['q1', 'f1'])
   })
 })
+
+describe('notification switches', () => {
+  const allOff: NotificationPrefs = { sessionNeedsMe: false, sessionFinished: false, buildFailed: false, celebrations: false, morningBrief: false, leftOff: false }
+
+  it("know a Claude Code session's alerts by the keys the session tracker gives them", async () => {
+    const tracker = new SessionTracker({ projects: () => [], now: () => 10 * 60_000 })
+    const event = (e: Partial<HookPayload> & Pick<HookPayload, 'hook_event_name'>) => ({ session_id: 's1', cwd: '/Users/me/haven', prompt_id: 'p1', ...e }) as HookPayload
+    const approval = await tracker.apply(event({ hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm test' } }))
+    const input = await tracker.apply(event({ hook_event_name: 'Notification', message: 'Which file?' }))
+    const finished = await tracker.apply(event({ hook_event_name: 'Stop' }))
+    expect([approval, input, finished].map((a) => alertSwitch(a!.key))).toEqual(['sessionNeedsMe', 'sessionNeedsMe', 'sessionFinished'])
+  })
+
+  it('know deploys and merges by the keys Steward gives them, and leave its own requests to no switch', () => {
+    expect(alertSwitch('deploy-failed:dpl_abc')).toBe('buildFailed')
+    expect(alertSwitch('deploy-ready:dpl_abc')).toBe('celebrations')
+    expect(alertSwitch('pr-merged:/Users/me/haven:12')).toBe('celebrations')
+    expect(alertSwitch('agent-approval:3f2a')).toBeNull()
+  })
+
+  it("keep an alert whose switch is off from peeking out, and nothing else changes", () => {
+    const failed = { key: 'deploy-failed:dpl_abc', level: 'urgent' as const, title: 'haven deploy failed', mood: 'worried' as const }
+    expect(withNotificationPrefs(failed, DEFAULT_NOTIFICATIONS)).toEqual(failed)
+    expect(withNotificationPrefs(failed, { ...DEFAULT_NOTIFICATIONS, buildFailed: false })).toEqual({ ...failed, level: 'quiet' })
+    // Steward asking for your OK always peeks out.
+    const ask = { key: 'agent-approval:3f2a', level: 'urgent' as const, title: 'Steward needs your OK' }
+    expect(withNotificationPrefs(ask, allOff)).toEqual(ask)
+  })
+
+  it('a switched-off alert never reaches the screen', () => {
+    const shown: AlertView[][] = []
+    const queue = new AlertQueue({ show: (alerts) => shown.push(alerts), batchMs: 0 })
+    expect(queue.push(withNotificationPrefs({ key: 'approval:s1:p1:Bash', level: 'urgent', title: 'haven is waiting on you' }, allOff))).toBe(true)
+    queue.flush()
+    expect(shown).toEqual([])
+  })
+})
+

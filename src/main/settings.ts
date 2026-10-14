@@ -2,36 +2,28 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { safeStorage } from 'electron'
-import type { Project, SettingsView } from '../shared/types'
+import type { NotificationPrefs, Project, SettingsPatch, SettingsView } from '../shared/types'
 import { decryptLegacySecret } from './migrate'
+import { defaultSettings, migrateSettings, type SecretKind, type StoredSettings } from './settings-schema'
 
-export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
-
-type SecretKind = 'anthropic' | 'unsplash' | 'vercel'
-
-interface Stored {
-  projects: Project[]
-  currentProject: string | null
-  allowlist: string[]
-  /** Encrypted with the macOS keychain via safeStorage, base64. */
-  secrets: Partial<Record<SecretKind, string>>
-}
-
-const defaults = (): Stored => ({ projects: [], currentProject: null, allowlist: [...DEFAULT_ALLOWLIST], secrets: {} })
+/** What the view shows that the settings file doesn't hold. */
+export type SystemInfo = Pick<SettingsView, 'hotkeys' | 'openAtLogin' | 'version'>
 
 export class SettingsStore {
-  private data: Stored = defaults()
+  private data: StoredSettings = defaultSettings()
 
   constructor(
     private readonly file: string,
-    readonly hotkeys: SettingsView['hotkeys'],
+    private readonly system: () => SystemInfo,
+    /** After every saved change, so every window can show it. */
+    private readonly onChange: () => void = () => {},
   ) {}
 
   async load(): Promise<void> {
     try {
-      this.data = { ...defaults(), ...JSON.parse(await fs.readFile(this.file, 'utf8')) }
+      this.data = migrateSettings(JSON.parse(await fs.readFile(this.file, 'utf8')))
     } catch {
-      this.data = defaults()
+      this.data = defaultSettings()
     }
   }
 
@@ -43,7 +35,9 @@ export class SettingsStore {
       apiKeySource: process.env.ANTHROPIC_API_KEY ? 'env' : this.data.secrets.anthropic ? 'saved' : 'none',
       hasUnsplashKey: Boolean(this.unsplashKey()),
       hasVercelToken: Boolean(this.vercelToken()),
-      hotkeys: this.hotkeys,
+      keepPanelOpen: this.data.keepPanelOpen,
+      notifications: this.data.notifications,
+      ...this.system(),
       home: os.homedir(),
     }
   }
@@ -76,6 +70,21 @@ export class SettingsStore {
 
   allowlist(): string[] {
     return this.data.allowlist
+  }
+
+  keepPanelOpen(): boolean {
+    return this.data.keepPanelOpen
+  }
+
+  notifications(): NotificationPrefs {
+    return this.data.notifications
+  }
+
+  /** The switches in Settings. Open at login lives in macOS, so the caller handles that one. */
+  async update(patch: Omit<SettingsPatch, 'openAtLogin'>): Promise<void> {
+    if (patch.keepPanelOpen !== undefined) this.data.keepPanelOpen = patch.keepPanelOpen
+    if (patch.notifications) this.data.notifications = { ...this.data.notifications, ...patch.notifications }
+    await this.save()
   }
 
   async addProject(projectPath: string): Promise<void> {
@@ -142,6 +151,7 @@ export class SettingsStore {
   private async save(): Promise<void> {
     await fs.mkdir(path.dirname(this.file), { recursive: true })
     await fs.writeFile(this.file, JSON.stringify(this.data, null, 2))
+    this.onChange()
   }
 
   private encrypt(value: string): string {

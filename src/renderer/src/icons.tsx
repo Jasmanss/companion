@@ -126,3 +126,41 @@ export const PhotosIcon = () => (
     <path d="M4.2 9l3-2.6 2.2 1.9 1.6-1.4 2.8 2.4" />
   </svg>
 )
+
+/** Settings sidebar: General. */
+export const SlidersIcon = () => (
+  <svg {...base}>
+    <path d="M2.5 4.5H4M7 4.5h6.5M2.5 8h7M12.5 8h1M2.5 11.5h2.5M8 11.5h5.5" />
+    <circle cx="5.5" cy="4.5" r="1.5" />
+    <circle cx="11" cy="8" r="1.5" />
+    <circle cx="6.5" cy="11.5" r="1.5" />
+  </svg>
+)
+
+/** Settings sidebar: Steward, as its own face. */
+export const FaceIcon = () => (
+  <svg {...base}>
+    <rect x="1.8" y="3.2" width="12.4" height="9.6" rx="3.4" />
+    <path d="M6 6.8v2.2M10 6.8v2.2" />
+  </svg>
+)
+
+export const KeyboardIcon = () => (
+  <svg {...base}>
+    <rect x="1.5" y="3.8" width="13" height="8.4" rx="1.8" />
+    <path d="M4.2 6.6h.01M6.7 6.6h.01M9.3 6.6h.01M11.8 6.6h.01M5 9.5h6" />
+  </svg>
+)
+
+export const PlugIcon = () => (
+  <svg {...base}>
+    <path d="M6 1.8v3M10 1.8v3M4.4 4.8h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 10.8v3.4" />
+  </svg>
+)
+
+export const BellIcon = () => (
+  <svg {...base}>
+    <path d="M4 10.8V7.4a4 4 0 0 1 8 0v3.4l1.2 1.4H2.8zM6.6 14.2h2.8" />
+  </svg>
+)
+

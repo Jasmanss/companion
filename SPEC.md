@@ -94,6 +94,36 @@ The tray survives restarts.
 
 ---
 
+## Settings
+
+A normal Mac window, centered on the main screen (or just clear of the panel when it's out): traffic lights, a
+sidebar frosted by macOS, and one window at a time. The gear in the panel, ⌘, in the panel and "Settings…" in the
+menu bar icon open it; ⌘W and Esc close it. Every change applies right away: the main process sends the new
+settings to the panel and the Settings window both, whichever one made the change (the pin in the panel's header
+and "Tuck the panel away when I click elsewhere" are the same setting). Going from the panel to Settings, or
+back, doesn't count as clicking away, so the panel stays out; clicking away from both tucks it in. Closing Settings
+hands focus back to the panel.
+
+- **General:** open at login (in the installed app; macOS keeps it, and asks first when it needs your OK), tuck the
+  panel away when I click elsewhere, and appearance (follows the Mac).
+- **Steward:** a live preview of the face in any mood. The Pill's options join it in the redesign's phase 4:
+  version, color, frost, personality, name, screen edge and size.
+- **Projects:** your projects (make one current, remove one, add a folder), folders found in Documents and Desktop,
+  and the commands that skip approval.
+- **Shortcuts:** the global hotkeys Steward got, and the keys in the panel and in Settings.
+- **Connections:** the Anthropic, Unsplash and Vercel keys (saved in the keychain, never shown again) and the Claude
+  Code hooks.
+- **Notifications:** whether a session that needs you, a finished session, a failed build, or a deploy or merged PR
+  peeks out from the edge; and whether the panel shows the morning brief and where you left off. With a switch off,
+  Steward stays tucked away for it, but its face still reacts. Steward asking for your OK to run a command always
+  peeks out.
+
+Settings files from before a field existed get its default, field by field, and anything of the wrong shape falls
+back to the default instead of being trusted (`migrateSettings` in `src/main/settings-schema.ts`). The window can
+only change the fields it shows.
+
+---
+
 ## Safety
 
 - **Every command and file edit shows an approval card** with the exact command
@@ -127,7 +157,7 @@ Built in this order; each one builds on the one before.
      terminal only), `Stop` (finished). Tested: in the desktop app, Notification
      doesn't fire when the app handles permission prompts, but PermissionRequest
      and Stop do, so PermissionRequest is the "needs approval" signal in both.
-   - A "Connect to Claude Code" toggle in Settings shows the exact change, then
+   - A "Connect to Claude Code" switch in Settings → Connections shows the exact change, then
      merges the hooks into `~/.claude/settings.json` (backup first, never
      overwrites, turning it off removes only Steward's entries).
    - The shared alert system lives here: one queue, no duplicates, urgent alerts

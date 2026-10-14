@@ -22,7 +22,7 @@ code. Pull it out to collect images, research designs, and run commands.
 
 **v1.1: Claude Code does the work. Steward keeps you on top of everything.**
 
-- **Session hub:** turn on Settings → Connect to Claude Code (it shows the exact
+- **Session hub:** turn on Settings → Connections → Connect to Claude Code (it shows the exact
   change to `~/.claude/settings.json` first). Steward peeks out, without
   taking focus, when a session needs your approval or input, or finishes, and
   the panel shows every session's state. Hooks post to a local server on
@@ -32,7 +32,7 @@ code. Pull it out to collect images, research designs, and run commands.
 - **Where you left off:** switching projects, or opening the panel after 2+
   hours away, shows the branch, last commits, uncommitted and unpushed changes,
   and the last thing Claude said there.
-- **Deploy watcher:** add a Vercel token in Settings. Linked projects
+- **Deploy watcher:** add a Vercel token in Settings → Connections. Linked projects
   (`.vercel/project.json`) are checked every minute, more often after a push.
   A failed build offers "Want me to look?"; a ready one is screenshotted into
   the tray. Deploys, rollbacks and `git push` always ask first.
@@ -50,9 +50,11 @@ npm install
 npm run dev
 ```
 
-Open settings (gear icon) and add your Anthropic API key, or start the app with
-`ANTHROPIC_API_KEY` set. An Unsplash access key is optional and turns on photo
-search. Keys are stored encrypted in your macOS keychain.
+Open Settings (the gear in the panel, ⌘, or the menu bar icon) and add your
+Anthropic API key under Connections, or start the app with `ANTHROPIC_API_KEY`
+set. An Unsplash access key is optional and turns on photo search. Keys are
+stored encrypted in your macOS keychain. Settings also has your projects,
+shortcuts, and which alerts peek out from the edge.
 
 ## Scripts
 
@@ -61,7 +63,7 @@ search. Keys are stored encrypted in your macOS keychain.
 | `npm run dev` | Run with hot reload |
 | `npm run lint` / `typecheck` / `test` | The checks CI runs |
 | `npm run design` | Serve `design/` at http://127.0.0.1:4321 (or the next free port) and reload open pages when files change (including after a `git pull`). `npm run design -- <folder>` serves any other folder the same way |
-| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png`, exit. `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds |
+| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png` and the Settings window to `out/smoke-settings.png`, exit. `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds; `STEWARD_SMOKE_SECTIONS=1` screenshots every Settings section |
 | `npm run pack` | Build an unsigned `.app` in `dist/` |
 | `npm run dist` | Build the DMG and zip in `dist/` |
 
@@ -72,14 +74,16 @@ search, a page read, a folder listing, a file read, a command, a screenshot, a s
 
 - **Electron + electron-vite**, React and TypeScript.
 - `src/main`: the edge-docked window, tray storage, saving to projects,
-  command runner, the read-only file tools (`files.ts`), settings, and the agent.
+  command runner, the read-only file tools (`files.ts`), settings (and the
+  Settings window), and the agent.
 - `src/main/agent.ts`: a streaming tool-use loop on the Claude API
   (`claude-sonnet-5-5`) with web search, web fetch, and custom tools for
   reading project files, screenshots, the tray, image search, and
   approval-gated commands. Refusals
   fall back to another model automatically (`fallbacks: "default"`).
 - `src/preload`: the small, typed bridge the UI talks through.
-- `src/renderer`: the peek, panel, tray, chat, and settings.
+- `src/renderer`: two pages. `index.html` is the peek, panel, tray and chat;
+  `settings.html` is the Settings window.
 
 ## CI/CD
 

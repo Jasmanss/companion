@@ -12,7 +12,7 @@ import { LeftOffCard } from './LeftOffCard'
 import { Nudge } from './Nudge'
 import { isLateNight, pickMood } from './pick-mood'
 import { SessionStrip } from './SessionStrip'
-import { formatHotkey, Settings } from './Settings'
+import { formatHotkey } from './hotkeys'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -38,13 +38,11 @@ export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
   const [items, setItems] = useState<TrayItem[]>([])
   const [settings, setSettings] = useState<SettingsView | null>(null)
-  const [view, setView] = useState<'chat' | 'settings'>('chat')
   const [entries, setEntries] = useState<Entry[]>([])
   const [busy, setBusy] = useState(false)
   const [agentMood, setAgentMood] = useState<Mood | null>(null)
   const [typing, setTyping] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [pinned, setPinned] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null)
   const [viewIndex, setViewIndex] = useState(0)
@@ -262,6 +260,11 @@ export function App() {
         setSwitcher((open) => !open)
         return
       }
+      if (e.key === ',' && e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        void api.settings.open()
+        return
+      }
       if (e.key !== 'Escape') return
       if (dock === 'viewing') void api.dock.expand()
       else void api.dock.collapse()
@@ -346,6 +349,8 @@ export function App() {
     void api.agent.reset()
   }
 
+  // The pin is the "tuck away when I click elsewhere" setting, so Settings shows it too.
+  const pinned = settings?.keepPanelOpen ?? false
   const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
   const mood = pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' })
   const noKey = settings?.apiKeySource === 'none'
@@ -405,19 +410,11 @@ export function App() {
                 className={`icon-btn ${pinned ? 'on' : ''}`}
                 aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
                 aria-pressed={pinned}
-                onClick={() => {
-                  setPinned(!pinned)
-                  void api.dock.setPinned(!pinned)
-                }}
+                onClick={() => api.settings.update({ keepPanelOpen: !pinned }).then(setSettings, showError)}
               >
                 <PinIcon on={pinned} />
               </button>
-              <button
-                className={`icon-btn ${view === 'settings' ? 'on' : ''}`}
-                aria-label="Settings"
-                aria-pressed={view === 'settings'}
-                onClick={() => setView(view === 'settings' ? 'chat' : 'settings')}
-              >
+              <button className="icon-btn" aria-label="Settings" title="Settings (⌘,)" onClick={() => api.settings.open()}>
                 <GearIcon />
               </button>
               <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
@@ -463,40 +460,29 @@ export function App() {
         </div>
       )}
 
-      {view === 'settings' && settings ? (
-        <div className="body scroll">
-          <button className="chip back" onClick={() => setView('chat')}>
-            ← Back to chat
-          </button>
-          <Settings settings={settings} onChange={setSettings} onError={showError} />
-        </div>
-      ) : (
-        <>
-          <Tray
-            items={items}
-            saveResult={saveResult}
-            onDragOut={dragOut}
-            onOpen={openViewer}
-            onSave={saveToProject}
-            onDismissSave={() => setSaveResult(null)}
-            onError={showError}
-          />
-          <div className="body">
-            {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
-            {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
-            {noKey && (
-              <div className="notice">
-                Add your Anthropic API key to start chatting.
-                <button className="chip" onClick={() => setView('settings')}>
-                  Open settings
-                </button>
-              </div>
-            )}
-            <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
+      <Tray
+        items={items}
+        saveResult={saveResult}
+        onDragOut={dragOut}
+        onOpen={openViewer}
+        onSave={saveToProject}
+        onDismissSave={() => setSaveResult(null)}
+        onError={showError}
+      />
+      <div className="body">
+        {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
+        {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
+        {noKey && (
+          <div className="notice">
+            Add your Anthropic API key to start chatting.
+            <button className="chip" onClick={() => api.settings.open('connections')}>
+              Open settings
+            </button>
           </div>
-          <Composer busy={busy} disabled={noKey} onSend={send} onStop={() => api.agent.cancel()} onTyping={setTyping} inputRef={composer} />
-        </>
-      )}
+        )}
+        <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
+      </div>
+      <Composer busy={busy} disabled={noKey} onSend={send} onStop={() => api.agent.cancel()} onTyping={setTyping} inputRef={composer} />
 
       {dragOver && <div className="drop-overlay">Drop to add to the tray</div>}
       {toast && (

@@ -1,4 +1,4 @@
-import type { AlertLevel, AlertView, Mood } from '../shared/types'
+import type { AlertLevel, AlertView, Mood, NotificationPrefs } from '../shared/types'
 
 export interface AlertInput {
   /** Identifies the event: an alert whose key was already seen is dropped. */
@@ -9,6 +9,24 @@ export interface AlertInput {
   mood?: Mood
   scope?: string
   action?: { label: string; prompt: string }
+}
+
+/**
+ * Which switch in Settings → Notifications an alert answers to, from its key. Steward's own requests (it needs your
+ * OK to run a command) answer to none: they always peek out.
+ */
+export function alertSwitch(key: string): keyof NotificationPrefs | null {
+  if (key.startsWith('approval:') || key.startsWith('input:')) return 'sessionNeedsMe'
+  if (key.startsWith('finished:')) return 'sessionFinished'
+  if (key.startsWith('deploy-failed:')) return 'buildFailed'
+  if (key.startsWith('deploy-ready:') || key.startsWith('pr-merged:')) return 'celebrations'
+  return null
+}
+
+/** An alert whose switch is off still happens (the face reacts, the panel's lists show it) but doesn't peek out. */
+export function withNotificationPrefs(input: AlertInput, prefs: NotificationPrefs): AlertInput {
+  const key = alertSwitch(input.key)
+  return key && !prefs[key] ? { ...input, level: 'quiet' } : input
 }
 
 interface Deps {

@@ -3,9 +3,9 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Project } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
-import { AlertQueue, type AlertInput } from './alerts'
+import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
 import { briefSince, buildBrief, localDate } from './brief'
 import {
@@ -33,11 +33,14 @@ import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
 import { SettingsStore } from './settings'
+import { parseSettingsPatch } from './settings-schema'
 
 const PEEK = { width: 56, height: 132 }
 const NUDGE = { width: 340, height: 132 }
 const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
+const SETTINGS_SIZE = { width: 720, height: 520 }
+const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'steward', 'projects', 'shortcuts', 'connections', 'notifications']
 /** First free one wins. Open toggles the panel; hide takes it off the screen edge and back. */
 const OPEN_HOTKEYS = ['Alt+Space', 'Control+Alt+Space']
 /** Opening the panel after this long away shows where you left off. */
@@ -47,6 +50,8 @@ const SMOKE_OUT = process.env.STEWARD_SMOKE_OUT
 /** Smoke check extras: force light or dark, and play the demo request, capturing the panel at these seconds. */
 const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
+/** Smoke check extra: screenshot every section of the Settings window, not just the first. */
+const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -60,10 +65,11 @@ else {
 }
 
 let win: BrowserWindow | null = null
+/** The Settings window, while it's open. Only ever one. */
+let settingsWin: BrowserWindow | null = null
 let menuBar: Tray | null = null
 let hotkeys = { open: '', hide: '' }
 let dock: DockState = 'collapsed'
-let pinned = false
 let modalOpen = false
 let draggingOut = false
 let settings: SettingsStore
@@ -127,6 +133,11 @@ function appearance(): Appearance {
   return { vibrant: process.platform === 'darwin' && isOpen(dock) && !nativeTheme.prefersReducedTransparency }
 }
 
+/** The Settings window's sidebar is frosted by macOS too, unless Reduce Transparency is on. */
+function settingsAppearance(): Appearance {
+  return { vibrant: process.platform === 'darwin' && !nativeTheme.prefersReducedTransparency }
+}
+
 let applied: boolean | null = null
 function applyMaterial(): void {
   if (!win) return
@@ -182,6 +193,7 @@ function updateMenuBar(): void {
       dock === 'hidden'
         ? { label: 'Show at Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
         : { label: 'Hide from Screen Edge', accelerator: hotkeys.hide || undefined, registerAccelerator: false, click: () => setDock('hidden') },
+      { label: 'Settings…', accelerator: 'Command+,', registerAccelerator: false, click: () => openSettings() },
       { type: 'separator' },
       { label: 'Quit Steward', role: 'quit' },
     ]),
@@ -226,9 +238,7 @@ function createWindow(): BrowserWindow {
   w.webContents.once('did-finish-load', reveal)
 
   // Collapse when you click away, unless something still needs the panel open.
-  w.on('blur', () => {
-    if ((dock === 'expanded' || dock === 'viewing') && !pinned && !modalOpen && !draggingOut && !agent.waitingForApproval) setDock('collapsed')
-  })
+  w.on('blur', tuckIfAway)
 
   // Links in chat open in the default browser; the window itself never navigates.
   w.webContents.setWindowOpenHandler(({ url }) => {
@@ -246,9 +256,109 @@ function createWindow(): BrowserWindow {
     w.webContents.on('render-process-gone', (_e, details) => console.error(`[steward] renderer gone: ${details.reason}`))
   }
 
-  if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else void w.loadFile(path.join(__dirname, '../renderer/index.html'))
+  loadPage(w, 'index.html')
   return w
+}
+
+/** A page of the renderer: from the dev server while developing, from the build otherwise. */
+function loadPage(w: BrowserWindow, page: 'index.html' | 'settings.html', hash?: string): void {
+  if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${page}${hash ? `#${hash}` : ''}`)
+  else void w.loadFile(path.join(__dirname, '../renderer', page), hash ? { hash } : undefined)
+}
+
+/**
+ * Clicking away from Steward tucks the panel away. Going from the panel to its Settings window (or back) isn't
+ * clicking away, so this waits for focus to land before deciding.
+ */
+function tuckIfAway(): void {
+  setTimeout(() => {
+    // Quitting closes the windows; by now they may be gone.
+    if (!win || win.isDestroyed() || !isOpen(dock)) return
+    if (settings.keepPanelOpen() || modalOpen || draggingOut || agent.waitingForApproval) return
+    if (win.isFocused() || (settingsWin && !settingsWin.isDestroyed() && settingsWin.isFocused())) return
+    setDock('collapsed')
+  }, 50)
+}
+
+/**
+ * Settings, in a normal Mac window centered on the main screen: traffic lights, a frosted sidebar, one at a time.
+ * Asking again brings it forward, at the section asked for.
+ */
+function openSettings(section?: SettingsSection): void {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    if (section) settingsWin.webContents.send('settings:section', section)
+    if (settingsWin.isMinimized()) settingsWin.restore()
+    app.focus({ steal: true })
+    settingsWin.show()
+    settingsWin.focus()
+    return
+  }
+  const area = screen.getPrimaryDisplay().workArea
+  const { width, height } = SETTINGS_SIZE
+  // Centered, unless the open panel would cover its right side; then just clear of the panel.
+  let x = area.x + Math.round((area.width - width) / 2)
+  if (isOpen(dock)) x = Math.min(x, area.x + area.width - PANEL_WIDTH - 8 - 24 - width)
+  x = Math.max(area.x + 24, x)
+  const { vibrant } = settingsAppearance()
+  const w = new BrowserWindow({
+    x,
+    y: area.y + Math.round((area.height - height) / 2),
+    width,
+    height,
+    minWidth: 640,
+    minHeight: 420,
+    title: 'Steward Settings',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 18, y: 18 },
+    // With vibrancy and no background color, the page is see-through, so the sidebar can show the frost.
+    ...(vibrant ? { vibrancy: 'sidebar' as const } : { backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1f27' : '#f4f6fa' }),
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  settingsWin = w
+  w.once('ready-to-show', () => {
+    app.focus({ steal: true })
+    w.show()
+    w.focus()
+  })
+  w.on('blur', tuckIfAway)
+  w.on('closed', () => {
+    settingsWin = null
+    // Back to the panel if it's still out, so clicking away tucks it again.
+    if (win && !win.isDestroyed() && isOpen(dock)) win.focus()
+  })
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  w.webContents.on('will-navigate', (event) => event.preventDefault())
+  if (!app.isPackaged) {
+    w.webContents.on('console-message', ({ level, message }) => {
+      if (level === 'warning' || level === 'error') console.log(`[settings ${level}] ${message}`)
+    })
+  }
+  loadPage(w, 'settings.html', section)
+}
+
+/** Open at login lives in macOS. While developing it's off limits: it would register Electron itself. */
+function loginItem(): SettingsView['openAtLogin'] {
+  if (!app.isPackaged || process.platform !== 'darwin') return { available: false, enabled: false, needsApproval: false }
+  const { openAtLogin, status } = app.getLoginItemSettings()
+  return { available: true, enabled: openAtLogin || status === 'enabled' || status === 'requires-approval', needsApproval: status === 'requires-approval' }
+}
+
+/** Every window shows every change as it happens. */
+function broadcastSettings(): void {
+  const view = settings.view()
+  for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('settings:changed', view)
 }
 
 async function withModal<T>(fn: () => Promise<T>): Promise<T> {
@@ -260,10 +370,14 @@ async function withModal<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function pickFolder(): Promise<string | null> {
-  const result = await withModal(() => dialog.showOpenDialog(win!, { properties: ['openDirectory'], buttonLabel: 'Add project' }))
+/** The folder picker, as a sheet on whichever window asked for it. */
+async function pickFolder(parent: BrowserWindow | null): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = { properties: ['openDirectory'], buttonLabel: 'Add project' }
+  const result = await withModal(() => (parent ? dialog.showOpenDialog(parent, options) : dialog.showOpenDialog(options)))
   return result.canceled ? null : result.filePaths[0]
 }
+
+const senderWindow = (e: Electron.IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender)
 
 /** Alerts that made it through the queue: peek out if tucked away; the open panel shows them itself. */
 function showAlerts(list: AlertView[]): void {
@@ -275,15 +389,16 @@ function showAlerts(list: AlertView[]): void {
 /** The first open each day shows the morning brief; coming back after a while shows where you left off. */
 function onPanelOpened(): void {
   if (!appState) return
+  const prefs = settings.notifications()
   const today = localDate(new Date())
-  if (appState.lastBriefDate !== today) {
+  if (prefs.morningBrief && appState.lastBriefDate !== today) {
     const since = briefSince(appState.lastSeenAt, Date.now())
     void appState.update({ lastBriefDate: today })
     void showBrief(since)
     return
   }
   const project = settings.currentProject()
-  if (project && Date.now() - appState.lastSeenAt >= AWAY_MS) showLeftOff(project)
+  if (prefs.leftOff && project && Date.now() - appState.lastSeenAt >= AWAY_MS) showLeftOff(project)
 }
 
 /** Built from a template: deploys, finished sessions, where you left off, and Dependabot PRs. No model call. */
@@ -315,14 +430,15 @@ function showLeftOff(project: Project): void {
 async function switchProject(projectPath: string | null, before = settings.currentProject()?.path ?? null): Promise<void> {
   await settings.setCurrentProject(projectPath)
   const after = settings.currentProject()
-  // The agent can switch too, so the panel hears about it either way.
-  win?.webContents.send('settings:changed', settings.view())
-  if (after && after.path !== before) showLeftOff(after)
+  if (after && after.path !== before && settings.notifications().leftOff) showLeftOff(after)
 }
 
-/** Every alert goes through here: the queue decides whether it shows, and the face picks up its mood. */
+/**
+ * Every alert goes through here: Settings → Notifications decides whether it peeks out, the queue whether it
+ * shows, and the face picks up its mood either way.
+ */
 function raise(input: AlertInput): void {
-  if (!alerts.push(input)) return
+  if (!alerts.push(withNotificationPrefs(input, settings.notifications()))) return
   moods.apply(input.mood, input.scope, Date.now())
   sendMood()
 }
@@ -411,10 +527,7 @@ function registerIpc(): void {
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
   ipcMain.handle('dock:hide', () => setDock('hidden'))
   ipcMain.handle('dock:view', () => setDock('viewing'))
-  ipcMain.handle('dock:pin', (_e, value: boolean) => {
-    pinned = value
-  })
-  ipcMain.handle('appearance:get', () => appearance())
+  ipcMain.handle('appearance:get', (e) => (settingsWin && e.sender === settingsWin.webContents ? settingsAppearance() : appearance()))
 
   ipcMain.handle('tray:list', () => tray.list())
   ipcMain.handle('tray:addPaths', async (_e, paths: string[]) => {
@@ -434,10 +547,10 @@ function registerIpc(): void {
   ipcMain.handle('tray:remove', (_e, id: string) => tray.remove(id))
   ipcMain.handle('tray:clear', () => tray.clear())
   ipcMain.handle('tray:reveal', (_e, target: string) => shell.showItemInFolder(target))
-  ipcMain.handle('tray:saveToProject', async (_e, ids: string[]) => {
+  ipcMain.handle('tray:saveToProject', async (e, ids: string[]) => {
     let project = settings.currentProject()
     if (!project) {
-      const folder = await pickFolder()
+      const folder = await pickFolder(senderWindow(e))
       if (!folder) return null
       await settings.addProject(folder)
       await settings.setCurrentProject(folder)
@@ -490,13 +603,13 @@ function registerIpc(): void {
       lastError: deploys.lastError,
     }),
   )
-  ipcMain.handle('settings:addProject', async () => {
-    const folder = await pickFolder()
+  ipcMain.handle('settings:addProject', async (e) => {
+    const folder = await pickFolder(senderWindow(e))
     if (folder) await settings.addProject(folder)
     return settings.view()
   })
-  ipcMain.handle('settings:addProjectAndSwitch', async () => {
-    const folder = await pickFolder()
+  ipcMain.handle('settings:addProjectAndSwitch', async (e) => {
+    const folder = await pickFolder(senderWindow(e))
     if (folder) {
       // Adding the first project makes it current already; it still counts as switching to it.
       const before = settings.currentProject()?.path ?? null
@@ -524,6 +637,16 @@ function registerIpc(): void {
     return settings.view()
   })
   ipcMain.handle('settings:suggestProjects', (): Promise<Project[]> => settings.suggestProjects())
+  ipcMain.handle('settings:update', async (_e, input: unknown) => {
+    const { openAtLogin, ...patch } = parseSettingsPatch(input)
+    if (openAtLogin !== undefined && loginItem().available) app.setLoginItemSettings({ openAtLogin })
+    // Saving broadcasts; open at login isn't saved here, so it's broadcast on its own.
+    if (patch.keepPanelOpen !== undefined || patch.notifications) await settings.update(patch)
+    else broadcastSettings()
+    return settings.view()
+  })
+  ipcMain.handle('settings:open', (_e, section?: unknown) => openSettings(SETTINGS_SECTIONS.find((s) => s === section)))
+  ipcMain.handle('settings:close', () => settingsWin?.close())
   ipcMain.handle('clipboard:writeText', (_e, text: string) => clipboard.writeText(text))
 
   ipcMain.handle('sessions:list', () => sessions.list())
@@ -572,11 +695,43 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
       if (SMOKE_DEMO) await captureDemo(w, out, SMOKE_DEMO)
+      // The Settings window is its own page, so it gets checked too.
+      const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
+      await captureSettings(out)
+      clearTimeout(settingsTimer)
       app.exit(0)
     } catch (err) {
       fail(String(err))
     }
   })
+}
+
+/** Opens Settings and screenshots it (every section with STEWARD_SMOKE_SECTIONS), next to the smoke screenshot. */
+async function captureSettings(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  openSettings('general')
+  const w = settingsWin!
+  await new Promise<void>((resolve, reject) => {
+    w.webContents.once('did-finish-load', () => resolve())
+    w.webContents.once('did-fail-load', (_e, code, description) => reject(new Error(`settings load failed: ${code} ${description}`)))
+  })
+  await sleep(1000)
+  if (!(await w.webContents.executeJavaScript('Boolean(document.querySelector("[data-settings]"))'))) throw new Error('settings window did not mount')
+  // Going to Settings isn't clicking away: the panel should still be out. (Logged, not failed: focus is up to macOS.)
+  console.log(`smoke: settings focused ${w.isFocused()}, panel still ${dock}`)
+  for (const section of SMOKE_SECTIONS ? SETTINGS_SECTIONS : (['general'] as const)) {
+    w.webContents.send('settings:section', section)
+    await sleep(600)
+    const image = await w.webContents.capturePage()
+    if (image.isEmpty()) throw new Error('settings window rendered empty')
+    const file = out.replace(/\.png$/, SMOKE_SECTIONS ? `-settings-${section}.png` : '-settings.png')
+    await fs.writeFile(file, image.toPNG())
+    console.log(`smoke: settings ${section} -> ${file}`)
+  }
+  // Closing it hands focus back to the panel, so clicking away tucks it again.
+  w.close()
+  await sleep(300)
+  console.log(`smoke: settings closed, panel ${dock} and focused ${win?.isFocused()}`)
 }
 
 /** Plays the demo request and captures the panel at the given seconds, next to the smoke screenshot. */
@@ -617,7 +772,7 @@ app.whenReady().then(async () => {
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
   hotkeys = { open: registerHotkey(OPEN_HOTKEYS, toggleDock), hide: registerHotkey(HIDE_HOTKEYS, toggleHidden) }
-  settings = new SettingsStore(path.join(userData, 'settings.json'), hotkeys)
+  settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ hotkeys, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
   await settings.load()
   if (secretsPending(userData)) {
     // The copied keys were encrypted for the old keychain entry: re-encrypt them once. macOS asks to allow this;
@@ -689,10 +844,16 @@ app.whenReady().then(async () => {
   }
 
   screen.on('display-metrics-changed', () => win?.setBounds(boundsFor(dock)))
-  // Reduce transparency can change while Steward runs.
+  // Reduce transparency, and light or dark, can change while Steward runs.
   nativeTheme.on('updated', () => {
     applied = null
     applyMaterial()
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      const { vibrant } = settingsAppearance()
+      settingsWin.setVibrancy(vibrant ? 'sidebar' : null)
+      if (!vibrant) settingsWin.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1c1f27' : '#f4f6fa')
+      settingsWin.webContents.send('appearance:changed', { vibrant })
+    }
   })
 })
 

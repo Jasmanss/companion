@@ -70,3 +70,31 @@ export function tildify(folder: string, home: string): string {
   if (folder === home) return '~'
   return folder.startsWith(`${home}/`) ? `~${folder.slice(home.length)}` : folder
 }
+
+/** Distinct enough to tell apart at a glance, and dark enough for a white letter. */
+const BADGE_COLORS = ['#2f8fe8', '#239a5b', '#e0583a', '#7c5ce6', '#11928f', '#c9446f', '#b57b0c', '#4f6be0']
+
+/** FNV-1a with a final mix, so similar names land far apart. */
+function hash(text: string): number {
+  let h = 0x811c9dc5
+  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193)
+  h ^= h >>> 16
+  h = Math.imul(h, 0x85ebca6b)
+  h ^= h >>> 13
+  return (Math.imul(h, 0xc2b2ae35) ^ (h >>> 16)) >>> 0
+}
+
+/** A steady color per project for its initial: its own by name, or the next free one if a project above has it. */
+export function badgeColors(projects: Project[]): Map<string, string> {
+  const used = new Set<number>()
+  const colors = new Map<string, string>()
+  for (const project of projects) {
+    if (used.size === BADGE_COLORS.length) used.clear()
+    let i = hash(project.name) % BADGE_COLORS.length
+    while (used.has(i)) i = (i + 1) % BADGE_COLORS.length
+    used.add(i)
+    colors.set(project.path, BADGE_COLORS[i])
+  }
+  return colors
+}
+

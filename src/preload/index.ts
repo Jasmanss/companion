@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -13,7 +13,6 @@ const api: StewardAPI = {
     collapse: () => ipcRenderer.invoke('dock:collapse'),
     hide: () => ipcRenderer.invoke('dock:hide'),
     view: () => ipcRenderer.invoke('dock:view'),
-    setPinned: (pinned) => ipcRenderer.invoke('dock:pin', pinned),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
   },
   tray: {
@@ -49,7 +48,11 @@ const api: StewardAPI = {
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
+    update: (patch) => ipcRenderer.invoke('settings:update', patch),
     onChanged: (cb) => subscribe<SettingsView>('settings:changed', cb),
+    open: (section) => ipcRenderer.invoke('settings:open', section),
+    close: () => ipcRenderer.invoke('settings:close'),
+    onSection: (cb) => subscribe<SettingsSection>('settings:section', cb),
   },
   sessions: {
     list: () => ipcRenderer.invoke('sessions:list'),

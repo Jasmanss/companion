@@ -26,6 +26,32 @@ export interface Project {
   path: string
 }
 
+/** Which alerts peek out from the screen edge, and which cards the panel shows. All on by default. */
+export interface NotificationPrefs {
+  /** A Claude Code session is waiting for approval or input. */
+  sessionNeedsMe: boolean
+  /** A Claude Code session finished a long turn. */
+  sessionFinished: boolean
+  buildFailed: boolean
+  /** A deploy went out or a PR was merged. */
+  celebrations: boolean
+  /** The first time the panel opens each day. */
+  morningBrief: boolean
+  /** On switching projects, or coming back after a while. */
+  leftOff: boolean
+}
+
+/** The sections of the Settings window, in sidebar order. */
+export type SettingsSection = 'general' | 'steward' | 'projects' | 'shortcuts' | 'connections' | 'notifications'
+
+/** What Settings can change in one go. Keys, projects and the allowlist have their own calls. */
+export interface SettingsPatch {
+  /** The panel stays open when you click elsewhere (the pin in its header). */
+  keepPanelOpen?: boolean
+  notifications?: Partial<NotificationPrefs>
+  openAtLogin?: boolean
+}
+
 export interface SettingsView {
   projects: Project[]
   currentProject: string | null
@@ -34,10 +60,15 @@ export interface SettingsView {
   apiKeySource: 'env' | 'saved' | 'none'
   hasUnsplashKey: boolean
   hasVercelToken: boolean
+  keepPanelOpen: boolean
+  notifications: NotificationPrefs
+  /** Lives in macOS, not in the settings file. Unavailable while developing (it would register Electron itself). */
+  openAtLogin: { available: boolean; enabled: boolean; needsApproval: boolean }
   /** Registered global shortcuts in Electron accelerator form; empty when another app has them. */
   hotkeys: { open: string; hide: string }
   /** The home folder, for showing project paths as ~/… */
   home: string
+  version: string
 }
 
 /** What a Claude Code session is doing, as far as its hooks have said. */
@@ -209,7 +240,6 @@ export interface StewardAPI {
     collapse(): Promise<void>
     hide(): Promise<void>
     view(): Promise<void>
-    setPinned(pinned: boolean): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
   }
   tray: {
@@ -246,8 +276,14 @@ export interface StewardAPI {
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
-    /** Changes made elsewhere, like the agent switching projects. */
+    update(patch: SettingsPatch): Promise<SettingsView>
+    /** Every change, wherever it was made (the Settings window, the panel, the agent switching projects). */
     onChanged(cb: (settings: SettingsView) => void): Unsubscribe
+    /** Open the Settings window, at a section, or bring it forward. */
+    open(section?: SettingsSection): Promise<void>
+    close(): Promise<void>
+    /** For the Settings window: show this section (asked for while it was already open). */
+    onSection(cb: (section: SettingsSection) => void): Unsubscribe
   }
   sessions: {
     list(): Promise<SessionView[]>
