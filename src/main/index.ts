@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
+import { TAB_SIZES } from '../shared/steward'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -36,8 +37,7 @@ import { capturePage } from './screenshot'
 import { SettingsStore } from './settings'
 import { parseSettingsPatch } from './settings-schema'
 
-const PEEK = { width: 56, height: 132 }
-const NUDGE = { width: 340, height: 132 }
+const NUDGE_WIDTH = 340
 const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
 const SETTINGS_SIZE = { width: 720, height: 560 }
@@ -86,17 +86,20 @@ let deploys: DeployWatcher
 let gh: GhRunner | null = null
 const merges = new MergeTracker()
 
+/** Where the window goes in each state: against the screen edge you picked, centered top to bottom. */
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
-  if (state === 'collapsed' || state === 'hidden') {
-    return { x: area.x + area.width - PEEK.width, y: area.y + Math.round((area.height - PEEK.height) / 2), ...PEEK }
-  }
-  if (state === 'nudge') {
-    return { x: area.x + area.width - NUDGE.width, y: area.y + Math.round((area.height - NUDGE.height) / 2), ...NUDGE }
-  }
+  const { edge, size } = settings.steward()
+  const tab = TAB_SIZES[size].tab
+  /** Left of a window this wide that sits gap points from the edge. */
+  const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
+  const y = (height: number) => area.y + Math.round((area.height - height) / 2)
+  if (state === 'collapsed' || state === 'hidden') return { x: x(tab.width), y: y(tab.height), ...tab }
+  // The nudge is the tab grown sideways, so it's as tall.
+  if (state === 'nudge') return { x: x(NUDGE_WIDTH), y: y(tab.height), width: NUDGE_WIDTH, height: tab.height }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
   const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
-  return { x: area.x + area.width - width - 8, y: area.y + Math.round((area.height - height) / 2), width, height }
+  return { x: x(width, 8), y: y(height), width, height }
 }
 
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
@@ -296,10 +299,13 @@ function openSettings(section?: SettingsSection): void {
   }
   const area = screen.getPrimaryDisplay().workArea
   const { width, height } = SETTINGS_SIZE
-  // Centered, unless the open panel would cover its right side; then just clear of the panel.
+  // Centered, unless the open panel would cover part of it; then just clear of the panel.
   let x = area.x + Math.round((area.width - width) / 2)
-  if (isOpen(dock)) x = Math.min(x, area.x + area.width - PANEL_WIDTH - 8 - 24 - width)
-  x = Math.max(area.x + 24, x)
+  if (isOpen(dock)) {
+    const panel = PANEL_WIDTH + 8 + 24
+    x = settings.steward().edge === 'left' ? Math.max(x, area.x + panel) : Math.min(x, area.x + area.width - panel - width)
+  }
+  x = Math.max(area.x + 24, Math.min(x, area.x + area.width - width - 24))
   const { vibrant } = settingsAppearance()
   const w = new BrowserWindow({
     x,
@@ -459,7 +465,10 @@ function sendSessions(): void {
   updateMenuBar()
 }
 
-/** A failed build peeks out worried and offers to look; a ready one is celebrated and screenshotted into the tray. */
+/**
+ * A failed build peeks out mad (then stays worried until it's fixed) and offers to look; a ready one is celebrated
+ * and screenshotted into the tray.
+ */
 function onDeployChanges(changes: DeployChange[]): void {
   for (const { kind, deploy } of changes) {
     if (kind === 'failed') {
@@ -468,7 +477,7 @@ function onDeployChanges(changes: DeployChange[]): void {
         level: 'urgent',
         title: `${deploy.project} deploy failed`,
         detail: deploy.errorMessage ?? deploy.commit ?? deploy.branch,
-        mood: 'worried',
+        mood: 'mad',
         scope: deploy.projectPath,
         action: { label: 'Want me to look?', prompt: `The ${deploy.project} deploy ${deploy.uid} failed. Read its build log with deploy_logs and tell me what broke and how to fix it.` },
       })
@@ -643,9 +652,13 @@ function registerIpc(): void {
   ipcMain.handle('settings:update', async (_e, input: unknown) => {
     const { openAtLogin, ...patch } = parseSettingsPatch(input)
     if (openAtLogin !== undefined && loginItem().available) app.setLoginItemSettings({ openAtLogin })
+    const before = settings.steward()
     // Saving broadcasts; open at login isn't saved here, so it's broadcast on its own.
-    if (patch.keepPanelOpen !== undefined || patch.notifications) await settings.update(patch)
+    if (patch.keepPanelOpen !== undefined || patch.notifications || patch.steward) await settings.update(patch)
     else broadcastSettings()
+    // The other screen edge, or another size: the window moves there now.
+    const after = settings.steward()
+    if (win && !win.isDestroyed() && dock !== 'hidden' && (after.edge !== before.edge || after.size !== before.size)) win.setBounds(boundsFor(dock))
     return settings.view()
   })
   ipcMain.handle('settings:setShortcut', (_e, id: unknown, accelerator: unknown) => setShortcut(id, accelerator))
@@ -856,6 +869,7 @@ app.whenReady().then(async () => {
     onDeployCommand: () => deploys.boost(),
     // Typing /demo plays a made-up request with every kind of step, without calling the API. Development only.
     demoImage: app.isPackaged && !SMOKE_OUT ? undefined : demoImage,
+    name: () => settings.steward().name,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
       // Peek out when the agent needs a decision; the approval card is in the panel.

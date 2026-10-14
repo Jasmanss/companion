@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { safeStorage } from 'electron'
 import { resolveShortcuts, type GlobalShortcutId } from '../shared/shortcuts'
-import type { NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId } from '../shared/types'
+import { cleanName } from '../shared/steward'
+import type { NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../shared/types'
 import { decryptLegacySecret } from './migrate'
 import { defaultSettings, migrateSettings, type SecretKind, type StoredSettings } from './settings-schema'
 
@@ -40,6 +41,7 @@ export class SettingsStore {
       keepPanelOpen: this.data.keepPanelOpen,
       notifications: this.data.notifications,
       shortcuts: resolveShortcuts(this.data.shortcuts, registered),
+      steward: this.data.steward,
       ...system,
       home: os.homedir(),
     }
@@ -83,6 +85,10 @@ export class SettingsStore {
     return this.data.notifications
   }
 
+  steward(): StewardPrefs {
+    return this.data.steward
+  }
+
   /** The shortcuts you changed (an accelerator, or '' for off). */
   shortcuts(): Partial<Record<ShortcutId, string>> {
     return this.data.shortcuts
@@ -99,6 +105,10 @@ export class SettingsStore {
   async update(patch: Omit<SettingsPatch, 'openAtLogin'>): Promise<void> {
     if (patch.keepPanelOpen !== undefined) this.data.keepPanelOpen = patch.keepPanelOpen
     if (patch.notifications) this.data.notifications = { ...this.data.notifications, ...patch.notifications }
+    if (patch.steward) {
+      const { name, ...rest } = patch.steward
+      this.data.steward = { ...this.data.steward, ...rest, ...(name !== undefined ? { name: cleanName(name) } : {}) }
+    }
     await this.save()
   }
 

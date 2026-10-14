@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
-import type { AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
 import { ContextPill, ProjectSwitcher } from './ContextPill'
-import { Face } from './Face'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
 import { Nudge } from './Nudge'
 import { isLateNight, pickMood } from './pick-mood'
+import { Pill, pillKey } from './Pill'
+import { glintFor, workingMood } from './pill/glint'
 import { SessionStrip } from './SessionStrip'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
@@ -59,6 +61,9 @@ export function App() {
   const [touch, setTouch] = useState<Touch | null>(null)
   /** The last file the agent read in each project (by path), shown in the pill when it's idle. */
   const [lastFiles, setLastFiles] = useState<Record<string, string>>({})
+  /** The steps running now, by id, and the kind of the newest: the character mirrors it. */
+  const running = useRef(new Map<string, ActivityKind>())
+  const [work, setWork] = useState<ActivityKind | null>(null)
   const currentProject = useRef<string | null>(null)
   const pill = useRef<HTMLButtonElement>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
@@ -123,6 +128,12 @@ export function App() {
     currentProject.current = settings?.currentProject ?? null
   }, [settings?.currentProject])
 
+  // The tab and the panel's animations face away from the screen edge it sits on.
+  const look = settings?.steward ?? DEFAULT_STEWARD
+  useEffect(() => {
+    document.documentElement.dataset.edge = look.edge
+  }, [look.edge])
+
   // The switcher belongs to the open panel; tucking away closes it.
   useEffect(() => {
     if (dock !== 'expanded') setSwitcher(false)
@@ -169,6 +180,9 @@ export function App() {
         })
         // Working, however the request started (the panel, an alert's offer, the demo).
         if (activity.status === 'running') setBusy(true)
+        if (activity.status === 'running') running.current.set(activity.id, activity.kind)
+        else running.current.delete(activity.id)
+        setWork([...running.current.values()].at(-1) ?? null)
         // The pill follows whatever the agent starts on; a step that failed lets go of it.
         const touched = touchOf(activity)
         if (touched && activity.status === 'running') setTouch(touched)
@@ -210,6 +224,8 @@ export function App() {
         setEntries((prev) => prev.map((e) => (e.kind === 'assistant' && e.streaming ? { ...e, streaming: false } : e)))
         setBusy(false)
         setTouch(null)
+        running.current.clear()
+        setWork(null)
         setAgentMood('done')
         doneTimer.current = setTimeout(() => setAgentMood(null), 2500)
         break
@@ -357,7 +373,9 @@ export function App() {
   // The pin is the "tuck away when I click elsewhere" setting, so Settings shows it too.
   const pinned = settings?.keepPanelOpen ?? false
   const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
-  const mood = pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' })
+  const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
+  const glint = glintFor(work)
+  const tab = TAB_SIZES[look.size].pill
   const noKey = settings?.apiKeySource === 'none'
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
@@ -389,13 +407,18 @@ export function App() {
   }
 
   if (dock === 'nudge') {
-    return <Nudge alerts={nudgeAlerts} mood={mood} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction} />
+    return (
+      <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
+      </Nudge>
+    )
   }
 
   if (dock === 'collapsed' || dock === 'hidden') {
+    const open = settings?.shortcuts?.togglePanel
     return (
-      <button className="peek" data-app onClick={() => api.dock.expand()} title="Steward (⌥ Space)">
-        <Face mood={mood} width={50} height={44} idle />
+      <button className="peek" data-app onClick={() => api.dock.expand()} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )
@@ -404,10 +427,10 @@ export function App() {
   return (
     <div className={`panel ${dragOver ? 'drag-over' : ''}`} data-app>
       <header className="panel-head">
-        <Face mood={mood} width={64} height={54} />
+        <Pill mood={mood} glint={glint} width={64} height={54} cls="header" look={look} />
         <div className="head-text">
           <div className="head-top">
-            <span className="name">Steward</span>
+            <span className="name">{look.name}</span>
             <div className="head-actions">
               <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
                 <NewChatIcon />
@@ -496,7 +519,18 @@ export function App() {
         )}
         <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
       </div>
-      <Composer busy={busy} disabled={noKey} onSend={send} onStop={() => api.agent.cancel()} onTyping={setTyping} inputRef={composer} />
+      <Composer
+        busy={busy}
+        disabled={noKey}
+        onSend={send}
+        onStop={() => api.agent.cancel()}
+        onTyping={(on) => {
+          setTyping(on)
+          // Each key you type, it nods along.
+          if (on) pillKey()
+        }}
+        inputRef={composer}
+      />
 
       {dragOver && <div className="drop-overlay">Drop to add to the tray</div>}
       {toast && (

@@ -117,7 +117,7 @@ export function SettingsWindow() {
           {props &&
             {
               general: <GeneralSection {...props} />,
-              steward: <StewardSection />,
+              steward: <StewardSection {...props} />,
               projects: <ProjectsSection {...props} />,
               shortcuts: <ShortcutsSection {...props} />,
               connections: <ConnectionsSection {...props} />,

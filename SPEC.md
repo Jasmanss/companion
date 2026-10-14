@@ -15,9 +15,9 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
 
 ## How it lives on screen
 
-- **Tucked away:** just its eyes peek out from the right edge, dimmed and
-  resting. It only takes clicks on that small peek, never on the rest of the
-  screen.
+- **Tucked away:** just its eyes peek out from the screen edge (right by
+  default, or left), dimmed and resting. It only takes clicks on that small
+  peek, never on the rest of the screen.
 - **Pull it out:** hover the peek and click, or press the hotkey (⌥ Space). It
   slides out into a panel: the character on top, the tray in the middle, and
   an input box at the bottom.
@@ -30,11 +30,15 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
 | State | When |
 |---|---|
 | Resting | Tucked away |
-| Listening | Pulled out, or you're typing |
-| Thinking | Working on a request |
+| Idle | Pulled out, nothing going on |
+| Listening | You're typing (it nods along) |
+| Thinking | Working on a request: dots in a wave; lit one at a time while reading a file, circling while searching |
 | Talking | A reply is coming in |
 | Done | A task finished |
 | Needs you | Waiting for approval; holds up the approval card |
+| Celebrating | A deploy went out or a PR merged |
+| Mad, then worried | A build failed: mad for a moment, then worried until the next good deploy |
+| Sleepy | Late at night |
 
 ---
 
@@ -106,8 +110,10 @@ hands focus back to the panel.
 
 - **General:** open at login (in the installed app; macOS keeps it, and asks first when it needs your OK), tuck the
   panel away when I click elsewhere, and appearance (follows the Mac).
-- **Steward:** a live preview of the face in any mood. The Pill's options join it in the redesign's phase 4:
-  version, color, frost, personality, name, screen edge and size.
+- **Steward:** a live preview of the character in any mood, next to the tab at its real size against the screen
+  edge it's on, then its options: version (Glass, Flat, Blocky), color (six: Silver, Sky, Lilac, Mint, Peach and
+  Graphite), glass tinted or clear, a mouth when it talks, personality (Calm or Lively), its name (shown in the panel,
+  and the chat answers to it), screen edge (left or right) and size of the tab (small or medium).
 - **Projects:** your projects (make one current, remove one, add a folder), folders found in Documents and Desktop,
   and the commands that skip approval.
 - **Shortcuts:** open or tuck away the panel (⌥ Space) and hide from the screen edge (⌥⇧ Space), which work in
@@ -197,12 +203,27 @@ instructions.
 
 ## Character
 
-Picked: **the Pill**, a rounded capsule with two eyes, in three versions you can switch between: Glass (a real
-lens over the desktop), Flat (one solid color) and Blocky (pixels). It comes in 14 colors, and every mood reads
-at the 50×44 peek without a label. Thinking shows three dots in a wave (lit one at a time while reading a file,
-circling while searching the web). The design lives in `design/moods.html` with `design/pill/eyes.js` and
-`design/pill/render.js`; it replaces today's face in the app in the redesign's phase 4, along with its Settings
-options.
+**The Pill**, a rounded capsule with two eyes, in three versions you can switch between in Settings: Glass (a
+tinted lens with a rim and a shine), Flat (one solid color) and Blocky (pixels). It comes in six colors, Silver by
+default, and every mood reads in the tab at the screen edge without a label. Glass by default, because it matches
+the panel.
+
+- **Moods.** The eyes spring between moods with a small overshoot, blink, glance around and look at the cursor
+  while it's over the window. Thinking shows three dots in a wave; reading a file lights them one at a time,
+  searching the web sends them circling, so the character mirrors what the agent is doing (a search in the middle
+  of a reply turns the words back into thinking). Listening nods once per key. Talking has a mouth (or, with it
+  off, eyes that bounce with the words). Some moods get one mark outside the Pill: "!" and a ring for needs you,
+  confetti for celebrating, a sweat drop for worried, Z's for sleepy.
+- **Personality.** Lively glances around, follows the cursor and hops when it's happy; calm does all of that about
+  half as much, glances half as often, and its confetti bursts once instead of three times.
+- **In the app.** `src/renderer/src/pill/` is a port of the design files (`design/pill/eyes.js` and `render.js`,
+  shown on `design/moods.html`), with the thinking dots you picked and without the bar style. The design's glass
+  bent the desktop behind it, but in the app there's nothing behind it to bend (the tab is solid, and the panel's
+  frost is drawn by macOS outside the page), so the lens is left out. A color too close to what's behind it (Silver
+  and the pastels in light mode, Graphite in dark) gets a fine edge so it doesn't fade into the tab.
+- **Cost.** It draws every frame only while the panel is open. Tucked away it draws 30 times a second, 20 when
+  sleepy and 10 when resting (whose standby glow is a CSS animation), and nothing while the window is hidden.
+  Reduce Motion holds each mood's still pose and draws 10 times a second.
 
 ---
 
@@ -216,8 +237,8 @@ options.
 - **Solid where frost can't go.** The peek and the nudge are tab-shaped and macOS frosts whole windows, so they're
   solid. Reduce Transparency (Accessibility) makes everything solid. There is no native Liquid Glass material in
   Electron yet (checked in Electron 44.7), so none is used.
-- **Light and dark** follow the Mac. The tokens at the top of `styles.css` have both versions; the tint is Ice for
-  now.
+- **Light and dark** follow the Mac. The tokens at the top of `styles.css` have both versions; the panel's tint is
+  Ice (the character's color doesn't change it).
 - **Activity.** Every step of the agent's work is an event `{ id, kind, label, target?, status, detail? }`, sent
   when it starts and again when it finishes (plus `results` for search results and `image` for a new tray item).
   Kinds: thinking, read-file, list-files, search-web, fetch-page, run-command, screenshot, add-image, read-logs,
@@ -233,8 +254,8 @@ options.
   to list them. Each step stays in full for a moment after it finishes, so its ending is seen.
 - **Motion.** Loops are CSS keyframes. Panels, popovers and cards use one spring with no bounce (about 0.35s);
   popovers grow from the control that opened them and leave the way they came. Only transform and opacity
-  animate. Reduce Motion swaps movement for fades and still icons. Nothing animates while Steward is tucked away
-  or hidden: the panel isn't drawn, and the face stops once it has settled.
+  animate. Reduce Motion swaps movement for fades and still icons. While Steward is tucked away only the character
+  moves, at a low frame rate, and nothing moves while it's hidden.
 - **Trying it.** In development, sending `/demo` plays a made-up request with every kind of step, without calling
   the API.
 
@@ -243,8 +264,8 @@ options.
 ## Tech plan
 
 - **App:** Electron with a transparent, frameless, always-on-top window
-  anchored to the right edge. The character is drawn in 2D, ported from the
-  Pill design files (no Three.js).
+  anchored to the right or left edge. The character is drawn in 2D (SVG and
+  canvas), ported from the Pill design files (no Three.js).
 - **Brain:** a streaming tool-use loop on the Claude API in the app's main
   process (`src/main/agent.ts`): web search and web fetch, plus Steward's own
   tools: `read_file` and `list_files` (read-only, inside the current project),
@@ -272,5 +293,4 @@ options.
 
 ## Open questions
 
-- Which character design Steward gets
-- Right edge vs. left, and the hotkey
+- The notch: a third spot to sit, under the MacBook notch (planned after the character)

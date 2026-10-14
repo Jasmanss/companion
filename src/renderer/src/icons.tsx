@@ -1,9 +1,10 @@
 const base = { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const
 
+/** A cog with six teeth. (Rays around a circle read as a sun, the light and dark mode icon.) */
 export const GearIcon = () => (
   <svg {...base}>
-    <circle cx="8" cy="8" r="2.2" />
-    <path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4" />
+    <path d="M6.57 3.31L6.74 1.52A6.6 6.6 0 0 1 9.26 1.52L9.43 3.31A4.9 4.9 0 0 1 11.34 4.42L12.98 3.67A6.6 6.6 0 0 1 14.24 5.85L12.77 6.9A4.9 4.9 0 0 1 12.77 9.1L14.24 10.15A6.6 6.6 0 0 1 12.98 12.33L11.34 11.58A4.9 4.9 0 0 1 9.43 12.69L9.26 14.48A6.6 6.6 0 0 1 6.74 14.48L6.57 12.69A4.9 4.9 0 0 1 4.66 11.58L3.02 12.33A6.6 6.6 0 0 1 1.76 10.15L3.23 9.1A4.9 4.9 0 0 1 3.23 6.9L1.76 5.85A6.6 6.6 0 0 1 3.02 3.67L4.66 4.42A4.9 4.9 0 0 1 6.57 3.31Z" />
+    <circle cx="8" cy="8" r="2" />
   </svg>
 )
 

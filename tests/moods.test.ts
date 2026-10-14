@@ -24,6 +24,17 @@ describe('MoodBoard', () => {
     expect(board.current(40_000)).toBeNull()
   })
 
+  it('is mad for a moment when something breaks, then worried until good news for that project', () => {
+    const board = new MoodBoard()
+    board.apply('mad', '/haven', 0)
+    expect(board.current(1000)).toBe('mad')
+    expect(board.nextChange(1000)).toBe(6000)
+    expect(board.current(6000)).toBe('worried')
+    expect(board.current(10 * 60_000)).toBe('worried')
+    board.apply('celebrating', '/haven', 10 * 60_000)
+    expect(board.current(10 * 60_000 + 13_000)).toBeNull()
+  })
+
   it('ignores moods that are not about events', () => {
     const board = new MoodBoard()
     board.apply('needs-you', undefined, 0)

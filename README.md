@@ -16,10 +16,17 @@ code. Pull it out to collect images, research designs, and run commands.
 - **Context pill:** the header shows the project and what Steward is on, like
   `haven › src/app/page.tsx`, with a live dot while it works. Click it or press
   ⌘K to switch projects (type to search, arrows and Enter) or add one.
-- **Always there:** it peeks out from the right edge. Click it, press ⌥ Space,
-  or drag an image toward it and it slides out. Press ⌥⇧ Space (or use the
-  menu bar icon) to hide it from the edge entirely and bring it back. Change
-  any of these in Settings → Shortcuts, on a keyboard that shows them all.
+- **Always there:** it peeks out from the right edge (or the left). Click it,
+  press ⌥ Space, or drag an image toward it and it slides out. Press ⌥⇧ Space
+  (or use the menu bar icon) to hide it from the edge entirely and bring it
+  back. Change any of these in Settings → Shortcuts, on a keyboard that shows
+  them all.
+- **The Pill:** Steward's character, a capsule with two eyes that reacts to
+  what's going on: it nods while you type, thinks in dots (lit one at a time
+  while it reads a file, circling while it searches), talks while the reply
+  streams in, and peeks out with a "!" when it needs you. Settings → Steward
+  picks its version (Glass, Flat, Blocky), one of six colors, its personality,
+  its name, and which screen edge it sits on.
 
 **v1.1: Claude Code does the work. Steward keeps you on top of everything.**
 
@@ -28,8 +35,8 @@ code. Pull it out to collect images, research designs, and run commands.
   taking focus, when a session needs your approval or input, or finishes, and
   the panel shows every session's state. Hooks post to a local server on
   127.0.0.1 with a secret token kept in Steward's data folder.
-- **Moods from real events:** worried when a build fails, celebrating when a
-  deploy is ready or a PR is merged, sleepy after midnight.
+- **Moods from real events:** mad and then worried when a build fails,
+  celebrating when a deploy is ready or a PR is merged, sleepy after midnight.
 - **Where you left off:** switching projects, or opening the panel after 2+
   hours away, shows the branch, last commits, uncommitted and unpushed changes,
   and the last thing Claude said there.
@@ -84,7 +91,8 @@ search, a page read, a folder listing, a file read, a command, a screenshot, a s
   fall back to another model automatically (`fallbacks: "default"`).
 - `src/preload`: the small, typed bridge the UI talks through.
 - `src/renderer`: two pages. `index.html` is the peek, panel, tray and chat;
-  `settings.html` is the Settings window.
+  `settings.html` is the Settings window. `src/renderer/src/pill/` draws the
+  character, ported from the design files in `design/pill/`.
 
 ## CI/CD
 

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { activityLabel, resultSites, siteOf } from '../shared/activity'
+import { DEFAULT_NAME } from '../shared/steward'
 import type { Activity, ActivityKind, AgentEvent, Mood, Project } from '../shared/types'
 import { alwaysAsks, isAllowlisted, runCommand, stripAnsi } from './commands'
 import { playDemo } from './demo'
@@ -13,7 +14,8 @@ import type { TrayStore } from './tray-store'
 const MODEL = 'claude-sonnet-5-5'
 const MAX_CONTINUATIONS = 5
 
-const BASE_PROMPT = `You are Steward, a desktop assistant that lives at the edge of the user's Mac screen and helps while they code. Talk like a sharp, friendly teammate: short and direct, a few sentences at most, no headings. Light Markdown (bold, lists, links, inline code) renders.
+/** Follows "You are <name>, ". */
+const BASE_PROMPT = `a desktop assistant that lives at the edge of the user's Mac screen and helps while they code. Talk like a sharp, friendly teammate: short and direct, a few sentences at most, no headings. Light Markdown (bold, lists, links, inline code) renders.
 
 You can:
 - Research designs: find real, live sites that fit what the user asks for, then use screenshot_page to put screenshots in their tray, each with a one-line note on what's worth stealing from it. By default it captures the whole page; when the user wants one part (a bento grid, a pricing table, a footer), pass section with the text of that part's heading so the screenshot is centered on it. You see every screenshot you take: check it shows what the user asked for, and if it doesn't (wrong section, cookie wall, blank), remove it with remove_from_tray and try again or pick another site.
@@ -130,6 +132,8 @@ export interface AgentDeps {
   onDeployCommand?(): void
   /** Set in development only: "/demo" then plays a made-up request, using this as its screenshot. */
   demoImage?(): Buffer
+  /** What the user calls it (Settings → Steward). */
+  name?(): string
   emit(event: AgentEvent): void
 }
 
@@ -504,7 +508,9 @@ export class Agent {
   private systemPrompt(): string {
     const current = this.deps.currentProject()
     const projects = this.deps.projects().map((p) => `- ${p.name}: ${p.path}`).join('\n') || '(none added yet)'
-    return `${BASE_PROMPT}\n\nCurrent project: ${current ? `${current.name} (${current.path})` : 'none selected'}\nKnown projects:\n${projects}`
+    const name = this.deps.name?.() ?? DEFAULT_NAME
+    const renamed = name === DEFAULT_NAME ? '' : `\n\nThe app is called Steward, and the user named you ${name}: answer to that name.`
+    return `You are ${name}, ${BASE_PROMPT}${renamed}\n\nCurrent project: ${current ? `${current.name} (${current.path})` : 'none selected'}\nKnown projects:\n${projects}`
   }
 
   private emit(event: AgentEvent): void {

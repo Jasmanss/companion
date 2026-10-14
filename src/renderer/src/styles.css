@@ -28,9 +28,8 @@
   --solid: 244, 246, 250;
   /* Little pages in the activity steps (the deck, the file chip): a step lighter than the glass in dark. */
   --paper: #ffffff;
-  /* Icons, spinners, the face: ink on light glass, the glow on dark. */
+  /* Icons and spinners: ink on light glass, the glow on dark. */
   --hi: rgb(var(--ink));
-  --face: rgb(var(--ink));
   --warm: #b06400;
   --ok: #1f8a4c;
   --bad: #c4372f;
@@ -42,7 +41,13 @@
   /* Motion: one spring with no bounce, about 0.35s. */
   --spring: cubic-bezier(0.2, 0.8, 0.2, 1);
   --radius: 14px;
+  /* Which way is away from the screen edge Steward sits on: 1 on the right edge, -1 on the left. */
+  --side: 1;
   color-scheme: light dark;
+}
+
+:root[data-edge='left'] {
+  --side: -1;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -60,7 +65,6 @@
     --paper: #353a47;
     --hi: rgb(var(--glow));
     --live: var(--glow);
-    --face: rgb(var(--glow));
     --warm: #ffc46b;
     --ok: #5fd68e;
     --bad: #ff8a8a;
@@ -218,6 +222,46 @@ pre {
   padding: 0;
   border: none;
   border-radius: 18px 0 0 18px;
+}
+
+/* On the left edge, the tab and the nudge round off on the right. */
+:root[data-edge='left'] .peek,
+:root[data-edge='left'] .nudge {
+  border-radius: 0 18px 18px 0;
+}
+
+/* ---------- the character ---------- */
+.pill-host {
+  position: relative;
+  flex: none;
+}
+
+/* Resting's standby glow, like a sleeping Mac's light: dimmer than idle, breathing slowly. Only opacity moves.
+   On light, dimming fades toward the tab itself, so it dims less there. */
+:root {
+  --standby-hi: 0.82;
+  --standby-lo: 0.58;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --standby-hi: 0.62;
+    --standby-lo: 0.36;
+  }
+}
+
+.pv.standby .pv-dim {
+  animation: pv-standby 6.4s ease-in-out infinite;
+}
+
+@keyframes pv-standby {
+  0%,
+  100% {
+    opacity: var(--standby-hi);
+  }
+  50% {
+    opacity: var(--standby-lo);
+  }
 }
 
 .peek:hover {
@@ -2016,14 +2060,14 @@ a.icon-btn {
 @keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateX(12px);
+    transform: translateX(calc(12px * var(--side)));
   }
 }
 
 @keyframes nudge-in {
   from {
     opacity: 0;
-    transform: translateX(16px);
+    transform: translateX(calc(16px * var(--side)));
   }
 }
 

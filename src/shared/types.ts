@@ -4,8 +4,33 @@
  */
 export type DockState = 'hidden' | 'collapsed' | 'nudge' | 'expanded' | 'viewing'
 
-/** What the character's face shows. The last three come from real events: a failed build, a deploy or merge, the hour. */
-export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you' | 'worried' | 'celebrating' | 'sleepy'
+/**
+ * What the character's face shows. Some come from real events: mad and then worried for a failed build, celebrating
+ * for a deploy or merge, sleepy for the hour.
+ */
+export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you' | 'worried' | 'mad' | 'celebrating' | 'sleepy'
+
+/** Glass: a tinted lens. Flat: one solid color. Blocky: pixels. */
+export type PillVersion = 'glass' | 'flat' | 'blocky'
+
+export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphite'
+
+/** How the character looks and behaves, and where it sits: Settings → Steward. */
+export interface StewardPrefs {
+  version: PillVersion
+  color: PillColor
+  /** Glass only: tinted with the color, or clear. */
+  glass: 'tinted' | 'clear'
+  /** Talking shows a mouth; without one, the eyes bounce with the words. */
+  mouth: boolean
+  /** Lively glances around, follows the cursor and hops when happy; calm mostly keeps still. */
+  personality: 'calm' | 'lively'
+  /** Shown in the panel, and what the agent answers to. */
+  name: string
+  edge: 'right' | 'left'
+  /** How big the tab at the screen edge is. */
+  size: 'small' | 'medium'
+}
 
 export interface TrayItem {
   id: string
@@ -62,6 +87,7 @@ export interface SettingsPatch {
   keepPanelOpen?: boolean
   notifications?: Partial<NotificationPrefs>
   openAtLogin?: boolean
+  steward?: Partial<StewardPrefs>
 }
 
 export interface SettingsView {
@@ -77,6 +103,7 @@ export interface SettingsView {
   /** Lives in macOS, not in the settings file. Unavailable while developing (it would register Electron itself). */
   openAtLogin: { available: boolean; enabled: boolean; needsApproval: boolean }
   shortcuts: Record<ShortcutId, ShortcutView>
+  steward: StewardPrefs
   /** The home folder, for showing project paths as ~/… */
   home: string
   version: string
@@ -308,7 +335,7 @@ export interface StewardAPI {
   alerts: {
     /** Alerts to show now: one urgent alert, or a batch. */
     onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
-    /** The face's event mood (worried, celebrating, done), or null when nothing's going on. */
+    /** The character's event mood (mad, worried, celebrating, done), or null when nothing's going on. */
     onMood(cb: (mood: Mood | null) => void): Unsubscribe
   }
   deploys: {

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId } from '../../shared/types'
+import { DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PILL_COLORS, TAB_SIZES } from '../../shared/steward'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, PillColor, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
-import { Face } from './Face'
+import { Pill, pillKey } from './Pill'
+import type { Glint } from './pill/eyes'
 import { Keys, SHORTCUT_COLORS, ShortcutRecorder } from './ShortcutRecorder'
 import { badgeColors, tildify } from './switcher'
 
@@ -109,40 +111,186 @@ export function GeneralSection(props: SectionProps) {
 
 /* ---------- Steward ---------- */
 
-const MOODS: [Mood, string][] = [
-  ['idle', 'Idle'],
-  ['listening', 'Listening'],
-  ['thinking', 'Thinking'],
-  ['talking', 'Talking'],
-  ['done', 'Done'],
-  ['needs-you', 'Needs you'],
-  ['worried', 'Worried'],
-  ['celebrating', 'Celebrating'],
-  ['sleepy', 'Sleepy'],
-  ['resting', 'Resting'],
+/** A row of choices, one picked, like macOS's segmented controls. The arrow keys move the pick. */
+function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (value: T) => void }) {
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    const i = options.findIndex(([v]) => v === value)
+    const next = options[(i + step + options.length) % options.length][0]
+    onChange(next)
+    e.currentTarget.querySelector<HTMLButtonElement>(`[data-value="${next}"]`)?.focus()
+  }
+  return (
+    <div className="set-seg" role="radiogroup" aria-label={label} onKeyDown={onKey}>
+      {options.map(([v, text]) => (
+        <button key={v} role="radio" data-value={v} aria-checked={v === value} tabIndex={v === value ? 0 : -1} onClick={() => onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The six colors, as swatches. */
+function ColorPicker({ value, onChange }: { value: PillColor; onChange: (color: PillColor) => void }) {
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    const i = PILL_COLORS.findIndex((c) => c.id === value)
+    const next = PILL_COLORS[(i + step + PILL_COLORS.length) % PILL_COLORS.length].id
+    onChange(next)
+    e.currentTarget.querySelector<HTMLButtonElement>(`[data-value="${next}"]`)?.focus()
+  }
+  return (
+    <div className="set-colors" role="radiogroup" aria-label="Color" onKeyDown={onKey}>
+      {PILL_COLORS.map((c) => (
+        <button
+          key={c.id}
+          role="radio"
+          data-value={c.id}
+          aria-checked={c.id === value}
+          aria-label={c.name}
+          title={c.name}
+          tabIndex={c.id === value ? 0 : -1}
+          style={{ background: c.hex }}
+          onClick={() => onChange(c.id)}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** The name, saved when you press Return or leave the field. Esc puts back the saved one. */
+function NameField({ name, onSave }: { name: string; onSave: (name: string) => void }) {
+  const [value, setValue] = useState(name)
+  // Saved (tidied up), or changed elsewhere: show it as it is.
+  useEffect(() => setValue(name), [name])
+  const save = () => {
+    if (value !== name) onSave(value)
+  }
+  return (
+    <input
+      type="text"
+      className="set-name"
+      value={value}
+      maxLength={MAX_NAME}
+      spellCheck={false}
+      placeholder={DEFAULT_NAME}
+      aria-label="Name"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && value !== name) {
+          // Only undoes the typing; a second Esc closes Settings as usual.
+          e.preventDefault()
+          setValue(name)
+        }
+      }}
+    />
+  )
+}
+
+/** What the preview can show: every mood, and thinking's three kinds. */
+const PREVIEWS: { id: string; label: string; mood: Mood; glint?: Glint }[] = [
+  { id: 'idle', label: 'Idle', mood: 'idle' },
+  { id: 'listening', label: 'Listening', mood: 'listening' },
+  { id: 'thinking', label: 'Thinking', mood: 'thinking' },
+  { id: 'reading', label: 'Reading a file', mood: 'thinking', glint: 'step' },
+  { id: 'searching', label: 'Searching the web', mood: 'thinking', glint: 'search' },
+  { id: 'talking', label: 'Talking', mood: 'talking' },
+  { id: 'done', label: 'Happy', mood: 'done' },
+  { id: 'celebrating', label: 'Celebrating', mood: 'celebrating' },
+  { id: 'needs-you', label: 'Needs you', mood: 'needs-you' },
+  { id: 'worried', label: 'Worried', mood: 'worried' },
+  { id: 'mad', label: 'Mad', mood: 'mad' },
+  { id: 'resting', label: 'Resting', mood: 'resting' },
+  { id: 'sleepy', label: 'Sleepy', mood: 'sleepy' },
 ]
 
-/** A live preview of the face, in any mood. The character's own options join it here when the Pill arrives. */
-export function StewardSection() {
-  const [mood, setMood] = useState<Mood>('idle')
+/** While the preview listens, someone types to it now and then, so you can see it nod along. */
+function useMakeBelieveTyping(on: boolean) {
+  useEffect(() => {
+    if (!on) return
+    let timer: ReturnType<typeof setTimeout>
+    const key = () => {
+      pillKey()
+      // Short bursts, with a longer pause now and then.
+      timer = setTimeout(key, Math.random() < 0.18 ? 900 + Math.random() * 1200 : 120 + Math.random() * 200)
+    }
+    timer = setTimeout(key, 400)
+    return () => clearTimeout(timer)
+  }, [on])
+}
+
+/** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
+export function StewardSection(props: SectionProps) {
+  // (A main process from before the character arrived sends no steward: show the defaults.)
+  const look = props.settings.steward ?? DEFAULT_STEWARD
+  const run = runner(props)
+  const set = (patch: Partial<StewardPrefs>) => run(api().settings.update({ steward: patch }))
+  const [preview, setPreview] = useState(PREVIEWS[0])
+  const tab = TAB_SIZES[look.size]
+  useMakeBelieveTyping(preview.mood === 'listening')
   return (
     <>
       <div className="set-preview">
         <div className="set-stage">
-          <Face mood={mood} width={150} height={127} />
+          <Pill mood={preview.mood} glint={preview.glint} width={196} height={125} cls="big" look={look} />
         </div>
-        <div className="set-moods" role="radiogroup" aria-label="Preview a mood">
-          {MOODS.map(([m, label]) => (
-            <button key={m} role="radio" aria-checked={m === mood} className={`chip ${m === mood ? 'on' : ''}`} onClick={() => setMood(m)}>
-              {label}
-            </button>
-          ))}
+        {/* The tab at its real size, against the screen edge it's on. */}
+        <div className={`set-screen ${look.edge}`} aria-label={`The tab at the ${look.edge} screen edge, at its real size`} role="img">
+          <div className="set-tab" style={{ width: tab.tab.width, height: tab.tab.height }}>
+            <Pill mood={preview.mood} glint={preview.glint} width={tab.pill.width} height={tab.pill.height} cls="peek" look={look} />
+          </div>
         </div>
       </div>
-      <p className="set-note">
-        This is the face in your panel right now. The Pill takes its place soon, and its options will live here: version,
-        color, frost, personality, name, screen edge and size.
-      </p>
+      <div className="set-moods" role="radiogroup" aria-label="Preview a mood">
+        {PREVIEWS.map((p) => (
+          <button key={p.id} role="radio" aria-checked={p.id === preview.id} className={`chip ${p.id === preview.id ? 'on' : ''}`} onClick={() => setPreview(p)}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <Group title="Look">
+        <Row label="Version">
+          <Segmented label="Version" value={look.version} options={[['glass', 'Glass'], ['flat', 'Flat'], ['blocky', 'Blocky']]} onChange={(version) => set({ version })} />
+        </Row>
+        <Row label="Color" note={PILL_COLORS.find((c) => c.id === look.color)?.name}>
+          <ColorPicker value={look.color} onChange={(color) => set({ color })} />
+        </Row>
+        {look.version === 'glass' && (
+          <Row label="Glass" note={look.glass === 'clear' ? 'No tint: the color only shows in its marks, like the “!”' : undefined}>
+            <Segmented label="Glass" value={look.glass} options={[['tinted', 'Tinted'], ['clear', 'Clear']]} onChange={(glass) => set({ glass })} />
+          </Row>
+        )}
+        <SwitchRow label="A mouth when it talks" note="Without one, its eyes bounce with the words." checked={look.mouth} onChange={(mouth) => set({ mouth })} />
+      </Group>
+
+      <Group title="Personality">
+        <Row
+          label="Personality"
+          note={look.personality === 'lively' ? 'Glances around, follows your cursor, and hops when it’s happy.' : 'Mostly keeps still, and glances around now and then.'}
+        >
+          <Segmented label="Personality" value={look.personality} options={[['calm', 'Calm'], ['lively', 'Lively']]} onChange={(personality) => set({ personality })} />
+        </Row>
+        <Row label="Name" note="Shown in the panel. The chat answers to it too.">
+          <NameField name={look.name} onSave={(name) => set({ name })} />
+        </Row>
+      </Group>
+
+      <Group title="At the screen edge">
+        <Row label="Screen edge">
+          <Segmented label="Screen edge" value={look.edge} options={[['left', 'Left'], ['right', 'Right']]} onChange={(edge) => set({ edge })} />
+        </Row>
+        <Row label="Size" note="How big the tab at the screen edge is.">
+          <Segmented label="Size" value={look.size} options={[['small', 'Small'], ['medium', 'Medium']]} onChange={(size) => set({ size })} />
+        </Row>
+      </Group>
     </>
   )
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
-import type { NotificationPrefs, Project, SettingsPatch, ShortcutId } from '../shared/types'
+import { cleanName, DEFAULT_STEWARD, MAX_NAME, PILL_COLOR_IDS } from '../shared/steward'
+import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StewardPrefs } from '../shared/types'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
@@ -26,6 +27,8 @@ export interface StoredSettings {
   notifications: NotificationPrefs
   /** Only the ones you changed: an accelerator, or '' for off. The rest use Steward's defaults. */
   shortcuts: Partial<Record<ShortcutId, string>>
+  /** The character: how it looks and behaves, its name, and where it sits. */
+  steward: StewardPrefs
 }
 
 export const defaultSettings = (): StoredSettings => ({
@@ -36,9 +39,38 @@ export const defaultSettings = (): StoredSettings => ({
   keepPanelOpen: false,
   notifications: { ...DEFAULT_NOTIFICATIONS },
   shortcuts: {},
+  steward: { ...DEFAULT_STEWARD },
 })
 
 const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 'string' && typeof (p as Project)?.path === 'string'
+
+/** The choices each of the character's options has (the name is free text). */
+const STEWARD_CHOICES = {
+  version: ['glass', 'flat', 'blocky'],
+  color: PILL_COLOR_IDS,
+  glass: ['tinted', 'clear'],
+  personality: ['calm', 'lively'],
+  edge: ['right', 'left'],
+  size: ['small', 'medium'],
+} as const
+
+const pick = <T extends string>(value: unknown, choices: readonly T[], fallback: T): T => ((choices as readonly unknown[]).includes(value) ? (value as T) : fallback)
+
+/** The character's options from a file: each one kept if it's one Steward knows, its default otherwise. */
+function migrateSteward(raw: unknown): StewardPrefs {
+  const d = DEFAULT_STEWARD
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  return {
+    version: pick(r.version, STEWARD_CHOICES.version, d.version),
+    color: pick(r.color, STEWARD_CHOICES.color, d.color),
+    glass: pick(r.glass, STEWARD_CHOICES.glass, d.glass),
+    mouth: typeof r.mouth === 'boolean' ? r.mouth : d.mouth,
+    personality: pick(r.personality, STEWARD_CHOICES.personality, d.personality),
+    name: typeof r.name === 'string' ? cleanName(r.name) : d.name,
+    edge: pick(r.edge, STEWARD_CHOICES.edge, d.edge),
+    size: pick(r.size, STEWARD_CHOICES.size, d.size),
+  }
+}
 
 /**
  * A settings file from any version, made whole: fields it doesn't have yet (like the notification switches) get
@@ -79,6 +111,7 @@ export function migrateSettings(raw: unknown): StoredSettings {
     keepPanelOpen: typeof r.keepPanelOpen === 'boolean' ? r.keepPanelOpen : d.keepPanelOpen,
     notifications,
     shortcuts,
+    steward: migrateSteward(r.steward),
   }
 }
 
@@ -93,6 +126,20 @@ const Patch = z.strictObject({
       celebrations: z.boolean(),
       morningBrief: z.boolean(),
       leftOff: z.boolean(),
+    })
+    .partial()
+    .optional(),
+  steward: z
+    .strictObject({
+      version: z.enum(STEWARD_CHOICES.version),
+      color: z.enum(STEWARD_CHOICES.color),
+      glass: z.enum(STEWARD_CHOICES.glass),
+      mouth: z.boolean(),
+      personality: z.enum(STEWARD_CHOICES.personality),
+      // Tidied (and an empty one made Steward again) when it's saved.
+      name: z.string().max(MAX_NAME * 4),
+      edge: z.enum(STEWARD_CHOICES.edge),
+      size: z.enum(STEWARD_CHOICES.size),
     })
     .partial()
     .optional(),

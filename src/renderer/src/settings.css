@@ -10,6 +10,8 @@
   --kb-key: #ffffff;
   --kb-edge: rgba(15, 20, 30, 0.2);
   --kb-line: rgba(15, 20, 30, 0.06);
+  /* The picked choice in a segmented control. */
+  --seg-on: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,6 +21,7 @@
     --kb-key: #2d3038;
     --kb-edge: rgba(0, 0, 0, 0.65);
     --kb-line: rgba(255, 255, 255, 0.05);
+    --seg-on: rgba(255, 255, 255, 0.2);
   }
 }
 
@@ -424,17 +427,16 @@
 /* ---------- Steward ---------- */
 .set-preview {
   display: flex;
-  align-items: center;
-  gap: 18px;
+  gap: 12px;
+  height: 172px;
 }
 
-/* The face on a piece of the panel's glass. */
+/* The character on a piece of the panel's glass. */
 .set-stage {
-  flex: none;
+  flex: 1;
+  min-width: 0;
   display: grid;
   place-items: center;
-  width: 176px;
-  height: 150px;
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(var(--tint), 0.32), rgba(var(--tint), 0.12)), rgba(var(--fill), 0.7);
   box-shadow:
@@ -443,10 +445,120 @@
     inset 0 0 28px rgba(var(--glow), 0.16);
 }
 
+/* A strip of desktop with the tab against its edge, at the tab's real size. */
+.set-screen {
+  position: relative;
+  flex: none;
+  width: 116px;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 70% at 15% 15%, rgba(255, 214, 231, 0.9), transparent 60%),
+    radial-gradient(80% 70% at 90% 85%, rgba(201, 222, 254, 0.9), transparent 60%),
+    #f1ece6;
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+@media (prefers-color-scheme: dark) {
+  .set-screen {
+    background:
+      radial-gradient(90% 70% at 15% 10%, rgba(91, 63, 163, 0.9), transparent 60%),
+      radial-gradient(80% 70% at 95% 90%, rgba(14, 91, 124, 0.9), transparent 60%),
+      #151726;
+  }
+}
+
+.set-tab {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 18px 0 0 18px;
+  background: linear-gradient(180deg, rgba(var(--tint), 0.16), rgba(var(--tint), 0.05)), rgb(var(--solid));
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    inset 0 0 0 0.5px var(--edge2),
+    0 6px 18px -6px var(--shadow);
+  transform: translateY(-50%);
+}
+
+.set-screen.left .set-tab {
+  right: auto;
+  left: 0;
+  border-radius: 0 18px 18px 0;
+}
+
 .set-moods {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin: 12px 0 22px;
+}
+
+/* Segmented choices: the picked one is raised. */
+.set-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.set-seg button {
+  padding: 3px 11px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--t1);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.set-seg button:hover {
+  background: var(--inset);
+}
+
+.set-seg button[aria-checked='true'] {
+  background: var(--seg-on);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 0 0 0.5px var(--line);
+}
+
+/* The colors: round swatches, the picked one ringed. */
+.set-colors {
+  display: flex;
+  gap: 9px;
+}
+
+.set-colors button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+
+.set-colors button[aria-checked='true'] {
+  outline: 2px solid var(--t1);
+  outline-offset: 2px;
+}
+
+.set-colors button:focus-visible {
+  outline-color: rgb(var(--glow));
+}
+
+.set-window input.set-name {
+  width: 170px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 7px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
+  user-select: text;
 }
 
 /* ---------- shortcuts ---------- */

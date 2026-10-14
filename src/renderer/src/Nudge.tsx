@@ -1,6 +1,5 @@
-import { useEffect, useRef } from 'react'
-import type { AlertView, Mood } from '../../shared/types'
-import { Face } from './Face'
+import { useEffect, useRef, type ReactNode } from 'react'
+import type { AlertView } from '../../shared/types'
 import { CloseIcon } from './icons'
 
 const STAY_MS = 10_000
@@ -8,16 +7,17 @@ const STAY_MS = 10_000
 /** Peeking out with a message. Never takes focus; a click opens the panel. Tucks back in after a while unless hovered. */
 export function Nudge({
   alerts,
-  mood,
   onOpen,
   onDismiss,
   onAction,
+  children,
 }: {
   alerts: AlertView[]
-  mood: Mood
   onOpen: () => void
   onDismiss: () => void
   onAction: (alert: AlertView) => void
+  /** The character, peeking out with it. */
+  children: ReactNode
 }) {
   const hovered = useRef(false)
   const lead = alerts[0]
@@ -41,7 +41,7 @@ export function Nudge({
       onMouseEnter={() => (hovered.current = true)}
       onMouseLeave={() => (hovered.current = false)}
     >
-      <Face mood={mood} width={50} height={44} />
+      {children}
       <div className="nudge-text">
         <span className="nudge-title">{lead.title}</span>
         {lead.detail && <span className="nudge-detail">{lead.detail}</span>}
