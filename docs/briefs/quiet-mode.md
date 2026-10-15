@@ -1,6 +1,6 @@
 # Quiet mode: blend Steward into the screen
 
-Status: designed
+Status: ready
 
 ## Ask (front door)
 A friend tested Steward and said the always-visible edge tab and the notch lip would bother him, because they sit in the way. The user wants Steward to blend into the screen: nearly invisible at rest, and appearing only when it is useful.
@@ -123,8 +123,8 @@ Decided (my recommendation; the user can overrule at go):
 6. **Being too invisible:** the menu bar icon is the home (see Part 1). It shows the count, plus a dot for quiet alerts, and the first-time note names the hotkey.
 7. **Content protection might not stop newer capture tools** (third build): apps built on ScreenCaptureKit may ignore it on recent macOS. Verify with Zoom, Google Meet in Chrome, QuickTime and ⌘⇧5 before promising it in the Settings text. Two side effects to handle: it hides Steward from the user's own screenshots and demo recordings, so the toggle must be easy to find and the Settings line must say so; and the smoke check's screenshots must not break (Main building checks that window capture from inside the app still works with protection on, since the CI shots come from the app itself, not from the screen).
 
-Still needs the user, at go (one confirmation, not blocking the design):
-- **The default for "Alerts that peek out" in quiet mode is "Only when a session needs me".** That means finished builds, failed builds and celebrations stay off the screen until the panel opens. If the user wants build failures to peek out too, that is a one-line change to the filter.
+Confirmed by the user at go (2026-10-15, to the front door): "In quiet mode, which alerts should still pop out?" → "Only 'a session needs me'". "Go to build quiet mode Phase 1?" → "Go".
+- **The default for "Alerts that peek out" in quiet mode is "Only when a session needs me".** Finished builds, failed builds and celebrations stay off the screen until the panel opens.
 
 ### How to test
 - **Unit tests:**
