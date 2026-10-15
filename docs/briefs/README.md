@@ -1,6 +1,6 @@
 # Briefs
 
-One file per piece of work: `docs/briefs/<slug>.md`. It is how the chats hand work to each other (see `CLAUDE.md`). Roadmap & design is the only chat that writes these files: it records the front door's ask, writes the design, and records Main building's result (sent through the front door). All briefs live in Roadmap & design's worktree.
+One file per piece of work: `docs/briefs/<slug>.md`. It is how the chats hand work to each other (see `CLAUDE.md`). Roadmap & design writes these files: it records the front door's ask, writes the design, and records each build chat's result (sent through the front door). The one exception is `Status: ready`, which the front door sets on the user's go. All briefs live in Roadmap & design's worktree.
 
 Status flow: `requested` → `designed` → `ready` → `built`.
 
