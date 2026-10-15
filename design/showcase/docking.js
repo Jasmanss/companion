@@ -5,6 +5,7 @@ import { wait, demo } from '../shared/activity.js'
 import { createNotch, crop, LAYOUTS } from '../notch/notch.js'
 import { S, onChange, stage, pill, card } from './state.js'
 import { headHTML } from './mock.js'
+import * as quiet from './quiet.js'
 
 const edgeDesk = (side) => `<figure class="edgefig"><div class="edgedesk gx ${side}" data-side="${side}"><div class="wall"></div><div class="ewin"></div><div class="ewin two"></div>
   <div class="etab solid"><span class="eslot"></span></div>
@@ -22,6 +23,7 @@ export function render(host) {
       tools: '<a class="btn" href="notch.html">Open notch.html</a>',
       body: `<div class="nlayouts">${LAYOUTS.map((l) => `<figure data-l="${l.id}"><div class="ncrop"></div><figcaption>${l.key} · ${l.name}</figcaption></figure>`).join('')}</div>` })}
   </div>`)
+  quiet.render(host)
   const edge = host.querySelector('#f-d-edge')
   const edgeRun = demo(edge, edge, playEdge, { clear: false, gap: 400 })
   host.querySelector('#d-edge-replay').onclick = () => edgeRun.replay()

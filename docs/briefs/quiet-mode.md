@@ -13,6 +13,8 @@ Ideas from the front door (not decisions):
 - **Edge placement that doesn't cover app UI.** The right edge collides with scrollbars and side panels. Let the user move the tab up and down along the edge, remembered per display.
 - **Notch: invisible at rest.** The chin (about 22 pt below the menu bar) covers the top center of app windows, such as browser tabs, and Wings covers menu bar items. At rest show nothing beyond the real notch; grow the chin only on hover or an alert. Wings stays optional.
 
+Example for the user (front door, 2026-10-15): the "Quiet mode: blending into the screen" card in the Showcase, Docking section, built in `design/showcase/quiet.js` on this branch. Today vs Quiet for the edge tab and the notch, with four steps (at rest, cursor at the edge, alert, full-screen app). It is a sketch of the "Only when needed" idea, not the final design.
+
 ## Design (Roadmap & design)
 
 **In one line:** a new Presence setting. "Only when needed" makes Steward invisible at rest, on the edge and in the notch. It appears when you push the cursor against its spot, when an alert you allow arrives, or when you press its hotkey, and it tucks away again afterward. Three smaller options build on it: dim when idle, move the tab along the edge, and step aside for screen sharing, full-screen apps, and apps you list.
