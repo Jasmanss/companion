@@ -5,7 +5,6 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Quiet mode", "line": "Your 4 questions are answered and the design is updated. Say go on the final design to start Phase 1 (auto-hide and quiet alerts).", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -18,6 +17,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
+        { "name": "Quiet mode, Phase 1", "line": "Ready (82128df). Being built in the chat \"build: quiet-mode, phase 1\": auto-hide, notch asleep shape, quiet alerts.", "date": "2026-10-15" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.", "date": "2026-10-14" },
         { "name": "Chat flow and this status page", "line": "Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.", "date": "2026-10-15" }
       ]
@@ -26,7 +26,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Quiet mode", "line": "Designed, answers folded in. Brief: docs/briefs/quiet-mode.md. Waits for your go. Next in development.", "date": "2026-10-15" },
+        { "name": "Quiet mode, Phases 2 and 3", "line": "Tab drag and dim when idle, then step aside. Each waits for its own go after Phase 1.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Waits for go.", "date": "2026-10-14" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
