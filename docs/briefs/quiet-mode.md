@@ -150,6 +150,24 @@ Confirmed by the user at go (2026-10-15, to the front door): "In quiet mode, whi
 List the shared-file edits in the Result section after each phase.
 
 ## Result (Main building)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Phase 1: the quiet core (build chat "build: quiet-mode, phase 1", 2026-10-15)
+Status stays `ready`: Phases 2 and 3 are not built yet. Recorded by Roadmap & design from the front door's relay.
+- **Branch / commit:** `claude/quiet-mode-phase-1-c95ee6`, commit `dd0cd9c`, cut from `v1.1-hub-knx5hf`. Not pushed, not merged.
+- **Built:**
+  - Presence setting. Fresh installs start quiet; existing settings stay "Always visible". "Dim when idle" and "Hide from screen sharing" are saved as on for fresh installs but do nothing until their phases.
+  - Edge auto-hide: slides in after 300 ms with the cursor within 2 pt of the edge beside the tab (±40 pt), tucks back 1.5 s after leaving. ⌥Space and the menu bar icon always open. Manual Hide ignores pushes.
+  - Notch asleep: pure notch black, wakes after 250 ms of hover, sleeps 1.5 s after the cursor leaves.
+  - Quiet alerts, "Alerts that peek out": Needs me / Everything / Nothing. Held alerts add a menu bar dot and show as the banner with "and N more" when the panel opens.
+  - The first-run note, `presence.ts` with tests, SPEC.md and README.md updated.
+- **Files:** new `src/main/presence.ts` and `tests/presence.test.ts`. Shared files, small and additive: `src/shared/types.ts`, `src/main/settings-schema.ts`, `src/preload/index.ts`, `src/renderer/src/App.tsx`, `Settings.tsx`, `Notch.tsx`, `Pill.tsx`. Also `src/main/index.ts`, `notch-window.ts`, `app-state.ts`, `src/shared/steward.ts`, `src/shared/notch.ts`, three test files, `SPEC.md`, `README.md`. 19 files, +991 −64.
+- **Checks:** lint, typecheck and test pass (254 tests; the front door re-ran all three). Smoke exits 0. Idle CPU: main process 0.02% in quiet mode, notch page 0.26% asleep.
+- **Not checked (by hand still):** real cursor pushes, scrollbars near the edge, a real alert and how the timing feels. The held-alert banner is not visible in the screenshot meant to show it.
+- **Open points:**
+  - A fresh install shows only the menu bar icon on first launch (no first-launch peek).
+  - Alerts raised while hidden by hand are now held for the next panel open instead of dropped.
+  - The "Alerts that peek out" default moves with Presence only while it is still on the old default.
+- **Waiting on the user:** OK to merge Phase 1 into `v1.1-hub-knx5hf`, and the go for Phase 2.
+
+### Phase 2 and Phase 3
+Not started.
