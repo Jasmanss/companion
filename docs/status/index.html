@@ -1,0 +1,241 @@
+<title>Steward Status</title>
+<style>
+:root {
+  --bg: #f6f6f3;
+  --fg: #1d1f24;
+  --muted: #5d626b;
+  --line: #dcdcd6;
+  --wait-bg: #fbf0d4;
+  --wait-line: #e2c36b;
+  --tag-bg: #ebe9e0;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a; --fg: #e8e9ec; --muted: #9aa0aa; --line: #2c3037;
+    --wait-bg: #2c2512; --wait-line: #6b5a22; --tag-bg: #262a31; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161a; --fg: #e8e9ec; --muted: #9aa0aa; --line: #2c3037;
+  --wait-bg: #2c2512; --wait-line: #6b5a22; --tag-bg: #262a31; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+main { max-width: 42rem; margin: 0 auto; padding-block: 24px 48px; padding-inline: 16px; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 24px; font-size: 0.85rem; }
+section { margin-bottom: 28px; }
+h2 { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.count { font-weight: 400; margin-left: 4px; }
+ul { list-style: none; margin: 0; padding: 0; }
+li { padding-block: 10px; border-top: 1px solid var(--line); }
+li:last-child { border-bottom: 1px solid var(--line); }
+.row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+time { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+li p { margin: 2px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.tag { display: inline-block; font-size: 0.72rem; background: var(--tag-bg); color: var(--fg); border-radius: 4px; padding: 1px 6px; margin-left: 2px; }
+.waiting { background: var(--wait-bg); border: 1px solid var(--wait-line); border-radius: 10px; padding: 14px 14px 6px; }
+.waiting h2 { color: var(--fg); }
+.waiting li { border-color: var(--wait-line); }
+.waiting li:last-child { border-bottom: 0; }
+.waiting li p { color: var(--fg); }
+.waiting .tag { background: var(--bg); }
+footer { color: var(--muted); font-size: 0.78rem; }
+code { font-family: var(--mono); font-size: 0.9em; }
+</style>
+<main>
+  <h1>Steward status</h1>
+  <p class="sub">Checked against git and GitHub on Oct 15. Date on each line is when it last changed.</p>
+  <section id="waiting" class="waiting">
+    <h2>Waiting on you <span class="count">7</span></h2>
+    <ul>
+      <li>
+        <div class="row"><span class="name">Quiet mode</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Answer 4 questions: what bothered your friend, default for new installs, should alerts drop from the notch first, does tab dragging stay in this brief. Then say go.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-14">Oct 14</time></div>
+        <p>Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch. <span class="tag">scope from notes, no brief file</span></p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Idea inbox</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Pick the recommended version or the smaller one. Design note is outside the repo.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). <span class="tag">unconfirmed: no design note found</span></p>
+      </li>
+      <li>
+        <div class="row"><span class="name">GitHub Actions bump</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>OK to push 062e4fd, open a PR and run CI? Main already has v7 (PR #8, merged Oct 14), so this only fixes v1.1-hub-knx5hf.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Dependabot</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Replace #13 with @types/node 24. Close #11, #12 and #14 with &quot;@dependabot ignore this major version&quot;. All four are still open on GitHub.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Overnight Watch account</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Set up the phone/text account. Registration takes days. <span class="tag">unconfirmed: only in research notes</span></p>
+      </li>
+    </ul>
+  </section>
+  <section id="progress">
+    <h2>In progress <span class="count">2</span></h2>
+    <ul>
+      <li>
+        <div class="row"><span class="name">Notch dock</span><time datetime="2026-10-14">Oct 14</time></div>
+        <p>Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Chat flow and this status page</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.</p>
+      </li>
+    </ul>
+  </section>
+  <section id="next">
+    <h2>Up next <span class="count">3</span></h2>
+    <ul>
+      <li>
+        <div class="row"><span class="name">Quiet mode</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Designed. Brief: docs/briefs/quiet-mode.md (1969359 on claude/roadmap-design-7ca12a). Waits for your answers.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-14">Oct 14</time></div>
+        <p>Waits for go.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Idea inbox and Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Designed in side chats, waiting for a pick. No brief files yet.</p>
+      </li>
+    </ul>
+  </section>
+  <section id="ideas">
+    <h2>Ideas not planned yet <span class="count">21</span></h2>
+    <ul>
+      <li>
+        <div class="row"><span class="name">Visual Review</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Hero feature. Decided, nothing designed.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Overnight Watch</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Hero feature. Decided, nothing designed. Needs the phone/text account.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Model line in Settings</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Show which model answered.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Confused mood trigger</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>The Confused mood exists but nothing sets it.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Stray thumbnail in the Showcase</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Bug. A leftover screenshot thumbnail on the page.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Haiku 5.5 for cheap jobs</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Check it works with Steward's tools.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">First run: API key or Claude login</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Decide what a new user sees first.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Name availability check</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Companion / Steward.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Energy face as AI budget</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Milestones</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Drop anything onto the character</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Earned accessories</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Sounds</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Pre-push secrets guard</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Post-deploy check</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Collision radar</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Runaway guard</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">&quot;What was I doing&quot;</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>From the mid-October feature list.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Hats and glasses</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Parked.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Screenshot catcher</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Parked (prompt 07).</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Smarter design research</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Parked (prompt 09).</p>
+      </li>
+    </ul>
+  </section>
+  <section id="done">
+    <h2>Done <span class="count">8</span></h2>
+    <ul>
+      <li>
+        <div class="row"><span class="name">Dependabot #10 merged</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Minor and patch group. d45bc58.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Chat pipeline docs</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>2ab436a.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Panel tint and frost</span><time datetime="2026-10-14">Oct 14</time></div>
+        <p>Settings, Steward. e88d9bd.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Showcase page</span><time datetime="2026-10-14">Oct 14</time></div>
+        <p>04104a1.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Moods</span><time datetime="2026-10-13">Oct 13</time></div>
+        <p>31cc7ba, 6f244eb, 9ed2636.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Redesign phases 1 to 4 with the Pill</span><time datetime="2026-10-13">Oct 13</time></div>
+        <p>Ends at 30920c8.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Avatar Lab in 2D</span><time datetime="2026-10-12">Oct 12</time></div>
+        <p>1ac942e.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Rename to Steward</span><time datetime="2026-10-09">Oct 9</time></div>
+        <p>516bf7b.</p>
+      </li>
+    </ul>
+  </section>
+  <footer>Source: docs/status/status.json in the roadmap-design worktree. Roadmap &amp; design keeps this page current.</footer>
+</main>

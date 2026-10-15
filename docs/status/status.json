@@ -1,0 +1,76 @@
+{
+  "checked": "2026-10-15",
+  "sections": [
+    {
+      "id": "waiting",
+      "title": "Waiting on you",
+      "items": [
+        { "name": "Quiet mode", "line": "Answer 4 questions: what bothered your friend, default for new installs, should alerts drop from the notch first, does tab dragging stay in this brief. Then say go.", "date": "2026-10-15" },
+        { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
+        { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design note is outside the repo.", "date": "2026-10-15" },
+        { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate).", "date": "2026-10-15", "tag": "unconfirmed: no design note found" },
+        { "name": "GitHub Actions bump", "line": "OK to push 062e4fd, open a PR and run CI? Main already has v7 (PR #8, merged Oct 14), so this only fixes v1.1-hub-knx5hf.", "date": "2026-10-15" },
+        { "name": "Dependabot", "line": "Replace #13 with @types/node 24. Close #11, #12 and #14 with \"@dependabot ignore this major version\". All four are still open on GitHub.", "date": "2026-10-15" },
+        { "name": "Overnight Watch account", "line": "Set up the phone/text account. Registration takes days.", "date": "2026-10-15", "tag": "unconfirmed: only in research notes" }
+      ]
+    },
+    {
+      "id": "progress",
+      "title": "In progress",
+      "items": [
+        { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.", "date": "2026-10-14" },
+        { "name": "Chat flow and this status page", "line": "Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.", "date": "2026-10-15" }
+      ]
+    },
+    {
+      "id": "next",
+      "title": "Up next",
+      "items": [
+        { "name": "Quiet mode", "line": "Designed. Brief: docs/briefs/quiet-mode.md (1969359 on claude/roadmap-design-7ca12a). Waits for your answers.", "date": "2026-10-15" },
+        { "name": "Notch dock, Phase 3", "line": "Waits for go.", "date": "2026-10-14" },
+        { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
+      ]
+    },
+    {
+      "id": "ideas",
+      "title": "Ideas not planned yet",
+      "items": [
+        { "name": "Visual Review", "line": "Hero feature. Decided, nothing designed.", "date": "2026-10-15" },
+        { "name": "Overnight Watch", "line": "Hero feature. Decided, nothing designed. Needs the phone/text account.", "date": "2026-10-15" },
+        { "name": "Model line in Settings", "line": "Show which model answered.", "date": "2026-10-15" },
+        { "name": "Confused mood trigger", "line": "The Confused mood exists but nothing sets it.", "date": "2026-10-15" },
+        { "name": "Stray thumbnail in the Showcase", "line": "Bug. A leftover screenshot thumbnail on the page.", "date": "2026-10-15" },
+        { "name": "Haiku 5.5 for cheap jobs", "line": "Check it works with Steward's tools.", "date": "2026-10-15" },
+        { "name": "First run: API key or Claude login", "line": "Decide what a new user sees first.", "date": "2026-10-15" },
+        { "name": "Name availability check", "line": "Companion / Steward.", "date": "2026-10-15" },
+        { "name": "Energy face as AI budget", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Milestones", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Drop anything onto the character", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Earned accessories", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Sounds", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Pre-push secrets guard", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Post-deploy check", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Collision radar", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Runaway guard", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "\"What was I doing\"", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Hats and glasses", "line": "Parked.", "date": "2026-10-15" },
+        { "name": "Screenshot catcher", "line": "Parked (prompt 07).", "date": "2026-10-15" },
+        { "name": "Smarter design research", "line": "Parked (prompt 09).", "date": "2026-10-15" }
+      ]
+    },
+    {
+      "id": "done",
+      "title": "Done",
+      "items": [
+        { "name": "Dependabot #10 merged", "line": "Minor and patch group. d45bc58.", "date": "2026-10-15" },
+        { "name": "Chat pipeline docs", "line": "2ab436a.", "date": "2026-10-15" },
+        { "name": "Panel tint and frost", "line": "Settings, Steward. e88d9bd.", "date": "2026-10-14" },
+        { "name": "Showcase page", "line": "04104a1.", "date": "2026-10-14" },
+        { "name": "Moods", "line": "31cc7ba, 6f244eb, 9ed2636.", "date": "2026-10-13" },
+        { "name": "Redesign phases 1 to 4 with the Pill", "line": "Ends at 30920c8.", "date": "2026-10-13" },
+        { "name": "Avatar Lab in 2D", "line": "1ac942e.", "date": "2026-10-12" },
+        { "name": "Rename to Steward", "line": "516bf7b.", "date": "2026-10-09" }
+      ]
+    }
+  ]
+}
