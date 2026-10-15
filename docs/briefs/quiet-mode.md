@@ -70,6 +70,12 @@ The nudge complaint is about alerts that were not worth interrupting for. In "On
 - The edge-push zone from Part 1 follows the tab's new position.
 - Build the vertical drag and the saved position so the planned drag-to-notch can reuse them.
 
+### Part 2b: First-launch peek (second build, small; added after Phase 1, 2026-10-15)
+- Phase 1 left a fresh install with only the menu bar icon on first launch, so a new user sees nothing. The user chose to fix it in Phase 2.
+- **On the first launch of a fresh install in "Only when needed":** the tab slides in once from its edge with the first-run note ("Steward hides until you need it. Push your cursor against the right edge, or press ⌥Space."), then tucks away like any other reveal (1.5 s after the cursor is not on it, and not while the note is waiting to be read: keep it out until the cursor has been on it, or about 10 s, whichever comes first, Main building picks the exact rule and reports it).
+- **Only once:** remember that it happened in app state (`appState`), not in settings. Existing installs, and fresh installs that already switched to "Always visible", never see it. In the notch, the same once-only reveal wakes the notch with the note.
+- Test: a pure rule for "show the first-launch peek" (fresh, quiet, not shown yet), and by hand with an empty user data folder.
+
 ### Part 1b: Dim when idle (second build, small)
 - **Settings → Steward → "Dim when idle" toggle** (default on for new installs, off for existing settings).
 - After 20 s at rest, the eyes fade to about 40%. They stop blinking, glancing and following the cursor, and the drawing loop pauses, which also saves CPU.
@@ -145,7 +151,7 @@ Confirmed by the user at go (2026-10-15, to the front door): "In quiet mode, whi
 
 ### Build phases (for Main building; one phase at a time, the user's go between phases)
 1. **Phase 1, the quiet core:** Presence setting with fresh-install and old-file defaults, edge auto-hide (reveal, tuck, hotkey, menu bar), notch asleep shape and hover wake, Part 1c quiet alerts, the first-time note, `presence.ts` and its tests, the smoke additions. No dim, no drag, no step aside.
-2. **Phase 2:** the tab drag with the remembered position (Part 2), and Dim when idle (Part 1b).
+2. **Phase 2:** the tab drag with the remembered position (Part 2), the first-launch peek (Part 2b), and Dim when idle (Part 1b).
 3. **Phase 3:** the investigation report for Part 3, then the step-aside options once the user picks the approach.
 List the shared-file edits in the Result section after each phase.
 

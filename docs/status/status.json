@@ -5,8 +5,7 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Quiet mode, merge Phase 1", "line": "OK to merge claude/quiet-mode-phase-1-c95ee6 into v1.1-hub-knx5hf?", "date": "2026-10-15" },
-        { "name": "Quiet mode, Phase 2 go", "line": "Say go for the tab drag and Dim when idle.", "date": "2026-10-15" },
+        { "name": "Quiet mode, Phase 1", "line": "Try it by hand first (claude/quiet-mode-phase-1-c95ee6), then OK the merge into v1.1-hub-knx5hf.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -28,7 +27,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Quiet mode, Phases 2 and 3", "line": "Tab drag and Dim when idle, then step aside. Each waits for its own go.", "date": "2026-10-15" },
+        { "name": "Quiet mode, Phases 2 and 3", "line": "Phase 2: tab drag, first-launch peek, Dim when idle. Then Phase 3, step aside. Each waits for its own go; Phase 2 not yet.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Waits for go.", "date": "2026-10-14" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
