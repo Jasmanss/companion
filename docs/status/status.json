@@ -5,7 +5,7 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Quiet mode", "line": "Answer 4 questions: what bothered your friend, default for new installs, should alerts drop from the notch first, does tab dragging stay in this brief. Then say go.", "date": "2026-10-15" },
+        { "name": "Quiet mode", "line": "Your 4 questions are answered and the design is updated. Say go on the final design to start Phase 1 (auto-hide and quiet alerts).", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -26,7 +26,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Quiet mode", "line": "Designed. Brief: docs/briefs/quiet-mode.md (1969359 on claude/roadmap-design-7ca12a). Waits for your answers.", "date": "2026-10-15" },
+        { "name": "Quiet mode", "line": "Designed, answers folded in. Brief: docs/briefs/quiet-mode.md. Waits for your go. Next in development.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Waits for go.", "date": "2026-10-14" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
