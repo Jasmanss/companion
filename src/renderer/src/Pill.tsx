@@ -36,8 +36,9 @@ export function toward(p: { x: number; y: number }, el: Element): { x: number; y
  * second, sleepy 20 and the rest 30; with reduced motion 10 (nothing moves on its own). Nothing at all while the page
  * is hidden. cursor() is where the cursor is, relative to the eyes, or null. Returns a function that stops it.
  */
-export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean }): () => void {
-  const every = () => (o.reduced || st.mood === 'resting' ? 0.1 : o.tucked ? (st.mood === 'sleepy' ? 0.05 : 1 / 30) : 0)
+export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean; idle?: () => boolean }): () => void {
+  // idle: nothing to see (the notch asleep): don't draw, and only look now and then to see if that's changed.
+  const every = () => (o.idle?.() ? 0.25 : o.reduced || st.mood === 'resting' ? 0.1 : o.tucked ? (st.mood === 'sleepy' ? 0.05 : 1 / 30) : 0)
   let frame = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = now()
@@ -52,7 +53,8 @@ export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x
   const tick = (ms: number) => {
     frame = 0
     if (document.hidden) return
-    draw(ms / 1000)
+    if (o.idle?.()) last = ms / 1000
+    else draw(ms / 1000)
     schedule()
   }
   const schedule = () => {

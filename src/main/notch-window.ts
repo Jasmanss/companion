@@ -3,15 +3,24 @@
 // black shape: it ignores the mouse everywhere, and a few times a second Steward checks where the cursor is and lets
 // clicks in while it's over the shape (the black's boxes, from shared/notch). The same check sends the cursor's
 // position to the page, so the eyes can follow it, but only while it's near: far away, it's checked rarely.
+//
+// With Presence "Only when needed" it rests asleep: just the notch's own black, no eyes. The same check tells the
+// presence rules (main/presence) whether the cursor is on the notch, and they say when to wake and when to sleep.
 import { BrowserWindow, screen } from 'electron'
 import { inBoxes, notchBoxes, notchShape, NOTCH_WINDOW } from '../shared/notch'
 import type { Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
+import { inRect } from './presence'
 
 interface Options {
   preload: string
   load(w: BrowserWindow): void
   style(): NotchStyle
+  /** Every time the cursor is checked: whether it's on the notch (asleep) or on the shape (awake). */
+  onCursor?(over: boolean): void
 }
+
+/** The cursor counts as on the shape this far outside it, so the edge of the black isn't a flicker. */
+const SLACK = 3
 
 /** Within this many points of the notch, the cursor is checked 20 times a second and sent to the eyes. */
 const NEAR = 420
@@ -24,6 +33,7 @@ export class NotchDock {
   private mood: Mood = 'idle'
   private glint: PillGlint = 'sweep'
   private wanted = false
+  private awake = true
   private ignoring = true
   private timer: ReturnType<typeof setTimeout> | undefined
   private sentCursor = ''
@@ -79,8 +89,15 @@ export class NotchDock {
     this.send()
   }
 
+  /** Asleep: only the notch's own black, no eyes. Awake: the chin or the wings, with the eyes. */
+  setAwake(awake: boolean): void {
+    if (awake === this.awake) return
+    this.awake = awake
+    this.send()
+  }
+
   state(): NotchState {
-    return { layout: this.layout(), mood: this.mood, glint: this.glint }
+    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake }
   }
 
   /** The notch window's own contents, for the smoke check. */
@@ -165,7 +182,12 @@ export class NotchDock {
       if (!w || w.isDestroyed() || !w.isVisible() || !layout) return
       const b = w.getBounds(), c = screen.getCursorScreenPoint()
       const p = { x: c.x - b.x, y: c.y - b.y }
-      const inside = inBoxes(p, notchBoxes(notchShape(this.o.style(), this.mood, layout), layout))
+      const boxes = notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake), layout)
+      const inside = inBoxes(p, boxes)
+      if (this.o.onCursor) {
+        const over = boxes.some((b) => inRect(p, b, SLACK))
+        this.o.onCursor(over)
+      }
       if (inside === this.ignoring) {
         this.ignoring = !inside
         w.setIgnoreMouseEvents(!inside)

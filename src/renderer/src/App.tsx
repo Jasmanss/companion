@@ -52,6 +52,10 @@ export function App() {
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   const [banner, setBanner] = useState<AlertView | null>(null)
+  /** How many more alerts came with the banner's (the ones that waited for the panel to open). */
+  const [bannerMore, setBannerMore] = useState(0)
+  /** The one-time note about Steward hiding until it's needed. */
+  const [presenceNote, setPresenceNote] = useState<string | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
@@ -84,6 +88,7 @@ export function App() {
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
     const offAlerts = api.alerts.onShow(handleAlerts)
+    const offNote = api.presence.onNote(setPresenceNote)
     const offMood = api.alerts.onMood(setEventMood)
     const offLeftOff = api.leftOff.onShow(setLeftOff)
     // The brief already includes where you left off.
@@ -108,6 +113,7 @@ export function App() {
       offAgent()
       offSessions()
       offAlerts()
+      offNote()
     }
     // The handlers only use state setters and refs, so subscribing once is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,9 +127,10 @@ export function App() {
 
   useEffect(() => {
     if (!banner) return
-    const t = setTimeout(() => setBanner(null), 6000)
+    // Several that waited for the panel get longer to read.
+    const t = setTimeout(() => setBanner(null), bannerMore > 0 ? 12_000 : 6000)
     return () => clearTimeout(t)
-  }, [banner])
+  }, [banner, bannerMore])
 
   useEffect(() => {
     currentProject.current = settings?.currentProject ?? null
@@ -153,6 +160,7 @@ export function App() {
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
     setBanner(list[0] ?? null)
+    setBannerMore(Math.max(0, list.length - 1))
   }
 
   const tuckAway = useCallback(() => {
@@ -490,6 +498,7 @@ export function App() {
         <div className="banner" role="status" onClick={() => setBanner(null)}>
           <strong>{banner.title}</strong>
           {banner.detail && <span>{banner.detail}</span>}
+          {bannerMore > 0 && <span>and {bannerMore} more</span>}
           {banner.action && (
             <button
               className="chip"
@@ -514,6 +523,14 @@ export function App() {
         onError={showError}
       />
       <div className="body">
+        {presenceNote && (
+          <div className="notice" role="status">
+            {presenceNote}
+            <button className="chip" onClick={() => setPresenceNote(null)}>
+              Got it
+            </button>
+          </div>
+        )}
         {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
         {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
         {noKey && (

@@ -1,4 +1,4 @@
-import type { PanelTint, PillColor, StewardPrefs } from './types'
+import type { AlertPeek, PanelTint, PillColor, Presence, StewardPrefs } from './types'
 
 /** The character's colors, at most six. Silver comes first: it's the default. */
 export const PILL_COLOR_IDS = ['silver', 'sky', 'lilac', 'mint', 'peach', 'graphite'] as const satisfies readonly PillColor[]
@@ -51,6 +51,12 @@ export function panelVars({ tint, frost }: Pick<StewardPrefs, 'tint' | 'frost'>)
   return { '--tint': t.tint, '--glow': t.glow, '--ink': t.ink, '--soft': t.soft, '--live-light': t.live, '--frost': String(frostFill(frost)) }
 }
 
+/** Which alerts peek out, by default, for each Presence: only a session that needs me when quiet, everything switched on when always visible. */
+export const DEFAULT_ALERT_PEEK: Record<Presence, AlertPeek> = { quiet: 'needs-me', always: 'all' }
+
+/** Switching Presence: an alert choice still on the old Presence's default moves to the new one's; one someone picked stays. */
+export const alertPeekAfterSwitch = (from: Presence, to: Presence, current: AlertPeek): AlertPeek => (current === DEFAULT_ALERT_PEEK[from] ? DEFAULT_ALERT_PEEK[to] : current)
+
 export const DEFAULT_NAME = 'Steward'
 export const MAX_NAME = 24
 
@@ -67,6 +73,12 @@ export const DEFAULT_STEWARD: StewardPrefs = {
   size: 'small',
   tint: 'ice',
   frost: DEFAULT_FROST,
+  // A fresh install is quiet. A settings file from before these existed keeps today's behavior instead: see
+  // OLD_FILE_STEWARD in main/settings-schema.
+  presence: 'quiet',
+  alertPeek: DEFAULT_ALERT_PEEK.quiet,
+  dimWhenIdle: true,
+  hideFromScreenShare: true,
 }
 
 export const colorHex = (id: PillColor): string => (PILL_COLORS.find((c) => c.id === id) ?? PILL_COLORS[0]).hex

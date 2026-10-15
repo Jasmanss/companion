@@ -5,6 +5,8 @@ interface State {
   lastSeenAt: number
   /** Local date (YYYY-MM-DD) of the last morning brief. */
   lastBriefDate?: string
+  /** The one-time note about Steward hiding until it's needed has been shown. */
+  presenceNoteSeen?: boolean
 }
 
 /** Small bits of state that should survive restarts. */
@@ -27,6 +29,10 @@ export class AppState {
 
   get lastBriefDate(): string | undefined {
     return this.data.lastBriefDate
+  }
+
+  get presenceNoteSeen(): boolean {
+    return this.data.presenceNoteSeen === true
   }
 
   async update(patch: Partial<State>): Promise<void> {

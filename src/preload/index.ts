@@ -93,6 +93,9 @@ const api: StewardAPI = {
     onCursor: (cb) => subscribe<{ x: number; y: number } | null>('notch:cursor', cb),
     click: () => ipcRenderer.send('notch:click'),
   },
+  presence: {
+    onNote: (cb) => subscribe<string>('presence:note', cb),
+  },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }
 

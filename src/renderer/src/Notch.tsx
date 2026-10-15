@@ -2,7 +2,8 @@
 // character's body becomes a black shape with the real notch and its color becomes the light of its eyes (Glass:
 // soft glowing eyes, Flat: solid ones, Blocky: pixels). Chin grows a lip below the notch, as wide as it, with the eyes
 // in it. Wings puts one eye on each side of the notch, in the menu bar, and grows the chin for the thinking dots and
-// the talking mouth, which need the middle. Designed in design/notch.html (shared/notch has the sizes).
+// the talking mouth, which need the middle. Designed in design/notch.html (shared/notch has the sizes). Asleep (Only
+// when needed, at rest), the shape shrinks to the notch's own black and the eyes are off.
 //
 // The cursor comes from the main process (the window ignores the mouse except over the shape), and a click on the
 // shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden.
@@ -34,31 +35,36 @@ export function NotchWindow() {
     return () => window.removeEventListener('click', click)
   }, [])
   if (!state?.layout) return null
-  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} prefs={prefs} />
+  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} prefs={prefs} />
 }
 
-function NotchFace({ layout, mood, glint, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; prefs: StewardPrefs }) {
+function NotchFace({ layout, mood, glint, awake, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; prefs: StewardPrefs }) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), performance.now() / 1000))
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
-  const reshape = useRef<((mood: Mood) => void) | null>(null)
+  const reshape = useRef<((mood: Mood, awake: boolean) => void) | null>(null)
+  // The eyes only draw while awake; the shape and the eyes follow it without the face being built again.
+  const awakeNow = useRef(awake)
+  useEffect(() => {
+    awakeNow.current = awake
+  }, [awake])
   const { notchStyle, version, color, mouth, personality } = prefs
   const { cx, width, height } = layout
 
   useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
   useEffect(() => {
     setMood(st, mood, glint)
-    reshape.current?.(mood)
-  }, [st, mood, glint])
+    reshape.current?.(mood, awake)
+  }, [st, mood, glint, awake])
 
   useEffect(() => {
     const el = host.current
     if (!el) return
-    const face = build(el, st, { layout: { cx, width, height }, style: notchStyle, kind: version, color: colorHex(color), mouth, reduced })
+    const face = build(el, st, { layout: { cx, width, height }, style: notchStyle, kind: version, color: colorHex(color), mouth, reduced, awake: awakeNow.current })
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
-    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : null), reduced, tucked: true })
+    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : null), reduced, tucked: true, idle: () => !awakeNow.current })
     return () => {
       stop()
       off()
@@ -106,10 +112,12 @@ interface FaceOptions {
   color: string
   mouth: boolean
   reduced: boolean
+  /** Awake at first: the shape and the eyes, or asleep, only the notch's own black. */
+  awake: boolean
 }
 
-/** Draws the black shape and the lit eyes. reshape(mood) changes the shape for a mood (Wings' chin comes and goes). */
-function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillView[]; center: HTMLElement; reshape(mood: Mood): void } {
+/** Draws the black shape and the lit eyes. reshape(mood, awake) changes the shape for a mood (Wings' chin comes and goes) and wakes or sleeps it. */
+function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillView[]; center: HTMLElement; reshape(mood: Mood, awake: boolean): void } {
   const { cx, width: nw, height: nh } = o.layout
   const E = NOTCH_EYE, k = E / 18, W = Math.round(92 * k), H = Math.round(60 * k)
   const eyeY = nh + NOTCH_LIP / 2
@@ -143,40 +151,40 @@ function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillV
   } else eyes('main', 0, eyeY, [Math.min(68, HW - 24), 0])
 
   let sig = ''
-  const apply = (mood: Mood) => {
-    const shape = notchShape(o.style, mood, { width: nw, height: nh })
+  const apply = (mood: Mood, awake: boolean) => {
+    const shape = notchShape(o.style, mood, { width: nw, height: nh }, awake)
     lip.size(nw, shape.lip)
     wings?.size(shape.wings, nh)
     const middle = needsMiddle(mood)
-    spots.main?.classList.add('on')
-    spots.chin?.classList.toggle('on', middle)
-    spots.wl?.classList.toggle('on', !middle)
-    spots.wr?.classList.toggle('on', !middle)
-    return JSON.stringify([shape, middle])
+    spots.main?.classList.toggle('on', awake)
+    spots.chin?.classList.toggle('on', awake && middle)
+    spots.wl?.classList.toggle('on', awake && !middle)
+    spots.wr?.classList.toggle('on', awake && !middle)
+    return JSON.stringify([shape, middle, awake])
   }
-  const snap = (mood: Mood) => {
+  const snap = (mood: Mood, awake: boolean) => {
     root.classList.add('snap')
-    sig = apply(mood)
+    sig = apply(mood, awake)
     void root.offsetWidth
     root.classList.remove('snap')
   }
-  snap(st.mood)
+  snap(st.mood, o.awake)
   let fade: ReturnType<typeof setTimeout> | undefined
   return {
     views,
     center: (spots.main ?? spots.chin)!,
-    reshape(mood) {
-      const next = JSON.stringify([notchShape(o.style, mood, { width: nw, height: nh }), needsMiddle(mood)])
+    reshape(mood, awake) {
+      const next = JSON.stringify([notchShape(o.style, mood, { width: nw, height: nh }, awake), needsMiddle(mood), awake])
       if (next === sig) return
       if (!o.reduced) {
-        sig = apply(mood)
+        sig = apply(mood, awake)
         return
       }
       // Reduced motion: fade out, change, fade back in, instead of flowing.
       root.classList.add('rm-out')
       clearTimeout(fade)
       fade = setTimeout(() => {
-        snap(mood)
+        snap(mood, awake)
         root.classList.remove('rm-out')
       }, 150)
     },
