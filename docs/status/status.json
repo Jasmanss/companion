@@ -7,7 +7,7 @@
       "items": [
         { "name": "Try quiet mode Phase 1 by hand", "line": "On the latest build in main. Push the cursor to the edge, try a real alert, hover the notch.", "date": "2026-10-15" },
         { "name": "Go on quiet mode Phase 2", "line": "Tab drag to any height, first-launch peek, Dim when idle.", "date": "2026-10-15" },
-        { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
+        { "name": "Notch dock, Phase 3", "line": "Designed, in 4 small steps (3a to 3d). Read docs/briefs/notch-dock-phase-3.md, then say go for 3a.", "date": "2026-10-15" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
         { "name": "Overnight Watch account", "line": "Set up the phone/text account. Registration takes days.", "date": "2026-10-15", "tag": "unconfirmed: only in research notes" }
@@ -17,7 +17,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.", "date": "2026-10-14" },
+        { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.", "date": "2026-10-15" },
         { "name": "Chat flow and this status page", "line": "Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.", "date": "2026-10-15" }
       ]
     },
@@ -26,7 +26,7 @@
       "title": "Up next",
       "items": [
         { "name": "Quiet mode, Phases 2 and 3", "line": "Phase 2: tab drag to any height on its side (asked for by you), first-launch peek, Dim when idle. Then Phase 3, step aside. Each waits for its own go; Phase 2 not yet.", "date": "2026-10-15" },
-        { "name": "Notch dock, Phase 3", "line": "Waits for go.", "date": "2026-10-14" },
+        { "name": "Notch dock, Phase 3", "line": "Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.", "date": "2026-10-15" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
     },
