@@ -50,6 +50,7 @@ import {
   type PresenceState,
 } from './presence'
 import { SessionTracker } from './sessions'
+import { judgeMotion, type Motion } from './smoke-motion'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1040,16 +1041,6 @@ function alphaAt(img: Electron.NativeImage, x: number, y: number, windowWidth: n
   return img.toBitmap()[(py * width + px) * 4 + 3]
 }
 
-interface Motion {
-  /** Frames drawn while the thing moved, how many different positions it was drawn at, how long it took, and the longest wait between two frames. */
-  frames: number
-  positions: number
-  spanMs: number
-  maxGapMs: number
-  /** Every frame the page drew while it was watched, moving or not: none means the page wasn't drawing at all. */
-  drawn: number
-}
-
 /**
  * Watches an element's transform in a page, once per drawn frame, while `trigger` makes it move. A slide drawn by the
  * compositor shows many positions with frames a display refresh apart; one stepped from the main process shows a few,
@@ -1064,25 +1055,30 @@ async function watchMotion(wc: Electron.WebContents, selector: string, ms: numbe
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
-    setTimeout(() => resolve(samples), ${ms})
-  })`) as Promise<[number, string][]>
+    setTimeout(() => resolve({ samples, visibility: document.visibilityState }), ${ms})
+  })`) as Promise<{ samples: [number, string][]; visibility: string }>
   await new Promise((resolve) => setTimeout(resolve, 30))
   await trigger()
-  const samples = await sampling
+  const { samples, visibility } = await sampling
+  const seen = { drawn: samples.length, watchedMs: ms, visibility }
   const changed = samples.map((s, i) => (i > 0 && s[1] !== samples[i - 1][1] ? i : -1)).filter((i) => i >= 0)
-  if (!changed.length) return { frames: 0, positions: 1, spanMs: 0, maxGapMs: 0, drawn: samples.length }
+  if (!changed.length) return { frames: 0, positions: 1, spanMs: 0, maxGapMs: 0, ...seen }
   const moving = samples.slice(changed[0] - 1, changed.at(-1)! + 1)
   const gaps = moving.slice(1).map((s, i) => s[0] - moving[i][0])
-  return { frames: moving.length, positions: new Set(moving.map((s) => s[1])).size, spanMs: Math.round(moving.at(-1)![0] - moving[0][0]), maxGapMs: Math.round(Math.max(...gaps)), drawn: samples.length }
+  return { frames: moving.length, positions: new Set(moving.map((s) => s[1])).size, spanMs: Math.round(moving.at(-1)![0] - moving[0][0]), maxGapMs: Math.round(Math.max(...gaps)), ...seen }
 }
 
 /** The piece of the notch's black that moves when it wakes: the chin, or in Wings the wings (the second shape). */
 const MOVING_BLACK = { chin: '.nt .bp', wings: '.nt .blob + .blob .bp' } as const
 
-/** The motion is smooth if it was drawn at many positions, with no long stall between frames. */
+/**
+ * The motion has to be smooth: drawn at many positions, with no long stall between frames. On a CI runner whose page
+ * hardly draws at all, it says it couldn't measure, and goes on (smoke-motion has the rules).
+ */
 function smoothly(what: string, m: Motion): void {
-  console.log(`smoke: motion ${what}: ${m.positions} positions in ${m.frames} frames over ${m.spanMs} ms, longest wait between frames ${m.maxGapMs} ms`)
-  if (m.positions < 8 || m.maxGapMs > 60) throw new Error(`${what} is not smooth: ${m.positions} positions in ${m.frames} frames, ${m.maxGapMs} ms between the furthest apart (the page drew ${m.drawn} frames while watched)`)
+  const verdict = judgeMotion(what, m, Boolean(process.env.CI))
+  console.log(`smoke: ${verdict.line}`)
+  if (verdict.result === 'not smooth') throw new Error(`${what} is not smooth: ${verdict.line}`)
 }
 
 /** The CPU the main process and a page used over the last look, as a short phrase for the log. */
