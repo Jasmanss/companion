@@ -9,6 +9,7 @@ Answers from the user (2026-10-15, relayed by the front door; this is not a go t
 - **New installs:** quiet by default. A fresh install starts on "Only when needed", with "Dim when idle" and "Hide from screen sharing" on. The user's own settings stay as they are.
 - **Alerts from the edge while Steward sits in the notch:** fine for now. Notch Phase 3 fixes it later.
 - **Next in development:** quiet mode.
+- **Added after Phase 2 was built (2026-10-16):** the user said "I feel it is hard to find side piece if we forgot where to put it. What if we did it where if its on the left you just put your mouse on the left and it pops up. But I feel as if that isnt good. Whats a better way to do this?" Of three options they picked "Tab comes to you": push anywhere along the tab's edge, hold briefly, and the tab slides out at the cursor's height. This is Part 2c below.
 - **Asked for directly (2026-10-15, later):** the user wants to move the tab up or down its side "anywhere on the screen basically", and chose "Up and down its side" when asked what that means: any height on the left or right edge, not floating free. This is Part 2 below.
 
 Ideas from the front door (not decisions):
@@ -78,6 +79,44 @@ The nudge complaint is about alerts that were not worth interrupting for. In "On
 - **On the first launch of a fresh install in "Only when needed":** the tab slides in once from its edge with the first-run note ("Steward hides until you need it. Push your cursor against the right edge, or press ⌥Space."), then tucks away like any other reveal (1.5 s after the cursor is not on it, and not while the note is waiting to be read: keep it out until the cursor has been on it, or about 10 s, whichever comes first, Main building picks the exact rule and reports it).
 - **Only once:** remember that it happened in app state (`appState`), not in settings. Existing installs, and fresh installs that already switched to "Always visible", never see it. In the notch, the same once-only reveal wakes the notch with the note.
 - Test: a pure rule for "show the first-launch peek" (fresh, quiet, not shown yet), and by hand with an empty user data folder.
+
+### Part 2c: The tab comes to you (Phase 2.1; designed, waiting for the user's go)
+**Why:** in "Only when needed" the tab only appears when the cursor pushes against the edge inside a band of ±40 pt around the tab's saved height. Once the tab can be dragged to any height, you can forget where you put it, and then you cannot find it. Nobody should have to remember a spot.
+
+**What the user sees:** with Presence "Only when needed", push the cursor against the tab's edge anywhere along the work area, hold still for a moment, and the tab slides out right at the cursor's height. Leave it and it tucks away as before. It does not change where the tab rests: the saved height (set by dragging) still decides where it sits in "Always visible", where a nudge appears, and where the tab shows when something else brings it out.
+
+**The rules** (pure functions in `src/main/presence.ts`, next to `inEdgeZone`, so they are unit tested):
+- **Zone:** the whole height of the display's work area (`display.workArea`, so never the menu bar band, and never behind the Dock), still within 2 pt of the edge Steward is on. Replace the ±40 band check in `inEdgeZone` with "anywhere in the work area's height".
+- **Hold:** 300 ms near the saved spot (inside the old ±40 band, exactly as today), 500 ms anywhere else along the edge. The longer hold off the band is the price of the bigger zone.
+- **Still, not sweeping:** the cursor must stay within about 6 pt while it holds. Dragging a scrollbar, or sliding down the edge to reach something, moves the cursor and never counts. This is the scrollbar rule for the whole edge, replacing "only the strip where the tab sits".
+- **No instant re-pop:** after the tab tucks away, the cursor has to leave the zone (move more than about 8 pt from the edge) before a new push counts. Without this, resting the cursor on a scrollbar would bring the tab back every two seconds.
+- **Where it appears:** its top is `clampTop(area, tabHeight, cursorY - tabHeight / 2)` from `src/shared/tab-place.ts`, so the cursor is at the tab's middle, shifted just enough to stay inside the work area near the menu bar or the Dock. The cursor always stays over the tab.
+
+**Temporary spot, saved spot:**
+- Add a runtime-only `revealTop` in `src/main/index.ts` (not in app state, not saved). `boundsFor('collapsed')` and `tabTop()` use it while it is set, and the saved place (`tabPlaces`) the rest of the time.
+- The tab window is hidden when it is not out, so moving it to the new top before it slides in is not visible. The page's slide animation does not change.
+- `revealTop` is cleared once the tab has tucked away and its slide-out has finished, so the next hidden tab is at its saved spot again. It is never cleared while the tab is on screen, so the tab never jumps under the cursor.
+- **Panel opened from a temporary spot:** it opens around where the tab is now (`topAround` already centers it on the tab's current top). Closing it keeps the tab where it was while the cursor is on it, then the normal tuck and clear apply. The panel must never use a different spot than the tab it grew from.
+- **Nudge:** if the tab is out at a temporary spot when an alert arrives, the nudge grows from the tab where it is (it shares the tab's top). If the tab is hidden, a nudge appears at the saved spot, as today.
+- **Manual Hide** still ignores pushes, as before. The ⌥Space hotkey and the menu bar icon are unchanged.
+
+**With the drag (Part 2):** dragging a tab that came to the cursor starts from its current top and saves the new height at the end, as for any drag. So the fastest way to move the saved spot is: push anywhere, then drag the tab. The drag's click-or-drag threshold (5 pt) is unchanged. Honest note: in "Only when needed" the saved height now mostly decides where nudges appear; the drag still matters fully in "Always visible".
+
+**With the first-launch peek (Part 2b):** unchanged. The peek shows at the saved spot (the middle on a fresh install), because the cursor is not at the edge. The first-run note's wording changes to "Push your cursor against the right edge, anywhere along it, or press ⌥Space."
+
+**Notch:** not affected. In the notch there is no edge tab and `canWatchEdge()` is off, so none of this applies. "Always visible" is also not affected: the tab is always out at its saved spot.
+
+**Files likely touched (small):** `src/main/presence.ts` (the zone, hold and still rules, with tests in `tests/presence.test.ts`), `src/main/index.ts` (`revealTop`, `boundsFor`, the edge watcher that calls the rules, clearing after the tuck), `src/shared/tab-place.ts` only if a helper is needed, the first-run note text in `presence.ts`, `SPEC.md`. Shared files: none expected; no new setting.
+
+**Risks and open questions:**
+1. **Scrollbars and side panels are the real risk.** The hold, stillness and no-instant-re-pop rules are my best guess, not measured. The user's hand test on a Mac with a scrollbar at the edge decides whether to tune the numbers. If false reveals still happen, add a switch in Settings → Steward → Presence ("Reveal from anywhere on the edge", on by default) as the safety valve. I recommend not adding the switch until the hand test shows it is needed.
+2. **Dock on the same side.** The work area is narrower than the display then, and the tab sits beside the Dock. Main building checks what today's zone does in that case and keeps it, rather than making the whole edge a zone next to the Dock.
+3. **Second display against the edge.** Unchanged: the cursor passes through and the push never counts (`screenBeside`). The hotkey and the menu bar icon still work.
+4. **Watcher cost.** The fast check (every 50 ms) runs while the cursor is in the 2 pt strip. The strip is now the whole edge, so it runs more often when someone works at the edge. Measure idle CPU in "Only when needed" as the Phase 1 smoke check does.
+
+**How to test:**
+- Unit tests: the new zone (anywhere in the work area, not the menu bar band, not outside the 2 pt strip), hold time near the saved spot (300 ms) and away from it (500 ms), movement over about 6 pt cancels the hold, no re-trigger until the cursor leaves the zone, `clampTop` near the top and bottom of the work area, `revealTop` set and cleared (and never cleared while the tab is out).
+- By hand: push high, low and in the middle of the edge and the tab comes at that height; drag a scrollbar at the edge (nothing comes out); open the panel from a temporary spot (it opens around the tab) and close it; push, then drag the tab (the new height is kept after a restart); a nudge while the tab is out at a temporary spot and while it is hidden; with the Dock on the same side; with Always visible (no change); in the notch (no change).
 
 ### Part 1b: Dim when idle (second build, small)
 - **Settings → Steward → "Dim when idle" toggle** (default on for new installs, off for existing settings).
@@ -155,7 +194,8 @@ Confirmed by the user at go (2026-10-15, to the front door): "In quiet mode, whi
 ### Build phases (for Main building; one phase at a time, the user's go between phases)
 1. **Phase 1, the quiet core:** Presence setting with fresh-install and old-file defaults, edge auto-hide (reveal, tuck, hotkey, menu bar), notch asleep shape and hover wake, Part 1c quiet alerts, the first-time note, `presence.ts` and its tests, the smoke additions. No dim, no drag, no step aside.
 2. **Phase 2:** the tab drag with the remembered position (Part 2), the first-launch peek (Part 2b), and Dim when idle (Part 1b).
-3. **Phase 3:** the investigation report for Part 3, then the step-aside options once the user picks the approach.
+3. **Phase 2.1:** Part 2c, the tab comes to you. A small follow-up to Phase 2: it changes the push zone and the tab's top, so it is reviewable on its own. (Recommended as its own phase after PR #18 merges, not folded into it. The user has not tried Phase 2 by hand yet, and a second behavior change in the same watcher would blur what they are testing.)
+4. **Phase 3:** the investigation report for Part 3, then the step-aside options once the user picks the approach.
 List the shared-file edits in the Result section after each phase.
 
 ## Result (Main building)
