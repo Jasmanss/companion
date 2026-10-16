@@ -341,10 +341,11 @@ pre {
   animation: nudge-in 0.35s var(--spring) both;
 }
 
+/* Urgent: the same half-point rim as every Steward surface, tinted with the glow. */
 .nudge.urgent {
   box-shadow:
     inset 0 1px 0 var(--edge),
-    inset 0 0 0 1.5px rgba(var(--glow), 0.9);
+    inset 0 0 0 0.5px rgba(var(--live), 0.45);
 }
 
 .nudge-text {
