@@ -7,6 +7,7 @@ import { NOTCH_WINDOW } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
+import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -1105,13 +1106,14 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
     console.error(`smoke: ${why}`)
     app.exit(1)
   }
-  const timer = setTimeout(() => fail('timed out'), 30_000)
+  // The panel has 30 s to show; the presence check before it (with its 20 s wait for Dim when idle) has its own budget.
+  const timer = setTimeout(() => fail('timed out'), 30_000 + 60_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
-      const presenceTimer = setTimeout(() => fail('presence timed out'), 30_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
-      await checkPresence(w)
+      const presenceTimer = setTimeout(() => fail('presence timed out'), 60_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+      await checkPresence(w, out)
       clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
       if (!w.isVisible()) return fail('window never showed')
@@ -1129,7 +1131,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 45_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 75_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       app.exit(0)
@@ -1200,7 +1202,7 @@ const cpuNow = (pid: number | null | undefined): string => {
  * session that needs you peeks out; a finished one only waits (a dot in the menu bar) until the panel opens. Then
  * Presence goes to Always visible, for the rest of the check. STEWARD_SMOKE_IDLE=seconds logs the idle CPU in both modes.
  */
-async function checkPresence(w: BrowserWindow): Promise<void> {
+async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   const idle = Number(process.env.STEWARD_SMOKE_IDLE ?? 0)
   const need = (ok: boolean, why: string) => {
@@ -1208,15 +1210,6 @@ async function checkPresence(w: BrowserWindow): Promise<void> {
   }
   need(settings.steward().presence === 'quiet' && settings.steward().alertPeek === 'needs-me', 'a fresh install did not start quiet')
   need(settings.steward().dimWhenIdle && settings.steward().hideFromScreenShare, 'a fresh install did not start with dim and screen-share hiding on')
-  await sleep(500)
-  need(dock === 'collapsed' && !w.isVisible(), 'the tab shows at rest while Presence is Only when needed')
-  console.log('smoke: fresh install is quiet, the tab is out of sight at rest')
-  if (idle > 0) {
-    app.getAppMetrics()
-    await sleep(idle * 1000)
-    console.log(`smoke: edge idle ${idle}s, Only when needed (tab hidden): ${cpuNow(w.webContents.getOSProcessId())}`)
-  }
-
   // A push against the edge for 300 ms comes out; leaving goes back after 1.5 s.
   const push = (inZone: boolean) => lookAtCursor(inZone, false, EDGE_DWELL_MS)
   /** The cursor is away and everything is at rest: after 1.5 s the tab slides out, and then the window goes. */
@@ -1226,6 +1219,33 @@ async function checkPresence(w: BrowserWindow): Promise<void> {
     push(false)
     await sleep(SLIDE_MS + 150)
   }
+
+  // The first launch of a fresh install: Steward peeks out once with the note, and tucks away once it's been read.
+  await sleep(500)
+  need(dock === 'collapsed' && !w.isVisible(), 'the tab showed before the first-launch peek')
+  maybeFirstPeek()
+  need(dock === 'nudge' && appState.firstPeekShown, 'a fresh install did not peek out on its first launch')
+  await sleep(800)
+  need(w.isVisible(), 'the first-launch peek did not come out')
+  const said = String(await w.webContents.executeJavaScript(`[...document.querySelectorAll('.nudge-title, .nudge-detail')].map((e) => e.textContent).join(' ')`))
+  need(said.startsWith('Hides until you need it.'), `the first-launch peek says "${said}"`)
+  await fs.writeFile(out.replace(/\.png$/, '-first-peek.png'), (await w.webContents.capturePage()).toPNG())
+  lookAtPeek(true)
+  need(dock === 'nudge', 'the first-launch peek went while the cursor was on it')
+  lookAtPeek(false)
+  need(dock === 'collapsed' && w.isVisible(), 'the first-launch peek did not go back to being the tab once read')
+  await tuck()
+  need(!w.isVisible(), 'the tab did not tuck away after the first-launch peek')
+  maybeFirstPeek()
+  need(dock === 'collapsed' && !w.isVisible(), 'the first-launch peek came out twice')
+  console.log(`smoke: a fresh install peeks out once ("${said}"), and tucks away once it's been read`)
+  console.log('smoke: fresh install is quiet, the tab is out of sight at rest')
+  if (idle > 0) {
+    app.getAppMetrics()
+    await sleep(idle * 1000)
+    console.log(`smoke: edge idle ${idle}s, Only when needed (tab hidden): ${cpuNow(w.webContents.getOSProcessId())}`)
+  }
+
   push(true)
   await sleep(150)
   push(false)
@@ -1280,6 +1300,40 @@ async function checkPresence(w: BrowserWindow): Promise<void> {
     await sleep(idle * 1000)
     console.log(`smoke: edge idle ${idle}s, Always visible (tab shown): ${cpuNow(w.webContents.getOSProcessId())}`)
   }
+
+  // Dim when idle: after 20 s at rest the tab's eyes fade and stop; the cursor coming near wakes them.
+  const dimmed = async () => Boolean(await w.webContents.executeJavaScript(`Boolean(document.querySelector('.pill-host.dimmed'))`))
+  await sleep(DIM_AFTER_MS + 1500)
+  need(await dimmed(), 'the eyes did not dim after 20 s at rest')
+  const opacity = String(await w.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.pill-host')).opacity`))
+  // What the edge's watcher sends when the cursor comes within reach of the tab.
+  w.webContents.send('presence:near', true)
+  await sleep(300)
+  need(!(await dimmed()), 'the cursor coming near did not wake the eyes')
+  w.webContents.send('presence:near', false)
+  console.log(`smoke: after 20 s at rest the tab's eyes dim (opacity ${opacity}), and the cursor coming near wakes them`)
+
+  // The tab drags up or down its edge, through the bridge its page uses. It stays inside the work area, the place is saved
+  // for this display, the panel stays on screen, and Reset brings it back to the middle.
+  const area = screen.getPrimaryDisplay().workArea
+  const middle = w.getBounds().y
+  const drag = (dy: number) => w.webContents.executeJavaScript(`window.steward.dock.drag('start'); window.steward.dock.drag('move', ${dy}); window.steward.dock.drag('end')`)
+  await drag(-200)
+  await sleep(300)
+  need(w.getBounds().y === middle - 200, `the tab is at ${w.getBounds().y} after a drag of 200 up from ${middle}`)
+  need(appState.tabPlaces[String(screen.getPrimaryDisplay().id)] !== undefined, "the tab's place was not saved")
+  await drag(-5000)
+  await sleep(300)
+  need(w.getBounds().y === area.y, `the tab went past the top of the work area (${w.getBounds().y}, not ${area.y})`)
+  const panel = boundsFor('expanded')
+  need(panel.y >= area.y + 24 && panel.y + panel.height <= area.y + area.height - 24, 'the panel would be off screen with the tab at the top')
+  await drag(5000)
+  await sleep(300)
+  need(w.getBounds().y + w.getBounds().height === area.y + area.height, 'the tab went past the bottom of the work area')
+  await resetTabPlace()
+  await sleep(600)
+  need(w.getBounds().y === middle, 'Reset did not bring the tab back to the middle')
+  console.log('smoke: the tab drags up and down its edge, stays inside the work area, is saved, and Reset brings it back')
 }
 
 /**
@@ -1311,6 +1365,23 @@ async function checkNotch(out: string): Promise<void> {
     const below = layout.height + 8
     const beside = layout.width / 2 + 8
     if (notchStyle === 'chin' ? !solid(image, layout.cx, below) : !solid(image, layout.cx - beside, layout.height / 2)) throw new Error(`the awake notch (${notchStyle}) did not draw its ${notchStyle === 'chin' ? 'chin' : 'wings'}`)
+
+    // Dim when idle, in the notch (once, in Chin): after 20 s awake at rest the eyes fade; the cursor coming near wakes
+    // them. Skipped if the real cursor happens to be near the notch, which keeps the eyes awake as it should.
+    const c = screen.getCursorScreenPoint()
+    if (notchStyle === 'chin' && Math.hypot(c.x - (notchGeo.x + notchGeo.width / 2), c.y - notchGeo.y) < 480) console.log('smoke: notch: the cursor is near the notch, skipped dim when idle')
+    else if (notchStyle === 'chin') {
+      const page = notch.contents()!
+      const dim = async () => Boolean(await page.executeJavaScript(`Boolean(document.querySelector('.notch-root.dim'))`))
+      await sleep(DIM_AFTER_MS + 1500)
+      if (!(await dim())) throw new Error("the notch's eyes did not dim after 20 s at rest")
+      // What the notch window sends its page when the cursor comes near.
+      notch.post('notch:cursor', { x: layout.cx, y: 10 })
+      await sleep(300)
+      if (await dim()) throw new Error('the cursor coming near the notch did not wake its eyes')
+      notch.post('notch:cursor', null)
+      console.log("smoke: notch: after 20 s at rest the eyes dim, and the cursor coming near wakes them")
+    }
 
     // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
     await settings.update({ steward: { presence: 'quiet' } })
