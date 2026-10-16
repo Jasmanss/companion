@@ -95,6 +95,8 @@ const api: StewardAPI = {
   },
   presence: {
     onNote: (cb) => subscribe<string>('presence:note', cb),
+    slid: () => ipcRenderer.invoke('presence:slid'),
+    onSlide: (cb) => subscribe<{ out: boolean; animate: boolean }>('presence:slide', cb),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }

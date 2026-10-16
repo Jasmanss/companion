@@ -426,9 +426,13 @@ export interface StewardAPI {
     onCursor(cb: (p: { x: number; y: number } | null) => void): Unsubscribe
     click(): void
   }
-  /** Only when needed: a one-time note, shown in the panel the first time it opens. */
+  /** Only when needed: a one-time note, shown in the panel the first time it opens, and the tab's slide in and out. */
   presence: {
     onNote(cb: (text: string) => void): Unsubscribe
+    /** Whether the page starts slid out (off the screen edge). */
+    slid(): Promise<boolean>
+    /** Slide out (to the screen edge) or back in; animate false jumps. The page does it, so the window never moves. */
+    onSlide(cb: (slide: { out: boolean; animate: boolean }) => void): Unsubscribe
   }
   copyText(text: string): Promise<void>
 }

@@ -214,20 +214,20 @@ describe('the menu bar', () => {
 })
 
 describe('the first-time note', () => {
-  it('names the edge and the shortcut', () => {
-    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toBe('Steward hides until you need it. Push your cursor against the right edge, or press ⌥\u00a0Space.')
-    expect(presenceNote({ where: 'left', hotkey: 'Alt+Space', besideScreen: false })).toContain('against the left edge')
+  it('is one short line: where to push, or the shortcut', () => {
+    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Push the right edge or press ⌥\u00a0Space.')
+    expect(presenceNote({ where: 'left', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Push the left edge or press ⌥\u00a0Space.')
+    expect(presenceNote({ where: 'notch', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Rest the cursor on the notch or press ⌥\u00a0Space.')
   })
 
-  it('adds the way around it when another screen touches that edge', () => {
-    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: true })).toBe(
-      'Steward hides until you need it. Push your cursor against the right edge, or press ⌥\u00a0Space. On a screen next to another one, use ⌥\u00a0Space or the menu bar icon.',
-    )
+  it('leaves out the edge when another screen touches it, since the cursor passes through', () => {
+    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: true })).toBe('Hides until you need it. Press ⌥\u00a0Space.')
+    // The notch has no neighbor to worry about.
+    expect(presenceNote({ where: 'notch', hotkey: 'Alt+Space', besideScreen: true })).toBe('Hides until you need it. Rest the cursor on the notch or press ⌥\u00a0Space.')
   })
 
-  it('points at the notch in the notch, and at the menu bar icon when the shortcut is off', () => {
-    expect(presenceNote({ where: 'notch', hotkey: 'Alt+Space', besideScreen: true })).toBe('Steward hides until you need it. Rest your cursor on the notch, or press ⌥\u00a0Space.')
-    expect(presenceNote({ where: 'right', hotkey: '', besideScreen: false })).toBe('Steward hides until you need it. Push your cursor against the right edge, or use the menu bar icon.')
-    expect(presenceNote({ where: 'right', hotkey: '', besideScreen: true })).toContain('On a screen next to another one, use the menu bar icon.')
+  it('points at the menu bar icon when the shortcut is off', () => {
+    expect(presenceNote({ where: 'right', hotkey: '', besideScreen: false })).toBe('Hides until you need it. Push the right edge or use the menu bar icon.')
+    expect(presenceNote({ where: 'right', hotkey: '', besideScreen: true })).toBe('Hides until you need it. Use the menu bar icon.')
   })
 })

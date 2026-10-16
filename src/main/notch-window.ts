@@ -105,6 +105,11 @@ export class NotchDock {
     return this.win && !this.win.isDestroyed() ? this.win.webContents.capturePage() : null
   }
 
+  /** The page, for the smoke check to watch it move. */
+  contents(): Electron.WebContents | null {
+    return this.win && !this.win.isDestroyed() ? this.win.webContents : null
+  }
+
   /** The page's process, for measuring how much it costs. */
   pid(): number | null {
     return this.win && !this.win.isDestroyed() ? this.win.webContents.getOSProcessId() : null

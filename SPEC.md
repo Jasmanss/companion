@@ -31,8 +31,9 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   (0.25 s), when a session needs you, while the agent is working, or on the
   hotkey and the menu bar icon, which always open the panel. It tucks away
   1.5 s after the cursor leaves. In the notch it sleeps as the notch's own black,
-  with no chin and no eyes. Manual Hide stays separate: nothing brings it back
-  but you.
+  with no chin and no eyes. It slides in and out as a transform in the page, so
+  every frame is the display's. Manual Hide stays separate: nothing brings it
+  back but you.
 - **Alerts that peek out (Settings → Steward → Presence):** only when a session
   needs me (the default in "Only when needed"), everything switched on in
   Notifications (the default in "Always visible"), or nothing. What doesn't peek

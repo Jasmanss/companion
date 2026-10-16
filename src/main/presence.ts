@@ -128,11 +128,14 @@ export function menuBarTitle(waiting: number, held: number): string {
 
 /* ---------- The first-time note ---------- */
 
-/** The one-time note in the panel the first time Steward is hiding: where to push, and the hotkey. hotkey is the opening shortcut, or '' if it's off. */
+/**
+ * The one-time note in the panel the first time Steward is hiding: one short line saying how to bring it out. hotkey is
+ * the opening shortcut, or '' if it's off. Beside another screen the cursor passes through the edge, so it isn't offered.
+ */
 export function presenceNote(o: { where: 'left' | 'right' | 'notch'; hotkey: string; besideScreen: boolean }): string {
   // A no-break space inside the shortcut, so it never wraps between the symbol and the key.
   const hotkey = o.hotkey ? formatAccelerator(o.hotkey).replace(' ', '\u00a0') : ''
-  const spot = o.where === 'notch' ? 'Rest your cursor on the notch' : `Push your cursor against the ${o.where} edge`
-  const note = `Steward hides until you need it. ${spot}, or ${hotkey ? `press ${hotkey}` : 'use the menu bar icon'}.`
-  return o.besideScreen && o.where !== 'notch' ? `${note} On a screen next to another one, use ${hotkey ? `${hotkey} or ` : ''}the menu bar icon.` : note
+  const key = hotkey ? `press ${hotkey}` : 'use the menu bar icon'
+  const push = o.where === 'notch' ? 'Rest the cursor on the notch' : `Push the ${o.where} edge`
+  return o.besideScreen && o.where !== 'notch' ? `Hides until you need it. ${hotkey ? `Press ${hotkey}` : 'Use the menu bar icon'}.` : `Hides until you need it. ${push} or ${key}.`
 }

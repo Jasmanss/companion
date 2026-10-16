@@ -90,6 +90,24 @@ body,
   overflow: hidden;
 }
 
+/* Only when needed: the tab slides in from the screen edge and back out. It's a transform on the page, drawn by the
+   compositor at the display's own rate; the window stays where it is. Away from the edge is --side times the window's own
+   width, so it's gone whatever the tab, the nudge or the panel is. Going out speeds up, coming in slows down. */
+:root[data-slide='out'] #root {
+  will-change: transform;
+  transform: translateX(calc(100% * var(--side)));
+  transition: transform 0.3s cubic-bezier(0.5, 0, 0.9, 0.4);
+}
+
+:root[data-slide='in'] #root {
+  transform: none;
+  transition: transform 0.38s var(--spring);
+}
+
+:root[data-slide-jump] #root {
+  transition: none !important;
+}
+
 body {
   font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   color: var(--t1);
@@ -2262,6 +2280,17 @@ a.icon-btn {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
+  :root[data-slide='out'] #root {
+    transform: none;
+    opacity: 0;
+    transition: opacity 0.2s linear;
+  }
+
+  :root[data-slide='in'] #root {
+    opacity: 1;
+    transition: opacity 0.2s linear;
+  }
+
   .mini .scan,
   .shine .win,
   .prog .shim,

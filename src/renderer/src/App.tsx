@@ -138,6 +138,27 @@ export function App() {
 
   // Settings → Steward, with the defaults for anything an older main process doesn't send.
   const look = { ...DEFAULT_STEWARD, ...settings?.steward }
+  // Only when needed, the tab slides in from the screen edge and back as a transform in the page (see styles.css), so
+  // every frame is the compositor's. The window never moves: macOS puts a window that is partly off screen back on it.
+  useEffect(() => {
+    const root = document.documentElement
+    const jump = (out: boolean) => {
+      root.dataset.slideJump = ''
+      root.dataset.slide = out ? 'out' : 'in'
+      // Read the style now, so the jump is over before the transitions come back.
+      void getComputedStyle(document.getElementById('root')!).transform
+      delete root.dataset.slideJump
+    }
+    const slide = ({ out, animate }: { out: boolean; animate: boolean }) => {
+      if (!animate) return jump(out)
+      // Coming in: the first frame is drawn away, and the next one starts the slide.
+      if (!out && root.dataset.slide === 'out') requestAnimationFrame(() => (root.dataset.slide = 'in'))
+      else root.dataset.slide = out ? 'out' : 'in'
+    }
+    void api.presence.slid().then(jump)
+    return api.presence.onSlide(slide)
+  }, [])
+
   // The tab and the panel's animations face away from the screen edge it sits on.
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge

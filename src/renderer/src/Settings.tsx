@@ -297,14 +297,14 @@ function useNotch(): NotchGeometry | null {
   return notch
 }
 
-/** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
-/** What each choice of "Alerts that peek out" means. Settings → Notifications still decides which kinds are on at all. */
+/** What each choice of "Alerts that peek out" comes to, in one line. Settings → Notifications still decides which kinds are on at all. */
 const ALERT_PEEK_NOTES: Record<StewardPrefs['alertPeek'], string> = {
-  'needs-me': 'Only when a session needs me. Finished and failed builds and good news wait in the menu bar, and show in the panel when it opens.',
-  all: 'Everything I turned on in Notifications.',
-  none: 'Nothing, menu bar only. Everything shows in the panel when it opens.',
+  'needs-me': 'Only when a session needs me.',
+  all: 'Everything in Notifications.',
+  none: 'Nothing. They wait in the menu bar.',
 }
 
+/** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
 export function StewardSection(props: SectionProps) {
   // (A main process from before the character, or before the panel's tint, sends less: the defaults fill in.)
   const look = { ...DEFAULT_STEWARD, ...props.settings.steward }
@@ -384,7 +384,7 @@ export function StewardSection(props: SectionProps) {
       </Group>
 
       <Group title="Presence">
-        <Row label="Presence" note={look.presence === 'quiet' ? `Out of sight until you ${where === 'notch' ? 'rest your cursor on the notch' : `push your cursor against the ${where} edge`}, press its shortcut, or a session needs you. The menu bar icon is always there.` : 'Always on screen, at its edge or in the notch.'}>
+        <Row label="Presence" note={look.presence === 'quiet' ? 'Hides until you need it.' : 'Always on screen.'}>
           <Segmented label="Presence" value={look.presence} options={[['always', 'Always visible'], ['quiet', 'Only when needed']]} onChange={(presence) => set({ presence, alertPeek: alertPeekAfterSwitch(look.presence, presence, look.alertPeek) })} />
         </Row>
         <Row label="Alerts that peek out" note={ALERT_PEEK_NOTES[look.alertPeek]}>
