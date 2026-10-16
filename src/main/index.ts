@@ -78,6 +78,8 @@ const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
 /** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
 const SLIDE_MS = 700
+/** Why the window went, when the page's slide ended with no frame to draw its end (its own clock said so). */
+const SLIDE_END_UNDRAWN = "its slide's end time, with no frame drawn"
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -263,10 +265,13 @@ function tuckTab(): void {
   }, SLIDE_MS)
 }
 
-/** From the tab's page: its slide out ended. Unless it was brought out again meanwhile, the window goes now. */
-function slideEnded(): void {
+/**
+ * From the tab's page: its slide out ended, drawn, or by the clock when no frame came to draw its end. Unless it was
+ * brought out again meanwhile, the window goes now.
+ */
+function slideEnded(by: 'drawn' | 'clock'): void {
   if (!win || win.isDestroyed() || !win.isVisible() || dock !== 'collapsed' || out() || !slidOut) return
-  hideTab('its slide ending')
+  hideTab(by === 'drawn' ? 'its slide ending' : SLIDE_END_UNDRAWN)
 }
 
 /** Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge. */
@@ -925,7 +930,7 @@ function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
   ipcMain.handle('presence:slid', () => slidOut)
   ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
-  ipcMain.on('presence:slideEnded', () => slideEnded())
+  ipcMain.on('presence:slideEnded', (_e, by: unknown) => slideEnded(by === 'clock' ? 'clock' : 'drawn'))
   ipcMain.handle('dock:overhang', () => edgeOverhang())
   ipcMain.handle('dock:resetPlace', () => resetTabPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)

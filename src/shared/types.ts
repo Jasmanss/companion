@@ -440,8 +440,11 @@ export interface StewardAPI {
     slid(): Promise<boolean>
     /** Slide out (to the screen edge) or back in; animate false jumps. The page does it, so the window never moves. */
     onSlide(cb: (slide: { out: boolean; animate: boolean }) => void): Unsubscribe
-    /** The slide out (or the fade, with Reduce Motion) has ended: the window can go. */
-    slideEnded(): void
+    /**
+     * The slide out (or the fade, with Reduce Motion) has ended: the window can go. 'drawn': the page drew its end;
+     * 'clock': its end time passed with no frame drawn (a page that isn't being drawn gets no transitionend).
+     */
+    slideEnded(by: 'drawn' | 'clock'): void
     /** The cursor came near the tab, or went away again (for Dim when idle). */
     onNear(cb: (near: boolean) => void): Unsubscribe
   }

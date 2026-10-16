@@ -40,6 +40,9 @@ function urlFromDrag(data: DataTransfer): { url: string; source?: string } | nul
 
 const canDrop = (e: globalThis.DragEvent) => ['Files', 'text/uri-list', 'text/html'].some((t) => e.dataTransfer?.types.includes(t))
 
+/** How long after its own end time a slide out counts as over when no frame came to draw its end (see the slide below). */
+const SLIDE_END_GRACE_MS = 100
+
 export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
   const [items, setItems] = useState<TrayItem[]>([])
@@ -152,23 +155,36 @@ export function App() {
       void getComputedStyle(document.getElementById('root')!).transform
       delete root.dataset.slideJump
     }
+    // The window goes when the slide out has ended (the transform, or with Reduce Motion the fade), not on a guess.
+    // transitionend only comes with a drawn frame, and a page that isn't being drawn (a sleeping screen) gets none, so
+    // the slide's own end time, a little after, says so too.
+    const page = document.getElementById('root')!
+    let clock: ReturnType<typeof setTimeout> | undefined
+    const ended = (by: 'drawn' | 'clock') => {
+      clearTimeout(clock)
+      if (root.dataset.slide === 'out') api.presence.slideEnded(by)
+    }
+    const drawn = (e: TransitionEvent) => {
+      if (e.target === page && (e.propertyName === 'transform' || e.propertyName === 'opacity')) ended('drawn')
+    }
     const slide = ({ out, animate }: { out: boolean; animate: boolean }) => {
+      clearTimeout(clock)
       if (!animate) return jump(out)
       // Coming in: the first frame is drawn away, and the next one starts the slide.
       if (!out && root.dataset.slide === 'out') requestAnimationFrame(() => (root.dataset.slide = 'in'))
       else root.dataset.slide = out ? 'out' : 'in'
+      if (!out) return
+      // getAnimations() brings the style up to date, so the slide's transition is there, with its length.
+      const ms = Math.max(0, ...page.getAnimations().map((a) => Number(a.effect?.getComputedTiming().endTime) || 0))
+      clock = setTimeout(() => ended('clock'), ms + SLIDE_END_GRACE_MS)
     }
-    // The window goes when the slide out has ended (the transform, or with Reduce Motion the fade), not on a guess.
-    const page = document.getElementById('root')!
-    const ended = (e: TransitionEvent) => {
-      if (e.target === page && (e.propertyName === 'transform' || e.propertyName === 'opacity') && root.dataset.slide === 'out') api.presence.slideEnded()
-    }
-    page.addEventListener('transitionend', ended)
+    page.addEventListener('transitionend', drawn)
     void api.presence.slid().then(jump)
     const off = api.presence.onSlide(slide)
     return () => {
       off()
-      page.removeEventListener('transitionend', ended)
+      clearTimeout(clock)
+      page.removeEventListener('transitionend', drawn)
     }
   }, [])
 
