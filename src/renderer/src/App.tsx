@@ -480,7 +480,7 @@ export function App() {
   if (dock === 'collapsed' || dock === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
-      <button className="peek" data-app {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
+      <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
         <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked dimmed={tabDimmed} />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>

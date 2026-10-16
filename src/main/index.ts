@@ -1376,11 +1376,18 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   need(!(await dimmed()), 'the eyes dimmed well before 20 s at rest')
   while (!(await dimmed()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
   const tookS = ((Date.now() - waiting) / 1000).toFixed(1)
-  need(await dimmed(), `the eyes did not dim within ${tookS} s of this check (about 3 s more at rest)`)
-  // The fade to dim takes 1.2 s.
-  await sleep(1300)
-  const opacity = Number(await w.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.pill-host')).opacity`))
-  need(Math.abs(opacity - 0.4) < 0.02, `the dimmed eyes are at opacity ${opacity}, not 0.4`)
+  // If not, say what the tab's page had: any of these changing starts the 20 s over.
+  const inputs = String(await w.webContents.executeJavaScript(`document.querySelector('.peek')?.dataset.dim ?? 'no tab'`))
+  need(await dimmed(), `the eyes did not dim within ${tookS} s of this check (about 3 s more at rest); the tab had ${inputs}`)
+  // The fade to dim takes 1.2 s; it has to settle at 0.4.
+  const eyesOpacity = async () => Number(await w.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.pill-host')).opacity`))
+  const fading = Date.now()
+  let opacity = await eyesOpacity()
+  while (Math.abs(opacity - 0.4) >= 0.02 && Date.now() - fading < 4000) {
+    await sleep(100)
+    opacity = await eyesOpacity()
+  }
+  need(Math.abs(opacity - 0.4) < 0.02, `the dimmed eyes are at opacity ${opacity}, not 0.4, 4 s after they began to fade`)
   // What the edge's watcher sends when the cursor comes within reach of the tab.
   w.webContents.send('presence:near', true)
   await sleep(300)
