@@ -116,11 +116,11 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </div>
   </header>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">7</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">6</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Quiet mode, Phase 1</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Try it by hand first (claude/quiet-mode-phase-1-c95ee6), then OK the merge into v1.1-hub-knx5hf.</p>
+        <p>Try it by hand first (claude/quiet-mode-phase-1-c95ee6), then OK the merge into main (a draft PR runs CI first).</p>
       </li>
       <li>
         <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-14">Oct 14</time></div>
@@ -133,10 +133,6 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       <li>
         <div class="row"><span class="name">Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">GitHub Actions bump</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>OK to push 062e4fd, open a PR and run CI? Main already has v7 (PR #8, merged Oct 14), so this only fixes v1.1-hub-knx5hf.</p>
       </li>
       <li>
         <div class="row"><span class="name">Dependabot</span><time datetime="2026-10-15">Oct 15</time></div>
@@ -153,7 +149,7 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <ul>
       <li>
         <div class="row"><span class="name">Quiet mode, Phase 1</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Built (dd0cd9c on claude/quiet-mode-phase-1-c95ee6, not merged). Checks pass; real cursor and alert timing not tried by hand yet.</p>
+        <p>Built (dd0cd9c on claude/quiet-mode-phase-1-c95ee6, not merged). Local checks pass; CI: no PR yet; real cursor and alert timing not tried by hand yet.</p>
       </li>
       <li>
         <div class="row"><span class="name">Notch dock</span><time datetime="2026-10-14">Oct 14</time></div>
@@ -272,8 +268,12 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">8</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">9</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">GitHub Actions bump: not needed</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Main already has v7 (PR #8) and phase PRs go into main. Branch claude/deps-actions-bump-c75665 stays until you say to delete it.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Dependabot #10 merged</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Minor and patch group. d45bc58.</p>
