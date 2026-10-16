@@ -9,6 +9,7 @@ Answers from the user (2026-10-15, relayed by the front door; this is not a go t
 - **New installs:** quiet by default. A fresh install starts on "Only when needed", with "Dim when idle" and "Hide from screen sharing" on. The user's own settings stay as they are.
 - **Alerts from the edge while Steward sits in the notch:** fine for now. Notch Phase 3 fixes it later.
 - **Next in development:** quiet mode.
+- **Asked for directly (2026-10-15, later):** the user wants to move the tab up or down its side "anywhere on the screen basically", and chose "Up and down its side" when asked what that means: any height on the left or right edge, not floating free. This is Part 2 below.
 
 Ideas from the front door (not decisions):
 - **Auto-hide like the Dock.** Fully tucked at rest. It appears when the cursor pushes against the edge (or the notch) for a short delay, or when an alert the user chose arrives. Today the hidden state is manual only (⌥⇧ Space).
@@ -64,7 +65,9 @@ The nudge complaint is about alerts that were not worth interrupting for. In "On
 - This is a filter in `showAlerts` (or just before it), written as a pure function with tests, not a change to how alerts are queued.
 
 ### Part 2: Move the tab along the edge (second build)
-- **Drag the tab up or down** to move it along its edge. A movement of more than 5 px is a drag; anything less is still a click that opens the panel.
+- **Drag the tab up or down** to move it to any height along its edge (the user's direct ask: "anywhere" means any height on the side, not a free-floating window). The edge stays the one chosen in Settings → Steward → Screen edge; dragging sideways does not switch edges.
+- **The only height limits are the ones the screen needs:** the tab stays fully inside the display's work area (`screen.getDisplayNearestPoint(...).workArea`), which already excludes the menu bar, the notch band and the Dock when it sits on that side. So it can be dragged right up to the menu bar and down to the Dock, but not under them. It is clamped while dragging, not after. Nudge and panel sizes are unchanged and are placed from the tab's new height (the panel keeps its existing rule for staying on screen).
+- **Edge cases:** an external display with a different height keeps its own saved position; if the saved position would put the tab outside the work area (resolution change, Dock moved), it is clamped back in. A movement of more than 5 px is a drag; anything less is still a click that opens the panel.
 - The position is remembered per display (by display id) as a fraction of the screen height, so it survives resolution changes. "Reset position" is in Settings.
 - Store it in app state (`appState`), not in settings: it's a remembered place, not a preference.
 - The edge-push zone from Part 1 follows the tab's new position.

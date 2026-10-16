@@ -27,7 +27,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Quiet mode, Phases 2 and 3", "line": "Phase 2: tab drag, first-launch peek, Dim when idle. Then Phase 3, step aside. Each waits for its own go; Phase 2 not yet.", "date": "2026-10-15" },
+        { "name": "Quiet mode, Phases 2 and 3", "line": "Phase 2: tab drag to any height on its side (asked for by you), first-launch peek, Dim when idle. Then Phase 3, step aside. Each waits for its own go; Phase 2 not yet.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Waits for go.", "date": "2026-10-14" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
