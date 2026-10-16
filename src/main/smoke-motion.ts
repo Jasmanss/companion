@@ -78,6 +78,12 @@ export interface MotionVerdict {
   line: string
 }
 
+/**
+ * On a Mac with a screen: at least MIN_POSITIONS positions and no wait over MAX_GAP_MS between frames. On a CI runner
+ * the runner decides when the page gets to draw, so a long wait there says more about the runner than the app. There,
+ * every frame the page drew mid-motion has to show a new position, at MIN_POSITIONS positions at least; the waits, while
+ * it moved and while it was still, are logged next to each other so a stutter of the app's own still shows.
+ */
 export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdict {
   const drew = `the page drew ${m.drawn} frames in ${m.watchedMs} ms (${m.visibility})`
   if (m.drawn < STARVED_FRAMES) {
@@ -87,6 +93,11 @@ export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdi
   }
   const still = m.stillGapMs === null ? 'no frames while it was still' : `${m.stillGapMs} ms while it was still`
   const line = `motion ${what}: ${m.positions} positions in ${m.frames} frames over ${m.spanMs} ms; longest wait between frames ${m.maxGapMs} ms while it moved (${m.maxGapAtMs} ms in), ${still}`
-  if (m.positions < MIN_POSITIONS || m.maxGapMs > MAX_GAP_MS) return { result: 'not smooth', line: `${line}; ${drew}` }
-  return { result: 'smooth', line }
+  if (!onCI) {
+    if (m.positions < MIN_POSITIONS || m.maxGapMs > MAX_GAP_MS) return { result: 'not smooth', line: `${line}; ${drew}` }
+    return { result: 'smooth', line }
+  }
+  if (m.stuck > 0) return { result: 'not smooth', line: `${line}; ${m.stuck} of those frames showed no new position mid-motion; ${drew}` }
+  if (m.positions < MIN_POSITIONS) return { result: 'not smooth', line: `${line}; fewer than ${MIN_POSITIONS} positions; ${drew}` }
+  return { result: 'smooth', line: `${line}; a new position in every frame the page drew (on CI the waits are logged, not judged); ${drew}` }
 }

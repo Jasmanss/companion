@@ -5,37 +5,55 @@ import { judgeMotion, measureMotion, type Motion, type Sample } from '../src/mai
 const SMOOTH: Motion = { frames: 47, positions: 47, spanMs: 383, maxGapMs: 9, maxGapAtMs: 0, stuck: 0, stillGapMs: 9, drawn: 84, watchedMs: 700, visibility: 'visible' }
 /** What the macOS CI runner gave: the page drew twice and stopped. */
 const STARVED: Motion = { frames: 0, positions: 1, spanMs: 0, maxGapMs: 0, maxGapAtMs: 0, stuck: 0, stillGapMs: null, drawn: 2, watchedMs: 700, visibility: 'visible' }
+/** The fade on the macOS CI runner (run 38852242586): a new opacity in all 19 frames, one 100 ms wait between two of them. */
+const CI_FADE: Motion = { frames: 19, positions: 19, spanMs: 383, maxGapMs: 100, maxGapAtMs: 0, stuck: 0, stillGapMs: 95, drawn: 33, watchedMs: 700, visibility: 'visible' }
 
-describe('judging a watched animation', () => {
+describe('judging a watched animation on a Mac', () => {
   it('passes a slide drawn at many positions with frames a display refresh apart', () => {
     expect(judgeMotion('the tab sliding in', SMOOTH, false)).toEqual({
       result: 'smooth',
       line: 'motion the tab sliding in: 47 positions in 47 frames over 383 ms; longest wait between frames 9 ms while it moved (0 ms in), 9 ms while it was still',
     })
-    // The same on CI: a runner that does draw is held to the same bar.
-    expect(judgeMotion('the tab sliding in', SMOOTH, true).result).toBe('smooth')
   })
 
   it('fails a slide drawn in a few steps, or with a long stall, while the page was drawing', () => {
-    const stepped = { ...SMOOTH, frames: 4, positions: 4, maxGapMs: 120 }
-    for (const onCI of [false, true]) expect(judgeMotion('the tab sliding in', stepped, onCI).result).toBe('not smooth')
+    expect(judgeMotion('x', { ...SMOOTH, frames: 4, positions: 4, maxGapMs: 120 }, false).result).toBe('not smooth')
     expect(judgeMotion('x', { ...SMOOTH, maxGapMs: 61 }, false).result).toBe('not smooth')
     expect(judgeMotion('x', { ...SMOOTH, positions: 7 }, false).result).toBe('not smooth')
-    // A page that drew but never moved: the animation didn't run.
-    expect(judgeMotion('x', { ...SMOOTH, frames: 0, positions: 1, spanMs: 0, maxGapMs: 0 }, true).result).toBe('not smooth')
+    // The CI runner's fade, on a Mac with a screen: a 100 ms wait is a stutter there.
+    expect(judgeMotion('x', CI_FADE, false).result).toBe('not smooth')
   })
 
-  it('on a CI runner whose page hardly draws, says plainly that it could not measure, instead of passing or failing', () => {
-    expect(judgeMotion('the tab sliding in', STARVED, true)).toEqual({
-      result: 'not measurable',
-      line: 'motion the tab sliding in: not measurable here: the page drew 2 frames in 700 ms (visible)',
-    })
-  })
-
-  it('on a Mac with a screen, a page that hardly draws is a failure', () => {
+  it('fails a page that hardly draws', () => {
     expect(judgeMotion('the tab sliding in', STARVED, false)).toEqual({
       result: 'not smooth',
       line: "motion the tab sliding in: the page drew 2 frames in 700 ms (visible), not at the display's rate",
+    })
+  })
+})
+
+describe('judging a watched animation on a CI runner', () => {
+  it('passes a fade with a new position in every frame the page drew, logging a long wait instead of failing on it', () => {
+    expect(judgeMotion('the tab sliding in', CI_FADE, true)).toEqual({
+      result: 'smooth',
+      line:
+        'motion the tab sliding in: 19 positions in 19 frames over 383 ms; longest wait between frames 100 ms while it moved (0 ms in), 95 ms while it was still; ' +
+        'a new position in every frame the page drew (on CI the waits are logged, not judged); the page drew 33 frames in 700 ms (visible)',
+    })
+    expect(judgeMotion('x', SMOOTH, true).result).toBe('smooth')
+  })
+
+  it('fails an animation that stood still in frames the page drew, or moved in too few steps, or never moved', () => {
+    const stepped = { ...CI_FADE, frames: 19, positions: 5, stuck: 14 }
+    expect(judgeMotion('x', stepped, true)).toMatchObject({ result: 'not smooth', line: expect.stringContaining('14 of those frames showed no new position mid-motion') })
+    expect(judgeMotion('x', { ...CI_FADE, frames: 4, positions: 4 }, true).result).toBe('not smooth')
+    expect(judgeMotion('x', { ...CI_FADE, frames: 0, positions: 1, spanMs: 0, maxGapMs: 0 }, true).result).toBe('not smooth')
+  })
+
+  it('says plainly that it could not measure when the page hardly draws, instead of passing or failing', () => {
+    expect(judgeMotion('the tab sliding in', STARVED, true)).toEqual({
+      result: 'not measurable',
+      line: 'motion the tab sliding in: not measurable here: the page drew 2 frames in 700 ms (visible)',
     })
   })
 })

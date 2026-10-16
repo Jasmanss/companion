@@ -1239,8 +1239,9 @@ async function motionLook(wc: Electron.WebContents, moving: string, fading: stri
 const MOVING_BLACK = { chin: '.nt .bp', wings: '.nt .blob + .blob .bp' } as const
 
 /**
- * The motion has to be smooth: drawn at many positions, with no long stall between frames. On a CI runner whose page
- * hardly draws at all, it says it couldn't measure, and goes on (smoke-motion has the rules).
+ * The motion has to be smooth: drawn at many positions, with no long stall between frames. On a CI runner, which
+ * decides when the page draws, every frame the page drew has to show a new position instead; if it hardly draws at
+ * all, it says it couldn't measure, and goes on (smoke-motion has the rules).
  */
 function smoothly(what: string, m: Motion): void {
   const verdict = judgeMotion(what, m, Boolean(process.env.CI))
