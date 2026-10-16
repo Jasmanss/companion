@@ -178,5 +178,11 @@ Status stays `ready`: Phases 2 and 3 are not built yet. Recorded by Roadmap & de
   - The "Alerts that peek out" default moves with Presence only while it is still on the old default.
 - **Waiting on the user:** OK to merge Phase 1 into `v1.1-hub-knx5hf`, and the go for Phase 2.
 
+### Phase 1 fix (recorded 2026-10-15, from the front door)
+- **Commit:** `eb3e963` on `claude/quiet-mode-phase-1-c95ee6`. Draft PR into main: https://github.com/Jasmanss/companion/pull/15. CI had not reported yet when this was recorded.
+- **What changed:** the tab slide is now a CSS transform drawn every frame, so the window never moves (macOS was snapping a partly off-screen window back, which gave the "3 frames" look). Reduce Motion fades instead. The Presence, alerts and first-run text are cut to one line each. Notch motion is unchanged.
+- **Measured in smoke:** 47 frames over 383 ms sliding in, 39 over 317 ms sliding out, longest gap 9 ms. Smoke now fails if a slide shows fewer than 8 positions or a gap over 60 ms.
+- **Not checked:** the motion as it looks on screen (no Screen Recording). One smoke run in seven showed no slide-out samples and was not reproduced.
+
 ### Phase 2 and Phase 3
 Not started.

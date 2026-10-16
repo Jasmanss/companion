@@ -5,7 +5,7 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Quiet mode, Phase 1", "line": "Try it by hand first (claude/quiet-mode-phase-1-c95ee6), then OK the merge into main (a draft PR runs CI first).", "date": "2026-10-15" },
+        { "name": "Quiet mode, Phase 1", "line": "Try the smoother Phase 1 by hand (claude/quiet-mode-phase-1-c95ee6), then OK the merge once CI is green on PR #15.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -17,7 +17,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Quiet mode, Phase 1", "line": "Built (dd0cd9c on claude/quiet-mode-phase-1-c95ee6, not merged). Local checks pass; CI: no PR yet; real cursor and alert timing not tried by hand yet.", "date": "2026-10-15" },
+        { "name": "Quiet mode, Phase 1", "line": "Built, slide smoothed (dd0cd9c, fix eb3e963 on claude/quiet-mode-phase-1-c95ee6). Draft PR #15 into main, CI running. Local checks pass; real cursor and alert timing not tried by hand yet.", "date": "2026-10-15" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.", "date": "2026-10-14" },
         { "name": "Chat flow and this status page", "line": "Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.", "date": "2026-10-15" }
       ]
