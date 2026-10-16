@@ -9,7 +9,6 @@
         { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
-        { "name": "Dependabot", "line": "Replace #13 with @types/node 24. Close #11, #12 and #14 with \"@dependabot ignore this major version\". All four are still open on GitHub.", "date": "2026-10-15" },
         { "name": "Overnight Watch account", "line": "Set up the phone/text account. Registration takes days.", "date": "2026-10-15", "tag": "unconfirmed: only in research notes" }
       ]
     },
@@ -18,6 +17,7 @@
       "title": "In progress",
       "items": [
         { "name": "Quiet mode, Phase 1", "line": "Built, slide smoothed (dd0cd9c, fix eb3e963 on claude/quiet-mode-phase-1-c95ee6). Draft PR #15 into main, CI running. Local checks pass; real cursor and alert timing not tried by hand yet.", "date": "2026-10-15" },
+        { "name": "PR #16: @types/node 24", "line": "Matches Electron 44's Node 24.21.0, plus a Dependabot rule to skip @types/node majors. CI running. Merge needs your OK.", "date": "2026-10-15" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.", "date": "2026-10-14" },
         { "name": "Chat flow and this status page", "line": "Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.", "date": "2026-10-15" }
       ]
@@ -53,6 +53,7 @@
         { "name": "Collision radar", "line": "From the mid-October feature list.", "date": "2026-10-15" },
         { "name": "Runaway guard", "line": "From the mid-October feature list.", "date": "2026-10-15" },
         { "name": "\"What was I doing\"", "line": "From the mid-October feature list.", "date": "2026-10-15" },
+        { "name": "Upgrade to TypeScript 7 and Vite 8", "line": "With @vitejs/plugin-react 6. The Dependabot PRs failed CI, so it needs its own planned upgrade.", "date": "2026-10-15" },
         { "name": "Hats and glasses", "line": "Parked.", "date": "2026-10-15" },
         { "name": "Screenshot catcher", "line": "Parked (prompt 07).", "date": "2026-10-15" },
         { "name": "Smarter design research", "line": "Parked (prompt 09).", "date": "2026-10-15" }
@@ -62,6 +63,7 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Dependabot cleanup", "line": "#11 to #14 closed with ignore-major (TypeScript 7, plugin-react 6, @types/node 26, Vite 8).", "date": "2026-10-15" },
         { "name": "GitHub Actions bump: not needed", "line": "Main already has v7 (PR #8) and phase PRs go into main. Branch claude/deps-actions-bump-c75665 stays until you say to delete it.", "date": "2026-10-15" },
         { "name": "Dependabot #10 merged", "line": "Minor and patch group. d45bc58.", "date": "2026-10-15" },
         { "name": "Chat pipeline docs", "line": "2ab436a.", "date": "2026-10-15" },
