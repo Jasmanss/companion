@@ -1188,12 +1188,12 @@ function alphaAt(img: Electron.NativeImage, x: number, y: number, windowWidth: n
  * compositor shows many positions with frames a display refresh apart; one stepped from the main process shows a few,
  * with long waits between. This measures the page's frames, not what the screen shows (Screen Recording isn't granted).
  */
-async function watchMotion(wc: Electron.WebContents, selector: string, ms: number, trigger: () => void | Promise<void>): Promise<Motion> {
+async function watchMotion(wc: Electron.WebContents, look: MotionLook, ms: number, trigger: () => void | Promise<void>): Promise<Motion> {
   const sampling = wc.executeJavaScript(`new Promise((resolve) => {
     const samples = []
     const frame = (t) => {
-      const el = document.querySelector(${JSON.stringify(selector)})
-      samples.push([t, el ? getComputedStyle(el).transform : ''])
+      const el = document.querySelector(${JSON.stringify(look.selector)})
+      samples.push([t, el ? getComputedStyle(el).${look.property} : ''])
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
@@ -1208,6 +1208,23 @@ async function watchMotion(wc: Electron.WebContents, selector: string, ms: numbe
   const moving = samples.slice(changed[0] - 1, changed.at(-1)! + 1)
   const gaps = moving.slice(1).map((s, i) => s[0] - moving[i][0])
   return { frames: moving.length, positions: new Set(moving.map((s) => s[1])).size, spanMs: Math.round(moving.at(-1)![0] - moving[0][0]), maxGapMs: Math.round(Math.max(...gaps)), ...seen }
+}
+
+/** What to watch: an element, and whether it moves (its transform) or, with Reduce Motion on, fades (its opacity). */
+interface MotionLook {
+  selector: string
+  property: 'transform' | 'opacity'
+  /** Said in the log, so a fade isn't mistaken for a slide. */
+  label: string
+}
+
+/**
+ * With Reduce Motion on, Steward fades instead of moving (styles.css, notch.css), so its transform never changes and
+ * the fade is what has to be smooth. The macOS CI runner has Reduce Motion on, which is why it once saw "1 position".
+ */
+async function motionLook(wc: Electron.WebContents, moving: string, fading: string): Promise<MotionLook> {
+  const reduced = Boolean(await wc.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`))
+  return reduced ? { selector: fading, property: 'opacity', label: ' (Reduce Motion is on: a fade)' } : { selector: moving, property: 'transform', label: '' }
 }
 
 /** The piece of the notch's black that moves when it wakes: the chin, or in Wings the wings (the second shape). */
@@ -1286,7 +1303,8 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   need(!presenceNow.revealed && !w.isVisible(), 'a push that left early still brought the tab out')
   push(true)
   await sleep(350)
-  smoothly('the tab sliding in', await watchMotion(w.webContents, '#root', 700, () => void push(true)))
+  const tabLook = await motionLook(w.webContents, '#root', '#root')
+  smoothly(`the tab sliding in${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void push(true)))
   need(presenceNow.revealed, 'a push for 300 ms did not bring the tab out')
   need(w.isVisible(), 'the tab did not slide in')
   const home = boundsFor('collapsed')
@@ -1294,7 +1312,7 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   need(Math.abs(at.x - home.x) <= 2 && Math.abs(at.y - home.y) <= 2, `the tab stopped at ${at.x},${at.y}, not at its edge (${home.x},${home.y})`)
   lookAtCursor(false, false, EDGE_DWELL_MS)
   await sleep(1600)
-  smoothly('the tab sliding out', await watchMotion(w.webContents, '#root', 700, () => void lookAtCursor(false, false, EDGE_DWELL_MS)))
+  smoothly(`the tab sliding out${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void lookAtCursor(false, false, EDGE_DWELL_MS)))
   need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away after the cursor left')
   console.log('smoke: a push brings the tab out to its edge, leaving tucks it away')
 
@@ -1475,14 +1493,15 @@ async function checkNotch(out: string): Promise<void> {
     lookAtCursor(true, true, NOTCH_DWELL_MS)
     if (presenceNow.revealed) throw new Error('the notch woke before the cursor had rested on it for 250 ms')
     await sleep(200)
-    smoothly(`the notch waking (${notchStyle})`, await watchMotion(notch.contents()!, MOVING_BLACK[notchStyle], 1300, () => void lookAtCursor(true, true, NOTCH_DWELL_MS)))
+    const notchLook = await motionLook(notch.contents()!, MOVING_BLACK[notchStyle], '.nt')
+    smoothly(`the notch waking (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(true, true, NOTCH_DWELL_MS)))
     if (!presenceNow.revealed) throw new Error('the notch did not wake when the cursor rested on it')
     await sleep(300)
     const woke = await notch.capture()
     if (!woke || (notchStyle === 'chin' ? !solid(woke, layout.cx, below) : !solid(woke, layout.cx - beside, layout.height / 2))) throw new Error(`the notch (${notchStyle}) did not grow when it woke`)
     lookAtCursor(false, false, NOTCH_DWELL_MS)
     await sleep(1600)
-    smoothly(`the notch going to sleep (${notchStyle})`, await watchMotion(notch.contents()!, MOVING_BLACK[notchStyle], 1300, () => void lookAtCursor(false, false, NOTCH_DWELL_MS)))
+    smoothly(`the notch going to sleep (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(false, false, NOTCH_DWELL_MS)))
     if (presenceNow.revealed) throw new Error('the notch did not go back to sleep after the cursor left')
     console.log(`smoke: notch ${notchStyle}: asleep is the notch's black only, resting the cursor on it wakes it, leaving puts it back to sleep`)
     await settings.update({ steward: { presence: 'always' } })
