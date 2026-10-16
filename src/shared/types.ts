@@ -333,6 +333,10 @@ export interface StewardAPI {
     hide(): Promise<void>
     view(): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
+    /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
+    drag(phase: 'start' | 'move' | 'end', dy?: number): void
+    /** Back to the middle of the edge (Settings → Steward). */
+    resetPlace(): Promise<void>
   }
   tray: {
     list(): Promise<TrayItem[]>

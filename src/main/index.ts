@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { NOTCH_WINDOW } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
+import { placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -134,20 +135,62 @@ const drivenBySmoke = Boolean(SMOKE_OUT)
 /** Alerts that didn't peek out, newest first: the menu bar's dot now, and cards when the panel next opens. */
 let heldAlerts: AlertView[] = []
 
-/** Where the window goes in each state: against the screen edge you picked, centered top to bottom. */
+/** Where the tab sits on each display's edge (dragged there; see shared/tab-place), by display id. */
+let tabPlaces: Record<string, number> = {}
+
+/** The tab's top on the main screen: where it was dragged to, or the middle. */
+function tabTop(): number {
+  const display = screen.getPrimaryDisplay()
+  return topFor(display.workArea, TAB_SIZES[settings.steward().size].tab.height, tabPlaces[String(display.id)])
+}
+
+/**
+ * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
+ * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered.
+ */
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
   const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab
   /** Left of a window this wide that sits gap points from the edge. */
   const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
-  const y = (height: number) => area.y + Math.round((area.height - height) / 2)
-  if (state === 'collapsed' || state === 'hidden') return { x: x(tab.width), y: y(tab.height), ...tab }
-  // The nudge is the tab grown sideways, so it's as tall.
-  if (state === 'nudge') return { x: x(NUDGE_WIDTH), y: y(tab.height), width: NUDGE_WIDTH, height: tab.height }
+  const top = tabTop()
+  if (state === 'collapsed' || state === 'hidden') return { x: x(tab.width), y: top, ...tab }
+  if (state === 'nudge') return { x: x(NUDGE_WIDTH), y: top, width: NUDGE_WIDTH, height: tab.height }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
   const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
-  return { x: x(width, 8), y: y(height), width, height }
+  const y = state === 'viewing' ? area.y + Math.round((area.height - height) / 2) : topAround(area, top, tab.height, height, 24)
+  return { x: x(width, 8), y, width, height }
+}
+
+/** The tab being dragged up or down its edge, while it is. */
+let tabDrag: TabDrag | null = null
+
+/** From the tab's page: a drag began, moved (dy points since it began), or ended. The tab follows; the end saves where it is. */
+function dragTab(phase: unknown, dy: unknown): void {
+  if (!win || win.isDestroyed()) return
+  if (phase === 'end') {
+    if (tabDrag) void appState.update({ tabPlaces })
+    tabDrag = null
+    return
+  }
+  // Only the tab at rest moves, and only at the edge (in the notch there's no tab).
+  if (dock !== 'collapsed' || inNotch()) return
+  const display = screen.getPrimaryDisplay()
+  const height = TAB_SIZES[settings.steward().size].tab.height
+  if (phase === 'start') tabDrag = new TabDrag(win.getBounds().y, display.workArea, height)
+  else if (phase === 'move' && tabDrag && typeof dy === 'number' && Number.isFinite(dy)) {
+    tabPlaces = { ...tabPlaces, [String(display.id)]: placeFor(display.workArea, height, tabDrag.move(dy)) }
+    win.setBounds(boundsFor('collapsed'))
+  }
+}
+
+/** Settings → Steward → Reset: the tab goes back to the middle of this display's edge. */
+async function resetTabPlace(): Promise<void> {
+  const id = String(screen.getPrimaryDisplay().id)
+  tabPlaces = Object.fromEntries(Object.entries(tabPlaces).filter(([key]) => key !== id))
+  await appState.update({ tabPlaces })
+  if (win && !win.isDestroyed() && win.isVisible() && dock !== 'hidden') win.setBounds(boundsFor(dock), true)
 }
 
 /**
@@ -343,7 +386,8 @@ function watchEdge(): void {
   if (!canWatchEdge()) return
   const display = screen.getPrimaryDisplay()
   const cursor = screen.getCursorScreenPoint()
-  const centerY = display.workArea.y + display.workArea.height / 2
+  // The push zone is wherever the tab was dragged to.
+  const centerY = tabTop() + TAB_SIZES[settings.steward().size].tab.height / 2
   const inZone = inEdgeZone(cursor, display.bounds, settings.steward().edge, centerY)
   const onTab = inRect(cursor, boundsFor('collapsed'), 6)
   const { next } = lookAtCursor(inZone, onTab, EDGE_DWELL_MS)
@@ -775,6 +819,8 @@ const FALLBACK_DRAG_ICON = nativeImage.createFromBitmap(Buffer.alloc(16 * 16 * 4
 function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
   ipcMain.handle('presence:slid', () => slidOut)
+  ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
+  ipcMain.handle('dock:resetPlace', () => resetTabPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
   ipcMain.handle('notch:state', () => notch.state())
   ipcMain.on('notch:click', () => setDock('expanded'))
@@ -1353,6 +1399,7 @@ app.whenReady().then(async () => {
   }
   appState = new AppState(path.join(userData, 'state.json'))
   await appState.load()
+  tabPlaces = appState.tabPlaces
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })

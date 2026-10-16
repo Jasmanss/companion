@@ -16,6 +16,7 @@ import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
 import { SessionStrip } from './SessionStrip'
+import { useTabDrag } from './tab-drag'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -412,6 +413,8 @@ export function App() {
   // Docked in the notch, the notch window shows the character: it gets the same mood.
   useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
+  // The tab can be dragged up or down its edge; a plain click still opens the panel.
+  const tabDrag = useTabDrag(() => void api.dock.expand())
   const noKey = settings?.apiKeySource === 'none'
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
@@ -453,7 +456,7 @@ export function App() {
   if (dock === 'collapsed' || dock === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
-      <button className="peek" data-app onClick={() => api.dock.expand()} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
+      <button className="peek" data-app {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
         <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>

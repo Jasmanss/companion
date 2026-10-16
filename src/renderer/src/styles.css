@@ -245,6 +245,11 @@ pre {
   border-radius: 18px 0 0 18px;
 }
 
+/* Being dragged up or down its edge. */
+.peek.dragging {
+  cursor: grabbing;
+}
+
 /* On the left edge, the tab and the nudge round off on the right. */
 :root[data-edge='left'] .peek,
 :root[data-edge='left'] .nudge {

@@ -7,6 +7,8 @@ interface State {
   lastBriefDate?: string
   /** The one-time note about Steward hiding until it's needed has been shown. */
   presenceNoteSeen?: boolean
+  /** Where the tab sits on each display's edge, by display id: its center as a fraction of the work area's height. */
+  tabPlaces?: Record<string, number>
 }
 
 /** Small bits of state that should survive restarts. */
@@ -33,6 +35,11 @@ export class AppState {
 
   get presenceNoteSeen(): boolean {
     return this.data.presenceNoteSeen === true
+  }
+
+  get tabPlaces(): Record<string, number> {
+    const places = this.data.tabPlaces
+    return places && typeof places === 'object' ? Object.fromEntries(Object.entries(places).filter(([, v]) => typeof v === 'number')) : {}
   }
 
   async update(patch: Partial<State>): Promise<void> {

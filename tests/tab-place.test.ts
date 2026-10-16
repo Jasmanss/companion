@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampTop, isDrag, placeFor, TabDrag, topAround, topFor } from '../src/main/tab-place'
+import { clampTop, isDrag, placeFor, TabDrag, topAround, topFor } from '../src/shared/tab-place'
 
 /** The 14-inch MacBook Pro's work area: under the 33-point menu bar, with the Dock hidden. */
 const AREA = { x: 0, y: 33, width: 1512, height: 949 }

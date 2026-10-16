@@ -1,6 +1,14 @@
-// Where the tab sits along its screen edge, and dragging it there. Pure, so it's tested without a screen; index.ts moves
-// the window and keeps the places in app state. Written so the planned drag into the notch can use the same pieces.
-import type { Rect } from './presence'
+// Where the tab sits along its screen edge, and dragging it there. Pure, so it's tested without a screen; the tab's page
+// tells a click from a drag with it, and index.ts moves the window and keeps the places in app state. Written so the
+// planned drag into the notch can use the same pieces.
+
+/** A rectangle in screen points (Electron's Rectangle has the same shape). */
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /** A press that moves more than this many points is a drag; anything less is still a click that opens the panel. */
 export const DRAG_THRESHOLD = 5
