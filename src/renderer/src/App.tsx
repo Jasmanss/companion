@@ -162,6 +162,14 @@ export function App() {
     return api.presence.onSlide(slide)
   }, [])
 
+  // The tab and the nudge hang a little past the screen edge (so the window's rounded corners are off the screen); the
+  // part that hangs over stays empty (see styles.css).
+  useEffect(() => {
+    const set = (points: number) => document.documentElement.style.setProperty('--overhang', `${points}px`)
+    void api.dock.overhang().then(set)
+    return api.dock.onOverhang(set)
+  }, [])
+
   // The tab and the panel's animations face away from the screen edge it sits on.
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge

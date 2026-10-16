@@ -337,6 +337,9 @@ export interface StewardAPI {
     drag(phase: 'start' | 'move' | 'end', dy?: number): void
     /** Back to the middle of the edge (Settings → Steward). */
     resetPlace(): Promise<void>
+    /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
+    overhang(): Promise<number>
+    onOverhang(cb: (points: number) => void): Unsubscribe
   }
   tray: {
     list(): Promise<TrayItem[]>

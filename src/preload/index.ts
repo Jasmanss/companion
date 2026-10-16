@@ -16,6 +16,8 @@ const api: StewardAPI = {
     onState: (cb) => subscribe<DockState>('dock:state', cb),
     drag: (phase, dy) => ipcRenderer.send('dock:drag', phase, dy),
     resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),
+    overhang: () => ipcRenderer.invoke('dock:overhang'),
+    onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
   },
   tray: {
     list: () => ipcRenderer.invoke('tray:list'),

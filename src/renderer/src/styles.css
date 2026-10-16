@@ -46,6 +46,8 @@
   --radius: 14px;
   /* Which way is away from the screen edge Steward sits on: 1 on the right edge, -1 on the left. */
   --side: 1;
+  /* How far the tab's and the nudge's window hangs past the screen edge (set by the main process). It stays empty. */
+  --overhang: 0px;
   color-scheme: light dark;
 }
 
@@ -236,7 +238,7 @@ pre {
 /* ---------- peek (tucked away) ---------- */
 .peek {
   position: relative;
-  width: 100%;
+  width: calc(100% - var(--overhang));
   height: 100%;
   display: grid;
   place-items: center;
@@ -250,9 +252,18 @@ pre {
   cursor: grabbing;
 }
 
-/* On the left edge, the tab and the nudge round off on the right. */
+/* The window hangs past the screen edge by --overhang, so its rounded corners are off the screen: the tab and the nudge
+   stop at the screen edge, square, and the part past it stays empty. */
+.peek,
+.nudge {
+  margin-right: var(--overhang);
+}
+
+/* On the left edge, the tab and the nudge round off on the right, and the empty part is on the left. */
 :root[data-edge='left'] .peek,
 :root[data-edge='left'] .nudge {
+  margin-right: 0;
+  margin-left: var(--overhang);
   border-radius: 0 18px 18px 0;
 }
 

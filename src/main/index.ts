@@ -150,6 +150,27 @@ function tabTop(): number {
 }
 
 /**
+ * macOS rounds the corners of every frameless window (Electron's roundedCorners, on by default), and that cut the
+ * tab's and the nudge's square corners where they meet the screen edge, so the desktop showed through there. Instead,
+ * those two windows hang this far past the screen edge: the rounded corners are off the screen, and the page leaves the
+ * part that hangs over empty. (Turning roundedCorners off would also square the panel's frosted glass, which macOS draws.)
+ */
+const EDGE_OVERHANG = 16
+
+/** How far the tab and the nudge hang past the edge: only where the screen really ends (no Dock there, no screen beside). */
+function edgeOverhang(): number {
+  const display = screen.getPrimaryDisplay()
+  const { bounds, workArea } = display
+  const { edge } = settings.steward()
+  const atScreenEdge = edge === 'right' ? workArea.x + workArea.width === bounds.x + bounds.width : workArea.x === bounds.x
+  const others = screen.getAllDisplays().filter((d) => d.id !== display.id).map((d) => d.bounds)
+  return atScreenEdge && !screenBeside(bounds, others, edge) ? EDGE_OVERHANG : 0
+}
+
+/** What the tab's page was last told about the overhang, so it leaves that much empty on the edge side. */
+let sentOverhang = -1
+
+/**
  * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
  * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered.
  */
@@ -160,8 +181,16 @@ function boundsFor(state: DockState): Electron.Rectangle {
   /** Left of a window this wide that sits gap points from the edge. */
   const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
   const top = tabTop()
-  if (state === 'collapsed' || state === 'hidden') return { x: x(tab.width), y: top, ...tab }
-  if (state === 'nudge') return { x: x(NUDGE_WIDTH), y: top, width: NUDGE_WIDTH, height: tab.height }
+  if (state === 'collapsed' || state === 'hidden' || state === 'nudge') {
+    const oh = edgeOverhang()
+    // The page has to know, or it would draw into the part that hangs off the screen.
+    if (oh !== sentOverhang && win && !win.isDestroyed()) {
+      sentOverhang = oh
+      win.webContents.send('dock:overhang', oh)
+    }
+    const width = state === 'nudge' ? NUDGE_WIDTH : tab.width
+    return { x: x(width) - (edge === 'left' ? oh : 0), y: top, width: width + oh, height: tab.height }
+  }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
   const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
   const y = state === 'viewing' ? area.y + Math.round((area.height - height) / 2) : topAround(area, top, tab.height, height, 24)
@@ -881,6 +910,7 @@ function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
   ipcMain.handle('presence:slid', () => slidOut)
   ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
+  ipcMain.handle('dock:overhang', () => edgeOverhang())
   ipcMain.handle('dock:resetPlace', () => resetTabPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
   ipcMain.handle('notch:state', () => notch.state())
