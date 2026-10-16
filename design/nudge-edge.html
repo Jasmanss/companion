@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: the alert card's edge</title>
+<style>
+/* A design page, not app code. The card's look is copied from src/renderer/src/styles.css (.nudge, the tokens). */
+:root{--page:#eef0f4;--ink:#1c1f25;--mute:#596070;--line:#d9dce3}
+@media (prefers-color-scheme:dark){:root{--page:#111216;--ink:#edeff3;--mute:#a6acb8;--line:#2b2e36}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:500 14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;padding:28px 20px 60px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;margin:0 0 6px}
+h2{font-size:15px;margin:36px 0 10px}
+p{margin:0 0 10px;color:var(--mute);max-width:70ch}
+.why{background:rgba(120,140,170,.12);border-radius:12px;padding:12px 14px;margin:14px 0 4px}
+.why b{color:var(--ink)}
+.grid{display:grid;grid-template-columns:130px 1fr 1fr;gap:10px 12px;align-items:center}
+.grid .col{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.04em;text-transform:uppercase}
+.row-label b{display:block;font-size:14px}
+.row-label span{font-size:12px;color:var(--mute)}
+
+/* ---- Steward's tokens, light and dark (styles.css) ---- */
+.t-light{--tint:200,228,255;--glow:96,190,255;--ink2:18,70,120;--fill:255,255,255;--solid:244,246,250;--edge:rgba(255,255,255,.85);--edge2:rgba(255,255,255,.35);--t1:#0d1015;--t3:rgba(18,70,120,.78);--inset:rgba(18,70,120,.07);--line2:rgba(18,70,120,.12);--glowline:26,140,255}
+.t-dark{--tint:200,228,255;--glow:96,190,255;--ink2:178,220,255;--fill:24,27,34;--solid:28,31,39;--edge:rgba(255,255,255,.26);--edge2:rgba(255,255,255,.1);--t1:#f5f7fa;--t3:rgba(178,220,255,.78);--inset:rgba(255,255,255,.07);--line2:rgba(255,255,255,.1);--glowline:96,190,255}
+
+/* A busy desktop to hold the card: photo-like color, a window edge, small icons. */
+.scene{position:relative;height:170px;border-radius:10px;overflow:hidden;display:flex;align-items:center;
+  background:
+    radial-gradient(60px 60px at 22% 30%,rgba(255,255,255,.5),transparent 70%),
+    radial-gradient(90px 50px at 70% 78%,rgba(70,120,60,.75),transparent 70%),
+    repeating-linear-gradient(115deg,rgba(255,255,255,.14) 0 6px,transparent 6px 22px),
+    linear-gradient(160deg,#8f9aa8,#c8ccd2 45%,#707a86)}
+.scene.right{justify-content:flex-end}
+.scene.left{justify-content:flex-start}
+.scene::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(180deg,rgba(255,255,255,.0),rgba(255,255,255,.55));pointer-events:none}
+.scene .window{position:absolute;top:14px;bottom:14px;width:46%;border-radius:8px;background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.scene.right .window{left:14px}
+.scene.left .window{right:14px}
+.scene .edgemark{position:absolute;top:0;bottom:0;width:2px;background:rgba(0,0,0,.55)}
+.scene.right .edgemark{right:0}
+.scene.left .edgemark{left:0}
+
+/* ---- the card: same size as the real nudge (340 x 132), flush against the screen edge ---- */
+.card{position:relative;z-index:2;width:340px;height:132px;display:flex;align-items:center;gap:10px;padding:0 34px 0 14px;color:var(--t1);
+  background:linear-gradient(180deg,rgba(var(--tint),.16),rgba(var(--tint),.05)),rgb(var(--solid));
+  box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2)}
+.right .card{border-radius:18px 0 0 18px}
+.left .card{border-radius:0 18px 18px 0;padding:0 14px 0 34px;flex-direction:row-reverse;text-align:right}
+.left .x{right:auto;left:12px}
+.pill{flex:none;position:relative;width:44px;height:26px;border-radius:999px;background:linear-gradient(180deg,#fff,#c9d3e0);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 4px rgba(0,0,0,.12)}
+.pill::before,.pill::after{content:"";position:absolute;top:8px;width:5px;height:9px;border-radius:999px;background:rgb(var(--glowline));box-shadow:0 0 6px 1px rgba(var(--glowline),.7)}
+.pill::before{left:13px}.pill::after{right:13px}
+.txt{min-width:0}
+.title{font-weight:700;font-size:14px}
+.detail{font-size:12.5px;color:var(--t3)}
+.x{position:absolute;top:12px;right:12px;width:18px;height:18px;opacity:.7}
+.x::before,.x::after{content:"";position:absolute;left:8px;top:2px;width:1.5px;height:14px;background:rgb(var(--glowline));border-radius:1px}
+.x::before{transform:rotate(45deg)}.x::after{transform:rotate(-45deg)}
+
+/* ---- the four edges ---- */
+/* Today: a 1.5 pt ring at 90% glow. The screen side and the corners are off screen or square, so only the top and bottom show, as two thick lines. */
+.today .card{box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 1.5px rgba(var(--glow),.9)}
+/* A: Hairline. The same glass rim as every other Steward surface, with a faint glow tint. */
+.a .card{box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px rgba(var(--glowline),.45)}
+/* B: Soft glow. No line at all: the urgency is a glow that fades inward from the edges. */
+.b .card{box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2),inset 0 0 28px rgba(var(--glowline),.26)}
+/* C: Lit side. A thin crescent of light only on the side facing the desktop, where the card is rounded. */
+.c.right .card{box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2),inset 2px 0 0 rgba(var(--glowline),.85)}
+.c.left .card{box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--edge2),inset -2px 0 0 rgba(var(--glowline),.85)}
+
+.rec{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:26px}
+.rec h2{margin-top:0}
+code{font:12.5px ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<main>
+  <h1>The alert card's edge</h1>
+  <p>The "needs you" card on the screen edge reads heavy: a light-blue line along its top and bottom. Four versions of its edge, on the right and left edges, in dark and light, over a busy desktop.</p>
+  <div class="why"><p style="margin:0;color:inherit"><b>Why it looks thick today.</b> An urgent card has a 1.5 pt ring at 90% glow drawn inside its edge (<code>.nudge.urgent</code> in <code>styles.css</code>). The side against the screen is square and half off screen, so what is left of the ring is a long straight line along the top and the bottom, and the line is brighter than any other edge in Steward. All four versions below stay inside the card, because the window is exactly the card's size and cannot draw outside it.</p></div>
+
+  <h2>Dark</h2>
+  <div class="grid t-dark" id="dark"></div>
+
+  <h2>Light</h2>
+  <div class="grid t-light" id="light"></div>
+
+  <div class="rec">
+    <h2>Recommendation: A, the hairline</h2>
+    <p>A is the same half-point glass rim every other Steward surface has (the panel, the settings window), with a light tint of the glow so an urgent card still reads as a card that wants you, and none of the heaviness. It changes one line of CSS. B is the softest but looks smudged next to the rest of the panel, and C adds a rail on one side, which is a detail the app does not use anywhere else. If the user wants urgency to stand out more than A does, B is the next step up.</p>
+    <p><b>Files Main building would change:</b> <code>src/renderer/src/styles.css</code> only, the <code>.nudge.urgent</code> rule. Nothing in the main process, the settings or the shared files.</p>
+  </div>
+</main>
+<script>
+// Builds the 4 rows x 2 edges for each theme. The card's markup mirrors the real nudge: the Pill, a title, a detail line, a close mark.
+const rows = [
+  ['today', 'Today', '1.5 pt ring, 90% glow'],
+  ['a', 'A: Hairline', '0.5 pt ring, 45% glow'],
+  ['b', 'B: Soft glow', 'no line, glow fades inward'],
+  ['c', 'C: Lit side', 'thin crescent on the desktop side'],
+];
+const card = () => `<div class="card"><div class="pill"></div><div class="txt"><div class="title">Claude Code needs you</div><div class="detail">Run npm test in companion?</div></div><div class="x"></div></div>`;
+const scene = (edge, id) => `<div class="scene ${edge} ${id}"><div class="window"></div><div class="edgemark"></div>${card()}</div>`;
+for (const theme of ['dark', 'light']) {
+  const g = document.getElementById(theme);
+  let html = '<div></div><div class="col">Right edge</div><div class="col">Left edge</div>';
+  for (const [id, name, note] of rows) {
+    html += `<div class="row-label"><b>${name}</b><span>${note}</span></div>${scene('right', id)}${scene('left', id)}`;
+  }
+  g.innerHTML = html;
+}
+</script>
+</body>
+</html>
