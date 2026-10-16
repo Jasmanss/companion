@@ -1367,6 +1367,50 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await sleep(600)
   need(w.getBounds().y === middle, 'Reset did not bring the tab back to the middle')
   console.log('smoke: the tab drags up and down its edge, stays inside the work area, is saved, and Reset brings it back')
+
+  // Both edges, as mirrors: the tab and the nudge stop at the screen edge with square corners, and their window hangs
+  // past it by the overhang (left empty), so the rounded corners macOS gives every frameless window are off the screen.
+  // At the default height and after a drag. The screen's own pixels can't be read here, so this checks the window's
+  // place and what the page drew.
+  const screenBounds = screen.getPrimaryDisplay().bounds
+  const flush = async (what: string, edge: 'left' | 'right', save?: string) => {
+    const b = w.getBounds()
+    const oh = edgeOverhang()
+    const screenEdge = edge === 'right' ? screenBounds.x + screenBounds.width : screenBounds.x
+    const windowEdge = edge === 'right' ? b.x + b.width - oh : b.x + oh
+    need(windowEdge === screenEdge, `${what} on the ${edge} edge ends at ${windowEdge}, not at the screen edge (${screenEdge}), with ${oh} points hanging past it`)
+    const img = await w.webContents.capturePage()
+    if (save) await fs.writeFile(out.replace(/\.png$/, save), img.toPNG())
+    const a = (x: number, y: number) => alphaAt(img, x, y, b.width)
+    const inside = edge === 'right' ? b.width - oh - 1 : oh + 1
+    const far = edge === 'right' ? 1 : b.width - 2
+    const past = edge === 'right' ? b.width - oh / 2 : oh / 2
+    const seen = { edgeTop: a(inside, 1), edgeBottom: a(inside, b.height - 2), farTop: a(far, 1), past: oh ? a(past, b.height / 2) : 0 }
+    need(seen.edgeTop > 200 && seen.edgeBottom > 200 && seen.farTop < 60 && seen.past < 10, `${what} on the ${edge} edge is not square at the screen edge and rounded away from it: ${JSON.stringify(seen)}`)
+  }
+  for (const edge of ['right', 'left'] as const) {
+    await settings.update({ steward: { edge } })
+    win!.setBounds(boundsFor(dock))
+    replaceForNotch()
+    await sleep(700)
+    await flush('the tab', edge, edge === 'left' ? '-left-tab.png' : undefined)
+    raise({ key: `approval:smoke-${edge}`, level: 'urgent', title: 'A session needs you', detail: 'mirrored on both edges' })
+    need(dock === 'nudge', `a session that needs me did not peek out on the ${edge} edge`)
+    await sleep(700)
+    await flush('the nudge', edge, edge === 'left' ? '-left-nudge.png' : undefined)
+    setDock('collapsed')
+    await sleep(700)
+    await drag(-150)
+    await sleep(300)
+    await flush('the tab after a drag', edge)
+    await resetTabPlace()
+    await sleep(600)
+  }
+  await settings.update({ steward: { edge: 'right' } })
+  win!.setBounds(boundsFor(dock))
+  replaceForNotch()
+  await sleep(500)
+  console.log(`smoke: on both edges the tab and the nudge stop square at the screen edge, ${edgeOverhang()} points of window hanging past it`)
 }
 
 /**
