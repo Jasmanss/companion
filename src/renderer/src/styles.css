@@ -2306,12 +2306,12 @@ a.icon-btn {
   :root[data-slide='out'] #root {
     transform: none;
     opacity: 0;
-    transition: opacity 0.2s linear;
+    transition: opacity 0.3s ease-in;
   }
 
   :root[data-slide='in'] #root {
     opacity: 1;
-    transition: opacity 0.2s linear;
+    transition: opacity 0.38s ease-out;
   }
 
   .mini .scan,
