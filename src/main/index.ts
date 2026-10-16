@@ -1493,14 +1493,13 @@ async function checkNotch(out: string): Promise<void> {
     if (notchStyle === 'chin' ? !solid(image, layout.cx, below) : !solid(image, layout.cx - beside, layout.height / 2)) throw new Error(`the awake notch (${notchStyle}) did not draw its ${notchStyle === 'chin' ? 'chin' : 'wings'}`)
 
     // Dim when idle, in the notch (once, in Chin): after 20 s awake at rest the eyes fade; the cursor coming near wakes
-    // them. Skipped if the real cursor happens to be near the notch, which keeps the eyes awake as it should.
-    const c = screen.getCursorScreenPoint()
-    if (notchStyle === 'chin' && Math.hypot(c.x - (notchGeo.x + notchGeo.width / 2), c.y - notchGeo.y) < 480) console.log('smoke: notch: the cursor is near the notch, skipped dim when idle')
-    else if (notchStyle === 'chin') {
+    // them. The real cursor is left out of the smoke run (moving the mouse near the top of the screen would wake them).
+    if (notchStyle === 'chin') {
       const page = notch.contents()!
       const dim = async () => Boolean(await page.executeJavaScript(`Boolean(document.querySelector('.notch-root.dim'))`))
-      await sleep(DIM_AFTER_MS + 1500)
-      if (!(await dim())) throw new Error("the notch's eyes did not dim after 20 s at rest")
+      const waiting = Date.now()
+      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
+      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest`)
       // What the notch window sends its page when the cursor comes near.
       notch.post('notch:cursor', { x: layout.cx, y: 10 })
       await sleep(300)
@@ -1697,7 +1696,7 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') app.dock?.hide()
 
   registerIpc()
-  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle, onCursor: lookAtNotch })
+  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle, onCursor: lookAtNotch, cursor: () => (drivenBySmoke ? null : screen.getCursorScreenPoint()) })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.

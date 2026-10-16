@@ -17,6 +17,8 @@ interface Options {
   style(): NotchStyle
   /** Every time the cursor is checked: whether it's on the notch (asleep) or on the shape (awake). */
   onCursor?(over: boolean): void
+  /** Where the cursor is; null to leave the real one out (the smoke check, which feeds what it needs itself). */
+  cursor?(): Electron.Point | null
 }
 
 /** The cursor counts as on the shape this far outside it, so the edge of the black isn't a flicker. */
@@ -185,7 +187,8 @@ export class NotchDock {
       this.timer = undefined
       const w = this.win, layout = this.layout()
       if (!w || w.isDestroyed() || !w.isVisible() || !layout) return
-      const b = w.getBounds(), c = screen.getCursorScreenPoint()
+      // Left out, the cursor counts as far away: not near, and not on the shape.
+      const b = w.getBounds(), c = (this.o.cursor ? this.o.cursor() : screen.getCursorScreenPoint()) ?? { x: -1e6, y: -1e6 }
       const p = { x: c.x - b.x, y: c.y - b.y }
       const boxes = notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake), layout)
       const inside = inBoxes(p, boxes)
