@@ -1352,17 +1352,25 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
     console.log(`smoke: edge idle ${idle}s, Always visible (tab shown): ${cpuNow(w.webContents.getOSProcessId())}`)
   }
 
-  // Dim when idle: after 20 s at rest the tab's eyes fade and stop; the cursor coming near wakes them.
+  // Dim when idle: after 20 s at rest the tab's eyes fade and stop; the cursor coming near wakes them. The 20 s began
+  // when the tab last came to rest, about 3 s before this point, so it isn't dim 14 s from here, and is by 28 s.
   const dimmed = async () => Boolean(await w.webContents.executeJavaScript(`Boolean(document.querySelector('.pill-host.dimmed'))`))
-  await sleep(DIM_AFTER_MS + 1500)
-  need(await dimmed(), 'the eyes did not dim after 20 s at rest')
-  const opacity = String(await w.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.pill-host')).opacity`))
+  const waiting = Date.now()
+  await sleep(DIM_AFTER_MS - 6000)
+  need(!(await dimmed()), 'the eyes dimmed well before 20 s at rest')
+  while (!(await dimmed()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
+  const tookS = ((Date.now() - waiting) / 1000).toFixed(1)
+  need(await dimmed(), `the eyes did not dim within ${tookS} s of this check (about 3 s more at rest)`)
+  // The fade to dim takes 1.2 s.
+  await sleep(1300)
+  const opacity = Number(await w.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.pill-host')).opacity`))
+  need(Math.abs(opacity - 0.4) < 0.02, `the dimmed eyes are at opacity ${opacity}, not 0.4`)
   // What the edge's watcher sends when the cursor comes within reach of the tab.
   w.webContents.send('presence:near', true)
   await sleep(300)
   need(!(await dimmed()), 'the cursor coming near did not wake the eyes')
   w.webContents.send('presence:near', false)
-  console.log(`smoke: after 20 s at rest the tab's eyes dim (opacity ${opacity}), and the cursor coming near wakes them`)
+  console.log(`smoke: the tab's eyes dim ${tookS} s into this check, about 20 s at rest (opacity ${opacity}), and the cursor coming near wakes them`)
 
   // The tab drags up or down its edge, through the bridge its page uses. It stays inside the work area, the place is saved
   // for this display, the panel stays on screen, and Reset brings it back to the middle.
