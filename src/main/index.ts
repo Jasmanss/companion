@@ -133,6 +133,9 @@ let watchTimer: ReturnType<typeof setTimeout> | undefined
 let slideTimer: ReturnType<typeof setTimeout> | undefined
 /** The window's page is slid out, off the screen edge (see setSlide). */
 let slidOut = false
+/** When the last tuck began, and how long until the window went and why (for the smoke check). */
+let tuckStarted = 0
+let lastTuck: { ms: number; why: string } | null = null
 /** The screen is asleep or locked: nobody is there to push, so the cursor isn't checked. */
 let screenAsleep = false
 /** The smoke check feeds the rules the cursor itself, so the real one (wherever it is parked) is left out. */
@@ -253,22 +256,24 @@ function tuckTab(): void {
   if (!win || win.isDestroyed() || !win.isVisible()) return
   clearTimeout(slideTimer)
   setSlide(true, true)
+  tuckStarted = Date.now()
   // The page says when the slide has ended (slideEnded), and the window goes then. If it never says, this does.
   slideTimer = setTimeout(() => {
-    if (win && !win.isDestroyed() && dock === 'collapsed' && !out()) hideTab()
+    if (win && !win.isDestroyed() && dock === 'collapsed' && !out()) hideTab('the safety timeout')
   }, SLIDE_MS)
 }
 
 /** From the tab's page: its slide out ended. Unless it was brought out again meanwhile, the window goes now. */
 function slideEnded(): void {
   if (!win || win.isDestroyed() || !win.isVisible() || dock !== 'collapsed' || out() || !slidOut) return
-  hideTab()
+  hideTab('its slide ending')
 }
 
 /** Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge. */
-function hideTab(): void {
+function hideTab(why?: string): void {
   if (!win || win.isDestroyed()) return
   clearTimeout(slideTimer)
+  if (why) lastTuck = { ms: Date.now() - tuckStarted, why }
   win.hide()
   setSlide(quiet(), false)
 }
@@ -1322,6 +1327,9 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await sleep(1600)
   smoothly(`the tab sliding out${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void lookAtCursor(false, false, EDGE_DWELL_MS)))
   need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away after the cursor left')
+  // The window went when the page said the slide had ended, not on the safety timeout.
+  need(lastTuck?.why === 'its slide ending', `the window went after ${lastTuck?.ms} ms, on ${lastTuck?.why ?? 'nothing'}, not when the slide ended`)
+  console.log(`smoke: the window went ${lastTuck?.ms} ms after the tuck began, when the page said its slide had ended`)
   console.log('smoke: a push brings the tab out to its edge, leaving tucks it away')
 
   // Alerts: only a session that needs me peeks out. The rest wait (a dot in the menu bar) and show when the panel opens.
