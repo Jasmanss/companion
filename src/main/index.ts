@@ -56,7 +56,7 @@ import {
   type PresenceState,
 } from './presence'
 import { SessionTracker } from './sessions'
-import { judgeMotion, type Motion } from './smoke-motion'
+import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1211,16 +1211,11 @@ async function watchMotion(wc: Electron.WebContents, look: MotionLook, ms: numbe
     }
     requestAnimationFrame(frame)
     setTimeout(() => resolve({ samples, visibility: document.visibilityState }), ${ms})
-  })`) as Promise<{ samples: [number, string][]; visibility: string }>
+  })`) as Promise<{ samples: Sample[]; visibility: string }>
   await new Promise((resolve) => setTimeout(resolve, 30))
   await trigger()
   const { samples, visibility } = await sampling
-  const seen = { drawn: samples.length, watchedMs: ms, visibility }
-  const changed = samples.map((s, i) => (i > 0 && s[1] !== samples[i - 1][1] ? i : -1)).filter((i) => i >= 0)
-  if (!changed.length) return { frames: 0, positions: 1, spanMs: 0, maxGapMs: 0, ...seen }
-  const moving = samples.slice(changed[0] - 1, changed.at(-1)! + 1)
-  const gaps = moving.slice(1).map((s, i) => s[0] - moving[i][0])
-  return { frames: moving.length, positions: new Set(moving.map((s) => s[1])).size, spanMs: Math.round(moving.at(-1)![0] - moving[0][0]), maxGapMs: Math.round(Math.max(...gaps)), ...seen }
+  return measureMotion(samples, ms, visibility)
 }
 
 /** What to watch: an element, and whether it moves (its transform) or, with Reduce Motion on, fades (its opacity). */
