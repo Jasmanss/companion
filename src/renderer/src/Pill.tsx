@@ -94,13 +94,15 @@ export interface PillProps {
   look: Pick<StewardPrefs, 'version' | 'color' | 'glass' | 'mouth' | 'personality'>
   /** Tucked away at the screen edge: it draws less often. */
   tucked?: boolean
+  /** Dim when idle: faded, still, and not drawn until it wakes. */
+  dimmed?: boolean
 }
 
 /**
  * The character, alive. Its eyes step every frame and look at the cursor while it's over the window. Tucked away
  * it draws less often (resting ten times a second), and while the page is hidden it doesn't draw at all.
  */
-export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false }: PillProps) {
+export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false, dimmed = false }: PillProps) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), now()))
   const dark = useMedia('(prefers-color-scheme: dark)')
@@ -109,6 +111,11 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
 
   useEffect(() => setMood(st, mood, glint), [st, mood, glint])
   useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
+  // Read by the drawing loop, so dimming and waking don't rebuild the character.
+  const dimNow = useRef(dimmed)
+  useEffect(() => {
+    dimNow.current = dimmed
+  }, [dimmed])
 
   useEffect(() => {
     const el = host.current
@@ -120,7 +127,7 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
     const onMove = (e: PointerEvent) => (pointer = { x: e.clientX, y: e.clientY })
     const onLeave = () => (pointer = null)
     const nod = () => pressKey(st)
-    const stop = runEyes(st, [view], { cursor: () => (pointer ? toward(pointer, el) : null), reduced, tucked })
+    const stop = runEyes(st, [view], { cursor: () => (pointer ? toward(pointer, el) : null), reduced, tucked, idle: () => dimNow.current })
     typed.add(nod)
     window.addEventListener('pointermove', onMove)
     document.documentElement.addEventListener('pointerleave', onLeave)
@@ -132,5 +139,5 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
     }
   }, [st, version, color, glass, mouth, cls, width, height, dark, reduced, tucked])
 
-  return <div ref={host} className="pill-host" style={{ width, height }} aria-hidden="true" />
+  return <div ref={host} className={dimmed ? 'pill-host dimmed' : 'pill-host'} style={{ width, height }} aria-hidden="true" />
 }

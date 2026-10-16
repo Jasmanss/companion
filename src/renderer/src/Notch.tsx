@@ -8,12 +8,14 @@
 // The cursor comes from the main process (the window ignores the mouse except over the shape), and a click on the
 // shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden.
 import { useEffect, useRef, useState } from 'react'
+import { canDim } from '../../shared/dim'
 import { NOTCH_EYE, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
 import type { Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
 import { createEyes, setMood, setStyle, type EyesState } from './pill/eyes'
 import { makeView, type PillKind, type PillView } from './pill/render'
+import { useDimmed } from './dim'
 
 const api = window.steward
 
@@ -48,6 +50,14 @@ function NotchFace({ layout, mood, glint, awake, prefs }: { layout: NotchLayout;
   useEffect(() => {
     awakeNow.current = awake
   }, [awake])
+  // Dim when idle: awake and at rest for a while, the eyes fade and stop; the cursor coming near or a new mood wakes them.
+  const [near, setNear] = useState(false)
+  useEffect(() => api.notch.onCursor((p) => setNear(p !== null)), [])
+  const dimmed = useDimmed(canDim({ enabled: prefs.dimWhenIdle, atRest: awake, near }), mood)
+  const dimNow = useRef(dimmed)
+  useEffect(() => {
+    dimNow.current = dimmed
+  }, [dimmed])
   const { notchStyle, version, color, mouth, personality } = prefs
   const { cx, width, height } = layout
 
@@ -64,7 +74,7 @@ function NotchFace({ layout, mood, glint, awake, prefs }: { layout: NotchLayout;
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
-    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : null), reduced, tucked: true, idle: () => !awakeNow.current })
+    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : null), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
     return () => {
       stop()
       off()
@@ -73,7 +83,7 @@ function NotchFace({ layout, mood, glint, awake, prefs }: { layout: NotchLayout;
     }
   }, [st, cx, width, height, notchStyle, version, color, mouth, reduced])
 
-  return <div ref={host} className="notch-root" aria-hidden="true" />
+  return <div ref={host} className={dimmed ? 'notch-root dim' : 'notch-root'} aria-hidden="true" />
 }
 
 const div = (cls: string, css = ''): HTMLDivElement => {

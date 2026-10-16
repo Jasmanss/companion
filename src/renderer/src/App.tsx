@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
+import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
 import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
@@ -17,6 +18,7 @@ import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
 import { SessionStrip } from './SessionStrip'
 import { useTabDrag } from './tab-drag'
+import { useDimmed } from './dim'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -415,6 +417,10 @@ export function App() {
   const tab = TAB_SIZES[look.size].pill
   // The tab can be dragged up or down its edge; a plain click still opens the panel.
   const tabDrag = useTabDrag(() => void api.dock.expand())
+  // Dim when idle: the tab's eyes fade after a while at rest, until something happens or the cursor comes near.
+  const [near, setNear] = useState(false)
+  useEffect(() => api.presence.onNear(setNear), [])
+  const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
@@ -457,7 +463,7 @@ export function App() {
     const open = settings?.shortcuts?.togglePanel
     return (
       <button className="peek" data-app {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
-        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked />
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked dimmed={tabDimmed} />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )

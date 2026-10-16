@@ -48,6 +48,7 @@ import {
   splitAlerts,
   stepPresence,
   TUCK_MS,
+  WATCH_MS,
   type PresenceState,
 } from './presence'
 import { SessionTracker } from './sessions'
@@ -376,26 +377,38 @@ function lookAtNotch(over: boolean): void {
   if (!drivenBySmoke && quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
 }
 
+/** Within this many points of the tab, the cursor is near: Dim when idle wakes the eyes. */
+const NEAR_TAB = 120
+/** What the tab's page was last told about the cursor being near. */
+let sentNear = false
+
 /**
  * The edge's watcher: while the tab is tucked away or out at rest, it checks the cursor 5 times a second, and 20 when it
- * is pushing against the edge. It stops while the panel is open (or a nudge is), while hidden by hand, while the screen
- * sleeps, in the notch (its own window watches there), and when Steward is always visible.
+ * is pushing against the edge. It also tells the tab's page when the cursor comes near, for Dim when idle. It stops while
+ * the panel is open (or a nudge is), while hidden by hand, while the screen sleeps, in the notch (its own window watches
+ * there), and when Steward is always visible with Dim when idle off.
  */
 function watchEdge(): void {
   watchTimer = undefined
   if (!canWatchEdge()) return
   const display = screen.getPrimaryDisplay()
   const cursor = screen.getCursorScreenPoint()
+  const tabBounds = boundsFor('collapsed')
+  const near = inRect(cursor, tabBounds, NEAR_TAB)
+  if (near !== sentNear) {
+    sentNear = near
+    win?.webContents.send('presence:near', near)
+  }
   // The push zone is wherever the tab was dragged to.
   const centerY = tabTop() + TAB_SIZES[settings.steward().size].tab.height / 2
   const inZone = inEdgeZone(cursor, display.bounds, settings.steward().edge, centerY)
-  const onTab = inRect(cursor, boundsFor('collapsed'), 6)
-  const { next } = lookAtCursor(inZone, onTab, EDGE_DWELL_MS)
+  const onTab = inRect(cursor, tabBounds, 6)
+  const next = quiet() ? lookAtCursor(inZone, onTab, EDGE_DWELL_MS).next : WATCH_MS
   // The look may have ended the watch (it came out, and something else changed).
   if (canWatchEdge()) watchTimer = setTimeout(watchEdge, next)
 }
 
-const canWatchEdge = (): boolean => !!win && quiet() && !inNotch() && dock === 'collapsed' && !screenAsleep && !drivenBySmoke
+const canWatchEdge = (): boolean => !!win && (quiet() || settings.steward().dimWhenIdle) && !inNotch() && dock === 'collapsed' && !screenAsleep && !drivenBySmoke
 
 /** Start or stop the edge's watcher to match what's going on. Called whenever any of that changes. */
 function syncWatch(): void {
@@ -955,6 +968,7 @@ function registerIpc(): void {
     if (after.notchStyle !== before.notchStyle) notch.restyle()
     // Always visible or only when needed: Steward comes out, or slips away, now.
     if (after.presence !== before.presence) presenceChanged()
+    else if (after.dimWhenIdle !== before.dimWhenIdle) syncWatch()
     return settings.view()
   })
   ipcMain.handle('settings:setShortcut', (_e, id: unknown, accelerator: unknown) => setShortcut(id, accelerator))

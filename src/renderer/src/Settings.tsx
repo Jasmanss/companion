@@ -397,6 +397,7 @@ export function StewardSection(props: SectionProps) {
         <Row label="Alerts that peek out" note={ALERT_PEEK_NOTES[look.alertPeek]}>
           <Segmented label="Alerts that peek out" value={look.alertPeek} options={[['needs-me', 'Needs me'], ['all', 'Everything'], ['none', 'Nothing']]} onChange={(alertPeek) => set({ alertPeek })} />
         </Row>
+        <SwitchRow label="Dim when idle" note="The eyes fade after 20 seconds at rest." checked={look.dimWhenIdle} onChange={(dimWhenIdle) => set({ dimWhenIdle })} />
       </Group>
 
       <Group title="The panel">

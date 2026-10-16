@@ -260,6 +260,13 @@ pre {
 .pill-host {
   position: relative;
   flex: none;
+  transition: opacity 0.25s ease-out;
+}
+
+/* Dim when idle: the eyes fade slowly to about 40% and hold still. Waking is quick. */
+.pill-host.dimmed {
+  opacity: 0.4;
+  transition: opacity 1.2s ease-in-out;
 }
 
 /* Resting's standby glow, like a sleeping Mac's light: dimmer than idle, breathing slowly. Only opacity moves.
