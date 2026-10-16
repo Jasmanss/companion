@@ -18,6 +18,41 @@ export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphit
 /** The color the panel's glass is tinted with. */
 export type PanelTint = 'ice' | 'lilac' | 'mint' | 'peach' | 'graphite'
 
+export type NotchStyle = 'chin' | 'wings'
+
+/** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
+export type Presence = 'always' | 'quiet'
+
+/** Which alerts peek out from where Steward sits: only a session that needs you, everything switched on in Notifications, or none. */
+export type AlertPeek = 'needs-me' | 'all' | 'none'
+
+/** The notch on a display that has one, in screen points (Electron's coordinates). Read from macOS, never guessed. */
+export interface NotchGeometry {
+  displayId: number
+  /** The notch's left side and the screen's top. */
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** The notch's size, and where its center is in the notch window. */
+export interface NotchLayout {
+  cx: number
+  width: number
+  height: number
+}
+/** What thinking is busy with: a wave, reading a file, or searching. */
+export type PillGlint = 'sweep' | 'step' | 'search'
+/** What the notch window shows: where the notch is, and the character's mood. */
+export interface NotchState {
+  layout: NotchLayout | null
+  mood: Mood
+  glint: PillGlint
+  /** Asleep (Only when needed, at rest): just the notch's own black, no eyes. */
+  awake: boolean
+}
+
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
 export interface StewardPrefs {
   version: PillVersion
@@ -30,12 +65,25 @@ export interface StewardPrefs {
   personality: 'calm' | 'lively'
   /** Shown in the panel, and what the agent answers to. */
   name: string
+  /** The side of the screen it docks on; also where it goes when it can't be in the notch. */
   edge: 'right' | 'left'
+  /** Dock in the MacBook notch instead, on screens that have one. Elsewhere it stays on the edge above. */
+  notch: boolean
+  /** In the notch: a chin below it with the eyes in it, or one eye on each side of it in the menu bar. */
+  notchStyle: NotchStyle
   /** How big the tab at the screen edge is. */
   size: 'small' | 'medium'
   /** The panel's glass: its tint, and how frosted it is, 0 (clear) to 100 (frosted). */
   tint: PanelTint
   frost: number
+  /** Always visible, or out of sight until it's needed (a cursor pushed against its spot, an alert, or the hotkey). */
+  presence: Presence
+  /** Which alerts peek out. The rest wait in the menu bar and show as cards when the panel next opens. */
+  alertPeek: AlertPeek
+  /** The eyes fade after a while at rest. Saved now; it does something from the next build. */
+  dimWhenIdle: boolean
+  /** Viewers and recordings don't see Steward. Saved now; it does something from a later build. */
+  hideFromScreenShare: boolean
 }
 
 export interface TrayItem {
@@ -364,6 +412,27 @@ export interface StewardAPI {
   appearance: {
     get(): Promise<Appearance>
     onChange(cb: (appearance: Appearance) => void): Unsubscribe
+  }
+  /** The MacBook notch, and Steward docked in it. */
+  notch: {
+    /** The notch on this Mac's screens right now, or null when none has one. */
+    geometry(): Promise<NotchGeometry | null>
+    onGeometry(cb: (notch: NotchGeometry | null) => void): Unsubscribe
+    /** From the panel: the character's mood, so the notch shows the same one. */
+    reportMood(mood: Mood, glint: PillGlint): void
+    /** In the notch window: what to show, the cursor relative to the window (null when it's far), and a click. */
+    state(): Promise<NotchState>
+    onState(cb: (state: NotchState) => void): Unsubscribe
+    onCursor(cb: (p: { x: number; y: number } | null) => void): Unsubscribe
+    click(): void
+  }
+  /** Only when needed: a one-time note, shown in the panel the first time it opens, and the tab's slide in and out. */
+  presence: {
+    onNote(cb: (text: string) => void): Unsubscribe
+    /** Whether the page starts slid out (off the screen edge). */
+    slid(): Promise<boolean>
+    /** Slide out (to the screen edge) or back in; animate false jumps. The page does it, so the window never moves. */
+    onSlide(cb: (slide: { out: boolean; animate: boolean }) => void): Unsubscribe
   }
   copyText(text: string): Promise<void>
 }

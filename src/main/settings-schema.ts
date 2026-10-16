@@ -51,13 +51,26 @@ const STEWARD_CHOICES = {
   glass: ['tinted', 'clear'],
   personality: ['calm', 'lively'],
   edge: ['right', 'left'],
+  notchStyle: ['chin', 'wings'],
   size: ['small', 'medium'],
   tint: PANEL_TINT_IDS,
+  presence: ['always', 'quiet'],
+  alertPeek: ['needs-me', 'all', 'none'],
 } as const
+
+/**
+ * What a settings file from before quiet mode gets for the options it doesn't have: today's behavior, not the fresh
+ * install's (DEFAULT_STEWARD is quiet, with the eyes dimming), so the settings someone already has stay exactly as they are.
+ */
+const OLD_FILE_STEWARD = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false } as const satisfies Pick<StewardPrefs, 'presence' | 'alertPeek' | 'dimWhenIdle' | 'hideFromScreenShare'>
 
 const pick = <T extends string>(value: unknown, choices: readonly T[], fallback: T): T => ((choices as readonly unknown[]).includes(value) ? (value as T) : fallback)
 
-/** The character's options from a file: each one kept if it's one Steward knows, its default otherwise. */
+/**
+ * The character's options from a file: each one kept if it's one Steward knows, its default otherwise. A file that exists
+ * but lacks the quiet-mode options (an older one, or one with a value that isn't one of Steward's) gets the old behavior;
+ * a fresh install has no file, and gets DEFAULT_STEWARD as it is.
+ */
 function migrateSteward(raw: unknown): StewardPrefs {
   const d = DEFAULT_STEWARD
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
@@ -69,9 +82,15 @@ function migrateSteward(raw: unknown): StewardPrefs {
     personality: pick(r.personality, STEWARD_CHOICES.personality, d.personality),
     name: typeof r.name === 'string' ? cleanName(r.name) : d.name,
     edge: pick(r.edge, STEWARD_CHOICES.edge, d.edge),
+    notch: typeof r.notch === 'boolean' ? r.notch : d.notch,
+    notchStyle: pick(r.notchStyle, STEWARD_CHOICES.notchStyle, d.notchStyle),
     size: pick(r.size, STEWARD_CHOICES.size, d.size),
     tint: pick(r.tint, STEWARD_CHOICES.tint, d.tint),
     frost: r.frost === undefined ? d.frost : cleanFrost(r.frost),
+    presence: pick(r.presence, STEWARD_CHOICES.presence, OLD_FILE_STEWARD.presence),
+    alertPeek: pick(r.alertPeek, STEWARD_CHOICES.alertPeek, OLD_FILE_STEWARD.alertPeek),
+    dimWhenIdle: typeof r.dimWhenIdle === 'boolean' ? r.dimWhenIdle : OLD_FILE_STEWARD.dimWhenIdle,
+    hideFromScreenShare: typeof r.hideFromScreenShare === 'boolean' ? r.hideFromScreenShare : OLD_FILE_STEWARD.hideFromScreenShare,
   }
 }
 
@@ -142,9 +161,15 @@ const Patch = z.strictObject({
       // Tidied (and an empty one made Steward again) when it's saved.
       name: z.string().max(MAX_NAME * 4),
       edge: z.enum(STEWARD_CHOICES.edge),
+      notch: z.boolean(),
+      notchStyle: z.enum(STEWARD_CHOICES.notchStyle),
       size: z.enum(STEWARD_CHOICES.size),
       tint: z.enum(STEWARD_CHOICES.tint),
       frost: z.number().int().min(0).max(100),
+      presence: z.enum(STEWARD_CHOICES.presence),
+      alertPeek: z.enum(STEWARD_CHOICES.alertPeek),
+      dimWhenIdle: z.boolean(),
+      hideFromScreenShare: z.boolean(),
     })
     .partial()
     .optional(),

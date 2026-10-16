@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
-import { DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, TAB_SIZES, panelTint } from '../../shared/steward'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
+import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, TAB_SIZES, panelTint } from '../../shared/steward'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
 import type { Glint } from './pill/eyes'
@@ -287,6 +287,23 @@ function useMakeBelieveTyping(on: boolean) {
   }, [on])
 }
 
+/** The MacBook notch on this Mac's screens, kept up to date (null: none has one right now). */
+function useNotch(): NotchGeometry | null {
+  const [notch, setNotch] = useState<NotchGeometry | null>(null)
+  useEffect(() => {
+    void api().notch.geometry().then(setNotch)
+    return api().notch.onGeometry(setNotch)
+  }, [])
+  return notch
+}
+
+/** What each choice of "Alerts that peek out" comes to, in one line. Settings → Notifications still decides which kinds are on at all. */
+const ALERT_PEEK_NOTES: Record<StewardPrefs['alertPeek'], string> = {
+  'needs-me': 'Only when a session needs me.',
+  all: 'Everything in Notifications.',
+  none: 'Nothing. They wait in the menu bar.',
+}
+
 /** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
 export function StewardSection(props: SectionProps) {
   // (A main process from before the character, or before the panel's tint, sends less: the defaults fill in.)
@@ -295,6 +312,9 @@ export function StewardSection(props: SectionProps) {
   const set = (patch: Partial<StewardPrefs>) => run(api().settings.update({ steward: patch }))
   const [preview, setPreview] = useState(PREVIEWS[0])
   const tab = TAB_SIZES[look.size]
+  // The notch is offered only on screens that have one; elsewhere Steward stays on its edge.
+  const hasNotch = useNotch() !== null
+  const where = look.notch && hasNotch ? 'notch' : look.edge
   useMakeBelieveTyping(preview.mood === 'listening')
   return (
     <>
@@ -344,12 +364,31 @@ export function StewardSection(props: SectionProps) {
         </Row>
       </Group>
 
-      <Group title="At the screen edge">
-        <Row label="Screen edge">
-          <Segmented label="Screen edge" value={look.edge} options={[['left', 'Left'], ['right', 'Right']]} onChange={(edge) => set({ edge })} />
+      <Group title="Where it sits">
+        <Row label="Screen edge" note={look.notch && !hasNotch ? 'In the notch again when a screen with one is on.' : undefined}>
+          <Segmented
+            label="Screen edge"
+            value={where}
+            options={hasNotch ? [['left', 'Left'], ['notch', 'Notch'], ['right', 'Right']] : [['left', 'Left'], ['right', 'Right']]}
+            onChange={(v) => set(v === 'notch' ? { notch: true } : { edge: v, notch: false })}
+          />
         </Row>
+        {where === 'notch' && (
+          <Row label="In the notch" note={look.notchStyle === 'wings' ? 'One eye on each side of the notch, in the menu bar.' : 'A chin below the notch, with the eyes in it.'}>
+            <Segmented label="In the notch" value={look.notchStyle} options={[['chin', 'Chin'], ['wings', 'Wings']]} onChange={(notchStyle) => set({ notchStyle })} />
+          </Row>
+        )}
         <Row label="Size" note="How big the tab at the screen edge is.">
           <Segmented label="Size" value={look.size} options={[['small', 'Small'], ['medium', 'Medium']]} onChange={(size) => set({ size })} />
+        </Row>
+      </Group>
+
+      <Group title="Presence">
+        <Row label="Presence" note={look.presence === 'quiet' ? 'Hides until you need it.' : 'Always on screen.'}>
+          <Segmented label="Presence" value={look.presence} options={[['always', 'Always visible'], ['quiet', 'Only when needed']]} onChange={(presence) => set({ presence, alertPeek: alertPeekAfterSwitch(look.presence, presence, look.alertPeek) })} />
+        </Row>
+        <Row label="Alerts that peek out" note={ALERT_PEEK_NOTES[look.alertPeek]}>
+          <Segmented label="Alerts that peek out" value={look.alertPeek} options={[['needs-me', 'Needs me'], ['all', 'Everything'], ['none', 'Nothing']]} onChange={(alertPeek) => set({ alertPeek })} />
         </Row>
       </Group>
 

@@ -7,10 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="shared/glass.css">
+<link rel="stylesheet" href="notch/notch.css">
 <style>
 /* ---------- page ---------- */
 :root{--bg:#F3F4F7;--card:#fff;--line:#E2E4EA;--text:#1C1F25;--muted:#596070;--accent:#2F6FEB;--chip:#fff;--barbg:rgba(243,244,247,.9);
-  --spring:cubic-bezier(.34,1.36,.5,1);--soft:cubic-bezier(.3,1.12,.4,1);--out:cubic-bezier(.2,.8,.2,1);color-scheme:light}
+  color-scheme:light}
 :root[data-dark]{--bg:#111216;--card:#1A1C21;--line:#2B2E36;--text:#EDEFF3;--muted:#A6ACB8;--accent:#7EA8FF;--chip:#1F2127;--barbg:rgba(17,18,22,.9);color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -53,7 +54,7 @@ section.sec>h2{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em}
 .is-off *,.is-off *::before,.is-off *::after{animation-play-state:paused!important}
 
 /* compare */
-.three{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:14px}
+.three{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,400px),1fr));gap:14px}
 .pros{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted)}
 .pros b{color:var(--text)}
 .worry{border-left:3px solid #e0a020;padding:4px 0 4px 10px;font-size:13.5px}
@@ -80,75 +81,6 @@ section.sec>h2{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em}
 .lrow .key{flex:none}
 .step{min-height:18px;font-size:12.5px;font-weight:700;color:var(--muted)}
 
-/* ---------- the screen ---------- */
-.crop{position:relative;overflow:hidden;border-radius:10px;flex:none;background:#000;box-shadow:0 0 0 1px var(--line)}
-.screen{position:absolute;left:0;top:0;width:1512px;transform-origin:0 0;overflow:hidden;font:500 13px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.wallp{position:absolute;left:0;top:0;width:1512px;height:982px}
-.wallp.light{background:radial-gradient(ellipse 60% 50% at 22% 0,#f6d3bd,transparent),radial-gradient(ellipse 55% 55% at 78% 8%,#bcd3f5,transparent),radial-gradient(ellipse 70% 60% at 50% 100%,#dccdf2,transparent),#edf0f6}
-.wallp.dark{background:radial-gradient(ellipse 60% 50% at 22% 0,#3b2a5e,transparent),radial-gradient(ellipse 55% 55% at 80% 8%,#0f3a5e,transparent),radial-gradient(ellipse 70% 60% at 50% 100%,#2a173f,transparent),#0b0e19}
-.mb{position:absolute;left:0;right:0;top:0;height:33px;display:flex;align-items:center;padding:0 12px 0 18px;white-space:nowrap}
-.mb.light{color:#1d1d1f}.mb.dark{color:#f5f5f7}
-.mb span{padding:0 9.5px;font-size:13.5px;font-weight:500}
-.mb .app{font-weight:700}
-.mb .apple{padding:0 8px 0 2px}.mb .apple svg{width:14px;height:17px;display:block}
-.mb .grow{flex:1}
-.mb .ic{width:17px;height:15px;margin:0 8px;display:grid;place-items:center}.mb .ic svg{width:100%;height:100%}
-.mb .clock{padding:0 4px 0 10px}
-.screen.light{--wbg:#fbfbfd;--wtb:#ececf0;--wt:#3b3d44;--wl:#e4e6ec}
-.screen.dark{--wbg:#1d1e24;--wtb:#28292f;--wt:#c9ccd4;--wl:#2e3038}
-.win{position:absolute;left:236px;top:64px;width:1040px;height:820px;border-radius:12px;background:var(--wbg);box-shadow:0 22px 60px rgba(0,0,0,.28),0 0 0 .5px rgba(0,0,0,.3);overflow:hidden}
-.win.maxed{left:0;top:33px;width:1512px;height:949px;border-radius:0}
-.wtb{height:28px;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--wtb);position:relative}
-.tl{width:12px;height:12px;border-radius:50%;display:block}.tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
-.wt{position:absolute;left:0;right:0;text-align:center;font-size:12.5px;font-weight:600;color:var(--wt);pointer-events:none}
-.wbody{padding:18px 24px}.wbody p{height:9px;border-radius:4px;background:var(--wl);margin:0 0 12px}
-.hw{position:absolute;left:663.5px;top:0;width:185px;height:32px;background:#000;border-radius:0 0 var(--r,10px) var(--r,10px);z-index:30}
-.crop.z2 canvas{image-rendering:pixelated}
-.fcur{position:absolute;left:0;top:0;width:13px;height:20px;z-index:25;opacity:0;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
-.fcur.on{opacity:1}
-.thumb{position:absolute;left:0;top:0;width:66px;height:44px;border-radius:7px;z-index:24;opacity:0;pointer-events:none;background:linear-gradient(135deg,#7cc4ff,#c8b6ff);box-shadow:0 8px 20px rgba(0,0,0,.35),0 0 0 1.5px #fff}
-.thumb::after{content:"";position:absolute;inset:7px 9px auto;height:6px;border-radius:3px;background:rgba(255,255,255,.75);box-shadow:0 11px 0 rgba(255,255,255,.45),0 22px 0 rgba(255,255,255,.3)}
-
-/* ---------- Steward in the notch ---------- */
-.nt{position:absolute;top:0;width:0;height:0;z-index:12;transition:opacity .18s linear}
-.nt.rm-out{opacity:0;transition-duration:.14s}
-.nt.snap,.nt.snap *{transition:none!important}
-.nt-shape{position:absolute;left:0;top:0}
-.blob{position:absolute;left:0;width:0;height:0}
-.bp{position:absolute;background:#000;transition:transform var(--d,.38s) var(--e,ease)}
-.blob.body{opacity:0;transition:opacity .12s linear}
-.blob.body.on{opacity:1}
-.nt[data-state=open] .blob.body.on{opacity:0;transition:opacity .3s linear .24s}
-.fil{position:absolute;opacity:0;transform:scale(.2);transition:transform var(--d,.38s) var(--e,ease),opacity .12s linear}
-.fil.l{transform-origin:100% 100%}.fil.r{transform-origin:0 100%}
-.fil.on{opacity:1;transform:none}
-.nt-eyes{position:absolute;left:0;top:0;width:0;height:0;opacity:0;transition:transform var(--d,.38s) var(--e,ease),opacity .18s linear}
-.nt-eyes.on{opacity:1}
-.nt[data-state=open] .nt-eyes{transition:transform var(--d) var(--e),opacity .2s linear .22s}
-.nt-glow{position:absolute;width:80px;height:30px;background:radial-gradient(closest-side,rgba(0,0,0,.38),rgba(0,0,0,0));opacity:0;transition:opacity .25s linear}
-.nt-glow.on{opacity:1}
-.nt-mouth{position:absolute;width:64px;height:17px;border-radius:9px;background:#050505;box-shadow:inset 0 3px 6px rgba(0,0,0,1),inset 0 0 0 1.2px rgba(var(--lit),.45),0 0 12px rgba(var(--lit),.3);opacity:0;transform:scaleY(.1);transition:transform var(--d) var(--e),opacity .14s linear}
-.nt-mouth.on{opacity:1;transform:none}
-.nt-msg{position:absolute;left:-165px;width:330px;text-align:center;color:#f2f3f5;font:600 12.5px/16px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transform:translateY(-6px);transition:opacity .16s linear,transform .3s var(--out)}
-.nt-msg.on{opacity:1;transform:none;transition-delay:.14s}
-.nt-msg b{color:rgb(var(--lit))}
-.nt-panel{position:absolute;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:9px;opacity:0;transform:translateY(-8px) scale(.95);transform-origin:50% 0;transition:opacity .26s linear,transform var(--d) var(--e);pointer-events:none;overflow:hidden;font:500 12.5px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
-.nt-panel.on{opacity:1;transform:none;transition-delay:.16s}
-.nt-panel header{display:flex;align-items:center;gap:8px}
-.nt-panel header b{display:block;font-size:14px}
-.nt-panel header small{display:block;color:var(--t3);font-size:11.5px}
-.nt-panel .hs{width:64px;height:54px;display:block;flex:none}
-.nt-panel .bub{padding:8px 11px;border-radius:14px;background:rgba(var(--fill),.55);box-shadow:inset 0 0 0 .5px var(--edge2);max-width:85%}
-.nt-panel .bub.me{align-self:flex-end;background:rgba(var(--glow),.28)}
-.nt-panel code{font:600 11.5px ui-monospace,Menlo,monospace}
-.nt-panel .cmp{margin-top:auto;padding:9px 12px;border-radius:14px;background:rgba(var(--fill),.5);color:var(--t3);box-shadow:inset 0 0 0 .5px var(--edge2)}
-
-/* the move between the edge and the notch */
-.tab{position:absolute;top:380px;width:58px;height:54px;display:grid;place-items:center;z-index:14;transition:opacity .26s linear}
-.tab.right{right:0;border-radius:18px 0 0 18px}.tab.left{left:0;border-radius:0 18px 18px 0}
-.tab.gone{opacity:0}
-.drop{position:absolute;left:0;top:0;border-radius:50%;background:#000;z-index:13;opacity:0;pointer-events:none;will-change:transform}
-.deyes{position:absolute;left:0;top:0;width:0;height:0;z-index:13;opacity:0;pointer-events:none}
 </style>
 </head>
 <body>

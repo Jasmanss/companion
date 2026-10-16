@@ -52,6 +52,10 @@ export function App() {
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   const [banner, setBanner] = useState<AlertView | null>(null)
+  /** How many more alerts came with the banner's (the ones that waited for the panel to open). */
+  const [bannerMore, setBannerMore] = useState(0)
+  /** The one-time note about Steward hiding until it's needed. */
+  const [presenceNote, setPresenceNote] = useState<string | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
@@ -84,6 +88,7 @@ export function App() {
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
     const offAlerts = api.alerts.onShow(handleAlerts)
+    const offNote = api.presence.onNote(setPresenceNote)
     const offMood = api.alerts.onMood(setEventMood)
     const offLeftOff = api.leftOff.onShow(setLeftOff)
     // The brief already includes where you left off.
@@ -108,6 +113,7 @@ export function App() {
       offAgent()
       offSessions()
       offAlerts()
+      offNote()
     }
     // The handlers only use state setters and refs, so subscribing once is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,9 +127,10 @@ export function App() {
 
   useEffect(() => {
     if (!banner) return
-    const t = setTimeout(() => setBanner(null), 6000)
+    // Several that waited for the panel get longer to read.
+    const t = setTimeout(() => setBanner(null), bannerMore > 0 ? 12_000 : 6000)
     return () => clearTimeout(t)
-  }, [banner])
+  }, [banner, bannerMore])
 
   useEffect(() => {
     currentProject.current = settings?.currentProject ?? null
@@ -131,6 +138,27 @@ export function App() {
 
   // Settings → Steward, with the defaults for anything an older main process doesn't send.
   const look = { ...DEFAULT_STEWARD, ...settings?.steward }
+  // Only when needed, the tab slides in from the screen edge and back as a transform in the page (see styles.css), so
+  // every frame is the compositor's. The window never moves: macOS puts a window that is partly off screen back on it.
+  useEffect(() => {
+    const root = document.documentElement
+    const jump = (out: boolean) => {
+      root.dataset.slideJump = ''
+      root.dataset.slide = out ? 'out' : 'in'
+      // Read the style now, so the jump is over before the transitions come back.
+      void getComputedStyle(document.getElementById('root')!).transform
+      delete root.dataset.slideJump
+    }
+    const slide = ({ out, animate }: { out: boolean; animate: boolean }) => {
+      if (!animate) return jump(out)
+      // Coming in: the first frame is drawn away, and the next one starts the slide.
+      if (!out && root.dataset.slide === 'out') requestAnimationFrame(() => (root.dataset.slide = 'in'))
+      else root.dataset.slide = out ? 'out' : 'in'
+    }
+    void api.presence.slid().then(jump)
+    return api.presence.onSlide(slide)
+  }, [])
+
   // The tab and the panel's animations face away from the screen edge it sits on.
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
@@ -153,6 +181,7 @@ export function App() {
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
     setBanner(list[0] ?? null)
+    setBannerMore(Math.max(0, list.length - 1))
   }
 
   const tuckAway = useCallback(() => {
@@ -380,6 +409,8 @@ export function App() {
   const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
   const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
   const glint = glintFor(work)
+  // Docked in the notch, the notch window shows the character: it gets the same mood.
+  useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
   const noKey = settings?.apiKeySource === 'none'
 
@@ -488,6 +519,7 @@ export function App() {
         <div className="banner" role="status" onClick={() => setBanner(null)}>
           <strong>{banner.title}</strong>
           {banner.detail && <span>{banner.detail}</span>}
+          {bannerMore > 0 && <span>and {bannerMore} more</span>}
           {banner.action && (
             <button
               className="chip"
@@ -512,6 +544,14 @@ export function App() {
         onError={showError}
       />
       <div className="body">
+        {presenceNote && (
+          <div className="notice" role="status">
+            {presenceNote}
+            <button className="chip" onClick={() => setPresenceNote(null)}>
+              Got it
+            </button>
+          </div>
+        )}
         {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
         {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
         {noKey && (

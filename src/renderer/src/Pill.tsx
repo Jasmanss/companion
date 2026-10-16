@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { colorHex } from '../../shared/steward'
 import type { Mood, StewardPrefs } from '../../shared/types'
-import { createEyes, pressKey, setMood, setStyle, stepEyes, type Glint, type SizeClass } from './pill/eyes'
-import { makeView } from './pill/render'
+import { createEyes, pressKey, setMood, setStyle, stepEyes, type EyesState, type Glint, type SizeClass } from './pill/eyes'
+import { makeView, type PillView } from './pill/render'
 
 /** Typing to Steward: every Pill on the page nods once per key (it only shows while listening). */
 const typed = new Set<() => void>()
@@ -22,7 +22,66 @@ export function useMedia(query: string): boolean {
 }
 
 let nextSeed = 1
+export const seed = (): number => nextSeed++
 const now = () => performance.now() / 1000
+
+/** A point (in the page) relative to an element, in units of its size (at least the header's), as the eyes expect. */
+export function toward(p: { x: number; y: number }, el: Element): { x: number; y: number } {
+  const r = el.getBoundingClientRect()
+  return { x: (p.x - (r.left + r.width / 2)) / Math.max(90, r.width), y: (p.y - (r.top + r.height / 2)) / Math.max(70, r.height) }
+}
+
+/**
+ * Steps one eyes state and draws its views from it, paced: every frame while open; tucked away, resting 10 times a
+ * second, sleepy 20 and the rest 30; with reduced motion 10 (nothing moves on its own). Nothing at all while the page
+ * is hidden. cursor() is where the cursor is, relative to the eyes, or null. Returns a function that stops it.
+ */
+export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean; idle?: () => boolean }): () => void {
+  // idle: nothing to see (the notch asleep): don't draw, and only look now and then to see if that's changed.
+  const every = () => (o.idle?.() ? 0.25 : o.reduced || st.mood === 'resting' ? 0.1 : o.tucked ? (st.mood === 'sleepy' ? 0.05 : 1 / 30) : 0)
+  let frame = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let last = now()
+  const draw = (t: number) => {
+    stepEyes(st, t, t - last, o.cursor(), o.reduced)
+    last = t
+    for (const v of views) {
+      v.standby(st.mood === 'resting' && !o.reduced)
+      v.update(st)
+    }
+  }
+  const tick = (ms: number) => {
+    frame = 0
+    if (document.hidden) return
+    if (o.idle?.()) last = ms / 1000
+    else draw(ms / 1000)
+    schedule()
+  }
+  const schedule = () => {
+    if (frame || timer) return
+    const wait = every()
+    if (wait > 0)
+      timer = setTimeout(() => {
+        timer = undefined
+        frame = requestAnimationFrame(tick)
+      }, wait * 1000)
+    else frame = requestAnimationFrame(tick)
+  }
+  const onVisible = () => {
+    if (document.hidden) return
+    last = now()
+    schedule()
+  }
+  // The first frame right away, so it never shows empty.
+  draw(now())
+  schedule()
+  document.addEventListener('visibilitychange', onVisible)
+  return () => {
+    cancelAnimationFrame(frame)
+    clearTimeout(timer)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
+}
 
 export interface PillProps {
   mood: Mood
@@ -43,7 +102,7 @@ export interface PillProps {
  */
 export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false }: PillProps) {
   const host = useRef<HTMLDivElement>(null)
-  const [st] = useState(() => createEyes(nextSeed++, now()))
+  const [st] = useState(() => createEyes(seed(), now()))
   const dark = useMedia('(prefers-color-scheme: dark)')
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
   const { version, color, glass, mouth, personality } = look
@@ -60,62 +119,16 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
     let pointer: { x: number; y: number } | null = null
     const onMove = (e: PointerEvent) => (pointer = { x: e.clientX, y: e.clientY })
     const onLeave = () => (pointer = null)
-    /** The cursor relative to this Pill, in units of its size (at least the header's), or null when it's away. */
-    const cursor = () => {
-      if (!pointer) return null
-      const r = el.getBoundingClientRect()
-      return { x: (pointer.x - (r.left + r.width / 2)) / Math.max(90, r.width), y: (pointer.y - (r.top + r.height / 2)) / Math.max(70, r.height) }
-    }
     const nod = () => pressKey(st)
-
-    // Seconds between frames. Open: every frame. Tucked away: resting 10 a second, sleepy 20, the rest 30.
-    // With reduced motion nothing moves on its own, so 10 a second is plenty.
-    const every = () => (reduced || st.mood === 'resting' ? 0.1 : tucked ? (st.mood === 'sleepy' ? 0.05 : 1 / 30) : 0)
-    let frame = 0
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let last = now()
-    const draw = (t: number) => {
-      stepEyes(st, t, t - last, cursor(), reduced)
-      last = t
-      view.standby(st.mood === 'resting' && !reduced)
-      view.update(st)
-    }
-    const tick = (ms: number) => {
-      frame = 0
-      if (document.hidden) return
-      draw(ms / 1000)
-      schedule()
-    }
-    const schedule = () => {
-      if (frame || timer) return
-      const wait = every()
-      if (wait > 0)
-        timer = setTimeout(() => {
-          timer = undefined
-          frame = requestAnimationFrame(tick)
-        }, wait * 1000)
-      else frame = requestAnimationFrame(tick)
-    }
-    const onVisible = () => {
-      if (document.hidden) return
-      last = now()
-      schedule()
-    }
-
-    // The first frame right away, so it never shows empty.
-    draw(now())
-    schedule()
+    const stop = runEyes(st, [view], { cursor: () => (pointer ? toward(pointer, el) : null), reduced, tucked })
     typed.add(nod)
     window.addEventListener('pointermove', onMove)
     document.documentElement.addEventListener('pointerleave', onLeave)
-    document.addEventListener('visibilitychange', onVisible)
     return () => {
-      cancelAnimationFrame(frame)
-      clearTimeout(timer)
+      stop()
       typed.delete(nod)
       window.removeEventListener('pointermove', onMove)
       document.documentElement.removeEventListener('pointerleave', onLeave)
-      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [st, version, color, glass, mouth, cls, width, height, dark, reduced, tucked])
 

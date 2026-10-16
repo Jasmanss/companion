@@ -18,10 +18,10 @@ export const NOTCH = { w: 185, h: 32 }
 export const MENU = 33
 export const CX = SCREEN.w / 2
 const HW = NOTCH.w / 2
-/** The lip below the notch, each wing beside it, the fillet radius, and how tall the eyes are. */
-export const SIZE = { lip: 18, wing: 20, fillet: 8, eye: 10 }
-const LIP = NOTCH.h + SIZE.lip // the black's full height at rest: 50
-const EYE_Y = NOTCH.h + SIZE.lip / 2 // the eyes' center line, in the middle of the lip: 41
+/** How tall the eyes are, and from that the lip below the notch and each wing beside it; and the fillet radius. */
+export const SIZE = { eye: 14, lip: 22, wing: 28, fillet: 8 }
+/** Pick the eye size (12, 14 or 16 points); the lip and the wings follow. */
+export function setEye(eye) { Object.assign(SIZE, { eye, lip: eye + 8, wing: eye + 14 }) }
 const BODY_TOP = MENU + SIZE.fillet // where anything wider than the notch starts
 const PANEL = { w: 380, h: 470 }
 
@@ -87,6 +87,13 @@ export function screenHTML({ wall = 'light', busy = false, maxed = false, title 
     <div class="mb ${wall}"><span class="apple"><svg viewBox="0 0 14 17"><path d="M11.6 9c0-2 1.6-3 1.7-3a3.7 3.7 0 0 0-2.9-1.6c-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7A3.9 3.9 0 0 0 1.5 6.4c-1.4 2.4-.4 6 1 8 .7 1 1.5 2 2.5 2s1.4-.7 2.6-.7 1.5.7 2.6.6 1.7-1 2.4-2a8 8 0 0 0 1-2.2A3.4 3.4 0 0 1 11.6 9zM9.6 3a3.4 3.4 0 0 0 .8-2.5 3.6 3.6 0 0 0-2.3 1.2 3.3 3.3 0 0 0-.9 2.4A3 3 0 0 0 9.6 3z" fill="currentColor"/></svg></span>${left}
       <span class="grow"></span>${extra}<i class="ic">${ICON.battery}</i><i class="ic">${ICON.wifi}</i><i class="ic">${ICON.search}</i><i class="ic">${ICON.cc}</i><span class="clock">Tue 14 Oct&nbsp;&nbsp;9:41</span></div>`
 }
+/** A lit eye view for anything that carries Steward's eyes outside the notch (the drop), centered on its host. */
+export function litEyes(stage, g, kind, host, { color, eye = SIZE.eye, mouth = true }) {
+  const k = eye / 18, W = Math.round(92 * k), H = Math.round(60 * k)
+  const v = stage.view(g, kind, host, W, H, { color, tinted: true, light: false, mouth, lit: true, symAt: { x: -999, y: -999 } })
+  Object.assign(v.el.style, { position: 'absolute', left: px(-W / 2), top: px(-H / 2) })
+  return v
+}
 /** The notch itself, on top of everything: whatever is drawn under it can't be seen, like on the real screen. */
 export const hardwareHTML = () => '<div class="hw"></div>'
 
@@ -96,7 +103,7 @@ export const hardwareHTML = () => '<div class="hw"></div>'
  */
 export function crop(host, { cw = 440, ch = 110, zoom = 1, wall, busy, maxed, cls = '' } = {}) {
   const el = div(`crop z${zoom} ${cls}`, `width:${cw * zoom}px;height:${ch * zoom}px`)
-  const screen = div(`screen ${wall ?? 'light'}`, `height:${ch}px;transform:scale(${zoom}) translateX(${px(-(CX - cw / 2))})`)
+  const screen = div(`screen gx ${wall ?? 'light'}`, `height:${ch}px;transform:scale(${zoom}) translateX(${px(-(CX - cw / 2))})`)
   screen.innerHTML = screenHTML({ wall, busy, maxed }) + hardwareHTML()
   el.append(screen)
   host.append(el)
@@ -107,18 +114,21 @@ export function crop(host, { cw = 440, ch = 110, zoom = 1, wall, busy, maxed, cl
 /**
  * Steward docked in the notch, in one of the three layouts. Put it in a screen; it sits at the notch's center.
  * o: { layout, kind, color, stage, group (share one eyes state), owner, seed, anchor, mood, mouth, think, r (the
- * corner radius), dark (the page theme, for the open panel), rm() (reduced motion), look() (a scripted cursor) }.
+ * corner radius), panel (add the panel it opens into), dark (the page theme, for that panel), rm() (reduced motion),
+ * look() (a scripted cursor) }.
  * go(state) changes its shape; mood(m) its eyes.
  */
 export function createNotch(screen, o) {
   const { layout, kind, color, stage, r = 10, rm = () => false } = o
+  const LIP = NOTCH.h + SIZE.lip // the black's full height at rest
+  const EYE_Y = NOTCH.h + SIZE.lip / 2 // the eyes' center line, in the middle of the lip
   const lit = palette(kind, { color, lit: true }).lit
   const root = div(`nt ${layout}`, `left:${px(CX)};--lit:${[1, 3, 5].map((i) => parseInt(lit.slice(i, i + 2), 16)).join(',')}`)
   const g = o.group ?? stage.group({ seed: o.seed ?? 1, anchor: o.anchor ?? screen, mood: o.mood ?? 'idle', think: o.think ?? 'dots', mouth: o.mouth ?? true, owner: o.owner, look: o.look })
   const shape = div('nt-shape')
   root.append(shape)
   // The underglow keeps layout C's eyes readable where there's no black behind them.
-  const glow = div('nt-glow', `left:-40px;top:${px(EYE_Y - 15)}`)
+  const glow = div('nt-glow', 'left:-50px')
   shape.append(glow)
   const body = blob(shape, { w0: 340, h0: 46, rt: 14, rb: 16, top: BODY_TOP, cls: 'body' })
   const lip = blob(shape, { w0: NOTCH.w, h0: LIP, rb: r, cls: 'lip' })
@@ -131,7 +141,7 @@ export function createNotch(screen, o) {
     return f
   })
   const mouthEl = div('nt-mouth', `left:-32px;top:${px(LIP + 4)}`)
-  const msg = div('nt-msg', `top:${px(BODY_TOP + 16)}`)
+  const msg = div('nt-msg', `top:${px(LIP + 6)}`)
   shape.append(mouthEl, msg)
 
   // The eyes: one lit view per spot, all sharing the group's state. Each view is centered on its spot.
@@ -141,7 +151,7 @@ export function createNotch(screen, o) {
     const w = div(`nt-eyes ${name}`, `transform:translate(${px(x)},${px(y)})${clip ? `;clip-path:${clip}` : ''}`)
     // The corner symbol: its center for vector views, the sprite's bottom left for blocky (2 pt pixels, 5 wide).
     const at = !sym ? { x: -999, y: -999 } : kind === 'blocky' ? { x: W / 2 + sym[0] - 5, y: H / 2 + sym[1] + 5 } : { x: W / 2 + sym[0], y: H / 2 + sym[1] }
-    const v = stage.view(g, kind, w, W, H, { color, tinted: true, light: false, mouth: o.mouth ?? true, lit: true, symAt: at, markSize: 10, markPx: 2 })
+    const v = stage.view(g, kind, w, W, H, { color, tinted: true, light: false, mouth: o.mouth ?? true, lit: true, symAt: at, markSize: Math.round(E * 0.85), markPx: 2 })
     v.el.style.position = 'absolute'
     v.el.style.left = px(-W / 2)
     v.el.style.top = px(-H / 2)
@@ -150,16 +160,20 @@ export function createNotch(screen, o) {
     return w
   }
   if (layout === 'wings') {
-    const wx = HW + SIZE.wing / 2
-    // Each wing shows one eye of a full pair; the other eye falls under the notch, and the clip keeps it there.
-    eyes('wl', -wx, NOTCH.h / 2, { clip: `polygon(${px(-140 + wx)} -40px,${px(-HW + wx)} -40px,${px(-HW + wx)} 40px,${px(-140 + wx)} 40px)` })
-    eyes('wr', wx, NOTCH.h / 2, { sym: [22, -3], clip: `polygon(${px(HW - wx)} -40px,${px(150 - wx)} -40px,${px(150 - wx)} 40px,${px(HW - wx)} 40px)` })
+    // Each wing shows one eye of a full pair: the view sits so that eye is in the middle of the wing, the other eye
+    // falls under the notch, and a clip keeps it there even when the eyes look around.
+    const wx = HW + SIZE.wing / 2, sp = 0.145 * 88 * (W / 92) // half the distance between a pair's eyes
+    const clip = (x0, x1, at) => `polygon(${px(x0 - at)} -40px,${px(x1 - at)} -40px,${px(x1 - at)} 40px,${px(x0 - at)} 40px)`
+    // The clip starts 5.5 pt out from the notch: looking sideways, the hidden eye's glow can reach that far.
+    eyes('wl', -wx + sp, NOTCH.h / 2, { clip: clip(-170, -HW - 5.5, -wx + sp) })
+    eyes('wr', wx - sp, NOTCH.h / 2, { sym: [sp + E * 1.7, -3], clip: clip(HW + 5.5, 180, wx - sp) })
     eyes('chin', 0, EYE_Y)
   } else eyes('main', 0, EYE_Y, { sym: [68, 0] })
+  glow.style.top = px(EYE_Y - 18)
 
   // The open panel: the black grows into it, then the glass takes over and the eyes become the header's Pill.
   let panel = null, headView = null
-  if (o.panel !== false) {
+  if (o.panel) {
     panel = div('nt-panel glass', `left:${px(-PANEL.w / 2)};top:${px(BODY_TOP)};width:${PANEL.w}px;height:${PANEL.h}px`)
     panel.innerHTML = `<header><span class="hs"></span><span><b>Steward</b><small>companion · idle</small></span></header>
       <div class="bub me">Why did the deploy fail?</div><div class="bub">A missing environment variable: <code>DATABASE_URL</code>. Want me to add it?</div>
@@ -181,9 +195,10 @@ export function createNotch(screen, o) {
     if (st === 'mouth') L = LIP + 26
     if (st === 'gulp') L = LIP + 3
     if (st === 'bulge') L = LIP + 8
+    if (lipOut && g.st.mood === 'talking' && L === LIP) L = LIP + 5 // room for the mouth under the eyes
     if (st === 'away' || st === 'open') L = NOTCH.h
     const ww = st === 'away' || st === 'open' ? NOTCH.w : NOTCH.w + 2 * SIZE.wing + (st === 'hover' ? 8 : st === 'press' ? -4 : 0)
-    const wide = st === 'nudge' ? [340, 46] : st === 'tray' ? [230, 36] : st === 'bulge' ? [236, 30] : st === 'open' ? [PANEL.w, PANEL.h] : null
+    const wide = st === 'nudge' ? [340, LIP - BODY_TOP + 30] : st === 'tray' ? [230, LIP - BODY_TOP + 22] : st === 'bulge' ? [236, 30] : st === 'open' ? [PANEL.w, PANEL.h] : null
     const eyesAt = Object.entries(spots).map(([name, sp]) => {
       let on = st !== 'away' && st !== 'open' && st !== 'bulge', y = sp.y
       if (name === 'chin') on = on && lipOut && (MIDDLE.has(g.st.mood) || st === 'think')
@@ -200,6 +215,8 @@ export function createNotch(screen, o) {
     if (wings) wings.size(p.ww, NOTCH.h)
     set(body.el, !!p.wide)
     body.size(...(p.wide ?? [140, 30]))
+    // Hidden, it sits tucked up inside the black above it, so it can drop out and slide back without a fade.
+    body.el.style.transform = p.wide ? '' : `translateY(${px(-(BODY_TOP + 30 - p.L))})`
     fils.forEach((f) => set(f, !!p.wide && p.st !== 'open'))
     set(mouthEl, p.st === 'mouth')
     set(msg, p.st === 'nudge' || p.st === 'tray')
@@ -225,11 +242,12 @@ export function createNotch(screen, o) {
     root, group: g, headView, spots,
     get state() { return state },
     go(st, { d, e } = {}) {
-      const first = state === null
+      const first = state === null, was = state
       state = st
-      const [td, te] = TIMING[st] ?? ['380ms', 'out']
+      // Tucking the panel away takes a little longer, evenly, so the black is seen shrinking back into the notch.
+      const [td, te] = was === 'open' ? ['480ms', 'inout'] : TIMING[st] ?? ['380ms', 'out']
       root.style.setProperty('--d', d ?? td)
-      root.style.setProperty('--e', `var(--${e ?? te})`)
+      root.style.setProperty('--e', `var(--nt-${e ?? te})`)
       change(st, first)
     },
     /** A new mood, and the shape that goes with it (layout C comes out, B shows its chin). */

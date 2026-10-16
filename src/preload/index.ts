@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -83,6 +83,20 @@ const api: StewardAPI = {
   appearance: {
     get: () => ipcRenderer.invoke('appearance:get'),
     onChange: (cb) => subscribe<Appearance>('appearance:changed', cb),
+  },
+  notch: {
+    geometry: () => ipcRenderer.invoke('notch:geometry'),
+    onGeometry: (cb) => subscribe<NotchGeometry | null>('notch:geometry', cb),
+    reportMood: (mood, glint) => ipcRenderer.send('notch:reportMood', mood, glint),
+    state: () => ipcRenderer.invoke('notch:state'),
+    onState: (cb) => subscribe<NotchState>('notch:state', cb),
+    onCursor: (cb) => subscribe<{ x: number; y: number } | null>('notch:cursor', cb),
+    click: () => ipcRenderer.send('notch:click'),
+  },
+  presence: {
+    onNote: (cb) => subscribe<string>('presence:note', cb),
+    slid: () => ipcRenderer.invoke('presence:slid'),
+    onSlide: (cb) => subscribe<{ out: boolean; animate: boolean }>('presence:slide', cb),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }

@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="shared/glass.css">
 <link rel="stylesheet" href="shared/activity.css">
+<link rel="stylesheet" href="notch/notch.css">
 <style>
 /* ---------- page ---------- */
 :root{--bg:#F3F4F7;--card:#fff;--line:#E2E4EA;--text:#1C1F25;--muted:#596070;--accent:#2F6FEB;--chip:#fff;--barbg:rgba(243,244,247,.88);--barh:120px;color-scheme:light}
@@ -388,6 +389,9 @@ figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
 .sstatus.on::before{background:#2fb36b}
 
 /* ---------- 6. docking ---------- */
+.nlayouts{display:flex;flex-wrap:wrap;gap:12px}
+.nlayouts figure{margin:0;display:flex;flex-direction:column;gap:6px}
+.nlayouts figcaption{font-size:12.5px;font-weight:800;color:var(--muted)}
 .edges{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media (max-width:760px){.edges{grid-template-columns:minmax(0,1fr)}}
 .edgefig{margin:0;display:flex;flex-direction:column;gap:6px}
@@ -408,43 +412,8 @@ figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
 .edgedesk[data-state=open] .etab{transform:translateX(calc(110% * var(--side)));opacity:0}
 .edgedesk:not([data-state]) .epanel{opacity:0}
 :root[data-rm] .edgedesk .epanel,:root[data-rm] .edgedesk .etab{transform:none!important;transition:opacity .25s}
-.notchwrap{overflow-x:auto;scrollbar-width:thin}
-.notchdesk{position:relative;width:640px;height:300px;margin:0 auto;border-radius:14px;overflow:hidden;--pillc:#c7ccd5}
-.nbar{position:absolute;left:0;right:0;top:0;height:30px;display:flex;align-items:center;gap:16px;padding:0 14px;font:600 12.5px -apple-system,system-ui,sans-serif;color:var(--t1);background:rgba(var(--fill),.5);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-.nbar .grow{flex:1}
-.notch{position:absolute;left:235px;top:0;width:170px;height:30px;background:#000;border-radius:0 0 14px 14px;z-index:4}
-.chin{position:absolute;left:256px;top:16px;width:128px;height:58px;background:#000;border-radius:0 0 29px 29px;z-index:3;display:grid;place-items:end center;padding-bottom:4px;transform-origin:50% 0;transform:scale(.6,0);opacity:0}
-.ntab{position:absolute;right:0;top:90px;width:56px;height:132px;border-radius:18px 0 0 18px;display:grid;place-items:center;z-index:2;transition:transform .45s var(--spring),opacity .35s}
 .ntslot{transition:opacity .25s}
-.drop{position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;z-index:5;opacity:0;pointer-events:none;transform:translate(592px,136px);
   background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.85),rgba(255,255,255,0) 38%),radial-gradient(circle at 60% 70%,rgba(0,0,0,.18),rgba(0,0,0,0) 60%),var(--pillc);box-shadow:0 6px 16px rgba(0,0,0,.25)}
-.notchdesk[data-state=lift] .ntslot,.notchdesk[data-state=flow] .ntslot,.notchdesk[data-state=merge] .ntslot,.notchdesk[data-state=notch] .ntslot{opacity:0}
-.notchdesk[data-state=lift] .drop{opacity:1;transform:translate(592px,128px) scale(.92,1.14);transition:transform .45s var(--spring),opacity .2s}
-.notchdesk[data-state=flow] .drop{animation:drop-in 1.1s cubic-bezier(.45,.05,.3,1) both}
-.notchdesk[data-state=flow] .ntab,.notchdesk[data-state=merge] .ntab,.notchdesk[data-state=notch] .ntab{transform:translateX(110%);opacity:0}
-.notchdesk[data-state=merge] .chin{animation:bulge .65s var(--spring) both}
-.notchdesk[data-state=notch] .chin{transform:none;opacity:1}
-.notchdesk[data-state=back] .chin{animation:bulge-out .5s ease-in both}
-.notchdesk[data-state=back] .drop{animation:drop-in 1.1s cubic-bezier(.45,.05,.3,1) .25s reverse both}
-.notchdesk[data-state=back] .ntab{transition-delay:.9s}
-.notchdesk[data-state=back] .ntslot{transition:opacity .3s 1.25s}
-@keyframes drop-in{
-  0%{opacity:1;transform:translate(592px,128px) scale(.92,1.14)}
-  22%{transform:translate(566px,64px) scale(.8,1.3)}
-  45%{transform:translate(500px,22px) scale(1.5,.66)}
-  72%{transform:translate(390px,13px) scale(1.75,.56)}
-  90%{opacity:1;transform:translate(318px,10px) scale(1,1.05)}
-  100%{opacity:0;transform:translate(300px,10px) scale(.4,.4)}}
-@keyframes bulge{0%{opacity:1;transform:scale(.55,0)}55%{opacity:1;transform:scale(1.1,1.18)}80%{transform:scale(.97,.95)}100%{opacity:1;transform:none}}
-@keyframes bulge-out{0%{opacity:1;transform:none}40%{transform:scale(1.08,1.1)}100%{opacity:0;transform:scale(.55,0)}}
-.nstep{margin:8px 0 0;text-align:center;font-weight:700;color:var(--muted);min-height:20px}
-/* Reduced motion: the tab and the notch simply cross-fade. */
-:root[data-rm] .drop{display:none}
-:root[data-rm] .chin{transform:none;transition:opacity .4s}
-:root[data-rm] .notchdesk[data-state] .chin{animation:none}
-:root[data-rm] .notchdesk[data-state=notch] .chin,:root[data-rm] .notchdesk[data-state=merge] .chin{opacity:1}
-:root[data-rm] .notchdesk[data-state=back] .chin{opacity:0}
-:root[data-rm] .ntab{transform:none!important;transition:opacity .4s!important}
 
 /* ---------- every feature ---------- */
 .ftable{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:14px}
