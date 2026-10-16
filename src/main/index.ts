@@ -75,8 +75,12 @@ const SLIDE_MS = 380
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 // The smoke check runs alongside a normal copy, with its own throwaway data.
-if (SMOKE_OUT) app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
-else {
+if (SMOKE_OUT) {
+  app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
+  // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
+  // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
+  for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)
+} else {
   // Electron names the data folder after the app, so the rename gave Steward a new one. Copy the old folder
   // (LEGACY_APP_NAME) across once, before anything (the instance lock included) creates the new one; the old one stays as a backup.
   migrateUserData(path.join(app.getPath('appData'), LEGACY_APP_NAME), app.getPath('userData'))
