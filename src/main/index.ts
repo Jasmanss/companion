@@ -526,6 +526,9 @@ function createWindow(): BrowserWindow {
     acceptFirstMouse: true,
     // Keep the frost lively even though the panel rarely becomes the key window.
     visualEffectState: 'active',
+    // The tab and the nudge hang a little past the screen edge (EDGE_OVERHANG); without this macOS pulls a window
+    // that's partly off the screen back onto it when it's shown.
+    enableLargerThanScreen: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
