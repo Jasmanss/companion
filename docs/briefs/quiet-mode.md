@@ -189,5 +189,17 @@ Status stays `ready`: Phases 2 and 3 are not built yet. Recorded by Roadmap & de
 - **CI limit:** the macOS CI runner could not measure motion ("not measurable here: the page drew 0 frames in 700 ms"). Slide smoothness is verified only by the local measurement and the user's hand test.
 - **Waiting on the user:** try Phase 1 by hand on the latest build, and the go on Phase 2 (tab drag, first-launch peek, dim when idle).
 
-### Phase 2 and Phase 3
+### Phase 2 (recorded from the front door, 2026-10-16)
+Status stays `ready`: Phase 3 is not built. The user typed the Phase 2 go into Main building.
+- **Branch / PR:** `claude/quiet-mode-phase-2` (cut from origin/main), 6 commits `2e321cd` to `54e780d`. Draft PR https://github.com/Jasmanss/companion/pull/18, CI running when recorded.
+- **Built:**
+  - Tab drag: more than 5 pt is a drag, clamped to the work area, height remembered per display, "Reset" in Settings → Steward → Height.
+  - Dim when idle: after 20 s at rest the eyes go to 40% and stop drawing. They wake on a mood change, an alert, or the cursor within 120 pt. On for new installs, off for existing ones.
+  - First-launch peek: once on a fresh quiet install. It replaces the panel's first-time note.
+- **Checks:** lint, typecheck, 269 tests and smoke pass locally (the front door re-ran lint, typecheck and tests).
+- **Not checked:** notch dim and notch peek (only an external monitor was on), drag feel with a real mouse, a real fresh install.
+- **Known limit:** a second display keeps its own height only when it is the main screen.
+- **Waiting on the user:** try Phase 2 by hand (drag the tab, wait for the eyes to dim).
+
+### Phase 3
 Not started.
