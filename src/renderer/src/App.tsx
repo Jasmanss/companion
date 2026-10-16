@@ -158,8 +158,18 @@ export function App() {
       if (!out && root.dataset.slide === 'out') requestAnimationFrame(() => (root.dataset.slide = 'in'))
       else root.dataset.slide = out ? 'out' : 'in'
     }
+    // The window goes when the slide out has ended (the transform, or with Reduce Motion the fade), not on a guess.
+    const page = document.getElementById('root')!
+    const ended = (e: TransitionEvent) => {
+      if (e.target === page && (e.propertyName === 'transform' || e.propertyName === 'opacity') && root.dataset.slide === 'out') api.presence.slideEnded()
+    }
+    page.addEventListener('transitionend', ended)
     void api.presence.slid().then(jump)
-    return api.presence.onSlide(slide)
+    const off = api.presence.onSlide(slide)
+    return () => {
+      off()
+      page.removeEventListener('transitionend', ended)
+    }
   }, [])
 
   // The tab and the nudge hang a little past the screen edge (so the window's rounded corners are off the screen); the

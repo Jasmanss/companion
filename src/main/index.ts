@@ -76,8 +76,8 @@ const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
-/** How long the tab's slide out takes (styles.css has 0.3 s), plus a moment, before the window is hidden. */
-const SLIDE_MS = 380
+/** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
+const SLIDE_MS = 700
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -253,9 +253,16 @@ function tuckTab(): void {
   if (!win || win.isDestroyed() || !win.isVisible()) return
   clearTimeout(slideTimer)
   setSlide(true, true)
+  // The page says when the slide has ended (slideEnded), and the window goes then. If it never says, this does.
   slideTimer = setTimeout(() => {
     if (win && !win.isDestroyed() && dock === 'collapsed' && !out()) hideTab()
   }, SLIDE_MS)
+}
+
+/** From the tab's page: its slide out ended. Unless it was brought out again meanwhile, the window goes now. */
+function slideEnded(): void {
+  if (!win || win.isDestroyed() || !win.isVisible() || dock !== 'collapsed' || out() || !slidOut) return
+  hideTab()
 }
 
 /** Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge. */
@@ -913,6 +920,7 @@ function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
   ipcMain.handle('presence:slid', () => slidOut)
   ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
+  ipcMain.on('presence:slideEnded', () => slideEnded())
   ipcMain.handle('dock:overhang', () => edgeOverhang())
   ipcMain.handle('dock:resetPlace', () => resetTabPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
