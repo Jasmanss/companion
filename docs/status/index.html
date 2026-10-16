@@ -116,11 +116,15 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </div>
   </header>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">5</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">6</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Quiet mode, Phase 1</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Try the smoother Phase 1 by hand (claude/quiet-mode-phase-1-c95ee6), then OK the merge once CI is green on PR #15.</p>
+        <div class="row"><span class="name">Try quiet mode Phase 1 by hand</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>On the latest build in main. Push the cursor to the edge, try a real alert, hover the notch.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Go on quiet mode Phase 2</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Tab drag to any height, first-launch peek, Dim when idle.</p>
       </li>
       <li>
         <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-14">Oct 14</time></div>
@@ -141,16 +145,8 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="progress" class="card progress">
-    <h2><span class="dot"></span>In progress <span class="count">4</span></h2>
+    <h2><span class="dot"></span>In progress <span class="count">2</span></h2>
     <ul>
-      <li>
-        <div class="row"><span class="name">Quiet mode, Phase 1</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Built, slide smoothed (dd0cd9c, fix eb3e963 on claude/quiet-mode-phase-1-c95ee6). Draft PR #15 into main, CI running. Local checks pass; real cursor and alert timing not tried by hand yet.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">PR #16: @types/node 24</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Matches Electron 44's Node 24.21.0, plus a Dependabot rule to skip @types/node majors. CI running. Merge needs your OK.</p>
-      </li>
       <li>
         <div class="row"><span class="name">Notch dock</span><time datetime="2026-10-14">Oct 14</time></div>
         <p>Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.</p>
@@ -272,8 +268,16 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">10</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">12</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Quiet mode, Phase 1</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Merged into main (PR #15, 876b487), CI green. Slide smoothness is checked locally only: the CI runner cannot measure motion.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">PR #16: @types/node 24</span><time datetime="2026-10-15">Oct 15</time></div>
+        <p>Merged into main (b50ff53), CI green. Dependabot now skips @types/node majors.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Dependabot cleanup</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>#11 to #14 closed with ignore-major (TypeScript 7, plugin-react 6, @types/node 26, Vite 8).</p>

@@ -184,5 +184,10 @@ Status stays `ready`: Phases 2 and 3 are not built yet. Recorded by Roadmap & de
 - **Measured in smoke:** 47 frames over 383 ms sliding in, 39 over 317 ms sliding out, longest gap 9 ms. Smoke now fails if a slide shows fewer than 8 positions or a gap over 60 ms.
 - **Not checked:** the motion as it looks on screen (no Screen Recording). One smoke run in seven showed no slide-out samples and was not reproduced.
 
+### Phase 1 merged (recorded 2026-10-15, from the front door)
+- PR #15 (quiet mode Phase 1) merged into main by the user's GitHub account: merge commit `876b487`, 00:30. PR #16 (@types/node 24) merged at 00:32 (`b50ff53`). CI was green on both.
+- **CI limit:** the macOS CI runner could not measure motion ("not measurable here: the page drew 0 frames in 700 ms"). Slide smoothness is verified only by the local measurement and the user's hand test.
+- **Waiting on the user:** try Phase 1 by hand on the latest build, and the go on Phase 2 (tab drag, first-launch peek, dim when idle).
+
 ### Phase 2 and Phase 3
 Not started.

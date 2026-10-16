@@ -5,7 +5,8 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Quiet mode, Phase 1", "line": "Try the smoother Phase 1 by hand (claude/quiet-mode-phase-1-c95ee6), then OK the merge once CI is green on PR #15.", "date": "2026-10-15" },
+        { "name": "Try quiet mode Phase 1 by hand", "line": "On the latest build in main. Push the cursor to the edge, try a real alert, hover the notch.", "date": "2026-10-15" },
+        { "name": "Go on quiet mode Phase 2", "line": "Tab drag to any height, first-launch peek, Dim when idle.", "date": "2026-10-15" },
         { "name": "Notch dock, Phase 3", "line": "Say go. Hover grows the black, the panel drops out of the notch, alerts sit below the menu bar, drop images onto the notch.", "date": "2026-10-14", "tag": "scope from notes, no brief file" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -16,8 +17,6 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Quiet mode, Phase 1", "line": "Built, slide smoothed (dd0cd9c, fix eb3e963 on claude/quiet-mode-phase-1-c95ee6). Draft PR #15 into main, CI running. Local checks pass; real cursor and alert timing not tried by hand yet.", "date": "2026-10-15" },
-        { "name": "PR #16: @types/node 24", "line": "Matches Electron 44's Node 24.21.0, plus a Dependabot rule to skip @types/node majors. CI running. Merge needs your OK.", "date": "2026-10-15" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 waits for go.", "date": "2026-10-14" },
         { "name": "Chat flow and this status page", "line": "Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.", "date": "2026-10-15" }
       ]
@@ -63,6 +62,8 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Quiet mode, Phase 1", "line": "Merged into main (PR #15, 876b487), CI green. Slide smoothness is checked locally only: the CI runner cannot measure motion.", "date": "2026-10-15" },
+        { "name": "PR #16: @types/node 24", "line": "Merged into main (b50ff53), CI green. Dependabot now skips @types/node majors.", "date": "2026-10-15" },
         { "name": "Dependabot cleanup", "line": "#11 to #14 closed with ignore-major (TypeScript 7, plugin-react 6, @types/node 26, Vite 8).", "date": "2026-10-15" },
         { "name": "GitHub Actions bump: not needed", "line": "Main already has v7 (PR #8) and phase PRs go into main. Branch claude/deps-actions-bump-c75665 stays until you say to delete it.", "date": "2026-10-15" },
         { "name": "Dependabot #10 merged", "line": "Minor and patch group. d45bc58.", "date": "2026-10-15" },
