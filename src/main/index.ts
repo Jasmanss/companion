@@ -43,7 +43,10 @@ import {
   menuBarTitle,
   nextLookMs,
   NOTCH_DWELL_MS,
+  firstPeekOver,
   presenceNote,
+  presenceNoteParts,
+  showFirstPeek,
   screenBeside,
   splitAlerts,
   stepPresence,
@@ -288,6 +291,11 @@ function setDock(state: DockState): void {
   const wasHidden = dock === 'hidden'
   const wasOpen = isOpen(dock)
   dock = state
+  // Leaving the nudge ends the first-launch peek, however it ended (clicked, closed, timed out, or the cursor left).
+  if (state !== 'nudge') {
+    firstPeek = null
+    clearTimeout(peekTimer)
+  }
   // Only when needed: a nudge brings Steward out, and at rest it stays out only while the cursor is on it (or work goes on).
   presenceNow = state === 'nudge' ? { revealed: quiet(), since: null } : state === 'collapsed' ? restingPresence() : asleep()
   notch?.setAwake(out())
@@ -699,10 +707,49 @@ function onPanelOpened(): void {
 function showPresenceNote(): void {
   if (!quiet() || appState.presenceNoteSeen) return
   void appState.update({ presenceNoteSeen: true })
+  win?.webContents.send('presence:note', presenceNote(noteFor()))
+}
+
+/** What the note says depends on where Steward is, the opening shortcut, and whether another screen touches its edge. */
+function noteFor(): Parameters<typeof presenceNote>[0] {
   const where = inNotch() ? 'notch' : settings.steward().edge
   const display = screen.getPrimaryDisplay().bounds
   const others = screen.getAllDisplays().filter((d) => d.id !== screen.getPrimaryDisplay().id).map((d) => d.bounds)
-  win?.webContents.send('presence:note', presenceNote({ where, hotkey: registered.togglePanel ?? '', besideScreen: where !== 'notch' && screenBeside(display, others, where) }))
+  return { where, hotkey: registered.togglePanel ?? '', besideScreen: where !== 'notch' && screenBeside(display, others, where) }
+}
+
+/** The first-launch peek while it's out: when it came out, and whether the cursor has been on it. */
+let firstPeek: { startedAt: number; touched: boolean } | null = null
+let peekTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * The first launch of a fresh install, hiding until needed: Steward comes out once on its own, peeking out with the note,
+ * so a new user sees where it lives. In the notch the notch wakes, and the note peeks from the edge like alerts do for now.
+ */
+function maybeFirstPeek(): void {
+  if (!win || win.isDestroyed() || dock !== 'collapsed') return
+  if (!showFirstPeek({ freshInstall: settings.missing && appState.missing, quiet: quiet(), shown: appState.firstPeekShown })) return
+  // The note was the panel's first-time note; this shows it instead.
+  void appState.update({ firstPeekShown: true, presenceNoteSeen: true })
+  const { title, how } = presenceNoteParts(noteFor())
+  win.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', title, detail: how, at: Date.now() }])
+  setDock('nudge')
+  firstPeek = { startedAt: Date.now(), touched: false }
+  watchPeek()
+}
+
+/** One look at the cursor during the first-launch peek: once it's over, the peek goes back to being the tab, which tucks away as usual. */
+function lookAtPeek(onIt: boolean): void {
+  if (!firstPeek || dock !== 'nudge') return
+  if (onIt) firstPeek.touched = true
+  if (firstPeekOver({ ...firstPeek, onIt, now: Date.now() })) setDock('collapsed')
+}
+
+function watchPeek(): void {
+  peekTimer = undefined
+  if (!firstPeek || !win || drivenBySmoke) return
+  lookAtPeek(inRect(screen.getCursorScreenPoint(), win.getBounds(), 6))
+  if (firstPeek) peekTimer = setTimeout(watchPeek, WATCH_MS)
 }
 
 /** Built from a template: deploys, finished sessions, where you left off, and Dependabot PRs. No model call. */
@@ -1459,6 +1506,10 @@ app.whenReady().then(async () => {
   await refreshNotch()
   win = createWindow()
   syncWatch()
+  // A fresh install that hides until needed comes out once, a moment after it starts, so a new user can find it.
+  win.webContents.once('did-finish-load', () => {
+    if (!drivenBySmoke) setTimeout(maybeFirstPeek, 1200)
+  })
   // Nobody is at a sleeping or locked screen to push against the edge.
   const screenIs = (asleepNow: boolean) => () => {
     screenAsleep = asleepNow

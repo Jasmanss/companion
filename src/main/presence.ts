@@ -132,10 +132,37 @@ export function menuBarTitle(waiting: number, held: number): string {
  * The one-time note in the panel the first time Steward is hiding: one short line saying how to bring it out. hotkey is
  * the opening shortcut, or '' if it's off. Beside another screen the cursor passes through the edge, so it isn't offered.
  */
-export function presenceNote(o: { where: 'left' | 'right' | 'notch'; hotkey: string; besideScreen: boolean }): string {
+export function presenceNote(o: NoteFor): string {
+  const { title, how } = presenceNoteParts(o)
+  return `${title} ${how}`
+}
+
+type NoteFor = { where: 'left' | 'right' | 'notch'; hotkey: string; besideScreen: boolean }
+
+/** The note in two parts, for the first-launch peek: what's happening, and how to bring Steward out. */
+export function presenceNoteParts(o: NoteFor): { title: string; how: string } {
   // A no-break space inside the shortcut, so it never wraps between the symbol and the key.
   const hotkey = o.hotkey ? formatAccelerator(o.hotkey).replace(' ', '\u00a0') : ''
   const key = hotkey ? `press ${hotkey}` : 'use the menu bar icon'
   const push = o.where === 'notch' ? 'Rest the cursor on the notch' : `Push the ${o.where} edge`
-  return o.besideScreen && o.where !== 'notch' ? `Hides until you need it. ${hotkey ? `Press ${hotkey}` : 'Use the menu bar icon'}.` : `Hides until you need it. ${push} or ${key}.`
+  const how = o.besideScreen && o.where !== 'notch' ? `${hotkey ? `Press ${hotkey}` : 'Use the menu bar icon'}.` : `${push} or ${key}.`
+  return { title: 'Hides until you need it.', how }
 }
+
+/* ---------- The first-launch peek ---------- */
+
+/** How long the first-launch peek stays out, at least, unless the cursor has been on it. */
+export const FIRST_PEEK_HOLD_MS = 10_000
+
+/**
+ * The first launch of a fresh install, hiding until needed: the tab comes out once on its own, with the note, so a new
+ * user sees where Steward lives. Never on an install that already had settings or state, never in Always visible, never twice.
+ */
+export const showFirstPeek = (o: { freshInstall: boolean; quiet: boolean; shown: boolean }): boolean => o.freshInstall && o.quiet && !o.shown
+
+/**
+ * The first-launch peek is over (it goes back to being the tab, which then tucks away like any reveal) once the cursor
+ * isn't on it and either it has been on it already or the peek has been out for FIRST_PEEK_HOLD_MS.
+ */
+export const firstPeekOver = (o: { startedAt: number; touched: boolean; onIt: boolean; now: number }): boolean =>
+  !o.onIt && (o.touched || o.now - o.startedAt >= FIRST_PEEK_HOLD_MS)

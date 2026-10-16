@@ -7,6 +7,8 @@ interface State {
   lastBriefDate?: string
   /** The one-time note about Steward hiding until it's needed has been shown. */
   presenceNoteSeen?: boolean
+  /** The first-launch peek has been shown (it only ever shows once). */
+  firstPeekShown?: boolean
   /** Where the tab sits on each display's edge, by display id: its center as a fraction of the work area's height. */
   tabPlaces?: Record<string, number>
 }
@@ -14,14 +16,17 @@ interface State {
 /** Small bits of state that should survive restarts. */
 export class AppState {
   private data: State = { lastSeenAt: Date.now() }
+  /** There was no state file: Steward has never run here (or never got as far as saving any). */
+  missing = false
 
   constructor(private readonly file: string) {}
 
   async load(): Promise<void> {
     try {
       this.data = { ...this.data, ...(JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<State>) }
-    } catch {
+    } catch (err) {
       // first run
+      this.missing = (err as NodeJS.ErrnoException).code === 'ENOENT'
     }
   }
 
@@ -35,6 +40,10 @@ export class AppState {
 
   get presenceNoteSeen(): boolean {
     return this.data.presenceNoteSeen === true
+  }
+
+  get firstPeekShown(): boolean {
+    return this.data.firstPeekShown === true
   }
 
   get tabPlaces(): Record<string, number> {
