@@ -119,12 +119,12 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <h2><span class="dot"></span>Waiting on you <span class="count">6</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Try quiet mode Phase 1 by hand</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>On the latest build in main. Push the cursor to the edge, try a real alert, hover the notch.</p>
+        <div class="row"><span class="name">Go on Phase 2.1: the tab comes to you</span><time datetime="2026-10-16">Oct 16</time></div>
+        <p>Quiet mode Part 2c. Push anywhere along the edge and the tab slides out at your cursor. Phase 2 is merged, so it can start.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Try quiet mode Phase 2 by hand</span><time datetime="2026-10-16">Oct 16</time></div>
-        <p>Drag the tab to a new height, wait 20 s for the eyes to dim. Then OK the merge once CI is green on PR #18.</p>
+        <div class="row"><span class="name">Merge docs PR #19</span><time datetime="2026-10-16">Oct 16</time></div>
+        <p>Docs: the chat flow, standing rules and a PR template (branch front-door). Merge once CI is green.</p>
       </li>
       <li>
         <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-15">Oct 15</time></div>
@@ -145,23 +145,15 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="progress" class="card progress">
-    <h2><span class="dot"></span>In progress <span class="count">4</span></h2>
+    <h2><span class="dot"></span>In progress <span class="count">2</span></h2>
     <ul>
-      <li>
-        <div class="row"><span class="name">Quiet mode, Phase 2</span><time datetime="2026-10-16">Oct 16</time></div>
-        <p>Built: tab drag, Dim when idle, first-launch peek. Draft PR #18 (claude/quiet-mode-phase-2), CI running. Notch dim and notch peek not tried (no notch screen on).</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">New edge for alerts</span><time datetime="2026-10-16">Oct 16</time></div>
-        <p>You picked A, the hairline. Being built by Main building as part of PR #18.</p>
-      </li>
       <li>
         <div class="row"><span class="name">Notch dock</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.</p>
       </li>
       <li>
         <div class="row"><span class="name">Chat flow and this status page</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Flow written in CLAUDE.md (9110979 on front-door, not pushed). Page is live.</p>
+        <p>Docs PR #19 is open (branch front-door). The status page is live.</p>
       </li>
     </ul>
   </section>
@@ -288,8 +280,16 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">12</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">14</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Quiet mode, Phase 2</span><time datetime="2026-10-16">Oct 16</time></div>
+        <p>Merged into main (PR #18, 48ce3c5), CI green: tab drag to any height, Dim when idle, first-launch peek, the left-gap fix and the slide-end fix.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">New edge for alerts</span><time datetime="2026-10-16">Oct 16</time></div>
+        <p>Hairline edge (option A) merged with PR #18. The urgent card no longer has the thick ring.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Quiet mode, Phase 1</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Merged into main (PR #15, 876b487), CI green. Slide smoothness is checked locally only: the CI runner cannot measure motion.</p>

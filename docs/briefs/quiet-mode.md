@@ -245,5 +245,9 @@ Status stays `ready`: Phase 3 is not built. The user typed the Phase 2 go into M
 - The user found the urgent alert card's edge too thick (a 1.5 pt ring at 90% glow, which shows as two heavy lines along the top and bottom against the screen edge). Four options are on `design/nudge-edge.html`.
 - **Picked: A, the hairline** (a 0.5 pt rim with a faint glow tint, like every other Steward surface). It goes into PR #18 before merge, built by Main building. Only the `.nudge.urgent` rule in `src/renderer/src/styles.css` changes.
 
+### Phase 2 merged (recorded 2026-10-16, from the front door)
+- PR #18 merged into main by the user's GitHub account: merge commit `48ce3c5`. It also carries the left-gap fix, the hairline alert edge (option A from `design/nudge-edge.html`), the slide-end fix and the test fixes. CI was green.
+- **Waiting on the user:** the go on Phase 2.1 (Part 2c, the tab comes to you).
+
 ### Phase 3
 Not started.
