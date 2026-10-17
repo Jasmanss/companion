@@ -3,13 +3,17 @@ import {
   asleep,
   EDGE_BAND,
   EDGE_DWELL_MS,
+  FIRST_PEEK_HOLD_MS,
+  firstPeekOver,
   inEdgeZone,
   menuBarTitle,
   NOTCH_DWELL_MS,
   nextLookMs,
   peeksOut,
   presenceNote,
+  presenceNoteParts,
   screenBeside,
+  showFirstPeek,
   splitAlerts,
   stepPresence,
   TUCK_MS,
@@ -229,5 +233,33 @@ describe('the first-time note', () => {
   it('points at the menu bar icon when the shortcut is off', () => {
     expect(presenceNote({ where: 'right', hotkey: '', besideScreen: false })).toBe('Hides until you need it. Push the right edge or use the menu bar icon.')
     expect(presenceNote({ where: 'right', hotkey: '', besideScreen: true })).toBe('Hides until you need it. Use the menu bar icon.')
+  })
+})
+
+describe('the first-launch peek', () => {
+  it('shows on the first launch of a fresh install that hides until needed, and never again', () => {
+    expect(showFirstPeek({ freshInstall: true, quiet: true, shown: false })).toBe(true)
+    expect(showFirstPeek({ freshInstall: true, quiet: true, shown: true })).toBe(false)
+    // An install that already had settings or state, or one switched to Always visible, never sees it.
+    expect(showFirstPeek({ freshInstall: false, quiet: true, shown: false })).toBe(false)
+    expect(showFirstPeek({ freshInstall: true, quiet: false, shown: false })).toBe(false)
+  })
+
+  it('stays out until the cursor has been on it and left, or 10 s have passed with the cursor off it', () => {
+    const at = (now: number, touched: boolean, onIt: boolean) => firstPeekOver({ startedAt: 0, touched, onIt, now })
+    expect(FIRST_PEEK_HOLD_MS).toBe(10_000)
+    // Untouched: held for 10 s.
+    expect(at(9_999, false, false)).toBe(false)
+    expect(at(10_000, false, false)).toBe(true)
+    // Read and left: over at once, however early.
+    expect(at(2_000, true, true)).toBe(false)
+    expect(at(2_500, true, false)).toBe(true)
+    // While the cursor is on it, it never ends, however long.
+    expect(at(60_000, true, true)).toBe(false)
+  })
+
+  it('says the note in two parts: what is happening, and how to bring Steward out', () => {
+    expect(presenceNoteParts({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Hides until you need it.', how: 'Push the right edge or press ⌥\u00a0Space.' })
+    expect(presenceNoteParts({ where: 'notch', hotkey: '', besideScreen: false }).how).toBe('Rest the cursor on the notch or use the menu bar icon.')
   })
 })

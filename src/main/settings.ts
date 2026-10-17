@@ -13,6 +13,8 @@ export type SystemInfo = Pick<SettingsView, 'openAtLogin' | 'version'> & { regis
 
 export class SettingsStore {
   private data: StoredSettings = defaultSettings()
+  /** There was no settings file: a fresh install (the defaults, which are quiet). */
+  missing = false
 
   constructor(
     private readonly file: string,
@@ -24,8 +26,9 @@ export class SettingsStore {
   async load(): Promise<void> {
     try {
       this.data = migrateSettings(JSON.parse(await fs.readFile(this.file, 'utf8')))
-    } catch {
+    } catch (err) {
       this.data = defaultSettings()
+      this.missing = (err as NodeJS.ErrnoException).code === 'ENOENT'
     }
   }
 

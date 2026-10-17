@@ -23,6 +23,14 @@ describe('isAllowlisted', () => {
   })
 })
 
+// These run real processes, so they can't use fake timers. Each command would run for 30 s if it weren't stopped, and
+// stopping it takes well under a second (2 s more when it ignores SIGTERM). A test passes in about 2 s at most and only
+// fails if the stopping breaks, so a busy machine can't decide the result. (They used to sleep 5 s and allow 3 to 4.5 s,
+// close to the 5 s each test gets.)
+const NEVER_ENDS = 'sleep 30'
+const STOPPED_WITHIN_MS = 10_000
+const TEST_TIMEOUT_MS = 20_000
+
 describe('runCommand', () => {
   it('captures output and the exit code', async () => {
     const result = await runCommand('echo hello && exit 3', os.tmpdir())
@@ -32,36 +40,37 @@ describe('runCommand', () => {
   })
 
   it('stops commands that run too long', async () => {
-    const result = await runCommand('sleep 5', os.tmpdir(), { timeoutMs: 200 })
+    const result = await runCommand(NEVER_ENDS, os.tmpdir(), { timeoutMs: 200 })
     expect(result.timedOut).toBe(true)
-  })
+  }, TEST_TIMEOUT_MS)
 
   it('stops what the command started, not just the shell', async () => {
     const started = Date.now()
-    const result = await runCommand('sleep 5; echo finished', os.tmpdir(), { timeoutMs: 200 })
+    const result = await runCommand(`${NEVER_ENDS}; echo finished`, os.tmpdir(), { timeoutMs: 200 })
     expect(result.timedOut).toBe(true)
     expect(result.output).not.toContain('finished')
-    expect(Date.now() - started).toBeLessThan(3000)
-  })
+    // A sleep left running would hold the output open for the full 30 s.
+    expect(Date.now() - started).toBeLessThan(STOPPED_WITHIN_MS)
+  }, TEST_TIMEOUT_MS)
 
   it('kills commands that ignore SIGTERM', async () => {
     const started = Date.now()
-    const result = await runCommand("trap '' TERM; sleep 6; echo finished", os.tmpdir(), { timeoutMs: 200 })
+    const result = await runCommand(`trap '' TERM; ${NEVER_ENDS}; echo finished`, os.tmpdir(), { timeoutMs: 200 })
     expect(result.timedOut).toBe(true)
     expect(result.output).not.toContain('finished')
-    expect(Date.now() - started).toBeLessThan(4500)
-  })
+    expect(Date.now() - started).toBeLessThan(STOPPED_WITHIN_MS)
+  }, TEST_TIMEOUT_MS)
 
   it('stops the same way when the request is cancelled', async () => {
     const controller = new AbortController()
     const started = Date.now()
-    const pending = runCommand('sleep 5; echo finished', os.tmpdir(), { signal: controller.signal })
+    const pending = runCommand(`${NEVER_ENDS}; echo finished`, os.tmpdir(), { signal: controller.signal })
     setTimeout(() => controller.abort(), 200)
     const result = await pending
     expect(result.exitCode).not.toBe(0)
     expect(result.output).not.toContain('finished')
-    expect(Date.now() - started).toBeLessThan(3000)
-  })
+    expect(Date.now() - started).toBeLessThan(STOPPED_WITHIN_MS)
+  }, TEST_TIMEOUT_MS)
 })
 
 describe('stripAnsi', () => {

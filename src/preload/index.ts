@@ -14,6 +14,10 @@ const api: StewardAPI = {
     hide: () => ipcRenderer.invoke('dock:hide'),
     view: () => ipcRenderer.invoke('dock:view'),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
+    drag: (phase, dy) => ipcRenderer.send('dock:drag', phase, dy),
+    resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),
+    overhang: () => ipcRenderer.invoke('dock:overhang'),
+    onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
   },
   tray: {
     list: () => ipcRenderer.invoke('tray:list'),
@@ -97,6 +101,8 @@ const api: StewardAPI = {
     onNote: (cb) => subscribe<string>('presence:note', cb),
     slid: () => ipcRenderer.invoke('presence:slid'),
     onSlide: (cb) => subscribe<{ out: boolean; animate: boolean }>('presence:slide', cb),
+    onNear: (cb) => subscribe<boolean>('presence:near', cb),
+    slideEnded: (by) => ipcRenderer.send('presence:slideEnded', by),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }

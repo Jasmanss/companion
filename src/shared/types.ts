@@ -333,6 +333,13 @@ export interface StewardAPI {
     hide(): Promise<void>
     view(): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
+    /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
+    drag(phase: 'start' | 'move' | 'end', dy?: number): void
+    /** Back to the middle of the edge (Settings → Steward). */
+    resetPlace(): Promise<void>
+    /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
+    overhang(): Promise<number>
+    onOverhang(cb: (points: number) => void): Unsubscribe
   }
   tray: {
     list(): Promise<TrayItem[]>
@@ -433,6 +440,13 @@ export interface StewardAPI {
     slid(): Promise<boolean>
     /** Slide out (to the screen edge) or back in; animate false jumps. The page does it, so the window never moves. */
     onSlide(cb: (slide: { out: boolean; animate: boolean }) => void): Unsubscribe
+    /**
+     * The slide out (or the fade, with Reduce Motion) has ended: the window can go. 'drawn': the page drew its end;
+     * 'clock': its end time passed with no frame drawn (a page that isn't being drawn gets no transitionend).
+     */
+    slideEnded(by: 'drawn' | 'clock'): void
+    /** The cursor came near the tab, or went away again (for Dim when idle). */
+    onNear(cb: (near: boolean) => void): Unsubscribe
   }
   copyText(text: string): Promise<void>
 }

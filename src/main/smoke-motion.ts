@@ -1,6 +1,6 @@
-// How the smoke check judges an animation it watched frame by frame: index.ts watches the page, this decides. Pure, so
-// it's tested. A CI runner has no one at its screen and may hardly draw at all; that's said plainly, not passed or failed
-// on made-up numbers. On a Mac with a screen, a page that hardly draws is a failure.
+// How the smoke check judges an animation it watched frame by frame: index.ts watches the page, this measures and
+// decides. Pure, so it's tested. A CI runner has no one at its screen and may hardly draw at all; that's said plainly,
+// not passed or failed on made-up numbers. On a Mac with a screen, a page that hardly draws is a failure.
 
 export interface Motion {
   /** Frames drawn while the thing moved, how many different positions it was drawn at, how long it took, and the longest wait between two frames. */
@@ -8,11 +8,63 @@ export interface Motion {
   positions: number
   spanMs: number
   maxGapMs: number
+  /** How far into the motion that longest wait began. */
+  maxGapAtMs: number
+  /** Frames drawn mid-motion that showed the same position as the frame before: the page drew, the thing didn't move. */
+  stuck: number
+  /** The longest wait between two frames while the thing was still (before or after it moved); null if there were none. */
+  stillGapMs: number | null
   /** Every frame the page drew while it was watched, moving or not, and for how long it was watched. */
   drawn: number
   watchedMs: number
   /** document.visibilityState at the end: "hidden" means Chromium thought no one could see the page. */
   visibility: string
+}
+
+/** One drawn frame: its time, and the watched value (a computed transform or opacity) in it. */
+export type Sample = [ms: number, value: string]
+
+/** The numbers in a computed value: "matrix(1, 0, 0, 1, 42.5, 0)" is six, "0.25" is one, "none" is none. */
+const numbers = (v: string): number[] => (v.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number)
+
+const longestGap = (s: Sample[]): number | null => (s.length < 2 ? null : Math.max(...s.slice(1).map((x, i) => x[0] - s[i][0])))
+
+/**
+ * Turns the frames a page drew into a Motion. The motion runs from the last frame before the value first changed to the
+ * frame it last changed in. A frame that repeats the one before counts as stuck only if it's mid-motion: somewhere
+ * strictly between the furthest points it reached. Holding at a turning point isn't stuck: the notch's fade (with
+ * Reduce Motion) goes out, holds while the shape changes, and comes back.
+ */
+export function measureMotion(samples: Sample[], watchedMs: number, visibility: string): Motion {
+  const seen = { drawn: samples.length, watchedMs, visibility }
+  const changed = samples.map((s, i) => (i > 0 && s[1] !== samples[i - 1][1] ? i : -1)).filter((i) => i >= 0)
+  if (!changed.length) {
+    const still = longestGap(samples)
+    return { frames: 0, positions: 1, spanMs: 0, maxGapMs: 0, maxGapAtMs: 0, stuck: 0, stillGapMs: still === null ? null : Math.round(still), ...seen }
+  }
+  const from = changed[0] - 1
+  const to = changed.at(-1)!
+  const moving = samples.slice(from, to + 1)
+  const gaps = moving.slice(1).map((s, i) => s[0] - moving[i][0])
+  const worst = gaps.indexOf(Math.max(...gaps))
+  const values = moving.map((s) => numbers(s[1]))
+  const midMotion = (v: number[]): boolean =>
+    v.some((x, k) => {
+      const same = values.filter((w) => w.length === v.length).map((w) => w[k])
+      return x > Math.min(...same) && x < Math.max(...same)
+    })
+  const stuck = moving.filter((s, i) => i > 0 && s[1] === moving[i - 1][1] && midMotion(values[i])).length
+  const stillGaps = [longestGap(samples.slice(0, from + 1)), longestGap(samples.slice(to))].filter((g): g is number => g !== null)
+  return {
+    frames: moving.length,
+    positions: new Set(moving.map((s) => s[1])).size,
+    spanMs: Math.round(moving.at(-1)![0] - moving[0][0]),
+    maxGapMs: Math.round(gaps[worst]),
+    maxGapAtMs: Math.round(moving[worst][0] - moving[0][0]),
+    stuck,
+    stillGapMs: stillGaps.length ? Math.round(Math.max(...stillGaps)) : null,
+    ...seen,
+  }
 }
 
 /** Fewer frames than this in a watch means the page wasn't being drawn: a screen draws 40 or more in that time. */
@@ -26,6 +78,12 @@ export interface MotionVerdict {
   line: string
 }
 
+/**
+ * On a Mac with a screen: at least MIN_POSITIONS positions and no wait over MAX_GAP_MS between frames. On a CI runner
+ * the runner decides when the page gets to draw, so a long wait there says more about the runner than the app. There,
+ * every frame the page drew mid-motion has to show a new position, at MIN_POSITIONS positions at least; the waits, while
+ * it moved and while it was still, are logged next to each other so a stutter of the app's own still shows.
+ */
 export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdict {
   const drew = `the page drew ${m.drawn} frames in ${m.watchedMs} ms (${m.visibility})`
   if (m.drawn < STARVED_FRAMES) {
@@ -33,7 +91,13 @@ export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdi
       ? { result: 'not measurable', line: `motion ${what}: not measurable here: ${drew}` }
       : { result: 'not smooth', line: `motion ${what}: ${drew}, not at the display's rate` }
   }
-  const line = `motion ${what}: ${m.positions} positions in ${m.frames} frames over ${m.spanMs} ms, longest wait between frames ${m.maxGapMs} ms`
-  if (m.positions < MIN_POSITIONS || m.maxGapMs > MAX_GAP_MS) return { result: 'not smooth', line: `${line}; ${drew}` }
-  return { result: 'smooth', line }
+  const still = m.stillGapMs === null ? 'no frames while it was still' : `${m.stillGapMs} ms while it was still`
+  const line = `motion ${what}: ${m.positions} positions in ${m.frames} frames over ${m.spanMs} ms; longest wait between frames ${m.maxGapMs} ms while it moved (${m.maxGapAtMs} ms in), ${still}`
+  if (!onCI) {
+    if (m.positions < MIN_POSITIONS || m.maxGapMs > MAX_GAP_MS) return { result: 'not smooth', line: `${line}; ${drew}` }
+    return { result: 'smooth', line }
+  }
+  if (m.stuck > 0) return { result: 'not smooth', line: `${line}; ${m.stuck} of those frames showed no new position mid-motion; ${drew}` }
+  if (m.positions < MIN_POSITIONS) return { result: 'not smooth', line: `${line}; fewer than ${MIN_POSITIONS} positions; ${drew}` }
+  return { result: 'smooth', line: `${line}; a new position in every frame the page drew (on CI the waits are logged, not judged); ${drew}` }
 }

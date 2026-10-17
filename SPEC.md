@@ -34,6 +34,13 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   with no chin and no eyes. It slides in and out as a transform in the page, so
   every frame is the display's. Manual Hide stays separate: nothing brings it
   back but you.
+- **Move the tab:** drag it up or down its edge, as far as the menu bar and
+  the Dock. It remembers the height on each display; Settings → Steward →
+  Height → Reset puts it back in the middle. The panel opens centered on it.
+- **First launch:** a new install that hides until needed peeks out once, a
+  moment after it starts, with a one-line note on how to bring it back.
+- **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
+  eyes fade and stop moving, until something happens or the cursor comes near.
 - **Alerts that peek out (Settings → Steward → Presence):** only when a session
   needs me (the default in "Only when needed"), everything switched on in
   Notifications (the default in "Always visible"), or nothing. What doesn't peek
