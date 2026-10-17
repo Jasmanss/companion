@@ -24,6 +24,27 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
 - **Drop target:** drag an image toward the edge and it wakes up, slides partway
   out, and holds out its tray. Drop the image on it.
 - **Put it back:** click away or press Esc and it slides back in.
+- **Presence (Settings → Steward):** "Always visible" is the above. "Only when
+  needed" (the default for a new install) keeps Steward out of sight at rest,
+  on the edge and in the notch. It comes out when you push the cursor against
+  its edge (within 2 pt, beside the tab, for 0.3 s) or rest it on the notch
+  (0.25 s), when a session needs you, while the agent is working, or on the
+  hotkey and the menu bar icon, which always open the panel. It tucks away
+  1.5 s after the cursor leaves. In the notch it sleeps as the notch's own black,
+  with no chin and no eyes. It slides in and out as a transform in the page, so
+  every frame is the display's. Manual Hide stays separate: nothing brings it
+  back but you.
+- **Move the tab:** drag it up or down its edge, as far as the menu bar and
+  the Dock. It remembers the height on each display; Settings → Steward →
+  Height → Reset puts it back in the middle. The panel opens centered on it.
+- **First launch:** a new install that hides until needed peeks out once, a
+  moment after it starts, with a one-line note on how to bring it back.
+- **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
+  eyes fade and stop moving, until something happens or the cursor comes near.
+- **Alerts that peek out (Settings → Steward → Presence):** only when a session
+  needs me (the default in "Only when needed"), everything switched on in
+  Notifications (the default in "Always visible"), or nothing. What doesn't peek
+  out adds a dot to the menu bar and shows as a card when the panel opens.
 
 ### States (the character's face shows these)
 

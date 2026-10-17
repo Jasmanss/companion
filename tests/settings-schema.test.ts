@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_ALLOWLIST, DEFAULT_NOTIFICATIONS, defaultSettings, migrateSettings, parseSettingsPatch } from '../src/main/settings-schema'
 import { DEFAULT_STEWARD } from '../src/shared/steward'
 
+/** The character's options for a settings file from before quiet mode: today's behavior, not a fresh install's. */
+const AS_BEFORE = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false } as const
+const OLD_FILE_STEWARD = { ...DEFAULT_STEWARD, ...AS_BEFORE }
+
 describe('migrateSettings', () => {
   it('brings a file from before the Settings window across, adding the new switches with their defaults', () => {
     const old = {
@@ -10,7 +14,7 @@ describe('migrateSettings', () => {
       allowlist: ['npm test'],
       secrets: { anthropic: 'djEwYWJj' },
     }
-    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, notifications: DEFAULT_NOTIFICATIONS, shortcuts: {}, steward: DEFAULT_STEWARD })
+    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, notifications: DEFAULT_NOTIFICATIONS, shortcuts: {}, steward: OLD_FILE_STEWARD })
   })
 
   it('keeps the switches a file has, and fills in the ones it lacks one at a time', () => {
@@ -36,24 +40,24 @@ describe('migrateSettings', () => {
       keepPanelOpen: false,
       notifications: { ...DEFAULT_NOTIFICATIONS, buildFailed: false },
       shortcuts: {},
-      steward: DEFAULT_STEWARD,
+      steward: OLD_FILE_STEWARD,
     })
   })
 
   it('gives a file from before the character arrived the default one: glass, silver, on the right', () => {
     const migrated = migrateSettings({ projects: [], keepPanelOpen: true })
-    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', notch: false, notchStyle: 'chin', size: 'small', tint: 'ice', frost: 50 })
+    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', notch: false, notchStyle: 'chin', size: 'small', tint: 'ice', frost: 50, ...AS_BEFORE })
   })
 
   it("keeps each of the character's options it knows, one at a time, and tidies the name", () => {
     const migrated = migrateSettings({
       steward: { version: 'blocky', color: 'mint', glass: 'frosted', mouth: 'no', personality: 'calm', name: '  Pip\n  the  Pill ', edge: 'left', size: 'huge', hat: 'top' },
     })
-    expect(migrated.steward).toEqual({ ...DEFAULT_STEWARD, version: 'blocky', color: 'mint', personality: 'calm', name: 'Pip the Pill', edge: 'left' })
+    expect(migrated.steward).toEqual({ ...OLD_FILE_STEWARD, version: 'blocky', color: 'mint', personality: 'calm', name: 'Pip the Pill', edge: 'left' })
     // A color from the old palette of fourteen isn't one of the six any more.
     expect(migrateSettings({ steward: { color: 'coral' } }).steward.color).toBe('silver')
     expect(migrateSettings({ steward: { name: '   ' } }).steward.name).toBe('Steward')
-    for (const junk of [null, 'glass', 7, ['flat']]) expect(migrateSettings({ steward: junk }).steward).toEqual(DEFAULT_STEWARD)
+    for (const junk of [null, 'glass', 7, ['flat']]) expect(migrateSettings({ steward: junk }).steward).toEqual(OLD_FILE_STEWARD)
   })
 
   it('keeps the notch choice and its style, and starts files from before the notch on their edge, as a chin', () => {
@@ -70,6 +74,26 @@ describe('migrateSettings', () => {
     const frost = (value: unknown) => migrateSettings({ steward: { frost: value } }).steward.frost
     expect([frost(-20), frost(140), frost(33.4), frost(0)]).toEqual([0, 100, 33, 0])
     for (const junk of ['80', null, NaN, Infinity, true]) expect(frost(junk), String(junk)).toBe(50)
+  })
+
+  it('starts a fresh install quiet: only when needed, peeking out for a session that needs me, dim and hidden from screen sharing on', () => {
+    // No file (or one that can't be read) is a fresh install: the defaults as they are.
+    for (const fresh of [undefined, null, 'not settings']) expect(migrateSettings(fresh).steward).toMatchObject({ presence: 'quiet', alertPeek: 'needs-me', dimWhenIdle: true, hideFromScreenShare: true })
+    expect(defaultSettings().steward).toEqual(DEFAULT_STEWARD)
+    expect(DEFAULT_STEWARD).toMatchObject({ presence: 'quiet', alertPeek: 'needs-me', dimWhenIdle: true, hideFromScreenShare: true })
+  })
+
+  it('keeps a settings file that already exists exactly as it was: always visible, everything peeking out, dim and screen sharing off', () => {
+    // However little the file has, it's the user's file: nothing about how Steward behaves changes under them.
+    for (const old of [{}, { keepPanelOpen: true }, { steward: {} }, { steward: { edge: 'left', color: 'mint' } }]) {
+      expect(migrateSettings(old).steward, JSON.stringify(old)).toMatchObject(AS_BEFORE)
+    }
+  })
+
+  it('keeps the quiet-mode options a file has, and falls back to the old behavior for ones that are not Steward’s', () => {
+    expect(migrateSettings({ steward: { presence: 'quiet', alertPeek: 'none', dimWhenIdle: true, hideFromScreenShare: true } }).steward).toMatchObject({ presence: 'quiet', alertPeek: 'none', dimWhenIdle: true, hideFromScreenShare: true })
+    expect(migrateSettings({ steward: { presence: 'always', alertPeek: 'needs-me' } }).steward).toMatchObject({ presence: 'always', alertPeek: 'needs-me' })
+    expect(migrateSettings({ steward: { presence: 'hidden', alertPeek: 'some', dimWhenIdle: 'yes', hideFromScreenShare: 1 } }).steward).toMatchObject(AS_BEFORE)
   })
 
   it('keeps the shortcuts you changed, tidied up, and drops ones it can’t use', () => {
@@ -108,6 +132,8 @@ describe('parseSettingsPatch', () => {
     expect(parseSettingsPatch({ steward: { tint: 'graphite', frost: 0 } })).toEqual({ steward: { tint: 'graphite', frost: 0 } })
     expect(parseSettingsPatch({ steward: { frost: 100 } })).toEqual({ steward: { frost: 100 } })
     expect(parseSettingsPatch({ steward: { notch: true, notchStyle: 'wings' } })).toEqual({ steward: { notch: true, notchStyle: 'wings' } })
+    expect(parseSettingsPatch({ steward: { presence: 'quiet', alertPeek: 'none' } })).toEqual({ steward: { presence: 'quiet', alertPeek: 'none' } })
+    expect(parseSettingsPatch({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })).toEqual({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })
   })
 
   it('refuses anything else, so the window can only change what it shows', () => {
@@ -124,6 +150,9 @@ describe('parseSettingsPatch', () => {
       { steward: { notch: 'yes' } },
       { steward: { notchStyle: 'ears' } },
       { steward: { edge: 'notch' } },
+      { steward: { presence: 'hidden' } },
+      { steward: { alertPeek: 'some' } },
+      { steward: { dimWhenIdle: 'yes' } },
       { steward: { frost: 101 } },
       { steward: { frost: -1 } },
       { steward: { frost: 42.5 } },

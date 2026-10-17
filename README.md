@@ -72,7 +72,7 @@ shortcuts, and which alerts peek out from the edge.
 | `npm run dev` | Run with hot reload |
 | `npm run lint` / `typecheck` / `test` | The checks CI runs |
 | `npm run design` | Serve `design/` at http://127.0.0.1:4321 (or the next free port) and reload open pages when files change (including after a `git pull`). `npm run design -- <folder>` serves any other folder the same way |
-| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png` and the Settings window to `out/smoke-settings.png`, exit. `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds; `STEWARD_SMOKE_SECTIONS=1` screenshots every Settings section |
+| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png` and the Settings window to `out/smoke-settings.png`, exit. `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds; `STEWARD_SMOKE_SECTIONS=1` screenshots every Settings section; it also checks Presence (Only when needed: the tab hidden at rest, the first-launch peek, a push and the tuck, quiet alerts, dim when idle (it waits 20 s), the tab drag, the notch asleep and awake, and that the slides and the notch's wake and sleep are drawn frame by frame, not in steps) and saves `smoke-settings-presence.png` and `smoke-notch-*-asleep.png`; `STEWARD_SMOKE_IDLE=5` logs idle CPU for the edge and the notch |
 | `npm run pack` | Build an unsigned `.app` in `dist/` |
 | `npm run dist` | Build the DMG and zip in `dist/` |
 

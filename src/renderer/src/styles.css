@@ -46,6 +46,8 @@
   --radius: 14px;
   /* Which way is away from the screen edge Steward sits on: 1 on the right edge, -1 on the left. */
   --side: 1;
+  /* How far the tab's and the nudge's window hangs past the screen edge (set by the main process). It stays empty. */
+  --overhang: 0px;
   color-scheme: light dark;
 }
 
@@ -88,6 +90,24 @@ body,
   height: 100%;
   background: transparent;
   overflow: hidden;
+}
+
+/* Only when needed: the tab slides in from the screen edge and back out. It's a transform on the page, drawn by the
+   compositor at the display's own rate; the window stays where it is. Away from the edge is --side times the window's own
+   width, so it's gone whatever the tab, the nudge or the panel is. Going out speeds up, coming in slows down. */
+:root[data-slide='out'] #root {
+  will-change: transform;
+  transform: translateX(calc(100% * var(--side)));
+  transition: transform 0.3s cubic-bezier(0.5, 0, 0.9, 0.4);
+}
+
+:root[data-slide='in'] #root {
+  transform: none;
+  transition: transform 0.38s var(--spring);
+}
+
+:root[data-slide-jump] #root {
+  transition: none !important;
 }
 
 body {
@@ -218,7 +238,7 @@ pre {
 /* ---------- peek (tucked away) ---------- */
 .peek {
   position: relative;
-  width: 100%;
+  width: calc(100% - var(--overhang));
   height: 100%;
   display: grid;
   place-items: center;
@@ -227,9 +247,23 @@ pre {
   border-radius: 18px 0 0 18px;
 }
 
-/* On the left edge, the tab and the nudge round off on the right. */
+/* Being dragged up or down its edge. */
+.peek.dragging {
+  cursor: grabbing;
+}
+
+/* The window hangs past the screen edge by --overhang, so its rounded corners are off the screen: the tab and the nudge
+   stop at the screen edge, square, and the part past it stays empty. */
+.peek,
+.nudge {
+  margin-right: var(--overhang);
+}
+
+/* On the left edge, the tab and the nudge round off on the right, and the empty part is on the left. */
 :root[data-edge='left'] .peek,
 :root[data-edge='left'] .nudge {
+  margin-right: 0;
+  margin-left: var(--overhang);
   border-radius: 0 18px 18px 0;
 }
 
@@ -237,6 +271,13 @@ pre {
 .pill-host {
   position: relative;
   flex: none;
+  transition: opacity 0.25s ease-out;
+}
+
+/* Dim when idle: the eyes fade slowly to about 40% and hold still. Waking is quick. */
+.pill-host.dimmed {
+  opacity: 0.4;
+  transition: opacity 1.2s ease-in-out;
 }
 
 /* Resting's standby glow, like a sleeping Mac's light: dimmer than idle, breathing slowly. Only opacity moves.
@@ -300,10 +341,11 @@ pre {
   animation: nudge-in 0.35s var(--spring) both;
 }
 
+/* Urgent: the same half-point rim as every Steward surface, tinted with the glow. */
 .nudge.urgent {
   box-shadow:
     inset 0 1px 0 var(--edge),
-    inset 0 0 0 1.5px rgba(var(--glow), 0.9);
+    inset 0 0 0 0.5px rgba(var(--live), 0.45);
 }
 
 .nudge-text {
@@ -2262,6 +2304,17 @@ a.icon-btn {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
+  :root[data-slide='out'] #root {
+    transform: none;
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
+  }
+
+  :root[data-slide='in'] #root {
+    opacity: 1;
+    transition: opacity 0.38s ease-out;
+  }
+
   .mini .scan,
   .shine .win,
   .prog .shim,

@@ -8,6 +8,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Keep @types/node on the Node major Electron ships (Electron 44 runs Node 24).
+      # Bump it by hand when Electron moves to a new Node major.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

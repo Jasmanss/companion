@@ -4,7 +4,7 @@
 // The notch is pure black, so the character's body becomes a black shape with the real notch, and its color becomes
 // the light of its eyes. Chin: the notch grows a lip below it, as wide as the notch, with the eyes in it. Wings: one
 // eye on each side of the notch, in the menu bar; the thinking dots and the talking mouth need the middle, so for
-// those it grows the chin too.
+// those it grows the chin too. Asleep, it's only the notch's own black.
 import type { Mood, NotchLayout, NotchStyle } from './types'
 
 /** How tall the eyes are, in points; the lip and the wings are sized from it. */
@@ -27,7 +27,9 @@ export interface NotchShape {
   lip: number
   wings: number
 }
-export function notchShape(style: NotchStyle, mood: Mood, notch: { width: number; height: number }): NotchShape {
+export function notchShape(style: NotchStyle, mood: Mood, notch: { width: number; height: number }, awake = true): NotchShape {
+  // Asleep (Only when needed, at rest): exactly the notch, no chin and no wings, so nothing under it is covered.
+  if (!awake) return { lip: notch.height, wings: 0 }
   const middle = needsMiddle(mood)
   // Talking's mouth sits under the eyes, so the lip grows a little to make room.
   const chin = notch.height + NOTCH_LIP + (mood === 'talking' ? 5 : 0)

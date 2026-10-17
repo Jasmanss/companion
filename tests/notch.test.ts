@@ -65,6 +65,25 @@ describe('the shape in the notch', () => {
     expect(notchShape('wings', 'sleepy', notch).lip).toBe(32)
   })
 
+  it('asleep (Only when needed, at rest) is exactly the notch: no chin, no wings, in either style and every mood', () => {
+    for (const style of ['chin', 'wings'] as const) {
+      for (const mood of ['idle', 'resting', 'thinking', 'talking', 'needs-you', 'sleepy'] as const) {
+        expect(notchShape(style, mood, notch, false), `${style} ${mood}`).toEqual({ lip: notch.height, wings: 0 })
+      }
+    }
+    // Awake is what it always was.
+    expect(notchShape('chin', 'idle', notch, true)).toEqual(notchShape('chin', 'idle', notch))
+    expect(notchShape('wings', 'idle', notch, true)).toEqual({ lip: 32, wings: 185 + 2 * NOTCH_WING })
+  })
+
+  it('asleep, the black takes clicks only over the notch itself, so the browser tabs under it stay clickable', () => {
+    const asleep = notchBoxes(notchShape('chin', 'idle', notch, false), layout)
+    expect(asleep).toEqual([{ x: 180 - 185 / 2, y: 0, width: 185, height: 32 }])
+    expect(inBoxes({ x: 180, y: 16 }, asleep)).toBe(true)
+    expect(inBoxes({ x: 180, y: 33 }, asleep)).toBe(false)
+    expect(inBoxes({ x: 180 - 100, y: 16 }, asleep)).toBe(false)
+  })
+
   it('takes clicks only on the black: never on the menu bar beside a chin', () => {
     const chin = notchBoxes(notchShape('chin', 'idle', notch), layout)
     expect(inBoxes({ x: 180, y: 45 }, chin)).toBe(true)

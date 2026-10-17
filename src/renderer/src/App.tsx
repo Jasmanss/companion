@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
+import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
 import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
@@ -16,6 +17,8 @@ import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
 import { SessionStrip } from './SessionStrip'
+import { useTabDrag } from './tab-drag'
+import { useDimmed } from './dim'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -37,6 +40,9 @@ function urlFromDrag(data: DataTransfer): { url: string; source?: string } | nul
 
 const canDrop = (e: globalThis.DragEvent) => ['Files', 'text/uri-list', 'text/html'].some((t) => e.dataTransfer?.types.includes(t))
 
+/** How long after its own end time a slide out counts as over when no frame came to draw its end (see the slide below). */
+const SLIDE_END_GRACE_MS = 100
+
 export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
   const [items, setItems] = useState<TrayItem[]>([])
@@ -52,6 +58,10 @@ export function App() {
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   const [banner, setBanner] = useState<AlertView | null>(null)
+  /** How many more alerts came with the banner's (the ones that waited for the panel to open). */
+  const [bannerMore, setBannerMore] = useState(0)
+  /** The one-time note about Steward hiding until it's needed. */
+  const [presenceNote, setPresenceNote] = useState<string | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
@@ -84,6 +94,7 @@ export function App() {
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
     const offAlerts = api.alerts.onShow(handleAlerts)
+    const offNote = api.presence.onNote(setPresenceNote)
     const offMood = api.alerts.onMood(setEventMood)
     const offLeftOff = api.leftOff.onShow(setLeftOff)
     // The brief already includes where you left off.
@@ -108,6 +119,7 @@ export function App() {
       offAgent()
       offSessions()
       offAlerts()
+      offNote()
     }
     // The handlers only use state setters and refs, so subscribing once is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,9 +133,10 @@ export function App() {
 
   useEffect(() => {
     if (!banner) return
-    const t = setTimeout(() => setBanner(null), 6000)
+    // Several that waited for the panel get longer to read.
+    const t = setTimeout(() => setBanner(null), bannerMore > 0 ? 12_000 : 6000)
     return () => clearTimeout(t)
-  }, [banner])
+  }, [banner, bannerMore])
 
   useEffect(() => {
     currentProject.current = settings?.currentProject ?? null
@@ -131,6 +144,58 @@ export function App() {
 
   // Settings → Steward, with the defaults for anything an older main process doesn't send.
   const look = { ...DEFAULT_STEWARD, ...settings?.steward }
+  // Only when needed, the tab slides in from the screen edge and back as a transform in the page (see styles.css), so
+  // every frame is the compositor's. The window never moves: macOS puts a window that is partly off screen back on it.
+  useEffect(() => {
+    const root = document.documentElement
+    const jump = (out: boolean) => {
+      root.dataset.slideJump = ''
+      root.dataset.slide = out ? 'out' : 'in'
+      // Read the style now, so the jump is over before the transitions come back.
+      void getComputedStyle(document.getElementById('root')!).transform
+      delete root.dataset.slideJump
+    }
+    // The window goes when the slide out has ended (the transform, or with Reduce Motion the fade), not on a guess.
+    // transitionend only comes with a drawn frame, and a page that isn't being drawn (a sleeping screen) gets none, so
+    // the slide's own end time, a little after, says so too.
+    const page = document.getElementById('root')!
+    let clock: ReturnType<typeof setTimeout> | undefined
+    const ended = (by: 'drawn' | 'clock') => {
+      clearTimeout(clock)
+      if (root.dataset.slide === 'out') api.presence.slideEnded(by)
+    }
+    const drawn = (e: TransitionEvent) => {
+      if (e.target === page && (e.propertyName === 'transform' || e.propertyName === 'opacity')) ended('drawn')
+    }
+    const slide = ({ out, animate }: { out: boolean; animate: boolean }) => {
+      clearTimeout(clock)
+      if (!animate) return jump(out)
+      // Coming in: the first frame is drawn away, and the next one starts the slide.
+      if (!out && root.dataset.slide === 'out') requestAnimationFrame(() => (root.dataset.slide = 'in'))
+      else root.dataset.slide = out ? 'out' : 'in'
+      if (!out) return
+      // getAnimations() brings the style up to date, so the slide's transition is there, with its length.
+      const ms = Math.max(0, ...page.getAnimations().map((a) => Number(a.effect?.getComputedTiming().endTime) || 0))
+      clock = setTimeout(() => ended('clock'), ms + SLIDE_END_GRACE_MS)
+    }
+    page.addEventListener('transitionend', drawn)
+    void api.presence.slid().then(jump)
+    const off = api.presence.onSlide(slide)
+    return () => {
+      off()
+      clearTimeout(clock)
+      page.removeEventListener('transitionend', drawn)
+    }
+  }, [])
+
+  // The tab and the nudge hang a little past the screen edge (so the window's rounded corners are off the screen); the
+  // part that hangs over stays empty (see styles.css).
+  useEffect(() => {
+    const set = (points: number) => document.documentElement.style.setProperty('--overhang', `${points}px`)
+    void api.dock.overhang().then(set)
+    return api.dock.onOverhang(set)
+  }, [])
+
   // The tab and the panel's animations face away from the screen edge it sits on.
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
@@ -153,6 +218,7 @@ export function App() {
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
     setBanner(list[0] ?? null)
+    setBannerMore(Math.max(0, list.length - 1))
   }
 
   const tuckAway = useCallback(() => {
@@ -383,6 +449,12 @@ export function App() {
   // Docked in the notch, the notch window shows the character: it gets the same mood.
   useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
+  // The tab can be dragged up or down its edge; a plain click still opens the panel.
+  const tabDrag = useTabDrag(() => void api.dock.expand())
+  // Dim when idle: the tab's eyes fade after a while at rest, until something happens or the cursor comes near.
+  const [near, setNear] = useState(false)
+  useEffect(() => api.presence.onNear(setNear), [])
+  const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
@@ -424,8 +496,8 @@ export function App() {
   if (dock === 'collapsed' || dock === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
-      <button className="peek" data-app onClick={() => api.dock.expand()} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
-        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked />
+      <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked dimmed={tabDimmed} />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )
@@ -490,6 +562,7 @@ export function App() {
         <div className="banner" role="status" onClick={() => setBanner(null)}>
           <strong>{banner.title}</strong>
           {banner.detail && <span>{banner.detail}</span>}
+          {bannerMore > 0 && <span>and {bannerMore} more</span>}
           {banner.action && (
             <button
               className="chip"
@@ -514,6 +587,14 @@ export function App() {
         onError={showError}
       />
       <div className="body">
+        {presenceNote && (
+          <div className="notice" role="status">
+            {presenceNote}
+            <button className="chip" onClick={() => setPresenceNote(null)}>
+              Got it
+            </button>
+          </div>
+        )}
         {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
         {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
         {noKey && (

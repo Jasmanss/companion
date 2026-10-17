@@ -45,3 +45,9 @@
 .nt-eyes.on {
   opacity: 1;
 }
+
+/* Dim when idle: the lit eyes fade slowly to about 40% and hold still. */
+.notch-root.dim .nt-eyes.on {
+  opacity: 0.4;
+  transition: opacity 1.2s ease-in-out;
+}

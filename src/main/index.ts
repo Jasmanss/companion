@@ -1,10 +1,13 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, screen, shell, Tray } from 'electron'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { NOTCH_WINDOW } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
+import { placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
+import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -32,7 +35,28 @@ import { LEGACY_APP_NAME, markSecretsDone, migrateUserData, readLegacyKeychainPa
 import { MoodBoard } from './moods'
 import { findNotch, probeScreens } from './notch'
 import { NotchDock } from './notch-window'
+import {
+  asleep,
+  EDGE_DWELL_MS,
+  inEdgeZone,
+  inRect,
+  MAX_HELD,
+  menuBarTitle,
+  nextLookMs,
+  NOTCH_DWELL_MS,
+  firstPeekOver,
+  presenceNote,
+  presenceNoteParts,
+  showFirstPeek,
+  screenBeside,
+  splitAlerts,
+  stepPresence,
+  TUCK_MS,
+  WATCH_MS,
+  type PresenceState,
+} from './presence'
 import { SessionTracker } from './sessions'
+import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -52,12 +76,20 @@ const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
+/** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
+const SLIDE_MS = 700
+/** Why the window went, when the page's slide ended with no frame to draw its end (its own clock said so). */
+const SLIDE_END_UNDRAWN = "its slide's end time, with no frame drawn"
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 // The smoke check runs alongside a normal copy, with its own throwaway data.
-if (SMOKE_OUT) app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
-else {
+if (SMOKE_OUT) {
+  app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
+  // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
+  // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
+  for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)
+} else {
   // Electron names the data folder after the app, so the rename gave Steward a new one. Copy the old folder
   // (LEGACY_APP_NAME) across once, before anything (the instance lock included) creates the new one; the old one stays as a backup.
   migrateUserData(path.join(app.getPath('appData'), LEGACY_APP_NAME), app.getPath('userData'))
@@ -93,20 +125,162 @@ let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
 
-/** Where the window goes in each state: against the screen edge you picked, centered top to bottom. */
+/** Presence is "Only when needed": Steward is out of sight until a push, an alert, work or the hotkey brings it out. */
+const quiet = (): boolean => settings?.steward().presence === 'quiet'
+/** Where hiding stands (the "revealed" flag): out because the cursor pushed, an alert came or the agent is working. */
+let presenceNow: PresenceState = asleep()
+/** Steward is showing: always, or when it's been brought out. At the edge that's the tab, in the notch it's awake. */
+const out = (): boolean => !quiet() || presenceNow.revealed
+let watchTimer: ReturnType<typeof setTimeout> | undefined
+let slideTimer: ReturnType<typeof setTimeout> | undefined
+/** The window's page is slid out, off the screen edge (see setSlide). */
+let slidOut = false
+/** When the last tuck began, and how long until the window went and why (for the smoke check). */
+let tuckStarted = 0
+let lastTuck: { ms: number; why: string } | null = null
+/** The screen is asleep or locked: nobody is there to push, so the cursor isn't checked. */
+let screenAsleep = false
+/** The smoke check feeds the rules the cursor itself, so the real one (wherever it is parked) is left out. */
+const drivenBySmoke = Boolean(SMOKE_OUT)
+/** Alerts that didn't peek out, newest first: the menu bar's dot now, and cards when the panel next opens. */
+let heldAlerts: AlertView[] = []
+
+/** Where the tab sits on each display's edge (dragged there; see shared/tab-place), by display id. */
+let tabPlaces: Record<string, number> = {}
+
+/** The tab's top on the main screen: where it was dragged to, or the middle. */
+function tabTop(): number {
+  const display = screen.getPrimaryDisplay()
+  return topFor(display.workArea, TAB_SIZES[settings.steward().size].tab.height, tabPlaces[String(display.id)])
+}
+
+/**
+ * macOS rounds the corners of every frameless window (Electron's roundedCorners, on by default), and that cut the
+ * tab's and the nudge's square corners where they meet the screen edge, so the desktop showed through there. Instead,
+ * those two windows hang this far past the screen edge: the rounded corners are off the screen, and the page leaves the
+ * part that hangs over empty. (Turning roundedCorners off would also square the panel's frosted glass, which macOS draws.)
+ */
+const EDGE_OVERHANG = 16
+
+/** How far the tab and the nudge hang past the edge: only where the screen really ends (no Dock there, no screen beside). */
+function edgeOverhang(): number {
+  const display = screen.getPrimaryDisplay()
+  const { bounds, workArea } = display
+  const { edge } = settings.steward()
+  const atScreenEdge = edge === 'right' ? workArea.x + workArea.width === bounds.x + bounds.width : workArea.x === bounds.x
+  const others = screen.getAllDisplays().filter((d) => d.id !== display.id).map((d) => d.bounds)
+  return atScreenEdge && !screenBeside(bounds, others, edge) ? EDGE_OVERHANG : 0
+}
+
+/** What the tab's page was last told about the overhang, so it leaves that much empty on the edge side. */
+let sentOverhang = -1
+
+/**
+ * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
+ * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered.
+ */
 function boundsFor(state: DockState): Electron.Rectangle {
   const area = screen.getPrimaryDisplay().workArea
   const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab
   /** Left of a window this wide that sits gap points from the edge. */
   const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
-  const y = (height: number) => area.y + Math.round((area.height - height) / 2)
-  if (state === 'collapsed' || state === 'hidden') return { x: x(tab.width), y: y(tab.height), ...tab }
-  // The nudge is the tab grown sideways, so it's as tall.
-  if (state === 'nudge') return { x: x(NUDGE_WIDTH), y: y(tab.height), width: NUDGE_WIDTH, height: tab.height }
+  const top = tabTop()
+  if (state === 'collapsed' || state === 'hidden' || state === 'nudge') {
+    const oh = edgeOverhang()
+    // The page has to know, or it would draw into the part that hangs off the screen.
+    if (oh !== sentOverhang && win && !win.isDestroyed()) {
+      sentOverhang = oh
+      win.webContents.send('dock:overhang', oh)
+    }
+    const width = state === 'nudge' ? NUDGE_WIDTH : tab.width
+    return { x: x(width) - (edge === 'left' ? oh : 0), y: top, width: width + oh, height: tab.height }
+  }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
   const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
-  return { x: x(width, 8), y: y(height), width, height }
+  const y = state === 'viewing' ? area.y + Math.round((area.height - height) / 2) : topAround(area, top, tab.height, height, 24)
+  return { x: x(width, 8), y, width, height }
+}
+
+/** The tab being dragged up or down its edge, while it is. */
+let tabDrag: TabDrag | null = null
+
+/** From the tab's page: a drag began, moved (dy points since it began), or ended. The tab follows; the end saves where it is. */
+function dragTab(phase: unknown, dy: unknown): void {
+  if (!win || win.isDestroyed()) return
+  if (phase === 'end') {
+    if (tabDrag) void appState.update({ tabPlaces })
+    tabDrag = null
+    return
+  }
+  // Only the tab at rest moves, and only at the edge (in the notch there's no tab).
+  if (dock !== 'collapsed' || inNotch()) return
+  const display = screen.getPrimaryDisplay()
+  const height = TAB_SIZES[settings.steward().size].tab.height
+  if (phase === 'start') tabDrag = new TabDrag(win.getBounds().y, display.workArea, height)
+  else if (phase === 'move' && tabDrag && typeof dy === 'number' && Number.isFinite(dy)) {
+    tabPlaces = { ...tabPlaces, [String(display.id)]: placeFor(display.workArea, height, tabDrag.move(dy)) }
+    win.setBounds(boundsFor('collapsed'))
+  }
+}
+
+/** Settings → Steward → Reset: the tab goes back to the middle of this display's edge. */
+async function resetTabPlace(): Promise<void> {
+  const id = String(screen.getPrimaryDisplay().id)
+  tabPlaces = Object.fromEntries(Object.entries(tabPlaces).filter(([key]) => key !== id))
+  await appState.update({ tabPlaces })
+  if (win && !win.isDestroyed() && win.isVisible() && dock !== 'hidden') win.setBounds(boundsFor(dock), true)
+}
+
+/**
+ * Only when needed: the tab slides in from the screen edge and back out. The page does the sliding, as a transform in the
+ * compositor (styles.css), and the window stays at its place on the edge. Moving the window itself can't work: macOS puts a
+ * window that is partly off the screen back on it, so the old "slide" was a window popping in and out, and what looked
+ * like a few frames was the window changing size. A hidden window's page is always slid out, so it comes in from there.
+ */
+function setSlide(out: boolean, animate: boolean): void {
+  slidOut = out
+  win?.webContents.send('presence:slide', { out, animate })
+}
+
+/** Show the tab or the nudge at these bounds. Slid out (Only when needed), it comes in from the edge. */
+function showTab(target: Electron.Rectangle, animateBounds = true): void {
+  if (!win || win.isDestroyed()) return
+  clearTimeout(slideTimer)
+  const wasShowing = win.isVisible()
+  win.setBounds(target, wasShowing && animateBounds)
+  if (!wasShowing) win.showInactive()
+  if (slidOut) setSlide(false, true)
+}
+
+/** Only when needed, at rest: the tab slides back into the edge, and then the window goes. */
+function tuckTab(): void {
+  if (!win || win.isDestroyed() || !win.isVisible()) return
+  clearTimeout(slideTimer)
+  setSlide(true, true)
+  tuckStarted = Date.now()
+  // The page says when the slide has ended (slideEnded), and the window goes then. If it never says, this does.
+  slideTimer = setTimeout(() => {
+    if (win && !win.isDestroyed() && dock === 'collapsed' && !out()) hideTab('the safety timeout')
+  }, SLIDE_MS)
+}
+
+/**
+ * From the tab's page: its slide out ended, drawn, or by the clock when no frame came to draw its end. Unless it was
+ * brought out again meanwhile, the window goes now.
+ */
+function slideEnded(by: 'drawn' | 'clock'): void {
+  if (!win || win.isDestroyed() || !win.isVisible() || dock !== 'collapsed' || out() || !slidOut) return
+  hideTab(by === 'drawn' ? 'its slide ending' : SLIDE_END_UNDRAWN)
+}
+
+/** Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge. */
+function hideTab(why?: string): void {
+  if (!win || win.isDestroyed()) return
+  clearTimeout(slideTimer)
+  if (why) lastTuck = { ms: Date.now() - tuckStarted, why }
+  win.hide()
+  setSlide(quiet(), false)
 }
 
 const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy']
@@ -119,6 +293,22 @@ const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
  */
 function placeNotch(): void {
   notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge'))
+}
+
+/** The tab or the notch follows whether Steward is out: it slides in or out, or the notch wakes or goes to sleep. */
+function applyPresence(): void {
+  notch?.setAwake(out())
+  if (!win || win.isDestroyed() || dock !== 'collapsed' || inNotch()) return
+  if (out()) showTab(boundsFor('collapsed'))
+  else tuckTab()
+}
+
+/**
+ * Resting (the panel just closed, or Steward just came back): at the edge, the tab stays out and the watcher tucks it
+ * away once the cursor has left and everything is at rest, so closing the panel never pops. The notch goes to sleep.
+ */
+function restingPresence(): PresenceState {
+  return quiet() && !inNotch() ? { revealed: true, since: null } : asleep()
 }
 
 /** Ask macOS where the notch is (at launch, and whenever a display changes), and put Steward where it belongs. */
@@ -134,12 +324,13 @@ async function refreshNotch(): Promise<void> {
 /** The notch came or went, or was picked or unpicked: the tab leaves the edge for the notch, or comes back. */
 function replaceForNotch(): void {
   placeNotch()
+  presenceNow = asleep()
+  notch?.setAwake(out())
+  syncWatch()
   if (!win || win.isDestroyed() || dock !== 'collapsed') return
-  if (inNotch()) win.hide()
-  else {
-    win.setBounds(boundsFor('collapsed'))
-    if (!win.isVisible()) win.showInactive()
-  }
+  if (inNotch()) hideTab()
+  else if (out()) showTab(boundsFor('collapsed'), false)
+  else if (win.isVisible()) hideTab()
 }
 
 function setDock(state: DockState): void {
@@ -147,6 +338,14 @@ function setDock(state: DockState): void {
   const wasHidden = dock === 'hidden'
   const wasOpen = isOpen(dock)
   dock = state
+  // Leaving the nudge ends the first-launch peek, however it ended (clicked, closed, timed out, or the cursor left).
+  if (state !== 'nudge') {
+    firstPeek = null
+    clearTimeout(peekTimer)
+  }
+  // Only when needed: a nudge brings Steward out, and at rest it stays out only while the cursor is on it (or work goes on).
+  presenceNow = state === 'nudge' ? { revealed: quiet(), since: null } : state === 'collapsed' ? restingPresence() : asleep()
+  notch?.setAwake(out())
   if (wasOpen && !isOpen(state)) void appState?.update({ lastSeenAt: Date.now() })
   if (!wasOpen && isOpen(state)) onPanelOpened()
   // The material first, so the panel's very first frame is drawn for it (frosted or solid).
@@ -154,19 +353,30 @@ function setDock(state: DockState): void {
   win.webContents.send('dock:state', state)
   updateMenuBar()
   placeNotch()
-  if (state === 'hidden') return win.hide()
-  win.setBounds(boundsFor(state), !wasHidden)
+  if (state === 'hidden') {
+    hideTab()
+    return syncWatch()
+  }
   if (state === 'collapsed' || state === 'nudge') {
-    // In the notch there's no tab at the edge: the notch window is the character.
-    if (state === 'collapsed' && inNotch()) win.hide()
-    // Peeking never takes keyboard focus, so it can't interrupt typing.
-    else if (!win.isVisible()) win.showInactive()
+    if (state === 'collapsed' && inNotch()) {
+      win.setBounds(boundsFor(state), !wasHidden)
+      // In the notch there's no tab at the edge: the notch window is the character.
+      hideTab()
+    } else if (state === 'collapsed' && !out()) tuckTab()
+    // Peeking never takes keyboard focus, so it can't interrupt typing. Out of hiding, it comes in from the edge.
+    else showTab(boundsFor(state), !wasHidden)
   } else {
+    // Hotkey or menu bar, with Steward out of sight: the panel is just there, and its own entrance plays.
+    clearTimeout(slideTimer)
+    setSlide(false, false)
+    win.setBounds(boundsFor(state), win.isVisible() && !wasHidden)
     if (!win.isVisible()) win.show()
     win.focus()
-    // Opening the panel shows any batched alerts now rather than later.
+    // Opening the panel shows what waited for it, and any batched alerts now rather than later.
+    deliverHeld()
     alerts?.flush()
   }
+  syncWatch()
 }
 
 /**
@@ -193,6 +403,74 @@ function applyMaterial(): void {
   // The deep shadow under the glass is the window's own, so it follows the window's shape.
   win.setHasShadow(vibrant)
   win.webContents.send('appearance:changed', { vibrant })
+}
+
+/**
+ * One look at the cursor, for Only when needed: the presence rules say whether Steward comes out or goes back, and this
+ * does it. Both watchers (the edge's, and the notch window's) look through here.
+ */
+function lookAtCursor(inZone: boolean, onIt: boolean, dwellMs: number): { next: number } {
+  const input = { now: Date.now(), quiet: quiet(), hidden: dock === 'hidden', rest: dock === 'collapsed' && !agent?.busy, inZone, onIt, dwellMs }
+  const step = stepPresence(presenceNow, input)
+  presenceNow = step.state
+  if (step.change) applyPresence()
+  return { next: nextLookMs(presenceNow, input) }
+}
+
+/** Presence was switched in Settings: Steward comes out, or slips away, now. */
+function presenceChanged(): void {
+  presenceNow = dock === 'collapsed' ? restingPresence() : asleep()
+  // Hidden, its page waits slid out or not, to match the new Presence.
+  if (win && !win.isVisible()) setSlide(quiet(), false)
+  applyPresence()
+  syncWatch()
+  updateMenuBar()
+}
+
+/** The notch window checks the cursor often while it's near; it says whether it's on the notch. */
+function lookAtNotch(over: boolean): void {
+  if (!drivenBySmoke && quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
+}
+
+/** Within this many points of the tab, the cursor is near: Dim when idle wakes the eyes. */
+const NEAR_TAB = 120
+/** What the tab's page was last told about the cursor being near. */
+let sentNear = false
+
+/**
+ * The edge's watcher: while the tab is tucked away or out at rest, it checks the cursor 5 times a second, and 20 when it
+ * is pushing against the edge. It also tells the tab's page when the cursor comes near, for Dim when idle. It stops while
+ * the panel is open (or a nudge is), while hidden by hand, while the screen sleeps, in the notch (its own window watches
+ * there), and when Steward is always visible with Dim when idle off.
+ */
+function watchEdge(): void {
+  watchTimer = undefined
+  if (!canWatchEdge()) return
+  const display = screen.getPrimaryDisplay()
+  const cursor = screen.getCursorScreenPoint()
+  const tabBounds = boundsFor('collapsed')
+  const near = inRect(cursor, tabBounds, NEAR_TAB)
+  if (near !== sentNear) {
+    sentNear = near
+    win?.webContents.send('presence:near', near)
+  }
+  // The push zone is wherever the tab was dragged to.
+  const centerY = tabTop() + TAB_SIZES[settings.steward().size].tab.height / 2
+  const inZone = inEdgeZone(cursor, display.bounds, settings.steward().edge, centerY)
+  const onTab = inRect(cursor, tabBounds, 6)
+  const next = quiet() ? lookAtCursor(inZone, onTab, EDGE_DWELL_MS).next : WATCH_MS
+  // The look may have ended the watch (it came out, and something else changed).
+  if (canWatchEdge()) watchTimer = setTimeout(watchEdge, next)
+}
+
+const canWatchEdge = (): boolean => !!win && (quiet() || settings.steward().dimWhenIdle) && !inNotch() && dock === 'collapsed' && !screenAsleep && !drivenBySmoke
+
+/** Start or stop the edge's watcher to match what's going on. Called whenever any of that changes. */
+function syncWatch(): void {
+  if (!canWatchEdge()) {
+    clearTimeout(watchTimer)
+    watchTimer = undefined
+  } else if (!watchTimer) watchTimer = setTimeout(watchEdge, 0)
 }
 
 function toggleDock(): void {
@@ -229,9 +507,10 @@ function menuBarIcon(): Electron.NativeImage {
 
 function updateMenuBar(): void {
   if (!menuBar) return
-  // While hidden, the menu bar shows how many sessions are waiting on you.
+  // While hidden, or when Steward only comes out when needed, the menu bar shows how many sessions are waiting on you,
+  // and a dot when something quieter is waiting too.
   const waiting = sessions?.waitingCount() ?? 0
-  menuBar.setTitle(dock === 'hidden' && waiting ? String(waiting) : '')
+  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() ? waiting : 0, heldAlerts.length))
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Steward', accelerator: registered.togglePanel || undefined, registerAccelerator: false, click: () => setDock('expanded') },
@@ -264,6 +543,9 @@ function createWindow(): BrowserWindow {
     acceptFirstMouse: true,
     // Keep the frost lively even though the panel rarely becomes the key window.
     visualEffectState: 'active',
+    // The tab and the nudge hang a little past the screen edge (EDGE_OVERHANG); without this macOS pulls a window
+    // that's partly off the screen back onto it when it's shown.
+    enableLargerThanScreen: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -277,8 +559,8 @@ function createWindow(): BrowserWindow {
   w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   // ready-to-show doesn't always fire for transparent windows, so also show once the page loads.
   const reveal = () => {
-    // Docked in the notch, the notch window shows instead.
-    if (dock === 'collapsed' && inNotch()) return
+    // Docked in the notch, the notch window shows instead; Only when needed, it stays out of sight until it's brought out.
+    if (dock === 'collapsed' && (inNotch() || !out())) return
     if (!w.isDestroyed() && !w.isVisible()) w.showInactive()
   }
   w.once('ready-to-show', reveal)
@@ -432,16 +714,33 @@ async function pickFolder(parent: BrowserWindow | null): Promise<string | null> 
 
 const senderWindow = (e: Electron.IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender)
 
-/** Alerts that made it through the queue: peek out if tucked away; the open panel shows them itself. */
+/**
+ * Alerts that made it through the queue (Settings → Notifications has silenced the types switched off). The open panel
+ * shows them all. Tucked away, "Alerts that peek out" decides which peek out; the rest wait in the menu bar (a dot) and
+ * show as cards when the panel next opens. Hidden by hand, nothing peeks out.
+ */
 function showAlerts(list: AlertView[]): void {
-  win?.webContents.send('alerts:show', list)
-  if (dock === 'collapsed') setDock('nudge')
+  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek)
+  if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
+  if (peek.length) {
+    win?.webContents.send('alerts:show', peek)
+    if (dock === 'collapsed') setDock('nudge')
+  }
+  updateMenuBar()
+}
+
+/** The panel opened: the alerts that didn't peek out show now. */
+function deliverHeld(): void {
+  if (!heldAlerts.length) return
+  win?.webContents.send('alerts:show', heldAlerts)
+  heldAlerts = []
   updateMenuBar()
 }
 
 /** The first open each day shows the morning brief; coming back after a while shows where you left off. */
 function onPanelOpened(): void {
   if (!appState) return
+  showPresenceNote()
   const prefs = settings.notifications()
   const today = localDate(new Date())
   if (prefs.morningBrief && appState.lastBriefDate !== today) {
@@ -452,6 +751,55 @@ function onPanelOpened(): void {
   }
   const project = settings.currentProject()
   if (prefs.leftOff && project && Date.now() - appState.lastSeenAt >= AWAY_MS) showLeftOff(project)
+}
+
+/** The first time the panel opens with Steward hiding until it's needed, a note says where to push and what to press. Once. */
+function showPresenceNote(): void {
+  if (!quiet() || appState.presenceNoteSeen) return
+  void appState.update({ presenceNoteSeen: true })
+  win?.webContents.send('presence:note', presenceNote(noteFor()))
+}
+
+/** What the note says depends on where Steward is, the opening shortcut, and whether another screen touches its edge. */
+function noteFor(): Parameters<typeof presenceNote>[0] {
+  const where = inNotch() ? 'notch' : settings.steward().edge
+  const display = screen.getPrimaryDisplay().bounds
+  const others = screen.getAllDisplays().filter((d) => d.id !== screen.getPrimaryDisplay().id).map((d) => d.bounds)
+  return { where, hotkey: registered.togglePanel ?? '', besideScreen: where !== 'notch' && screenBeside(display, others, where) }
+}
+
+/** The first-launch peek while it's out: when it came out, and whether the cursor has been on it. */
+let firstPeek: { startedAt: number; touched: boolean } | null = null
+let peekTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * The first launch of a fresh install, hiding until needed: Steward comes out once on its own, peeking out with the note,
+ * so a new user sees where it lives. In the notch the notch wakes, and the note peeks from the edge like alerts do for now.
+ */
+function maybeFirstPeek(): void {
+  if (!win || win.isDestroyed() || dock !== 'collapsed') return
+  if (!showFirstPeek({ freshInstall: settings.missing && appState.missing, quiet: quiet(), shown: appState.firstPeekShown })) return
+  // The note was the panel's first-time note; this shows it instead.
+  void appState.update({ firstPeekShown: true, presenceNoteSeen: true })
+  const { title, how } = presenceNoteParts(noteFor())
+  win.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', title, detail: how, at: Date.now() }])
+  setDock('nudge')
+  firstPeek = { startedAt: Date.now(), touched: false }
+  watchPeek()
+}
+
+/** One look at the cursor during the first-launch peek: once it's over, the peek goes back to being the tab, which tucks away as usual. */
+function lookAtPeek(onIt: boolean): void {
+  if (!firstPeek || dock !== 'nudge') return
+  if (onIt) firstPeek.touched = true
+  if (firstPeekOver({ ...firstPeek, onIt, now: Date.now() })) setDock('collapsed')
+}
+
+function watchPeek(): void {
+  peekTimer = undefined
+  if (!firstPeek || !win || drivenBySmoke) return
+  lookAtPeek(inRect(screen.getCursorScreenPoint(), win.getBounds(), 6))
+  if (firstPeek) peekTimer = setTimeout(watchPeek, WATCH_MS)
 }
 
 /** Built from a template: deploys, finished sessions, where you left off, and Dependabot PRs. No model call. */
@@ -580,6 +928,11 @@ const FALLBACK_DRAG_ICON = nativeImage.createFromBitmap(Buffer.alloc(16 * 16 * 4
 
 function registerIpc(): void {
   ipcMain.handle('dock:expand', () => setDock('expanded'))
+  ipcMain.handle('presence:slid', () => slidOut)
+  ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
+  ipcMain.on('presence:slideEnded', (_e, by: unknown) => slideEnded(by === 'clock' ? 'clock' : 'drawn'))
+  ipcMain.handle('dock:overhang', () => edgeOverhang())
+  ipcMain.handle('dock:resetPlace', () => resetTabPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
   ipcMain.handle('notch:state', () => notch.state())
   ipcMain.on('notch:click', () => setDock('expanded'))
@@ -712,6 +1065,9 @@ function registerIpc(): void {
     // Into the notch or out of it, or the other notch style.
     if (after.notch !== before.notch || after.edge !== before.edge) replaceForNotch()
     if (after.notchStyle !== before.notchStyle) notch.restyle()
+    // Always visible or only when needed: Steward comes out, or slips away, now.
+    if (after.presence !== before.presence) presenceChanged()
+    else if (after.dimWhenIdle !== before.dimWhenIdle) syncWatch()
     return settings.view()
   })
   ipcMain.handle('settings:setShortcut', (_e, id: unknown, accelerator: unknown) => setShortcut(id, accelerator))
@@ -801,10 +1157,15 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
     console.error(`smoke: ${why}`)
     app.exit(1)
   }
-  const timer = setTimeout(() => fail('timed out'), 30_000)
+  // The panel has 30 s to show; the presence check before it (with its 20 s wait for Dim when idle) has its own budget.
+  const timer = setTimeout(() => fail('timed out'), 30_000 + 60_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
+      // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
+      const presenceTimer = setTimeout(() => fail('presence timed out'), 60_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+      await checkPresence(w, out)
+      clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
       if (!w.isVisible()) return fail('window never showed')
       setDock('expanded')
@@ -821,7 +1182,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 20_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 1000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 75_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       app.exit(0)
@@ -829,6 +1190,283 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       fail(String(err))
     }
   })
+}
+
+/** How opaque one pixel of a capture of a transparent window is (0 to 255), at a point in the window's own coordinates. */
+function alphaAt(img: Electron.NativeImage, x: number, y: number, windowWidth: number): number {
+  const { width, height } = img.getSize()
+  const k = width / windowWidth
+  const px = Math.min(width - 1, Math.max(0, Math.round(x * k)))
+  const py = Math.min(height - 1, Math.max(0, Math.round(y * k)))
+  return img.toBitmap()[(py * width + px) * 4 + 3]
+}
+
+/**
+ * Watches an element's transform in a page, once per drawn frame, while `trigger` makes it move. A slide drawn by the
+ * compositor shows many positions with frames a display refresh apart; one stepped from the main process shows a few,
+ * with long waits between. This measures the page's frames, not what the screen shows (Screen Recording isn't granted).
+ */
+async function watchMotion(wc: Electron.WebContents, look: MotionLook, ms: number, trigger: () => void | Promise<void>): Promise<Motion> {
+  const sampling = wc.executeJavaScript(`new Promise((resolve) => {
+    const samples = []
+    const frame = (t) => {
+      const el = document.querySelector(${JSON.stringify(look.selector)})
+      samples.push([t, el ? getComputedStyle(el).${look.property} : ''])
+      requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+    setTimeout(() => resolve({ samples, visibility: document.visibilityState }), ${ms})
+  })`) as Promise<{ samples: Sample[]; visibility: string }>
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  await trigger()
+  const { samples, visibility } = await sampling
+  return measureMotion(samples, ms, visibility)
+}
+
+/** What to watch: an element, and whether it moves (its transform) or, with Reduce Motion on, fades (its opacity). */
+interface MotionLook {
+  selector: string
+  property: 'transform' | 'opacity'
+  /** Said in the log, so a fade isn't mistaken for a slide. */
+  label: string
+}
+
+/**
+ * With Reduce Motion on, Steward fades instead of moving (styles.css, notch.css), so its transform never changes and
+ * the fade is what has to be smooth. The macOS CI runner has Reduce Motion on, which is why it once saw "1 position".
+ */
+async function motionLook(wc: Electron.WebContents, moving: string, fading: string): Promise<MotionLook> {
+  const reduced = Boolean(await wc.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`))
+  return reduced ? { selector: fading, property: 'opacity', label: ' (Reduce Motion is on: a fade)' } : { selector: moving, property: 'transform', label: '' }
+}
+
+/** The piece of the notch's black that moves when it wakes: the chin, or in Wings the wings (the second shape). */
+const MOVING_BLACK = { chin: '.nt .bp', wings: '.nt .blob + .blob .bp' } as const
+
+/**
+ * The motion has to be smooth: drawn at many positions, with no long stall between frames. On a CI runner, which
+ * decides when the page draws, every frame the page drew has to show a new position instead; if it hardly draws at
+ * all, it says it couldn't measure, and goes on (smoke-motion has the rules).
+ */
+function smoothly(what: string, m: Motion): void {
+  const verdict = judgeMotion(what, m, Boolean(process.env.CI))
+  console.log(`smoke: ${verdict.line}`)
+  if (verdict.result === 'not smooth') throw new Error(`${what} is not smooth: ${verdict.line}`)
+}
+
+/** The CPU the main process and a page used over the last look, as a short phrase for the log. */
+const cpuNow = (pid: number | null | undefined): string => {
+  const m = app.getAppMetrics()
+  return `main ${m.find((x) => x.pid === process.pid)?.cpu.percentCPUUsage.toFixed(2)}% CPU, page ${m.find((x) => x.pid === pid)?.cpu.percentCPUUsage.toFixed(2)}% CPU`
+}
+
+/**
+ * Only when needed, on the edge: a fresh install starts quiet, and the tab is out of sight at rest. The cursor is fed to
+ * the same rules the watcher uses (the real one can't be moved from here): a push comes out, leaving goes back. A
+ * session that needs you peeks out; a finished one only waits (a dot in the menu bar) until the panel opens. Then
+ * Presence goes to Always visible, for the rest of the check. STEWARD_SMOKE_IDLE=seconds logs the idle CPU in both modes.
+ */
+async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const idle = Number(process.env.STEWARD_SMOKE_IDLE ?? 0)
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  need(settings.steward().presence === 'quiet' && settings.steward().alertPeek === 'needs-me', 'a fresh install did not start quiet')
+  need(settings.steward().dimWhenIdle && settings.steward().hideFromScreenShare, 'a fresh install did not start with dim and screen-share hiding on')
+  // A push against the edge for 300 ms comes out; leaving goes back after 1.5 s.
+  const push = (inZone: boolean) => lookAtCursor(inZone, false, EDGE_DWELL_MS)
+  /** The cursor is away and everything is at rest: after 1.5 s the tab slides out, and then the window goes. */
+  const tuck = async () => {
+    push(false)
+    await sleep(TUCK_MS + 100)
+    push(false)
+    await sleep(SLIDE_MS + 150)
+  }
+
+  // The first launch of a fresh install: Steward peeks out once with the note, and tucks away once it's been read.
+  await sleep(500)
+  need(dock === 'collapsed' && !w.isVisible(), 'the tab showed before the first-launch peek')
+  maybeFirstPeek()
+  need(dock === 'nudge' && appState.firstPeekShown, 'a fresh install did not peek out on its first launch')
+  await sleep(800)
+  need(w.isVisible(), 'the first-launch peek did not come out')
+  const said = String(await w.webContents.executeJavaScript(`[...document.querySelectorAll('.nudge-title, .nudge-detail')].map((e) => e.textContent).join(' ')`))
+  need(said.startsWith('Hides until you need it.'), `the first-launch peek says "${said}"`)
+  await fs.writeFile(out.replace(/\.png$/, '-first-peek.png'), (await w.webContents.capturePage()).toPNG())
+  lookAtPeek(true)
+  need(dock === 'nudge', 'the first-launch peek went while the cursor was on it')
+  lookAtPeek(false)
+  need(dock === 'collapsed' && w.isVisible(), 'the first-launch peek did not go back to being the tab once read')
+  await tuck()
+  need(!w.isVisible(), 'the tab did not tuck away after the first-launch peek')
+  maybeFirstPeek()
+  need(dock === 'collapsed' && !w.isVisible(), 'the first-launch peek came out twice')
+  console.log(`smoke: a fresh install peeks out once ("${said}"), and tucks away once it's been read`)
+  console.log('smoke: fresh install is quiet, the tab is out of sight at rest')
+  if (idle > 0) {
+    app.getAppMetrics()
+    await sleep(idle * 1000)
+    console.log(`smoke: edge idle ${idle}s, Only when needed (tab hidden): ${cpuNow(w.webContents.getOSProcessId())}`)
+  }
+
+  push(true)
+  await sleep(150)
+  push(false)
+  await sleep(100)
+  need(!presenceNow.revealed && !w.isVisible(), 'a push that left early still brought the tab out')
+  push(true)
+  await sleep(350)
+  const tabLook = await motionLook(w.webContents, '#root', '#root')
+  smoothly(`the tab sliding in${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void push(true)))
+  need(presenceNow.revealed, 'a push for 300 ms did not bring the tab out')
+  need(w.isVisible(), 'the tab did not slide in')
+  const home = boundsFor('collapsed')
+  const at = w.getBounds()
+  need(Math.abs(at.x - home.x) <= 2 && Math.abs(at.y - home.y) <= 2, `the tab stopped at ${at.x},${at.y}, not at its edge (${home.x},${home.y})`)
+  lookAtCursor(false, false, EDGE_DWELL_MS)
+  await sleep(1600)
+  smoothly(`the tab sliding out${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void lookAtCursor(false, false, EDGE_DWELL_MS)))
+  need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away after the cursor left')
+  // The window went when the page said the slide had ended, not on the safety timeout. On a Mac with a screen, the page
+  // drew the end. A CI runner sometimes stops drawing the page for a while, so there the slide's own end time may say so.
+  const undrawn = lastTuck?.why === SLIDE_END_UNDRAWN && Boolean(process.env.CI)
+  need(lastTuck?.why === 'its slide ending' || undrawn, `the window went after ${lastTuck?.ms} ms, on ${lastTuck?.why ?? 'nothing'}, not when the page drew the slide's end`)
+  console.log(
+    undrawn
+      ? `smoke: the window went ${lastTuck?.ms} ms after the tuck began, at its slide's end time: the page drew no frame then (on CI that's logged, not judged)`
+      : `smoke: the window went ${lastTuck?.ms} ms after the tuck began, when the page said its slide had ended`,
+  )
+  console.log('smoke: a push brings the tab out to its edge, leaving tucks it away')
+
+  // Alerts: only a session that needs me peeks out. The rest wait (a dot in the menu bar) and show when the panel opens.
+  raise({ key: 'finished:smoke', level: 'normal', title: 'A session finished' })
+  alerts.flush()
+  need(dock === 'collapsed' && !w.isVisible() && heldAlerts.length === 1, 'a finished session peeked out in quiet mode, or was lost')
+  need(menuBarTitle(0, heldAlerts.length) === '•', 'the menu bar has no dot for a waiting alert')
+  raise({ key: 'approval:smoke', level: 'urgent', title: 'A session needs you' })
+  need(dock === 'nudge', 'a session that needs me did not peek out')
+  await sleep(700)
+  need(w.isVisible(), 'the nudge did not come out from the edge')
+  // The nudge ends and the tab stays out until the cursor has been away for 1.5 s, so nothing pops.
+  setDock('collapsed')
+  await sleep(500)
+  need(dock === 'collapsed' && w.isVisible(), 'the tab went at once when the nudge ended')
+  await tuck()
+  need(dock === 'collapsed' && !w.isVisible(), 'the tab did not tuck away after the nudge')
+  setDock('expanded')
+  need(heldAlerts.length === 0, 'the panel opened without showing the alerts that waited')
+  await sleep(500)
+  setDock('collapsed')
+  await sleep(500)
+  need(w.isVisible(), 'the tab went at once when the panel closed')
+  await tuck()
+  need(!w.isVisible(), 'the tab did not tuck away after the panel closed')
+  console.log('smoke: only a session that needs me peeks out, the rest wait for the panel')
+
+  // Always visible: the tab is there at rest, as before.
+  await settings.update({ steward: { presence: 'always' } })
+  presenceChanged()
+  await sleep(700)
+  need(w.isVisible(), 'the tab is not showing with Presence on Always visible')
+  if (idle > 0) {
+    app.getAppMetrics()
+    await sleep(idle * 1000)
+    console.log(`smoke: edge idle ${idle}s, Always visible (tab shown): ${cpuNow(w.webContents.getOSProcessId())}`)
+  }
+
+  // Dim when idle: after 20 s at rest the tab's eyes fade and stop; the cursor coming near wakes them. The 20 s began
+  // when the tab last came to rest, about 3 s before this point, so it isn't dim 14 s from here, and is by 28 s.
+  const dimmed = async () => Boolean(await w.webContents.executeJavaScript(`Boolean(document.querySelector('.pill-host.dimmed'))`))
+  const waiting = Date.now()
+  await sleep(DIM_AFTER_MS - 6000)
+  need(!(await dimmed()), 'the eyes dimmed well before 20 s at rest')
+  while (!(await dimmed()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
+  const tookS = ((Date.now() - waiting) / 1000).toFixed(1)
+  // If not, say what the tab's page had: any of these changing starts the 20 s over.
+  const inputs = String(await w.webContents.executeJavaScript(`document.querySelector('.peek')?.dataset.dim ?? 'no tab'`))
+  need(await dimmed(), `the eyes did not dim within ${tookS} s of this check (about 3 s more at rest); the tab had ${inputs}`)
+  // The fade to dim takes 1.2 s; it has to settle at 0.4.
+  const eyesOpacity = async () => Number(await w.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.pill-host')).opacity`))
+  const fading = Date.now()
+  let opacity = await eyesOpacity()
+  while (Math.abs(opacity - 0.4) >= 0.02 && Date.now() - fading < 4000) {
+    await sleep(100)
+    opacity = await eyesOpacity()
+  }
+  need(Math.abs(opacity - 0.4) < 0.02, `the dimmed eyes are at opacity ${opacity}, not 0.4, 4 s after they began to fade`)
+  // What the edge's watcher sends when the cursor comes within reach of the tab.
+  w.webContents.send('presence:near', true)
+  await sleep(300)
+  need(!(await dimmed()), 'the cursor coming near did not wake the eyes')
+  w.webContents.send('presence:near', false)
+  console.log(`smoke: the tab's eyes dim ${tookS} s into this check, about 20 s at rest (opacity ${opacity}), and the cursor coming near wakes them`)
+
+  // The tab drags up or down its edge, through the bridge its page uses. It stays inside the work area, the place is saved
+  // for this display, the panel stays on screen, and Reset brings it back to the middle.
+  const area = screen.getPrimaryDisplay().workArea
+  const middle = w.getBounds().y
+  const drag = (dy: number) => w.webContents.executeJavaScript(`window.steward.dock.drag('start'); window.steward.dock.drag('move', ${dy}); window.steward.dock.drag('end')`)
+  await drag(-200)
+  await sleep(300)
+  need(w.getBounds().y === middle - 200, `the tab is at ${w.getBounds().y} after a drag of 200 up from ${middle}`)
+  need(appState.tabPlaces[String(screen.getPrimaryDisplay().id)] !== undefined, "the tab's place was not saved")
+  await drag(-5000)
+  await sleep(300)
+  need(w.getBounds().y === area.y, `the tab went past the top of the work area (${w.getBounds().y}, not ${area.y})`)
+  const panel = boundsFor('expanded')
+  need(panel.y >= area.y + 24 && panel.y + panel.height <= area.y + area.height - 24, 'the panel would be off screen with the tab at the top')
+  await drag(5000)
+  await sleep(300)
+  need(w.getBounds().y + w.getBounds().height === area.y + area.height, 'the tab went past the bottom of the work area')
+  await resetTabPlace()
+  await sleep(600)
+  need(w.getBounds().y === middle, 'Reset did not bring the tab back to the middle')
+  console.log('smoke: the tab drags up and down its edge, stays inside the work area, is saved, and Reset brings it back')
+
+  // Both edges, as mirrors: the tab and the nudge stop at the screen edge with square corners, and their window hangs
+  // past it by the overhang (left empty), so the rounded corners macOS gives every frameless window are off the screen.
+  // At the default height and after a drag. The screen's own pixels can't be read here, so this checks the window's
+  // place and what the page drew.
+  const screenBounds = screen.getPrimaryDisplay().bounds
+  const flush = async (what: string, edge: 'left' | 'right', save?: string) => {
+    const b = w.getBounds()
+    const oh = edgeOverhang()
+    const screenEdge = edge === 'right' ? screenBounds.x + screenBounds.width : screenBounds.x
+    const windowEdge = edge === 'right' ? b.x + b.width - oh : b.x + oh
+    need(windowEdge === screenEdge, `${what} on the ${edge} edge ends at ${windowEdge}, not at the screen edge (${screenEdge}), with ${oh} points hanging past it`)
+    const img = await w.webContents.capturePage()
+    if (save) await fs.writeFile(out.replace(/\.png$/, save), img.toPNG())
+    const a = (x: number, y: number) => alphaAt(img, x, y, b.width)
+    const inside = edge === 'right' ? b.width - oh - 1 : oh + 1
+    const far = edge === 'right' ? 1 : b.width - 2
+    const past = edge === 'right' ? b.width - oh / 2 : oh / 2
+    const seen = { edgeTop: a(inside, 1), edgeBottom: a(inside, b.height - 2), farTop: a(far, 1), past: oh ? a(past, b.height / 2) : 0 }
+    need(seen.edgeTop > 200 && seen.edgeBottom > 200 && seen.farTop < 60 && seen.past < 10, `${what} on the ${edge} edge is not square at the screen edge and rounded away from it: ${JSON.stringify(seen)}`)
+  }
+  for (const edge of ['right', 'left'] as const) {
+    await settings.update({ steward: { edge } })
+    win!.setBounds(boundsFor(dock))
+    replaceForNotch()
+    await sleep(700)
+    await flush('the tab', edge, edge === 'left' ? '-left-tab.png' : undefined)
+    raise({ key: `approval:smoke-${edge}`, level: 'urgent', title: 'A session needs you', detail: 'mirrored on both edges' })
+    need(dock === 'nudge', `a session that needs me did not peek out on the ${edge} edge`)
+    await sleep(700)
+    await flush('the nudge', edge, edge === 'left' ? '-left-nudge.png' : undefined)
+    setDock('collapsed')
+    await sleep(700)
+    await drag(-150)
+    await sleep(300)
+    await flush('the tab after a drag', edge)
+    await resetTabPlace()
+    await sleep(600)
+  }
+  await settings.update({ steward: { edge: 'right' } })
+  win!.setBounds(boundsFor(dock))
+  replaceForNotch()
+  await sleep(500)
+  console.log(`smoke: on both edges the tab and the nudge stop square at the screen edge, ${edgeOverhang()} points of window hanging past it`)
 }
 
 /**
@@ -853,15 +1491,77 @@ async function checkNotch(out: string): Promise<void> {
     await fs.writeFile(file, image.toPNG())
     const b = notch.windowBounds()
     console.log(`smoke: notch ${notchStyle}: notch ${notchGeo.width}x${notchGeo.height} at x ${notchGeo.x}; window ${b?.width}x${b?.height} at ${b?.x},${b?.y} -> ${file}`)
+
+    // Awake, the black reaches below the notch (a chin) or beside it (wings), and the eyes are lit in it.
+    const layout = notch.state().layout!
+    const solid = (img: Electron.NativeImage, x: number, y: number) => alphaAt(img, x, y, NOTCH_WINDOW.width) > 200
+    const below = layout.height + 8
+    const beside = layout.width / 2 + 8
+    if (notchStyle === 'chin' ? !solid(image, layout.cx, below) : !solid(image, layout.cx - beside, layout.height / 2)) throw new Error(`the awake notch (${notchStyle}) did not draw its ${notchStyle === 'chin' ? 'chin' : 'wings'}`)
+
+    // Dim when idle, in the notch (once, in Chin): after 20 s awake at rest the eyes fade; the cursor coming near wakes
+    // them. The real cursor is left out of the smoke run (moving the mouse near the top of the screen would wake them).
+    if (notchStyle === 'chin') {
+      const page = notch.contents()!
+      const dim = async () => Boolean(await page.executeJavaScript(`Boolean(document.querySelector('.notch-root.dim'))`))
+      const waiting = Date.now()
+      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
+      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest`)
+      // What the notch window sends its page when the cursor comes near.
+      notch.post('notch:cursor', { x: layout.cx, y: 10 })
+      await sleep(300)
+      if (await dim()) throw new Error('the cursor coming near the notch did not wake its eyes')
+      notch.post('notch:cursor', null)
+      console.log("smoke: notch: after 20 s at rest the eyes dim, and the cursor coming near wakes them")
+    }
+
+    // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
+    await settings.update({ steward: { presence: 'quiet' } })
+    presenceChanged()
+    await sleep(1500)
+    const resting = await notch.capture()
+    if (!resting || resting.isEmpty()) throw new Error(`the sleeping notch (${notchStyle}) rendered empty`)
+    if (!solid(resting, layout.cx, layout.height / 2)) throw new Error('the sleeping notch does not cover the notch')
+    if (solid(resting, layout.cx, below) || solid(resting, layout.cx - beside, layout.height / 2) || solid(resting, layout.cx + beside, layout.height / 2)) throw new Error(`the sleeping notch (${notchStyle}) still reaches beyond the notch`)
+    await fs.writeFile(file.replace(/\.png$/, '-asleep.png'), resting.toPNG())
+    // The cursor resting on it for 250 ms wakes it; leaving for 1.5 s puts it back to sleep.
+    lookAtCursor(true, true, NOTCH_DWELL_MS)
+    await sleep(100)
+    lookAtCursor(true, true, NOTCH_DWELL_MS)
+    if (presenceNow.revealed) throw new Error('the notch woke before the cursor had rested on it for 250 ms')
+    await sleep(200)
+    const notchLook = await motionLook(notch.contents()!, MOVING_BLACK[notchStyle], '.nt')
+    smoothly(`the notch waking (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(true, true, NOTCH_DWELL_MS)))
+    if (!presenceNow.revealed) throw new Error('the notch did not wake when the cursor rested on it')
+    await sleep(300)
+    const woke = await notch.capture()
+    if (!woke || (notchStyle === 'chin' ? !solid(woke, layout.cx, below) : !solid(woke, layout.cx - beside, layout.height / 2))) throw new Error(`the notch (${notchStyle}) did not grow when it woke`)
+    lookAtCursor(false, false, NOTCH_DWELL_MS)
+    await sleep(1600)
+    smoothly(`the notch going to sleep (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(false, false, NOTCH_DWELL_MS)))
+    if (presenceNow.revealed) throw new Error('the notch did not go back to sleep after the cursor left')
+    console.log(`smoke: notch ${notchStyle}: asleep is the notch's black only, resting the cursor on it wakes it, leaving puts it back to sleep`)
+    await settings.update({ steward: { presence: 'always' } })
+    presenceChanged()
   }
   const idle = Number(process.env.STEWARD_SMOKE_IDLE ?? 0)
-  if (idle > 0) {
+  const measure = async (what: string) => {
     const pid = notch.pid()
     app.getAppMetrics()
     await sleep(idle * 1000)
     const m = app.getAppMetrics()
     const cpu = (p: number | null | undefined) => m.find((x) => x.pid === p)?.cpu.percentCPUUsage.toFixed(2)
-    console.log(`smoke: notch idle ${idle}s: notch page ${cpu(pid)}% CPU, main ${cpu(process.pid)}% CPU, GPU ${m.find((x) => x.type === 'GPU')?.cpu.percentCPUUsage.toFixed(2)}%`)
+    console.log(`smoke: notch idle ${idle}s, ${what}: notch page ${cpu(pid)}% CPU, main ${cpu(process.pid)}% CPU, GPU ${m.find((x) => x.type === 'GPU')?.cpu.percentCPUUsage.toFixed(2)}%`)
+  }
+  if (idle > 0) {
+    await measure('Always visible')
+    // Asleep, the eyes aren't drawn at all: this should be lower.
+    await settings.update({ steward: { presence: 'quiet' } })
+    presenceChanged()
+    await sleep(1500)
+    await measure('Only when needed, asleep')
+    await settings.update({ steward: { presence: 'always' } })
+    presenceChanged()
   }
   await settings.update({ steward: { notch: false } })
   replaceForNotch()
@@ -891,6 +1591,21 @@ async function captureSettings(out: string): Promise<void> {
     await fs.writeFile(file, image.toPNG())
     console.log(`smoke: settings ${section} -> ${file}`)
   }
+  // The Presence group is below the fold in Steward: with Only when needed picked, scroll to it and screenshot it.
+  await settings.update({ steward: { presence: 'quiet' } })
+  presenceChanged()
+  w.webContents.send('settings:section', 'steward')
+  await sleep(600)
+  const found = await w.webContents.executeJavaScript(
+    `(() => { const h = [...document.querySelectorAll('.set-group h2')].find((x) => x.textContent === 'Presence'); h?.scrollIntoView({ block: 'center' }); return Boolean(h) })()`,
+  )
+  if (!found) throw new Error('Settings → Steward has no Presence group')
+  await sleep(400)
+  const presenceShot = await w.webContents.capturePage()
+  if (presenceShot.isEmpty()) throw new Error('settings window rendered empty')
+  await fs.writeFile(out.replace(/\.png$/, '-settings-presence.png'), presenceShot.toPNG())
+  await settings.update({ steward: { presence: 'always' } })
+  presenceChanged()
   // Closing it hands focus back to the panel, so clicking away tucks it again.
   w.close()
   await sleep(300)
@@ -934,8 +1649,12 @@ function demoImage(): Buffer {
 app.whenReady().then(async () => {
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
+  // The smoke check starts as a fresh install every time, which is quiet: its throwaway data folder is emptied first.
+  if (SMOKE_OUT) await Promise.all(['settings.json', 'state.json'].map((f) => fs.rm(path.join(userData, f), { force: true })))
   settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ registered, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
   await settings.load()
+  // Only when needed, the window starts out of sight, with its page slid out ready to come in.
+  slidOut = quiet()
   registerGlobalShortcuts()
   if (secretsPending(userData)) {
     // The copied keys were encrypted for the old keychain entry: re-encrypt them once. macOS asks to allow this;
@@ -945,6 +1664,7 @@ app.whenReady().then(async () => {
   }
   appState = new AppState(path.join(userData, 'state.json'))
   await appState.load()
+  tabPlaces = appState.tabPlaces
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })
@@ -983,10 +1703,26 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') app.dock?.hide()
 
   registerIpc()
-  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle })
+  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle, onCursor: lookAtNotch, cursor: () => (drivenBySmoke ? null : screen.getCursorScreenPoint()) })
+  // Only when needed, it starts asleep.
+  notch.setAwake(out())
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
   await refreshNotch()
   win = createWindow()
+  syncWatch()
+  // A fresh install that hides until needed comes out once, a moment after it starts, so a new user can find it.
+  win.webContents.once('did-finish-load', () => {
+    if (!drivenBySmoke) setTimeout(maybeFirstPeek, 1200)
+  })
+  // Nobody is at a sleeping or locked screen to push against the edge.
+  const screenIs = (asleepNow: boolean) => () => {
+    screenAsleep = asleepNow
+    syncWatch()
+  }
+  powerMonitor.on('suspend', screenIs(true))
+  powerMonitor.on('lock-screen', screenIs(true))
+  powerMonitor.on('resume', screenIs(false))
+  powerMonitor.on('unlock-screen', screenIs(false))
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
   else {
     menuBar = new Tray(menuBarIcon())
