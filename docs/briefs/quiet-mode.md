@@ -249,5 +249,18 @@ Status stays `ready`: Phase 3 is not built. The user typed the Phase 2 go into M
 - PR #18 merged into main by the user's GitHub account: merge commit `48ce3c5`. It also carries the left-gap fix, the hairline alert edge (option A from `design/nudge-edge.html`), the slide-end fix and the test fixes. CI was green.
 - **Phase 2.1 (Part 2c, the tab comes to you):** ready. The user gave the go to the front door on 2026-10-18; the build starts when they type it into Main building.
 
+### Phase 2.1: the tab comes to you (Part 2c) built (recorded 2026-10-18, from the front door)
+Status stays `ready`: Phase 3 is not built. The user typed the Phase 2.1 go into Main building.
+- **Branch / PR:** `claude/quiet-mode-phase-2-1`, commits `8b9c827`, `61eaab7`, `52b1190`. Draft PR https://github.com/Jasmanss/companion/pull/20, CI running when recorded.
+- **Built:**
+  - Hold 0.3 s near the saved spot, 0.5 s elsewhere along the edge. The menu bar band and the space beside a bottom Dock do not count.
+  - Moving more than 6 pt restarts the hold. After a reveal, the cursor must move more than 8 pt off the edge before a new push counts.
+  - The panel and alerts open from the temporary spot, a drag there saves the height, and a tuck returns the tab home. With the Dock on the same edge, only the old area counts (the Dock check I flagged as a risk).
+  - The first-launch note now reads "Hides until you need it. Push anywhere on the right edge or press ⌥ Space."
+- **Checks:** lint, typecheck, 285 tests (8 runs in all) and 2 smoke runs pass.
+- **Not checked:** the feel with a real scrollbar, the left edge in smoke, and the Dock on a side edge.
+- **Note:** the front door set Part 2c to ready in this brief (`d04ad15`) on the user's go.
+- **Waiting on the user:** try Phase 2.1 by hand (push anywhere on the edge, try a scrollbar).
+
 ### Phase 3
 Not started.

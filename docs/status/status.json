@@ -5,7 +5,7 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Go on Phase 2.1: the tab comes to you", "line": "Quiet mode Part 2c. Push anywhere along the edge and the tab slides out at your cursor. Phase 2 is merged, so it can start.", "date": "2026-10-16" },
+        { "name": "Try quiet mode Phase 2.1 by hand", "line": "Push anywhere on the edge and the tab comes to your cursor. Try it on a scrollbar. Then OK the merge once CI is green on PR #20.", "date": "2026-10-18" },
         { "name": "Merge docs PR #19", "line": "Docs: the chat flow, standing rules and a PR template (branch front-door). Merge once CI is green.", "date": "2026-10-16" },
         { "name": "Notch dock, Phase 3", "line": "Designed, in 4 small steps (3a to 3d). Read docs/briefs/notch-dock-phase-3.md, then say go for 3a.", "date": "2026-10-15" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
@@ -17,6 +17,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
+        { "name": "Quiet mode, Phase 2.1", "line": "Built: the tab comes to you. Draft PR #20 (claude/quiet-mode-phase-2-1), CI running. Scrollbar feel and a side Dock not tried yet.", "date": "2026-10-18" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.", "date": "2026-10-15" },
         { "name": "Chat flow and this status page", "line": "Docs PR #19 is open (branch front-door). The status page is live.", "date": "2026-10-16" }
       ]
@@ -25,7 +26,6 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Quiet mode, Phase 2.1", "line": "Tab comes to you: push anywhere along the edge, the tab slides out at your cursor. Designed, waits for your go after PR #18 merges.", "date": "2026-10-16" },
         { "name": "Quiet mode, Phase 3", "line": "Step aside (screen sharing, full-screen apps, listed apps). Starts with an investigation report. Waits for its own go.", "date": "2026-10-16" },
         { "name": "Notch dock, Phase 3", "line": "Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.", "date": "2026-10-15" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
