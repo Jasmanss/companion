@@ -80,7 +80,7 @@ The nudge complaint is about alerts that were not worth interrupting for. In "On
 - **Only once:** remember that it happened in app state (`appState`), not in settings. Existing installs, and fresh installs that already switched to "Always visible", never see it. In the notch, the same once-only reveal wakes the notch with the note.
 - Test: a pure rule for "show the first-launch peek" (fresh, quiet, not shown yet), and by hand with an empty user data folder.
 
-### Part 2c: The tab comes to you (Phase 2.1; designed, waiting for the user's go)
+### Part 2c: The tab comes to you (Phase 2.1; ready, the user said "yes lets move forward" on 2026-10-18)
 **Why:** in "Only when needed" the tab only appears when the cursor pushes against the edge inside a band of ±40 pt around the tab's saved height. Once the tab can be dragged to any height, you can forget where you put it, and then you cannot find it. Nobody should have to remember a spot.
 
 **What the user sees:** with Presence "Only when needed", push the cursor against the tab's edge anywhere along the work area, hold still for a moment, and the tab slides out right at the cursor's height. Leave it and it tucks away as before. It does not change where the tab rests: the saved height (set by dragging) still decides where it sits in "Always visible", where a nudge appears, and where the tab shows when something else brings it out.
@@ -247,7 +247,7 @@ Status stays `ready`: Phase 3 is not built. The user typed the Phase 2 go into M
 
 ### Phase 2 merged (recorded 2026-10-16, from the front door)
 - PR #18 merged into main by the user's GitHub account: merge commit `48ce3c5`. It also carries the left-gap fix, the hairline alert edge (option A from `design/nudge-edge.html`), the slide-end fix and the test fixes. CI was green.
-- **Waiting on the user:** the go on Phase 2.1 (Part 2c, the tab comes to you).
+- **Phase 2.1 (Part 2c, the tab comes to you):** ready. The user gave the go to the front door on 2026-10-18; the build starts when they type it into Main building.
 
 ### Phase 3
 Not started.
