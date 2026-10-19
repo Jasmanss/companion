@@ -1,6 +1,8 @@
 # A showcase website for Steward
 
-Status: designed
+Status: ready
+
+Set by the front door on the user's go, 2026-10-19: "Can we create e separate chat that makes the website." It's built by its own chat, Site building, one phase at a time, with the user's go between phases.
 
 ## Ask (front door)
 The user's words: "what if we made a website to showcase steward for people to maybe use or view?" Their answers on 2026-10-19:
