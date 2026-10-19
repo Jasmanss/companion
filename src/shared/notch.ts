@@ -59,6 +59,19 @@ export function stepHover(s: HoverState, over: boolean, now: number): HoverState
   return now - since >= (over ? HOVER_IN_MS : HOVER_OUT_MS) ? { hover: over, since: null } : { hover: s.hover, since }
 }
 
+/**
+ * Where something that comes out of the notch goes (the panel now; a nudge later): centered under the notch on the
+ * notch's own screen, its top at the top of that screen's work area (just under the menu bar), kept inside the work
+ * area with margin points to spare at the sides.
+ */
+export function underNotch(notch: { x: number; width: number }, area: Box, size: { width: number; height: number }, margin = 8): Box {
+  const width = Math.min(size.width, area.width - 2 * margin)
+  const height = Math.min(size.height, area.height)
+  const centered = notch.x + notch.width / 2 - width / 2
+  const x = Math.round(Math.min(area.x + area.width - margin - width, Math.max(area.x + margin, centered)))
+  return { x, y: area.y, width, height }
+}
+
 export interface Box {
   x: number
   y: number

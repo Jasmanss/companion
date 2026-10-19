@@ -3,7 +3,7 @@ import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
@@ -200,6 +200,16 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
   }, [look.edge])
+
+  // Docked in the notch, the panel comes down from it instead of in from the side (styles.css).
+  const [notchGeo, setNotchGeo] = useState<NotchGeometry | null>(null)
+  useEffect(() => {
+    void api.notch.geometry().then(setNotchGeo)
+    return api.notch.onGeometry(setNotchGeo)
+  }, [])
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
+  }, [look.notch, notchGeo])
 
   // The glass's tint and frost, from Settings → Steward.
   useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])

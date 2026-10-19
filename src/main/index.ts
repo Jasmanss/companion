@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { NOTCH_WINDOW } from '../shared/notch'
+import { NOTCH_WINDOW, underNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
@@ -127,6 +127,8 @@ let notch: NotchDock
 let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
+/** The screen with the notch: the built-in one, which isn't always the main screen (an external one can be). */
+const notchDisplay = (): Electron.Display => screen.getAllDisplays().find((d) => d.id === notchGeo?.displayId) ?? screen.getPrimaryDisplay()
 
 /** Presence is "Only when needed": Steward is out of sight until a push, an alert, work or the hotkey brings it out. */
 const quiet = (): boolean => settings?.steward().presence === 'quiet'
@@ -203,9 +205,16 @@ let sentOverhang = -1
 
 /**
  * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
- * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered.
+ * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered. Docked in
+ * the notch, the panel and the viewer come down from the notch instead, on the notch's own screen.
  */
 function boundsFor(state: DockState): Electron.Rectangle {
+  if ((state === 'expanded' || state === 'viewing') && inNotch() && notchGeo) {
+    const area = notchDisplay().workArea
+    if (state === 'expanded') return underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
+    const size = { width: Math.min(VIEWER_MAX_WIDTH, area.width - 120), height: area.height - 48 }
+    return { ...underNotch(notchGeo, area, size), y: area.y + Math.round((area.height - size.height) / 2) }
+  }
   const area = screen.getPrimaryDisplay().workArea
   const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findNotch, parseProbe, probeScreens, type ScreenProbe } from '../src/main/notch'
-import { HOVER_IN_MS, HOVER_OUT_MS, inBoxes, noHover, notchBoxes, notchShape, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, stepHover } from '../src/shared/notch'
+import { HOVER_IN_MS, HOVER_OUT_MS, inBoxes, noHover, notchBoxes, notchShape, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, stepHover, underNotch } from '../src/shared/notch'
 
 /** What macOS reports for the 14-inch MacBook Pro at its default 1512 x 982, measured on the user's Mac (Mac16,1). */
 const MBP14: ScreenProbe = { id: 1, frame: [0, 0, 1512, 982], safeTop: 32, left: [0, 950, 663.5, 32], right: [848.5, 950, 663.5, 32] }
@@ -132,5 +132,33 @@ describe('hovering on the notch', () => {
     expect(looks([[0, true], [100, true], [200, false], [449, false], [450, false]])).toEqual([false, true, true, true, false])
     // Passing over it quickly never counts.
     expect(looks([[0, true], [50, false], [100, true], [150, false]])).toEqual([false, false, false, false])
+  })
+})
+
+describe('the panel from the notch', () => {
+  /** The 14-inch MacBook Pro: the notch at 663.5 to 848.5, the work area under the 33-point menu bar. */
+  const NOTCH = { displayId: 1, x: 663.5, y: 0, width: 185, height: 32 }
+  const AREA = { x: 0, y: 33, width: 1512, height: 949 }
+
+  it('is centered under the notch, its top just under the menu bar', () => {
+    const at = underNotch(NOTCH, AREA, { width: 380, height: 760 })
+    expect(at).toEqual({ x: Math.round(756 - 190), y: 33, width: 380, height: 760 })
+    expect(at.x + at.width / 2).toBeCloseTo(663.5 + 185 / 2, 0)
+  })
+
+  it('stays inside the work area, even when that means not quite centered', () => {
+    expect(underNotch({ x: 0, width: 185 }, AREA, { width: 380, height: 760 }).x).toBe(8)
+    expect(underNotch({ x: 1400, width: 185 }, AREA, { width: 380, height: 760 }).x).toBe(1512 - 8 - 380)
+    expect(underNotch(NOTCH, { ...AREA, height: 600 }, { width: 380, height: 760 }).height).toBe(600)
+    expect(underNotch(NOTCH, { ...AREA, width: 300 }, { width: 380, height: 760 }).width).toBe(300 - 16)
+  })
+
+  it("goes to the notch's own screen when that isn't the main one", () => {
+    // The MacBook to the left of a main external display, a little lower.
+    const builtIn = { x: -1512, y: 213, width: 1512, height: 949 }
+    const at = underNotch({ x: -848.5, width: 185 }, builtIn, { width: 380, height: 760 })
+    expect(at.y).toBe(213)
+    expect(at.x).toBeGreaterThanOrEqual(-1512)
+    expect(at.x + at.width / 2).toBeCloseTo(-848.5 + 92.5, 0)
   })
 })
