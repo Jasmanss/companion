@@ -380,6 +380,8 @@ export interface StewardAPI {
     addProject(): Promise<SettingsView>
     /** Pick a folder, add it as a project if it's new, and switch to it. */
     addProjectAndSwitch(): Promise<SettingsView>
+    /** Pick an app in Finder and add it to Step aside's list. */
+    addStepAsideApp(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>

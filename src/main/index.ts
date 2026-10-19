@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, screen, shell, systemPreferences, Tray } from 'electron'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -8,7 +8,7 @@ import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, i
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
 import { DIM_AFTER_MS } from '../shared/dim'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -58,6 +58,7 @@ import {
   type PresenceState,
 } from './presence'
 import { SessionTracker } from './sessions'
+import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
@@ -146,6 +147,13 @@ let screenAsleep = false
 const drivenBySmoke = Boolean(SMOKE_OUT)
 /** Alerts that didn't peek out, newest first: the menu bar's dot now, and cards when the panel next opens. */
 let heldAlerts: AlertView[] = []
+/** Stepping aside: an app fills Steward's screen, or an app on the list is in front (see step-aside.ts). */
+let steppedAside = false
+/** The app in front (Steward itself not counted), and the screens showing a full-screen app, as macOS last said. */
+let asideFront: string | null = null
+let asideFullScreenOn: number[] = []
+/** Alerts that came while stepping aside, oldest first: they peek out once Steward is back. */
+let asideAlerts: AlertView[] = []
 
 /** Where the tab sits on each display's edge (dragged there; see shared/tab-place), by display id. */
 let tabPlaces: Record<string, number> = {}
@@ -265,9 +273,10 @@ function setSlide(out: boolean, animate: boolean): void {
   win?.webContents.send('presence:slide', { out, animate })
 }
 
-/** Show the tab or the nudge at these bounds. Slid out (Only when needed), it comes in from the edge. */
+/** Show the tab or the nudge at these bounds. Slid out (Only when needed), it comes in from the edge. Not while stepping aside. */
 function showTab(target: Electron.Rectangle, animateBounds = true): void {
   if (!win || win.isDestroyed()) return
+  if (steppedAside) return hideTab()
   clearTimeout(slideTimer)
   const wasShowing = win.isVisible()
   win.setBounds(target, wasShowing && animateBounds)
@@ -318,7 +327,7 @@ const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
  * edge); the panel opens from the edge. Not in the notch: the tab is back at the edge.
  */
 function placeNotch(): void {
-  notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge'))
+  notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge') && !steppedAside)
 }
 
 /** The tab or the notch follows whether Steward is out: it slides in or out, or the notch wakes or goes to sleep. */
@@ -503,7 +512,7 @@ function watchEdge(): void {
   if (canWatchEdge()) watchTimer = setTimeout(watchEdge, next)
 }
 
-const canWatchEdge = (): boolean => !!win && (quiet() || settings.steward().dimWhenIdle) && !inNotch() && dock === 'collapsed' && !screenAsleep && !drivenBySmoke
+const canWatchEdge = (): boolean => !!win && (quiet() || settings.steward().dimWhenIdle) && !inNotch() && dock === 'collapsed' && !screenAsleep && !steppedAside && !drivenBySmoke
 
 /** Start or stop the edge's watcher to match what's going on. Called whenever any of that changes. */
 function syncWatch(): void {
@@ -511,6 +520,106 @@ function syncWatch(): void {
     clearTimeout(watchTimer)
     watchTimer = undefined
   } else if (!watchTimer) watchTimer = setTimeout(watchEdge, 0)
+}
+
+/* ---------- Step aside ---------- */
+
+/** The notifications from macOS Steward listens to while Step aside is on (their subscription ids). */
+let asideSubs: number[] = []
+let asideLooking = false
+let asideAgain = false
+
+/** Step aside is on: for full-screen apps, or for a list of apps. Only a Mac can say. */
+const wantsStepAside = (): boolean => process.platform === 'darwin' && (settings.steward().hideInFullScreen || settings.steward().hideInApps.length > 0)
+
+/** The screen Steward shows on: the notch's when it's docked there, otherwise the main one, where the tab sits. */
+const stewardScreen = (): number => (inNotch() && notchGeo ? notchGeo.displayId : screen.getPrimaryDisplay().id)
+
+/**
+ * Listen to macOS, or stop, to match Settings, and ask it once now. An app switch names the app, which is all the list
+ * needs; a Space change (into or out of a full-screen app) asks which screens show a full-screen app. Nothing runs in
+ * between. The smoke check feeds these itself.
+ */
+function syncStepAside(): void {
+  const want = wantsStepAside() && !drivenBySmoke
+  if (want && !asideSubs.length) {
+    asideSubs = [
+      systemPreferences.subscribeWorkspaceNotification('NSWorkspaceDidActivateApplicationNotification', (_e, info) => {
+        const front = appFromUserInfo(info)
+        if (front) noteFront(front)
+        else void lookAside()
+      }),
+      systemPreferences.subscribeWorkspaceNotification('NSWorkspaceActiveSpaceDidChangeNotification', () => void lookAside()),
+    ]
+  } else if (!want && asideSubs.length) {
+    for (const id of asideSubs) systemPreferences.unsubscribeWorkspaceNotification(id)
+    asideSubs = []
+  }
+  if (want) void lookAside()
+  applyStepAside()
+}
+
+/** Another app came to the front. Steward itself coming forward (its panel, Settings) changes nothing. */
+function noteFront(front: FrontApp): void {
+  asideFront = frontAfter(asideFront, front, process.pid)
+  applyStepAside()
+}
+
+/** Ask macOS which app is in front and which screens show a full-screen app: one question at a time, again if something changed meanwhile. */
+async function lookAside(): Promise<void> {
+  if (asideLooking) {
+    asideAgain = true
+    return
+  }
+  asideLooking = true
+  do {
+    asideAgain = false
+    const look = await lookNow()
+    if (look) {
+      asideFront = frontAfter(asideFront, look.front, process.pid)
+      asideFullScreenOn = look.fullScreenOn
+    }
+  } while (asideAgain)
+  asideLooking = false
+  applyStepAside()
+}
+
+/**
+ * Step aside, or come back. Stepping aside, the tab, a nudge, the notch and an open panel go, and alerts wait (the
+ * hotkey and the menu bar still open the panel). Back, Steward is as it was: always visible, the tab is there again;
+ * hiding until needed, it stays hidden. What waited peeks out then.
+ */
+function applyStepAside(): void {
+  const s = settings.steward()
+  const on = wantsStepAside() && shouldStepAside({ hideInFullScreen: s.hideInFullScreen, apps: s.hideInApps, front: asideFront, fullScreenHere: asideFullScreenOn.includes(stewardScreen()) })
+  if (on === steppedAside) return
+  steppedAside = on
+  if (on) {
+    if (dock !== 'collapsed' && dock !== 'hidden') setDock('collapsed')
+    else if (dock === 'collapsed') hideTab()
+  } else if (dock === 'collapsed') {
+    if (quiet() && !agent?.busy) presenceNow = asleep()
+    if (!inNotch() && out()) showTab(boundsFor('collapsed'), false)
+  }
+  placeNotch()
+  notch?.setAwake(out())
+  syncWatch()
+  updateMenuBar()
+  if (!on && asideAlerts.length) {
+    const back = asideAlerts
+    asideAlerts = []
+    showAlerts(back)
+  }
+}
+
+/** The app picker, as a sheet: an app (from Applications), read for its bundle id. */
+async function pickApp(parent: BrowserWindow | null): Promise<StepAsideApp | null> {
+  const options: Electron.OpenDialogOptions = { defaultPath: '/Applications', properties: ['openFile'], filters: [{ name: 'Apps', extensions: ['app'] }], buttonLabel: 'Add app' }
+  const result = await withModal(() => (parent ? dialog.showOpenDialog(parent, options) : dialog.showOpenDialog(options)))
+  if (result.canceled) return null
+  const picked = await readApp(result.filePaths[0])
+  if (!picked) throw new Error("Steward can't tell which app that is.")
+  return picked
 }
 
 function toggleDock(): void {
@@ -547,10 +656,10 @@ function menuBarIcon(): Electron.NativeImage {
 
 function updateMenuBar(): void {
   if (!menuBar) return
-  // While hidden, or when Steward only comes out when needed, the menu bar shows how many sessions are waiting on you,
-  // and a dot when something quieter is waiting too.
+  // While hidden, stepping aside, or when Steward only comes out when needed, the menu bar shows how many sessions are
+  // waiting on you, and a dot when something quieter is waiting too.
   const waiting = sessions?.waitingCount() ?? 0
-  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() ? waiting : 0, heldAlerts.length))
+  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length))
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Steward', accelerator: registered.togglePanel || undefined, registerAccelerator: false, click: () => setDock('expanded') },
@@ -757,9 +866,14 @@ const senderWindow = (e: Electron.IpcMainInvokeEvent) => BrowserWindow.fromWebCo
 /**
  * Alerts that made it through the queue (Settings → Notifications has silenced the types switched off). The open panel
  * shows them all. Tucked away, "Alerts that peek out" decides which peek out; the rest wait in the menu bar (a dot) and
- * show as cards when the panel next opens. Hidden by hand, nothing peeks out.
+ * show as cards when the panel next opens. Hidden by hand, nothing peeks out. Stepping aside, they all wait (a dot in
+ * the menu bar) and come through here again once Steward is back.
  */
 function showAlerts(list: AlertView[]): void {
+  if (steppedAside && !isOpen(dock)) {
+    asideAlerts = [...asideAlerts, ...list].slice(-MAX_HELD)
+    return updateMenuBar()
+  }
   const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek)
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
@@ -769,11 +883,12 @@ function showAlerts(list: AlertView[]): void {
   updateMenuBar()
 }
 
-/** The panel opened: the alerts that didn't peek out show now. */
+/** The panel opened: the alerts that didn't peek out, or waited while Steward stepped aside, show now. */
 function deliverHeld(): void {
-  if (!heldAlerts.length) return
-  win?.webContents.send('alerts:show', heldAlerts)
+  if (!heldAlerts.length && !asideAlerts.length) return
+  win?.webContents.send('alerts:show', [...asideAlerts.toReversed(), ...heldAlerts])
   heldAlerts = []
+  asideAlerts = []
   updateMenuBar()
 }
 
@@ -817,7 +932,7 @@ let peekTimer: ReturnType<typeof setTimeout> | undefined
  * so a new user sees where it lives. In the notch the notch wakes, and the note peeks from the edge like alerts do for now.
  */
 function maybeFirstPeek(): void {
-  if (!win || win.isDestroyed() || dock !== 'collapsed') return
+  if (!win || win.isDestroyed() || dock !== 'collapsed' || steppedAside) return
   if (!showFirstPeek({ freshInstall: settings.missing && appState.missing, quiet: quiet(), shown: appState.firstPeekShown })) return
   // The note was the panel's first-time note; this shows it instead.
   void appState.update({ firstPeekShown: true, presenceNoteSeen: true })
@@ -1108,6 +1223,16 @@ function registerIpc(): void {
     // Always visible or only when needed: Steward comes out, or slips away, now.
     if (after.presence !== before.presence) presenceChanged()
     else if (after.dimWhenIdle !== before.dimWhenIdle) syncWatch()
+    // Step aside's switch or list: listen to macOS or stop, and step aside or come back now.
+    if (after.hideInFullScreen !== before.hideInFullScreen || JSON.stringify(after.hideInApps) !== JSON.stringify(before.hideInApps)) syncStepAside()
+    return settings.view()
+  })
+  ipcMain.handle('settings:addStepAsideApp', async (e) => {
+    const picked = await pickApp(senderWindow(e))
+    if (picked) {
+      await settings.update({ steward: { hideInApps: withApp(settings.steward().hideInApps, picked) } })
+      syncStepAside()
+    }
     return settings.view()
   })
   ipcMain.handle('settings:setShortcut', (_e, id: unknown, accelerator: unknown) => setShortcut(id, accelerator))
@@ -1814,6 +1939,8 @@ app.whenReady().then(async () => {
   await refreshNotch()
   win = createWindow()
   syncWatch()
+  // Step aside: listen for full-screen apps and the listed ones, and ask macOS where things stand now.
+  syncStepAside()
   // A fresh install that hides until needed comes out once, a moment after it starts, so a new user can find it.
   win.webContents.once('did-finish-load', () => {
     if (!drivenBySmoke) setTimeout(maybeFirstPeek, 1200)
@@ -1855,7 +1982,11 @@ app.whenReady().then(async () => {
   let recheck: ReturnType<typeof setTimeout> | undefined
   const notchLater = () => {
     clearTimeout(recheck)
-    recheck = setTimeout(() => void refreshNotch(), 400)
+    recheck = setTimeout(() => {
+      void refreshNotch()
+      // Which screens show a full-screen app may have changed too.
+      if (asideSubs.length) void lookAside()
+    }, 400)
   }
   screen.on('display-added', notchLater)
   screen.on('display-removed', notchLater)
