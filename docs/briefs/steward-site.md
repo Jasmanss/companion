@@ -83,9 +83,9 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 4. **Vercel details to confirm at setup:** the preview protection default, and that the free plan's terms cover a personal showcase site. Both are the user's to check in their own account.
 5. **Name collision:** SPEC mentions an open check on whether the name Steward is taken. A public site makes that check more relevant. It is already on the ideas list ("Name availability check").
 
-**Needs the user (not blocking the design):**
-- **Is the "How it's built" section OK to show publicly?** It names the roles and the flow, but not the code, the chats' names or any link. If the user would rather show less, cut it to one paragraph.
-- **A domain, or the free `.vercel.app` address to start?** Recommendation: start free, decide on a domain later.
+**Answered by the user (2026-10-19, via the front door):**
+- **"How it's built" is OK to show publicly, as designed** ("Yes, show it"). It names the roles and the flow, and nothing about the code, the chats' names or any link.
+- **Start on a free `.vercel.app` address.** A domain can come later.
 
 ### How to test
 - **Page:** open `design/site.html` (and the build later) in a browser at 375, 768 and 1100 pixels wide, in light and dark. No horizontal scroll, the demo's pickers work by keyboard, reduced motion stops the blinking.
