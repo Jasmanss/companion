@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward</title>
+<style>
+/* Design page for the Steward showcase site (docs/briefs/steward-site.md). Plain HTML and CSS, no libraries, no web fonts.
+   Steward's own look: the Ice tint, glass panels, the system font (src/renderer/src/styles.css). The clips are placeholders
+   until the user records them; the demo here is a small CSS mock of what the real one (built from design/showcase) does. */
+:root{
+  --tint:200,228,255;--glow:96,190,255;--ink:18,70,120;--soft:178,220,255;--live:26,140,255;
+  --t1:#0d1015;--t2:rgb(var(--ink));--t3:rgba(var(--ink),.78);
+  --fill:255,255,255;--frost:.5;--edge:rgba(255,255,255,.85);--inset:rgba(var(--ink),.07);--inset2:rgba(var(--ink),.14);--line:rgba(var(--ink),.12);
+  --ok:31,138,76;--warm:176,100,0;--shadow:rgba(20,30,60,.18);
+  --bg1:#d9e8fb;--bg2:#eef4fc;--blob:150,200,255;--pill1:#fff;--pill2:#c9d3e0;--eye:26,140,255;
+  --radius:14px;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;--spring:cubic-bezier(.2,.8,.2,1);
+}
+@media (prefers-color-scheme:dark){:root{
+  --t1:#f5f7fa;--t2:rgb(var(--soft));--t3:rgba(var(--soft),.78);--fill:24,27,34;--edge:rgba(255,255,255,.26);
+  --inset:rgba(255,255,255,.07);--inset2:rgba(255,255,255,.12);--line:rgba(255,255,255,.1);--ok:95,214,142;--warm:255,196,107;--shadow:rgba(0,0,0,.5);
+  --bg1:#0c1017;--bg2:#141a24;--blob:40,90,160;--pill1:#e9eef5;--pill2:#8d99ab;--eye:96,190,255;color-scheme:dark}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;min-height:100vh;color:var(--t1);font:500 15px/1.55 var(--font);-webkit-font-smoothing:antialiased;
+  background:radial-gradient(60rem 30rem at 85% -10%,rgba(var(--blob),.55),transparent 70%),radial-gradient(45rem 28rem at -10% 45%,rgba(var(--blob),.35),transparent 70%),linear-gradient(180deg,var(--bg1),var(--bg2));
+  background-color:var(--bg1);background-attachment:fixed}
+a{color:inherit}
+.wrap{max-width:60rem;margin:0 auto;padding-inline:20px}
+h1,h2,h3{margin:0;line-height:1.15;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:1.5rem;margin-bottom:6px}
+.lede{color:var(--t3);max-width:46rem;margin:0 0 22px}
+section{padding-block:44px}
+.glass{border-radius:var(--radius);background:rgba(var(--fill),var(--frost));-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8);
+  border:1px solid var(--line);box-shadow:inset 0 1px 0 var(--edge),0 8px 24px var(--shadow)}
+.chip{display:inline-block;font-size:.74rem;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--inset);color:var(--t2)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:10;-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);background:rgba(var(--fill),.45);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:18px;height:52px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none}
+.top nav{margin-left:auto;display:flex;gap:4px}
+.top nav a{text-decoration:none;font-size:.88rem;padding:6px 10px;border-radius:999px;color:var(--t3)}
+.top nav a:hover{background:var(--inset);color:var(--t1)}
+
+/* the Pill */
+.pill{position:relative;flex:none;width:calc(var(--s,1) * 46px);height:calc(var(--s,1) * 26px);border-radius:999px;background:linear-gradient(180deg,var(--pill1),var(--pill2));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 4px rgba(0,0,0,.12),0 4px 10px var(--shadow)}
+.pill i{position:absolute;top:calc(var(--s,1)*8px);width:calc(var(--s,1)*5px);height:calc(var(--s,1)*9px);border-radius:999px;background:rgb(var(--eye));box-shadow:0 0 calc(var(--s,1)*6px) 1px rgba(var(--eye),.7);transform-origin:center;animation:blink 5s infinite}
+.pill i:nth-child(1){left:calc(var(--s,1)*14px)}.pill i:nth-child(2){right:calc(var(--s,1)*14px)}.pill i:nth-child(3){display:none;left:calc(50% - var(--s,1)*2.5px)}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+.pill.big{--s:2.4}
+/* moods */
+.pill[data-mood=thinking] i{animation:wave 1.1s ease-in-out infinite;height:calc(var(--s,1)*5px);width:calc(var(--s,1)*5px);top:calc(var(--s,1)*10px)}
+.pill[data-mood=thinking] i:nth-child(1){left:calc(50% - var(--s,1)*11px)}.pill[data-mood=thinking] i:nth-child(2){left:calc(50% - var(--s,1)*2.5px);right:auto;animation-delay:.15s}
+.pill[data-mood=thinking] i:nth-child(3){display:block;left:calc(50% + var(--s,1)*6px);animation:wave 1.1s .3s ease-in-out infinite}
+@keyframes wave{0%,100%{transform:translateY(0)}50%{transform:translateY(calc(var(--s,1)*-4px))}}
+.pill[data-mood=sleepy] i{animation:none;height:calc(var(--s,1)*2px);top:calc(var(--s,1)*12px);box-shadow:none}
+.pill[data-mood=needs] i{height:calc(var(--s,1)*11px);top:calc(var(--s,1)*7px);animation:none}
+.pill[data-mood=talking] i{animation:talk .5s ease-in-out infinite alternate}
+@keyframes talk{to{transform:scaleY(.6)}}
+.pill[data-color=sky]{--eye:96,190,255}.pill[data-color=silver]{--eye:130,150,175}.pill[data-color=lilac]{--eye:176,140,255}.pill[data-color=mint]{--eye:80,210,160}.pill[data-color=peach]{--eye:255,160,110}.pill[data-color=graphite]{--eye:150,158,170}
+@media (prefers-reduced-motion:reduce){.pill i,.pill[data-mood] i{animation:none!important}}
+
+/* hero */
+.hero{padding-block:64px 36px;display:grid;grid-template-columns:1.2fr .8fr;gap:32px;align-items:center}
+.hero h1{font-size:clamp(2.2rem,6vw,3.4rem);margin-bottom:12px}
+.hero p{font-size:1.1rem;color:var(--t3);max-width:34rem;margin:0 0 16px}
+.note{display:inline-flex;gap:8px;align-items:center;font-size:.88rem;padding:7px 12px;border-radius:10px;background:var(--inset);color:var(--t2)}
+.stage{aspect-ratio:1/1;display:grid;place-items:center;border-radius:22px;position:relative;overflow:hidden}
+.stage .edge{position:absolute;right:0;top:50%;transform:translateY(-50%);width:34%;height:30%;border-radius:18px 0 0 18px;background:linear-gradient(180deg,rgba(var(--tint),.16),rgba(var(--tint),.05)),rgba(var(--fill),.85);box-shadow:inset 0 1px 0 var(--edge);display:grid;place-items:center}
+@media (max-width:760px){.hero{grid-template-columns:1fr;padding-block:40px 20px}.stage{aspect-ratio:16/9}}
+
+/* clips */
+.clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.clip{padding:10px 10px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.poster{position:relative;aspect-ratio:16/10;border-radius:10px;overflow:hidden;display:grid;place-items:center;
+  background:radial-gradient(40px 40px at 25% 35%,rgba(255,255,255,.5),transparent 70%),radial-gradient(70px 40px at 75% 80%,rgba(70,120,60,.6),transparent 70%),repeating-linear-gradient(115deg,rgba(255,255,255,.12) 0 6px,transparent 6px 22px),linear-gradient(160deg,#8f9aa8,#c8ccd2 45%,#707a86)}
+.poster .play{width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.5);display:grid;place-items:center}
+.poster .play::before{content:"";margin-left:3px;border-left:13px solid #fff;border-block:8px solid transparent}
+.poster .len{position:absolute;right:8px;bottom:8px;font-size:.72rem;font-weight:700;background:rgba(0,0,0,.55);color:#fff;padding:1px 7px;border-radius:999px}
+.poster .mini{position:absolute;right:0;top:36%;width:20%;height:28%;border-radius:10px 0 0 10px;background:rgba(var(--fill),.9)}
+.clip h3{font-size:1rem}
+.clip p{margin:0;color:var(--t3);font-size:.9rem}
+.clip .placeholder{font-size:.72rem;color:var(--t3)}
+
+/* demo */
+.demo{display:grid;grid-template-columns:1fr 280px;gap:0;overflow:hidden;min-height:340px}
+.demo .screen{position:relative;padding:18px;background:radial-gradient(70px 60px at 30% 30%,rgba(255,255,255,.45),transparent 70%),linear-gradient(160deg,#8fa2b8,#c9d3dd 50%,#6f7f92);display:grid;place-items:center}
+.panel{width:min(300px,100%);padding:14px;border-radius:14px;background:linear-gradient(180deg,rgba(var(--tint),.26),rgba(var(--tint),.1)),rgba(var(--fill),.78);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 var(--edge),0 14px 34px var(--shadow);display:flex;flex-direction:column;gap:10px}
+.panel .head{display:flex;align-items:center;gap:10px}
+.panel .head b{font-size:.92rem}.panel .head span{font-size:.78rem;color:var(--t3)}
+.bubble{background:var(--inset);border-radius:10px;padding:8px 10px;font-size:.86rem;min-height:2.4em}
+.demo aside{padding:16px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--line)}
+.demo aside h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+.opts button{font:600 .82rem var(--font);color:var(--t1);background:var(--inset);border:0;border-radius:999px;padding:5px 11px;cursor:pointer}
+.opts button:hover{background:var(--inset2)}
+.opts button[aria-pressed=true]{background:rgb(var(--ink));color:#fff}
+@media (prefers-color-scheme:dark){.opts button[aria-pressed=true]{background:rgb(var(--glow));color:#0b0d12}}
+.opts button:focus-visible{outline:2px solid rgb(var(--live));outline-offset:2px}
+@media (max-width:760px){.demo{grid-template-columns:1fr}.demo aside{border-left:0;border-top:1px solid var(--line)}}
+.fine{font-size:.8rem;color:var(--t3);margin-top:8px}
+
+/* how it's built */
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin-bottom:18px}
+.step{flex:1 1 130px;min-width:130px;padding:12px 12px 14px;display:flex;flex-direction:column;gap:4px}
+.step b{font-size:.92rem}.step span{font-size:.82rem;color:var(--t3)}
+.step.ok{box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 1px rgba(var(--ok),.55),0 8px 24px var(--shadow)}
+.step.ok b::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:rgb(var(--ok));margin-right:6px;box-shadow:0 0 6px rgb(var(--ok))}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.fact{padding:14px}.fact b{display:block;font-size:1.05rem;margin-bottom:2px}.fact span{color:var(--t3);font-size:.9rem}
+footer{padding-block:34px 60px;color:var(--t3);font-size:.88rem;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#top"><span class="pill" aria-hidden="true"><i></i><i></i><i></i></span>Steward</a>
+  <nav aria-label="Sections"><a href="#watch">Watch</a><a href="#try">Try it</a><a href="#built">How it's built</a></nav>
+</div></header>
+
+<main id="top">
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <h1>A small helper that lives at the edge of my Mac screen.</h1>
+      <p>Steward keeps watch while I code with Claude Code. It tells me when a session needs me, collects screenshots in a tray, and stays out of the way until I need it.</p>
+      <span class="note">A personal project. It is not available to download.</span>
+    </div>
+    <div class="stage glass" aria-hidden="true">
+      <div class="pill big" data-mood="idle" data-color="sky"><i></i><i></i><i></i></div>
+      <div class="edge"><span class="pill" style="--s:1"><i></i><i></i><i></i></span></div>
+    </div>
+  </section>
+
+  <section id="watch">
+    <h2>Watch it work</h2>
+    <p class="lede">Short clips of the real app, each a few seconds, no sound.</p>
+    <div class="clips">
+      <figure class="clip glass" style="margin:0"><div class="poster"><div class="mini"></div><div class="play"></div><span class="len">0:08</span></div>
+        <h3>It comes to you</h3><p>Push the cursor against the edge and the tab slides out right where you are.</p><span class="placeholder">Placeholder. Clip to be recorded.</span></figure>
+      <figure class="clip glass" style="margin:0"><div class="poster"><div class="play"></div><span class="len">0:10</span></div>
+        <h3>A face with moods</h3><p>Resting, thinking, talking, sleepy, and waiting on you.</p><span class="placeholder">Placeholder. Clip to be recorded.</span></figure>
+      <figure class="clip glass" style="margin:0"><div class="poster"><div class="mini"></div><div class="play"></div><span class="len">0:08</span></div>
+        <h3>Quiet until it matters</h3><p>Nothing on screen. One alert slides out because a session needs an answer.</p><span class="placeholder">Placeholder. Clip to be recorded.</span></figure>
+      <figure class="clip glass" style="margin:0"><div class="poster"><div class="play"></div><span class="len">0:08</span></div>
+        <h3>Living in the notch</h3><p>Rest the cursor on the notch and the eyes wake up and follow it.</p><span class="placeholder">Placeholder. Clip to be recorded.</span></figure>
+      <figure class="clip glass" style="margin:0"><div class="poster"><div class="mini"></div><div class="play"></div><span class="len">0:15</span></div>
+        <h3>A request, start to finish</h3><p>Ask for something small and watch the steps it takes.</p><span class="placeholder">Placeholder. Clip to be recorded.</span></figure>
+    </div>
+  </section>
+
+  <section id="try">
+    <h2>Try it</h2>
+    <p class="lede">This is the real character and panel, running in your browser. Pick a color and a mood.</p>
+    <div class="demo glass">
+      <div class="screen">
+        <div class="panel">
+          <div class="head"><span class="pill" id="p" data-mood="idle" data-color="sky" aria-hidden="true"><i></i><i></i><i></i></span><div><b>Steward</b><br><span id="state">Idle</span></div></div>
+          <div class="bubble" id="say">Hi. Nothing is waiting on you.</div>
+        </div>
+      </div>
+      <aside>
+        <div><h3>Mood</h3><div class="opts" id="moods" role="group" aria-label="Mood"></div></div>
+        <div><h3>Color</h3><div class="opts" id="colors" role="group" aria-label="Color"></div></div>
+      </aside>
+    </div>
+    <p class="fine">Nothing here is saved or sent anywhere.</p>
+  </section>
+
+  <section id="built">
+    <h2>How it's built</h2>
+    <p class="lede">One person, working with several AI chats that each have one job. Nothing counts as done until it passes its checks and the checks on GitHub turn green.</p>
+    <div class="flow">
+      <div class="step glass"><b>An idea</b><span>Written down as a short brief.</span></div>
+      <div class="step glass"><b>A design</b><span>Planned and shown before any code.</span></div>
+      <div class="step glass"><b>One phase</b><span>Built in small commits.</span></div>
+      <div class="step glass"><b>Checks</b><span>Lint, types, tests, and a smoke run of the app.</span></div>
+      <div class="step glass ok"><b>CI is green</b><span>Run again on GitHub for every phase.</span></div>
+      <div class="step glass"><b>My OK</b><span>Only then does it merge.</span></div>
+    </div>
+    <div class="facts">
+      <div class="fact glass"><b>Four chats, four roles</b><span>A front door, a designer, a builder and a researcher. They hand work to each other in written briefs.</span></div>
+      <div class="fact glass"><b>One phase at a time</b><span>Each phase is small enough to review on its own.</span></div>
+      <div class="fact glass"><b>More than 280 tests</b><span>Plus a smoke run that launches the real app.</span></div>
+    </div>
+    <p class="fine">The code is private.</p>
+  </section>
+</div>
+</main>
+<footer><div class="wrap">Steward is a personal project made for one person. It is not for sale and has no download or waitlist.</div></footer>
+
+<script>
+// The mock demo: mood and color switch the character. The real one is built from design/showcase.
+const MOODS = [['idle','Idle','Hi. Nothing is waiting on you.'],['thinking','Thinking','Reading the project files...'],['talking','Talking','Done. Three files changed.'],['needs','Needs you','Run npm test in the project?'],['sleepy','Sleepy','It is late. I am keeping quiet.']];
+const COLORS = ['sky','silver','lilac','mint','peach','graphite'];
+const p = document.getElementById('p'), hero = document.querySelector('.hero .pill.big');
+const say = document.getElementById('say'), state = document.getElementById('state');
+function group(el, items, on) {
+  el.innerHTML = items.map(([k,l],i) => `<button type="button" data-k="${k}" aria-pressed="${i===0}">${l}</button>`).join('');
+  el.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); on(b.dataset.k); };
+}
+group(document.getElementById('moods'), MOODS.map(m => [m[0], m[1]]), (k) => { const m = MOODS.find(x => x[0] === k); p.dataset.mood = hero.dataset.mood = k; say.textContent = m[2]; state.textContent = m[1]; });
+group(document.getElementById('colors'), COLORS.map(c => [c, c[0].toUpperCase() + c.slice(1)]), (k) => { p.dataset.color = hero.dataset.color = k; });
+</script>
+</body>
+</html>
