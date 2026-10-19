@@ -1,6 +1,8 @@
 # Notch dock, Phase 3: Steward comes alive in the notch
 
-Status: designed
+Status: ready
+
+Set by the front door, 2026-10-19: the user typed the go for Phase 3a into Main building directly. 3b, 3c and 3d each wait for their own go.
 
 ## Ask (front door)
 The user's open item, in their words: "Phase 3 (hover grows the black, the panel drops out of the notch, alerts below the menu bar, drop images onto the notch)". They picked it as the next design job on 2026-10-15.
