@@ -278,4 +278,5 @@ Status stays `ready`: "Hide from screen sharing" is not built.
 - **Checks:** lint, typecheck and 298 tests pass (5 runs by Main building, 1 by the front door). The last 2 smoke runs pass. Two smoke timing checks were changed to wait properly after failing while the Mac was in use.
 - **Not checked:** real app switches in the finished app (smoke turns the real listener off), the "Add app…" picker, a second display, and Keynote's slideshow.
 - **Still open:** "Hide from screen sharing" is not built. It waits on the user's share test with Main building's protected test window.
-- **Waiting on the user:** try step aside by hand (full screen, an app on the list), and answer Main building: did the protected test window stay hidden while sharing?
+- **Screen-share result (2026-10-19):** in the user's share test on macOS 27.0.1, the protected test window still showed up in the share. So "Hide from screen sharing" is left out, and its saved setting stays unused and hidden. Main building recorded this in `docs/reports/step-aside.md` (`d72ba41`, pushed to PR #21). This closes the "content protection might not stop newer capture tools" risk in this brief: it does not work here. It also means the earlier recording warning no longer applies, since nothing hides Steward from recordings.
+- **Waiting on the user:** try step aside by hand (full screen, an app on the list).

@@ -6,7 +6,6 @@
       "title": "Waiting on you",
       "items": [
         { "name": "Try step aside by hand", "line": "Go full screen, and open an app on your list (Keynote, Zoom, FaceTime): Steward should step aside.", "date": "2026-10-19" },
-        { "name": "Answer Main building", "line": "Did the protected test window stay hidden while you shared your screen? This decides the screen-share option.", "date": "2026-10-19" },
         { "name": "Notch dock, Phase 3", "line": "Designed, in 4 small steps (3a to 3d). Read docs/briefs/notch-dock-phase-3.md, then say go for 3a.", "date": "2026-10-15" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -17,7 +16,8 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Quiet mode, Phase 3", "line": "Step aside built (draft PR #21, claude/quiet-mode-phase-3), CI running. The screen-share option waits on your test.", "date": "2026-10-19" },
+        { "name": "Quiet mode, Phase 3", "line": "Step aside built (draft PR #21, claude/quiet-mode-phase-3), CI running. The screen-share option was left out: your test showed the protected window in the share.", "date": "2026-10-19" },
+        { "name": "Steward showcase site", "line": "Site building (a new chat) is on Phase 1: the page shell and the hero, in site/. Each later phase waits for your go, typed into that chat.", "date": "2026-10-19" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.", "date": "2026-10-15" }
       ]
     },
@@ -25,7 +25,6 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Steward showcase site", "line": "Designed as a product-launch page (dark, scroll scenes, full-width clips you record, a live demo, a spec sheet). Built after quiet mode Phase 3. Brief docs/briefs/steward-site.md, page design/site.html. Waits for your go.", "date": "2026-10-19" },
         { "name": "Notch dock, Phase 3", "line": "Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.", "date": "2026-10-15" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]

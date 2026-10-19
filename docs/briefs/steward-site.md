@@ -67,7 +67,7 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 - **How to record:** the built-in ⌘⇧5 "Record Selected Portion". Record a part of the screen, not the whole thing.
 - **Before recording:**
   - Use a demo project and a clean desktop: no personal tabs, bookmarks, notifications, other apps' windows or private project names. The menu bar shows personal items, so crop it out where possible.
-  - **Quiet mode Phase 3 will hide Steward from screen recordings by default** (its "Hide from screen sharing" option). Record before Phase 3 lands, or switch that option off first, or the clips will show no Steward at all.
+  - Quiet mode's "Hide from screen sharing" option was left out (it did not hide the window in the user's test), so nothing hides Steward from the recording. The "In full-screen apps" and "Hide in these apps" options can still step Steward aside, so switch them off or stay out of full screen while recording.
   - If the notch clip is recorded before notch Phase 3, it shows only the hover and the eyes.
 
 ### The live demo ("Try it")
