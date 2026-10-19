@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { NOTCH_WINDOW, underNotch } from '../shared/notch'
+import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, underNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
@@ -147,6 +147,8 @@ let lastTuck: { ms: number; why: string } | null = null
 let screenAsleep = false
 /** The smoke check feeds the rules the cursor itself, so the real one (wherever it is parked) is left out. */
 const drivenBySmoke = Boolean(SMOKE_OUT)
+/** The cursor the smoke check shows the notch window instead (null: far away). */
+let smokeNotchCursor: Electron.Point | null = null
 /** Alerts that didn't peek out, newest first: the menu bar's dot now, and cards when the panel next opens. */
 let heldAlerts: AlertView[] = []
 /** Stepping aside: an app fills Steward's screen, or an app on the list is in front (see step-aside.ts). */
@@ -1816,6 +1818,55 @@ async function checkNotch(out: string): Promise<void> {
       console.log('smoke: notch: it steps aside for a full-screen app on its screen, and comes back')
     }
 
+    // Always visible, the cursor on the black grows it a little: the chin taller, or the wings wider. The real watcher
+    // is shown a made-up cursor. With Reduce Motion on it doesn't grow.
+    const page = notch.contents()!
+    const reducedNow = Boolean(await page.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`))
+    const grownAt: [number, number] = notchStyle === 'chin' ? [layout.cx, layout.height + NOTCH_LIP + NOTCH_HOVER_LIP / 2] : [layout.cx - (layout.width / 2 + NOTCH_WING + NOTCH_HOVER_WINGS / 4), layout.height / 2]
+    const grown = async () => solid((await notch.capture())!, ...grownAt)
+    if (await grown()) throw new Error(`the notch (${notchStyle}) is grown before the cursor is on it`)
+    const onBlack = { x: notchGeo.x + notchGeo.width / 2, y: notchGeo.y + 10 }
+    const hoverLook = await motionLook(page, MOVING_BLACK[notchStyle], '.nt')
+    if (reducedNow) {
+      smokeNotchCursor = onBlack
+      await sleep(600)
+    } else smoothly(`the notch growing on hover (${notchStyle})`, await watchMotion(page, hoverLook, 700, () => void (smokeNotchCursor = onBlack)))
+    if (!notch.state().hover) throw new Error(`the notch (${notchStyle}) did not see the cursor on it`)
+    if ((await grown()) === reducedNow) throw new Error(reducedNow ? 'the notch grew on hover with Reduce Motion on' : `the notch (${notchStyle}) did not grow with the cursor on it`)
+    await fs.writeFile(file.replace(/\.png$/, '-hover.png'), (await notch.capture())!.toPNG())
+    smokeNotchCursor = null
+    await sleep(900)
+    if (notch.state().hover || (await grown())) throw new Error(`the notch (${notchStyle}) did not shrink back once the cursor left`)
+    console.log(`smoke: notch ${notchStyle}: the cursor on it ${reducedNow ? 'is seen (Reduce Motion: no growth)' : 'grows it a little'}, and leaving shrinks it back`)
+
+    // A click opens the panel under the notch, on the notch's screen, its top just under the menu bar, coming down from
+    // it. Closing it brings Steward back to the notch.
+    if (notchStyle === 'chin') {
+      // Kept open for the check: an open panel that loses focus folds away, and someone may be using another app.
+      const keptOpen = settings.keepPanelOpen()
+      await settings.update({ keepPanelOpen: true })
+      setDock('expanded')
+      const area = notchDisplay().workArea
+      const want = underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
+      const at = win!.getBounds()
+      if (at.x !== want.x || at.y !== area.y || at.width !== want.width || at.height !== want.height) throw new Error(`the panel opened at ${JSON.stringify(at)}, not under the notch (${JSON.stringify(want)})`)
+      if (notch.visible) throw new Error('the notch window still shows with the panel open')
+      let entrance = ''
+      for (let tries = 0; tries < 12 && !entrance; tries++) {
+        await sleep(50)
+        entrance = String(await win!.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-notch') ? getComputedStyle(document.querySelector('.panel') ?? document.body).animationName : 'no notch'`))
+        if (entrance === 'none') entrance = ''
+      }
+      if (entrance !== (reducedNow ? 'fadein' : 'panel-drop')) throw new Error(`the panel from the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the drop from the notch'}`)
+      await sleep(500)
+      await fs.writeFile(out.replace(/\.png$/, '-notch-panel.png'), (await win!.webContents.capturePage()).toPNG())
+      setDock('collapsed')
+      await settings.update({ keepPanelOpen: keptOpen })
+      await sleep(400)
+      if (!notch.visible || win!.isVisible()) throw new Error('closing the panel did not bring Steward back to the notch')
+      console.log(`smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back`)
+    }
+
     // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
     await settings.update({ steward: { presence: 'quiet' } })
     presenceChanged()
@@ -2018,7 +2069,7 @@ app.whenReady().then(async () => {
     load: (w) => loadPage(w, 'notch.html'),
     style: () => settings.steward().notchStyle,
     onCursor: lookAtNotch,
-    cursor: () => (drivenBySmoke ? null : screen.getCursorScreenPoint()),
+    cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
     // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
     hoverable: () => !quiet(),
   })
