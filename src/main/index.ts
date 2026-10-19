@@ -565,6 +565,12 @@ function noteFront(front: FrontApp): void {
   applyStepAside()
 }
 
+/** Which screens show a full-screen app now. */
+function noteFullScreen(on: number[]): void {
+  asideFullScreenOn = on
+  applyStepAside()
+}
+
 /** Ask macOS which app is in front and which screens show a full-screen app: one question at a time, again if something changed meanwhile. */
 async function lookAside(): Promise<void> {
   if (asideLooking) {
@@ -1700,6 +1706,50 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   replaceForNotch()
   await sleep(500)
   console.log(`smoke: on both edges the tab and the nudge stop square at the screen edge, ${edgeOverhang()} points of window hanging past it`)
+
+  // Step aside, fed what macOS's notifications would say. The real question to macOS is asked once, to see it answers.
+  const asked = await lookNow()
+  need(asked !== null && asked.front.pid > 0, 'macOS did not say which app is in front')
+  console.log(`smoke: step aside: macOS says ${asked?.front.app ?? 'an app without a bundle id'} is in front, full screen on ${JSON.stringify(asked?.fullScreenOn)}`)
+  await settings.update({ steward: { hideInFullScreen: true, hideInApps: [{ id: 'com.apple.iWork.Keynote', name: 'Keynote' }] } })
+  syncStepAside()
+  await sleep(300)
+  need(w.isVisible() && !steppedAside, 'the tab is not out before anything asked it to step aside')
+  noteFront({ app: 'com.apple.iWork.Keynote', pid: 90_001 })
+  await sleep(300)
+  need(steppedAside && !w.isVisible(), 'the tab did not step aside with an app on the list in front')
+  raise({ key: 'approval:smoke-aside', level: 'urgent', title: 'A session needs you' })
+  await sleep(300)
+  need(dock === 'collapsed' && !w.isVisible() && asideAlerts.length === 1, 'an alert peeked out while stepping aside, or was lost')
+  // Steward itself coming forward (its panel, opened by the hotkey) changes nothing; the panel still opens.
+  noteFront({ app: 'com.github.Electron', pid: process.pid })
+  setDock('expanded')
+  await sleep(400)
+  need(steppedAside && w.isVisible(), 'the panel did not open from the hotkey while stepping aside')
+  setDock('collapsed')
+  await sleep(400)
+  need(steppedAside && !w.isVisible(), 'the tab came back when the panel closed, while stepping aside')
+  raise({ key: 'approval:smoke-aside-2', level: 'urgent', title: 'Another session needs you' })
+  noteFront({ app: 'com.apple.finder', pid: 90_002 })
+  await sleep(500)
+  need(!steppedAside && dock === 'nudge' && w.isVisible() && asideAlerts.length === 0, 'the alert that waited did not peek out once Steward was back')
+  setDock('collapsed')
+  await sleep(400)
+  // A full-screen app on Steward's screen, and on another one.
+  noteFullScreen([stewardScreen() + 1])
+  await sleep(300)
+  need(!steppedAside && w.isVisible(), 'the tab stepped aside for a full-screen app on another screen')
+  noteFullScreen([stewardScreen()])
+  await sleep(300)
+  need(steppedAside && !w.isVisible(), 'the tab did not step aside for a full-screen app on its screen')
+  await settings.update({ steward: { hideInFullScreen: false } })
+  syncStepAside()
+  await sleep(300)
+  need(!steppedAside && w.isVisible(), 'the tab did not come back when "In full-screen apps" was switched off')
+  noteFullScreen([])
+  await settings.update({ steward: { hideInFullScreen: true, hideInApps: [] } })
+  syncStepAside()
+  console.log('smoke: step aside: an app on the list in front or a full-screen app on its screen hides the tab, alerts wait and peek out once it is back, and the hotkey still opens the panel')
 }
 
 /**
@@ -1746,6 +1796,14 @@ async function checkNotch(out: string): Promise<void> {
       if (await dim()) throw new Error('the cursor coming near the notch did not wake its eyes')
       notch.post('notch:cursor', null)
       console.log("smoke: notch: after 20 s at rest the eyes dim, and the cursor coming near wakes them")
+      // The notch steps aside too, for a full-screen app on its screen, and comes back after.
+      noteFullScreen([stewardScreen()])
+      await sleep(300)
+      if (notch.visible || !steppedAside) throw new Error('the notch did not step aside for a full-screen app on its screen')
+      noteFullScreen([])
+      await sleep(300)
+      if (!notch.visible) throw new Error('the notch did not come back once the full-screen app was gone')
+      console.log('smoke: notch: it steps aside for a full-screen app on its screen, and comes back')
     }
 
     // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
@@ -1837,7 +1895,16 @@ async function captureSettings(out: string): Promise<void> {
   const presenceShot = await w.webContents.capturePage()
   if (presenceShot.isEmpty()) throw new Error('settings window rendered empty')
   await fs.writeFile(out.replace(/\.png$/, '-settings-presence.png'), presenceShot.toPNG())
-  await settings.update({ steward: { presence: 'always' } })
+  // Step aside, below it, with an app on its list.
+  await settings.update({ steward: { hideInApps: [{ id: 'com.apple.iWork.Keynote', name: 'Keynote' }] } })
+  await sleep(300)
+  const aside = await w.webContents.executeJavaScript(
+    `(() => { const h = [...document.querySelectorAll('.set-group h2')].find((x) => x.textContent === 'Step aside'); h?.scrollIntoView({ block: 'start' }); return Boolean(h) })()`,
+  )
+  if (!aside) throw new Error('Settings → Steward has no Step aside group')
+  await sleep(400)
+  await fs.writeFile(out.replace(/\.png$/, '-settings-step-aside.png'), (await w.webContents.capturePage()).toPNG())
+  await settings.update({ steward: { presence: 'always', hideInApps: [] } })
   presenceChanged()
   // Closing it hands focus back to the panel, so clicking away tucks it again.
   w.close()
