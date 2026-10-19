@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
-import { cleanFrost, cleanName, DEFAULT_STEWARD, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
-import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StewardPrefs } from '../shared/types'
+import { cleanFrost, cleanName, DEFAULT_STEWARD, isBundleId, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
+import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StepAsideApp, StewardPrefs } from '../shared/types'
+import { MAX_APPS, withApp } from './step-aside'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
@@ -62,7 +63,10 @@ const STEWARD_CHOICES = {
  * What a settings file from before quiet mode gets for the options it doesn't have: today's behavior, not the fresh
  * install's (DEFAULT_STEWARD is quiet, with the eyes dimming), so the settings someone already has stay exactly as they are.
  */
-const OLD_FILE_STEWARD = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false } as const satisfies Pick<StewardPrefs, 'presence' | 'alertPeek' | 'dimWhenIdle' | 'hideFromScreenShare'>
+const OLD_FILE_STEWARD = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false, hideInFullScreen: false } as const satisfies Pick<
+  StewardPrefs,
+  'presence' | 'alertPeek' | 'dimWhenIdle' | 'hideFromScreenShare' | 'hideInFullScreen'
+>
 
 const pick = <T extends string>(value: unknown, choices: readonly T[], fallback: T): T => ((choices as readonly unknown[]).includes(value) ? (value as T) : fallback)
 
@@ -91,7 +95,17 @@ function migrateSteward(raw: unknown): StewardPrefs {
     alertPeek: pick(r.alertPeek, STEWARD_CHOICES.alertPeek, OLD_FILE_STEWARD.alertPeek),
     dimWhenIdle: typeof r.dimWhenIdle === 'boolean' ? r.dimWhenIdle : OLD_FILE_STEWARD.dimWhenIdle,
     hideFromScreenShare: typeof r.hideFromScreenShare === 'boolean' ? r.hideFromScreenShare : OLD_FILE_STEWARD.hideFromScreenShare,
+    hideInFullScreen: typeof r.hideInFullScreen === 'boolean' ? r.hideInFullScreen : OLD_FILE_STEWARD.hideInFullScreen,
+    hideInApps: cleanApps(r.hideInApps),
   }
+}
+
+/** Step aside's list from a file: apps with a real bundle id and a name, each once, at most MAX_APPS. */
+function cleanApps(raw: unknown): StepAsideApp[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((a): a is StepAsideApp => !!a && typeof a === 'object' && isBundleId(a.id) && typeof a.name === 'string')
+    .reduce((list: StepAsideApp[], a) => withApp(list, { id: a.id, name: a.name.slice(0, 80) }), [])
 }
 
 /**
@@ -170,6 +184,11 @@ const Patch = z.strictObject({
       alertPeek: z.enum(STEWARD_CHOICES.alertPeek),
       dimWhenIdle: z.boolean(),
       hideFromScreenShare: z.boolean(),
+      hideInFullScreen: z.boolean(),
+      hideInApps: z
+        .array(z.object({ id: z.string().refine(isBundleId), name: z.string().min(1).max(80) }))
+        .max(MAX_APPS)
+        .refine((list) => new Set(list.map((a) => a.id)).size === list.length),
     })
     .partial()
     .optional(),
