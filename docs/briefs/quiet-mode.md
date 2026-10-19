@@ -267,5 +267,15 @@ Status stays `ready`: Phase 3 is not built. The user typed the Phase 2.1 go into
 - The scrollbar feel is still untried.
 - **Next:** Phase 3 (step aside). It starts with the investigation report and waits for the user's go, which they type into Main building.
 
-### Phase 3
-Not started.
+### Phase 3: step aside, built except screen-share hiding (recorded 2026-10-19, from the front door)
+Status stays `ready`: "Hide from screen sharing" is not built.
+- **Branch / PR:** `claude/quiet-mode-phase-3`, commits `bec535e` (the investigation report), `d5fd12f`, `50db777`, `93da400`, `a4c939e`, `def1063`. Draft PR #21, CI running when recorded.
+- **The user's pick:** approach A from the report, typed into Main building directly: Electron's app-switch and Space-change notifications, plus one query per Space change through `CGSCopyManagedDisplaySpaces` (undocumented, read-only).
+- **Built:** Settings → Steward → Step aside.
+  - "In full-screen apps": on for new installs, off for existing settings files.
+  - An app list with "Add app…" and one-click Keynote, Zoom and FaceTime.
+  - While stepped aside, the tab, alert cards, the notch and an open panel hide. Alerts wait with the menu bar dot. ⌥ Space and the menu bar icon still open the panel. A full-screen app on another display does not hide Steward.
+- **Checks:** lint, typecheck and 298 tests pass (5 runs by Main building, 1 by the front door). The last 2 smoke runs pass. Two smoke timing checks were changed to wait properly after failing while the Mac was in use.
+- **Not checked:** real app switches in the finished app (smoke turns the real listener off), the "Add app…" picker, a second display, and Keynote's slideshow.
+- **Still open:** "Hide from screen sharing" is not built. It waits on the user's share test with Main building's protected test window.
+- **Waiting on the user:** try step aside by hand (full screen, an app on the list), and answer Main building: did the protected test window stay hidden while sharing?
