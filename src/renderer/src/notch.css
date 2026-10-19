@@ -40,7 +40,16 @@
   width: 0;
   height: 0;
   opacity: 0;
-  transition: opacity 0.18s linear;
+  transition:
+    opacity 0.18s linear,
+    transform 0.38s cubic-bezier(0.34, 1.36, 0.5, 1);
+}
+
+/* Hovering, the black grows a little, quicker and softer than a change of mood (design/notch.html: 220 ms, out). */
+.nt.quick .bp,
+.nt.quick .nt-eyes {
+  transition-duration: 0.22s;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .nt-eyes.on {
   opacity: 1;

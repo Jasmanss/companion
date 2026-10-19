@@ -2004,7 +2004,15 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') app.dock?.hide()
 
   registerIpc()
-  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle, onCursor: lookAtNotch, cursor: () => (drivenBySmoke ? null : screen.getCursorScreenPoint()) })
+  notch = new NotchDock({
+    preload: path.join(__dirname, '../preload/index.js'),
+    load: (w) => loadPage(w, 'notch.html'),
+    style: () => settings.steward().notchStyle,
+    onCursor: lookAtNotch,
+    cursor: () => (drivenBySmoke ? null : screen.getCursorScreenPoint()),
+    // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
+    hoverable: () => !quiet(),
+  })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.

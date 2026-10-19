@@ -51,6 +51,8 @@ export interface NotchState {
   glint: PillGlint
   /** Asleep (Only when needed, at rest): just the notch's own black, no eyes. */
   awake: boolean
+  /** The cursor is on the black (Always visible): it grows a little. */
+  hover?: boolean
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
