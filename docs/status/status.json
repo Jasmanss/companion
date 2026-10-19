@@ -5,8 +5,9 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Try step aside by hand", "line": "Go full screen, and open an app on your list (Keynote, Zoom, FaceTime): Steward should step aside.", "date": "2026-10-19" },
-        { "name": "Notch dock, Phase 3", "line": "Designed, in 4 small steps (3a to 3d). Read docs/briefs/notch-dock-phase-3.md, then say go for 3a.", "date": "2026-10-15" },
+        { "name": "Try notch Phase 3a by hand", "line": "Rest the cursor near the notch (the black grows), click it (the panel opens under the notch).", "date": "2026-10-19" },
+        { "name": "Look at the site hero", "line": "Open the built page from site Phase 1 and scroll through the hero, on desktop and on your phone.", "date": "2026-10-19" },
+        { "name": "OK the merges of #22, #23 and #24", "line": "Docs, site Phase 1 and notch Phase 3a. Merge each once its CI is green.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
         { "name": "Overnight Watch account", "line": "Set up the phone/text account. Registration takes days.", "date": "2026-10-15", "tag": "unconfirmed: only in research notes" }
@@ -16,16 +17,17 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Quiet mode, Phase 3", "line": "Step aside built (draft PR #21, claude/quiet-mode-phase-3), CI running. The screen-share option was left out: your test showed the protected window in the share.", "date": "2026-10-19" },
-        { "name": "Steward showcase site", "line": "Site building (a new chat) is on Phase 1: the page shell and the hero, in site/. Each later phase waits for your go, typed into that chat.", "date": "2026-10-19" },
-        { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.", "date": "2026-10-15" }
+        { "name": "Notch dock, Phase 3a", "line": "Built: hover grows the black, the panel opens from the notch (draft PR #24, claude/notch-phase-3a), CI running. Try it by hand first.", "date": "2026-10-19" },
+        { "name": "Steward showcase site, Phase 1", "line": "Built: the page shell and the hero (draft PR #23, claude/site-phase-1), CI running. Phase 2, the five scenes, waits for your go in Site building.", "date": "2026-10-19" },
+        { "name": "Docs PR #22", "line": "Site building added to CLAUDE.md. Waits for your merge OK.", "date": "2026-10-19" }
       ]
     },
     {
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Notch dock, Phase 3", "line": "Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.", "date": "2026-10-15" },
+        { "name": "Site, Phase 2: the five scenes", "line": "Edge, moods, quiet, notch and request. Waits for your go, typed into Site building.", "date": "2026-10-19" },
+        { "name": "Notch dock, Phase 3b to 3d", "line": "Alerts below the menu bar, drop images, and the optional morph. Waits for you to try 3a.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
     },
@@ -63,6 +65,7 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Quiet mode, Phase 3", "line": "Merged into main (PR #21, 88e8527): step aside in full-screen apps and listed apps. Hide from screen sharing was left out, because your test showed the window in the share. All planned quiet mode parts are built.", "date": "2026-10-19" },
         { "name": "Quiet mode, Phase 2.1", "line": "Merged into main (PR #20, d67a4f1): the tab comes to you. CI on main was still running when recorded. Scrollbar feel not tried yet.", "date": "2026-10-19" },
         { "name": "Chat flow and this status page", "line": "Docs PR #19 merged into main (b81df3a): the chat flow, standing rules and a PR template. The status page is live.", "date": "2026-10-19" },
         { "name": "Quiet mode, Phase 2", "line": "Merged into main (PR #18, 48ce3c5), CI green: tab drag to any height, Dim when idle, first-launch peek, the left-gap fix and the slide-end fix.", "date": "2026-10-16" },

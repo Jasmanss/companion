@@ -94,6 +94,14 @@ All four already exist as animations on `design/notch.html` (the States section:
 3a, then 3b, then 3c (its spike first), then 3d only if the user wants it. The user's go between phases; one phase per build chat, each as a draft PR into main with CI green before it counts as done.
 
 ## Result (Main building)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### 3a: hover and the panel from the notch (recorded 2026-10-19, from the front door)
+Status stays `ready`: 3b, 3c and 3d are not built. The user typed the 3a go into Main building.
+- **Branch / PR:** `claude/notch-phase-3a` (branched from main after PR #21), commits `2d97250`, `623988a`, `282e699`, `c9ae1b0`. Draft PR #24, CI running when recorded.
+- **Hover:** in "Always visible", the black grows (chin 4 pt taller, wings 8 pt wider). It takes 220 ms, starts after 80 ms on it, and ends 250 ms after the cursor leaves. In "Only when needed", waking is the grow. With Reduce Motion on there is no grow.
+- **Panel from the notch:** a click opens it centered under the notch, on the notch's own screen. It grows down from its top center, or fades in with Reduce Motion on. Closing returns Steward to the notch.
+- **Checks:** lint, typecheck and 305 tests (5 runs by Main building, 1 by the front door), and 2 smoke runs.
+- **Not checked:** idle CPU in the notch (the Mac went to sleep mid-run), full screen, a second display, Reduce Motion by hand, and the user's hand feel.
+- **Next decision:** 3d (the black growing into the panel), after the user tries 3a.
+- **Note:** the front door set this brief's Status to `ready` (`d173a29`) on the user's go.
+- **Waiting on the user:** try 3a by hand, then OK the merge once CI is green.

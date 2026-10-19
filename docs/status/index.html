@@ -116,15 +116,19 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </div>
   </header>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">5</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">6</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Try step aside by hand</span><time datetime="2026-10-19">Oct 19</time></div>
-        <p>Go full screen, and open an app on your list (Keynote, Zoom, FaceTime): Steward should step aside.</p>
+        <div class="row"><span class="name">Try notch Phase 3a by hand</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Rest the cursor near the notch (the black grows), click it (the panel opens under the notch).</p>
       </li>
       <li>
-        <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Designed, in 4 small steps (3a to 3d). Read docs/briefs/notch-dock-phase-3.md, then say go for 3a.</p>
+        <div class="row"><span class="name">Look at the site hero</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Open the built page from site Phase 1 and scroll through the hero, on desktop and on your phone.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">OK the merges of #22, #23 and #24</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Docs, site Phase 1 and notch Phase 3a. Merge each once its CI is green.</p>
       </li>
       <li>
         <div class="row"><span class="name">Idea inbox</span><time datetime="2026-10-15">Oct 15</time></div>
@@ -144,25 +148,29 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <h2><span class="dot"></span>In progress <span class="count">3</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Quiet mode, Phase 3</span><time datetime="2026-10-19">Oct 19</time></div>
-        <p>Step aside built (draft PR #21, claude/quiet-mode-phase-3), CI running. The screen-share option was left out: your test showed the protected window in the share.</p>
+        <div class="row"><span class="name">Notch dock, Phase 3a</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Built: hover grows the black, the panel opens from the notch (draft PR #24, claude/notch-phase-3a), CI running. Try it by hand first.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Steward showcase site</span><time datetime="2026-10-19">Oct 19</time></div>
-        <p>Site building (a new chat) is on Phase 1: the page shell and the hero, in site/. Each later phase waits for your go, typed into that chat.</p>
+        <div class="row"><span class="name">Steward showcase site, Phase 1</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Built: the page shell and the hero (draft PR #23, claude/site-phase-1), CI running. Phase 2, the five scenes, waits for your go in Site building.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Notch dock</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.</p>
+        <div class="row"><span class="name">Docs PR #22</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Site building added to CLAUDE.md. Waits for your merge OK.</p>
       </li>
     </ul>
   </section>
   <section id="next" class="card next">
-    <h2><span class="dot"></span>Up next <span class="count">2</span></h2>
+    <h2><span class="dot"></span>Up next <span class="count">3</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Notch dock, Phase 3</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.</p>
+        <div class="row"><span class="name">Site, Phase 2: the five scenes</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Edge, moods, quiet, notch and request. Waits for your go, typed into Site building.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch dock, Phase 3b to 3d</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Alerts below the menu bar, drop images, and the optional morph. Waits for you to try 3a.</p>
       </li>
       <li>
         <div class="row"><span class="name">Idea inbox and Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
@@ -272,8 +280,12 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">16</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">17</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Quiet mode, Phase 3</span><time datetime="2026-10-19">Oct 19</time></div>
+        <p>Merged into main (PR #21, 88e8527): step aside in full-screen apps and listed apps. Hide from screen sharing was left out, because your test showed the window in the share. All planned quiet mode parts are built.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Quiet mode, Phase 2.1</span><time datetime="2026-10-19">Oct 19</time></div>
         <p>Merged into main (PR #20, d67a4f1): the tab comes to you. CI on main was still running when recorded. Scrollbar feel not tried yet.</p>

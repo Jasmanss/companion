@@ -126,6 +126,16 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 - **Before live:** open the protected preview on the user's phone, read the whole page once as a stranger would, and check no string from the check list appears.
 
 ## Result (Main building)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Site Phase 1: the page shell and the hero (recorded 2026-10-19, from the front door)
+Built by Site building, a separate long-lived chat. Status stays `ready`: phases 2 to 6 are not built.
+- **Branch / PR:** `claude/site-phase-1`, commits `fe55d80`, `df664a3`, `91dc6cd`, `e000975`. Draft PR #23, CI running when recorded.
+- **Built:** `site/index.html` (one 11 KB file, no images, fonts or URLs) and `site/build.mjs`, which copies into `site/dist/`.
+  - The hero: a big "Steward" with a mock screen that rises while the tab slides out. On a phone the screen rises to the middle of the view.
+  - The closing screen with the "personal project" line.
+  - Motion: CSS inside `@supports` in Chrome, the script fallback elsewhere, and a reduced-motion layout.
+  - The top bar has no links yet. Later phases add them with their sections.
+- **Checks:** lint, typecheck and 285 tests, plus headless Chrome at 60 fps (desktop and phone, both scroll paths, and reduced motion) and a private-string scan of the built page.
+- **Not checked:** a real phone, Safari and Firefox.
+- **Next:** phase 2 (the five scenes) waits for the user's go, typed into Site building.
+- **Waiting on the user:** look at the hero, then OK the merge once CI is green.
