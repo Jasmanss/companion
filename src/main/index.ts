@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { NOTCH_WINDOW } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
-import { placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
+import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView } from '../shared/types'
 import { Agent } from './agent'
@@ -37,8 +37,8 @@ import { findNotch, probeScreens } from './notch'
 import { NotchDock } from './notch-window'
 import {
   asleep,
-  EDGE_DWELL_MS,
-  inEdgeZone,
+  EDGE_FAR_DWELL_MS,
+  freshPush,
   inRect,
   MAX_HELD,
   menuBarTitle,
@@ -47,12 +47,14 @@ import {
   firstPeekOver,
   presenceNote,
   presenceNoteParts,
+  pushAlongEdge,
   showFirstPeek,
   screenBeside,
   splitAlerts,
   stepPresence,
   TUCK_MS,
   WATCH_MS,
+  type EdgePush,
   type PresenceState,
 } from './presence'
 import { SessionTracker } from './sessions'
@@ -147,11 +149,24 @@ let heldAlerts: AlertView[] = []
 
 /** Where the tab sits on each display's edge (dragged there; see shared/tab-place), by display id. */
 let tabPlaces: Record<string, number> = {}
+/**
+ * The tab comes to you: a push anywhere along the edge brought it out here, at the cursor's height. Only while it's out
+ * (never saved); once it has tucked away and its window has gone, it's back at its saved spot.
+ */
+let revealTop: number | null = null
+/** The push along the edge being timed, and whether one counts yet (see pushAlongEdge). */
+let edgePush: EdgePush = freshPush()
 
-/** The tab's top on the main screen: where it was dragged to, or the middle. */
-function tabTop(): number {
+/** The tab's saved top on the main screen: where it was dragged to, or the middle. */
+function savedTabTop(): number {
   const display = screen.getPrimaryDisplay()
   return topFor(display.workArea, TAB_SIZES[settings.steward().size].tab.height, tabPlaces[String(display.id)])
+}
+
+/** The tab's top now: where a push brought it out, while it's there, or its saved spot. */
+function tabTop(): number {
+  if (revealTop === null) return savedTabTop()
+  return clampTop(screen.getPrimaryDisplay().workArea, TAB_SIZES[settings.steward().size].tab.height, revealTop)
 }
 
 /**
@@ -162,14 +177,17 @@ function tabTop(): number {
  */
 const EDGE_OVERHANG = 16
 
+/** The Dock sits on the edge Steward is on: the work area stops short of the screen's edge there. */
+function dockOnEdge(): boolean {
+  const { bounds, workArea } = screen.getPrimaryDisplay()
+  return settings.steward().edge === 'right' ? workArea.x + workArea.width !== bounds.x + bounds.width : workArea.x !== bounds.x
+}
+
 /** How far the tab and the nudge hang past the edge: only where the screen really ends (no Dock there, no screen beside). */
 function edgeOverhang(): number {
   const display = screen.getPrimaryDisplay()
-  const { bounds, workArea } = display
-  const { edge } = settings.steward()
-  const atScreenEdge = edge === 'right' ? workArea.x + workArea.width === bounds.x + bounds.width : workArea.x === bounds.x
   const others = screen.getAllDisplays().filter((d) => d.id !== display.id).map((d) => d.bounds)
-  return atScreenEdge && !screenBeside(bounds, others, edge) ? EDGE_OVERHANG : 0
+  return !dockOnEdge() && !screenBeside(display.bounds, others, settings.steward().edge) ? EDGE_OVERHANG : 0
 }
 
 /** What the tab's page was last told about the overhang, so it leaves that much empty on the edge side. */
@@ -217,8 +235,12 @@ function dragTab(phase: unknown, dy: unknown): void {
   if (dock !== 'collapsed' || inNotch()) return
   const display = screen.getPrimaryDisplay()
   const height = TAB_SIZES[settings.steward().size].tab.height
-  if (phase === 'start') tabDrag = new TabDrag(win.getBounds().y, display.workArea, height)
-  else if (phase === 'move' && tabDrag && typeof dy === 'number' && Number.isFinite(dy)) {
+  if (phase === 'start') {
+    // From where the tab is now, also when a push brought it out somewhere else: that spot becomes the saved one.
+    tabDrag = new TabDrag(win.getBounds().y, display.workArea, height)
+    tabPlaces = { ...tabPlaces, [String(display.id)]: placeFor(display.workArea, height, win.getBounds().y) }
+    revealTop = null
+  } else if (phase === 'move' && tabDrag && typeof dy === 'number' && Number.isFinite(dy)) {
     tabPlaces = { ...tabPlaces, [String(display.id)]: placeFor(display.workArea, height, tabDrag.move(dy)) }
     win.setBounds(boundsFor('collapsed'))
   }
@@ -274,12 +296,16 @@ function slideEnded(by: 'drawn' | 'clock'): void {
   hideTab(by === 'drawn' ? 'its slide ending' : SLIDE_END_UNDRAWN)
 }
 
-/** Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge. */
+/**
+ * Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge, and the tab
+ * is back at its saved spot for the next time (a push brings it to the cursor again).
+ */
 function hideTab(why?: string): void {
   if (!win || win.isDestroyed()) return
   clearTimeout(slideTimer)
   if (why) lastTuck = { ms: Date.now() - tuckStarted, why }
   win.hide()
+  revealTop = null
   setSlide(quiet(), false)
 }
 
@@ -407,12 +433,15 @@ function applyMaterial(): void {
 
 /**
  * One look at the cursor, for Only when needed: the presence rules say whether Steward comes out or goes back, and this
- * does it. Both watchers (the edge's, and the notch window's) look through here.
+ * does it. Both watchers (the edge's, and the notch window's) look through here. On the edge, a push says whether it
+ * moved (and starts over) and where the tab would come out for it.
  */
-function lookAtCursor(inZone: boolean, onIt: boolean, dwellMs: number): { next: number } {
-  const input = { now: Date.now(), quiet: quiet(), hidden: dock === 'hidden', rest: dock === 'collapsed' && !agent?.busy, inZone, onIt, dwellMs }
+function lookAtCursor(inZone: boolean, onIt: boolean, dwellMs: number, push?: { restart: boolean; top: number }): { next: number } {
+  const input = { now: Date.now(), quiet: quiet(), hidden: dock === 'hidden', rest: dock === 'collapsed' && !agent?.busy, inZone, onIt, dwellMs, restart: push?.restart }
   const step = stepPresence(presenceNow, input)
   presenceNow = step.state
+  // A push brought it out: the tab comes to the cursor.
+  if (step.change === 'reveal' && input.rest && inZone && push) revealTop = push.top
   if (step.change) applyPresence()
   return { next: nextLookMs(presenceNow, input) }
 }
@@ -420,6 +449,8 @@ function lookAtCursor(inZone: boolean, onIt: boolean, dwellMs: number): { next: 
 /** Presence was switched in Settings: Steward comes out, or slips away, now. */
 function presenceChanged(): void {
   presenceNow = dock === 'collapsed' ? restingPresence() : asleep()
+  // Always visible, the tab is at its saved spot.
+  if (!quiet()) revealTop = null
   // Hidden, its page waits slid out or not, to match the new Presence.
   if (win && !win.isVisible()) setSlide(quiet(), false)
   applyPresence()
@@ -438,27 +469,36 @@ const NEAR_TAB = 120
 let sentNear = false
 
 /**
- * The edge's watcher: while the tab is tucked away or out at rest, it checks the cursor 5 times a second, and 20 when it
- * is pushing against the edge. It also tells the tab's page when the cursor comes near, for Dim when idle. It stops while
- * the panel is open (or a nudge is), while hidden by hand, while the screen sleeps, in the notch (its own window watches
- * there), and when Steward is always visible with Dim when idle off.
+ * One look at the cursor for the edge: the tab's page hears whether it's near, for Dim when idle, and Only when needed a
+ * push anywhere along the edge brings the tab out right there, with the cursor at its middle (kept inside the work area).
+ * The watcher looks with the real cursor, the smoke check with made-up ones. Says when to look next.
  */
-function watchEdge(): void {
-  watchTimer = undefined
-  if (!canWatchEdge()) return
+function lookAtEdge(cursor: Electron.Point): number {
   const display = screen.getPrimaryDisplay()
-  const cursor = screen.getCursorScreenPoint()
+  const height = TAB_SIZES[settings.steward().size].tab.height
   const tabBounds = boundsFor('collapsed')
   const near = inRect(cursor, tabBounds, NEAR_TAB)
   if (near !== sentNear) {
     sentNear = near
     win?.webContents.send('presence:near', near)
   }
-  // The push zone is wherever the tab was dragged to.
-  const centerY = tabTop() + TAB_SIZES[settings.steward().size].tab.height / 2
-  const inZone = inEdgeZone(cursor, display.bounds, settings.steward().edge, centerY)
-  const onTab = inRect(cursor, tabBounds, 6)
-  const next = quiet() ? lookAtCursor(inZone, onTab, EDGE_DWELL_MS).next : WATCH_MS
+  if (!quiet()) return WATCH_MS
+  const at = { screen: display.bounds, area: display.workArea, edge: settings.steward().edge, savedCenterY: savedTabTop() + height / 2, dockOnEdge: dockOnEdge() }
+  const look = pushAlongEdge(edgePush, cursor, at, presenceNow.revealed)
+  edgePush = look.push
+  const top = clampTop(display.workArea, height, cursor.y - height / 2)
+  return lookAtCursor(look.inZone, inRect(cursor, tabBounds, 6), look.dwellMs, { restart: look.restart, top }).next
+}
+
+/**
+ * The edge's watcher: while the tab is tucked away or out at rest, it checks the cursor 5 times a second, and 20 when it
+ * is pushing against the edge. It stops while the panel is open (or a nudge is), while hidden by hand, while the screen
+ * sleeps, in the notch (its own window watches there), and when Steward is always visible with Dim when idle off.
+ */
+function watchEdge(): void {
+  watchTimer = undefined
+  if (!canWatchEdge()) return
+  const next = lookAtEdge(screen.getCursorScreenPoint())
   // The look may have ended the watch (it came out, and something else changed).
   if (canWatchEdge()) watchTimer = setTimeout(watchEdge, next)
 }
@@ -765,7 +805,7 @@ function noteFor(): Parameters<typeof presenceNote>[0] {
   const where = inNotch() ? 'notch' : settings.steward().edge
   const display = screen.getPrimaryDisplay().bounds
   const others = screen.getAllDisplays().filter((d) => d.id !== screen.getPrimaryDisplay().id).map((d) => d.bounds)
-  return { where, hotkey: registered.togglePanel ?? '', besideScreen: where !== 'notch' && screenBeside(display, others, where) }
+  return { where, hotkey: registered.togglePanel ?? '', besideScreen: where !== 'notch' && screenBeside(display, others, where), dockOnEdge: where !== 'notch' && dockOnEdge() }
 }
 
 /** The first-launch peek while it's out: when it came out, and whether the cursor has been on it. */
@@ -1158,12 +1198,12 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
     app.exit(1)
   }
   // The panel has 30 s to show; the presence check before it (with its 20 s wait for Dim when idle) has its own budget.
-  const timer = setTimeout(() => fail('timed out'), 30_000 + 60_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+  const timer = setTimeout(() => fail('timed out'), 30_000 + 80_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
-      const presenceTimer = setTimeout(() => fail('presence timed out'), 60_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+      const presenceTimer = setTimeout(() => fail('presence timed out'), 80_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
       await checkPresence(w, out)
       clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
@@ -1274,8 +1314,12 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   }
   need(settings.steward().presence === 'quiet' && settings.steward().alertPeek === 'needs-me', 'a fresh install did not start quiet')
   need(settings.steward().dimWhenIdle && settings.steward().hideFromScreenShare, 'a fresh install did not start with dim and screen-share hiding on')
-  // A push against the edge for 300 ms comes out; leaving goes back after 1.5 s.
-  const push = (inZone: boolean) => lookAtCursor(inZone, false, EDGE_DWELL_MS)
+  // A push against the edge at the tab's saved spot for 300 ms comes out; leaving goes back after 1.5 s. The cursor is
+  // made up: on the edge, or away in the middle of the screen.
+  const display = screen.getPrimaryDisplay()
+  const edgeAt = (y: number) => ({ x: settings.steward().edge === 'right' ? display.bounds.x + display.bounds.width - 1 : display.bounds.x, y })
+  const away = { x: display.bounds.x + Math.round(display.bounds.width / 2), y: display.bounds.y + Math.round(display.bounds.height / 2) }
+  const push = (inZone: boolean) => lookAtEdge(inZone ? edgeAt(savedTabTop() + TAB_SIZES[settings.steward().size].tab.height / 2) : away)
   /** The cursor is away and everything is at rest: after 1.5 s the tab slides out, and then the window goes. */
   const tuck = async () => {
     push(false)
@@ -1324,9 +1368,9 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   const home = boundsFor('collapsed')
   const at = w.getBounds()
   need(Math.abs(at.x - home.x) <= 2 && Math.abs(at.y - home.y) <= 2, `the tab stopped at ${at.x},${at.y}, not at its edge (${home.x},${home.y})`)
-  lookAtCursor(false, false, EDGE_DWELL_MS)
+  push(false)
   await sleep(1600)
-  smoothly(`the tab sliding out${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void lookAtCursor(false, false, EDGE_DWELL_MS)))
+  smoothly(`the tab sliding out${tabLook.label}`, await watchMotion(w.webContents, tabLook, 700, () => void push(false)))
   need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away after the cursor left')
   // The window went when the page said the slide had ended, not on the safety timeout. On a Mac with a screen, the page
   // drew the end. A CI runner sometimes stops drawing the page for a while, so there the slide's own end time may say so.
@@ -1338,6 +1382,66 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
       : `smoke: the window went ${lastTuck?.ms} ms after the tuck began, when the page said its slide had ended`,
   )
   console.log('smoke: a push brings the tab out to its edge, leaving tucks it away')
+
+  // The tab comes to you: held still against the edge anywhere along it for 500 ms, it comes out right there, with the
+  // cursor at its middle. Sliding along the edge never counts. Once it has been out, a push counts again only after the
+  // cursor has left the edge. The panel and a nudge grow from where it is, a drag from there saves it, and once it has
+  // tucked away it's back at its saved spot.
+  const work = display.workArea
+  const tabH = TAB_SIZES[settings.steward().size].tab.height
+  const saved = savedTabTop()
+  const hold = async (p: Electron.Point, ms: number) => {
+    const until = Date.now() + ms
+    do {
+      lookAtEdge(p)
+      await sleep(50)
+    } while (Date.now() < until)
+  }
+  for (let y = work.y + 40; y < work.y + 400; y += 12) {
+    lookAtEdge(edgeAt(y))
+    await sleep(50)
+  }
+  need(!presenceNow.revealed, 'sliding along the edge brought the tab out')
+  const high = edgeAt(work.y + 10)
+  await hold(high, EDGE_FAR_DWELL_MS - 120)
+  need(!presenceNow.revealed, `a push away from the saved spot came out before ${EDGE_FAR_DWELL_MS} ms`)
+  await hold(high, 220)
+  need(presenceNow.revealed, `a push held still for ${EDGE_FAR_DWELL_MS} ms high on the edge did not bring the tab out`)
+  await sleep(500)
+  need(w.isVisible() && w.getBounds().y === work.y, `the tab came out at ${w.getBounds().y} for a push at the top, not at ${work.y} (under the menu bar)`)
+  need(savedTabTop() === saved, 'a push moved the saved spot')
+  // Down the edge, still: the tab tucks away from under it and stays away while the cursor rests there.
+  const low = edgeAt(work.y + work.height - 10)
+  await hold(low, TUCK_MS + SLIDE_MS + 400)
+  need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away with the cursor resting further down the edge')
+  need(boundsFor('collapsed').y === saved, `the tucked-away tab is at ${boundsFor('collapsed').y}, not back at its saved spot (${saved})`)
+  await hold(low, 800)
+  need(!presenceNow.revealed, 'the tab came back with the cursor still resting on the edge')
+  lookAtEdge(away)
+  await hold(low, EDGE_FAR_DWELL_MS + 100)
+  await sleep(500)
+  const bottom = work.y + work.height - tabH
+  need(presenceNow.revealed && w.isVisible() && w.getBounds().y === bottom, `after leaving the edge, a push at the bottom brought the tab to ${w.isVisible() ? w.getBounds().y : 'nowhere'}, not ${bottom}`)
+  setDock('expanded')
+  await sleep(400)
+  const panelAt = boundsFor('expanded')
+  need(w.getBounds().y === topAround(work, bottom, tabH, panelAt.height, 24), `the panel opened at ${w.getBounds().y}, not around the tab at ${bottom}`)
+  setDock('collapsed')
+  await sleep(500)
+  need(w.isVisible() && w.getBounds().y === bottom, `closing the panel put the tab at ${w.getBounds().y}, not back where it was (${bottom})`)
+  raise({ key: 'approval:smoke-comes-to-you', level: 'urgent', title: 'A session needs you' })
+  await sleep(500)
+  need(dock === 'nudge' && w.getBounds().y === bottom, `the nudge came out at ${w.getBounds().y}, not from the tab at ${bottom}`)
+  setDock('collapsed')
+  await sleep(500)
+  await w.webContents.executeJavaScript(`window.steward.dock.drag('start'); window.steward.dock.drag('move', -100); window.steward.dock.drag('end')`)
+  await sleep(300)
+  need(w.getBounds().y === bottom - 100 && savedTabTop() === bottom - 100, `a drag from where the tab came out left it at ${w.getBounds().y}, saved at ${savedTabTop()}, not ${bottom - 100}`)
+  await tuck()
+  need(!w.isVisible() && boundsFor('collapsed').y === bottom - 100, 'after a drag, the tucked-away tab is not at its new saved spot')
+  await resetTabPlace()
+  need(savedTabTop() === saved, 'Reset did not bring the saved spot back')
+  console.log(`smoke: the tab comes to you: a push held ${EDGE_FAR_DWELL_MS} ms brings it out at the cursor (top and bottom), sliding along the edge doesn't, a push counts again only after leaving the edge, the panel and a nudge grow from where it is, and a drag there saves it`)
 
   // Alerts: only a session that needs me peeks out. The rest wait (a dot in the menu bar) and show when the panel opens.
   raise({ key: 'finished:smoke', level: 'normal', title: 'A session finished' })

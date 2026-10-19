@@ -43,6 +43,17 @@ describe('where the tab sits along its edge', () => {
   })
 })
 
+describe('the tab coming to the cursor', () => {
+  it('has the cursor at its middle, shifted just enough to stay inside the work area', () => {
+    const at = (cursorY: number) => clampTop(AREA, TAB, cursorY - TAB / 2)
+    expect(at(500)).toBe(434)
+    // Near the menu bar and near the bottom, it stops at the work area, and the cursor is still over it.
+    expect(at(40)).toBe(33)
+    expect(at(975)).toBe(33 + 949 - TAB)
+    for (const y of [40, 500, 975]) expect(y >= at(y) && y <= at(y) + TAB).toBe(true)
+  })
+})
+
 describe('dragging the tab', () => {
   it('follows the cursor up and down, clamped while dragging, not after', () => {
     const drag = new TabDrag(400, AREA, TAB)
