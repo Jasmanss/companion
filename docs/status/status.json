@@ -5,7 +5,6 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "OK the merge of PR #20", "line": "Quiet mode Phase 2.1, the tab comes to you. CI is green and you tried it: pushing anywhere on the edge works. The scrollbar is still untried.", "date": "2026-10-19" },
         { "name": "Notch dock, Phase 3", "line": "Designed, in 4 small steps (3a to 3d). Read docs/briefs/notch-dock-phase-3.md, then say go for 3a.", "date": "2026-10-15" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -16,7 +15,6 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Quiet mode, Phase 2.1", "line": "CI green, tried by hand, waiting on merge (draft PR #20, claude/quiet-mode-phase-2-1). Scrollbar feel not tried yet.", "date": "2026-10-19" },
         { "name": "Notch dock", "line": "Built through part 2 (c9bb4f1, design page c1f74dd). Phase 3 is designed and waits for your go.", "date": "2026-10-15" }
       ]
     },
@@ -24,7 +22,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Quiet mode, Phase 3", "line": "Step aside (screen sharing, full-screen apps, listed apps). Starts with an investigation report. Waits for its own go.", "date": "2026-10-16" },
+        { "name": "Quiet mode, Phase 3", "line": "Step aside (screen sharing, full-screen apps, listed apps). Starts with an investigation report. Waits for your go, typed into Main building.", "date": "2026-10-16" },
         { "name": "Notch dock, Phase 3", "line": "Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.", "date": "2026-10-15" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
@@ -63,6 +61,7 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Quiet mode, Phase 2.1", "line": "Merged into main (PR #20, d67a4f1): the tab comes to you. CI on main was still running when recorded. Scrollbar feel not tried yet.", "date": "2026-10-19" },
         { "name": "Chat flow and this status page", "line": "Docs PR #19 merged into main (b81df3a): the chat flow, standing rules and a PR template. The status page is live.", "date": "2026-10-19" },
         { "name": "Quiet mode, Phase 2", "line": "Merged into main (PR #18, 48ce3c5), CI green: tab drag to any height, Dim when idle, first-launch peek, the left-gap fix and the slide-end fix.", "date": "2026-10-16" },
         { "name": "New edge for alerts", "line": "Hairline edge (option A) merged with PR #18. The urgent card no longer has the thick ring.", "date": "2026-10-16" },

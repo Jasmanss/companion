@@ -262,5 +262,10 @@ Status stays `ready`: Phase 3 is not built. The user typed the Phase 2.1 go into
 - **Note:** the front door set Part 2c to ready in this brief (`d04ad15`) on the user's go.
 - **Update 2026-10-19:** the user tried it by hand: pushing anywhere on the edge brings the tab out at the cursor. They did not mention the scrollbar, so that is still not tried. PR #20 CI is green (lint, typecheck, test, and the macOS build, smoke and package jobs). It is still a draft and waits for the user's OK to merge.
 
+### Phase 2.1 merged (recorded 2026-10-19, from the front door)
+- PR #20 was marked ready and merged into main on the user's OK: merge commit `d67a4f1`. CI on main for that commit was still running when this was recorded.
+- The scrollbar feel is still untried.
+- **Next:** Phase 3 (step aside). It starts with the investigation report and waits for the user's go, which they type into Main building.
+
 ### Phase 3
 Not started.
