@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: a small helper at the edge of your screen</title>
+<meta name="description" content="Steward is a small helper that lives at the edge of your Mac screen while you code.">
+<meta name="theme-color" content="#050608">
+<!-- The tab icon is the Pill, inlined as base64 so the page needs no extra file. -->
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NiAyNiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZTllZWY1Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGQ5OWFiIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI2IiByeD0iMTMiIGZpbGw9InVybCgjZykiLz48cmVjdCB4PSIxNCIgeT0iOCIgd2lkdGg9IjUiIGhlaWdodD0iOSIgcng9IjIuNSIgZmlsbD0iIzYwYmVmZiIvPjxyZWN0IHg9IjI3IiB5PSI4IiB3aWR0aD0iNSIgaGVpZ2h0PSI5IiByeD0iMi41IiBmaWxsPSIjNjBiZWZmIi8+PC9zdmc+">
+<script>
+// ?fallback in the address turns off the CSS scroll driver, so the script driver below can be compared against it.
+if (/[?&]fallback\b/.test(location.search)) document.documentElement.classList.add('fb');
+</script>
+<style>
+/* The Steward showcase site (docs/briefs/steward-site.md). One file of plain HTML and CSS: no libraries, no web fonts, no images.
+   Only transform and opacity animate. The scenes are drawn from the app's own look (the Ice tint, glass, the Pill), not screenshots. */
+:root{
+  --bg:#050608;--t1:#f5f7fa;--t2:rgba(245,247,250,.62);--t3:rgba(245,247,250,.4);--line:rgba(255,255,255,.1);
+  --glow:96,190,255;--tint:200,228,255;--eye:96,190,255;--u:1px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--t1);font:500 16px/1.5 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+h1,h2,h3,p{margin:0}
+a:focus-visible{outline:2px solid rgb(var(--glow));outline-offset:3px;border-radius:6px}
+
+/* ---------- the Pill, sized by --u ---------- */
+.pill{display:block;position:relative;flex:none;width:calc(46*var(--u));height:calc(26*var(--u));border-radius:999px;background:linear-gradient(180deg,#e9eef5,#8d99ab);
+  box-shadow:inset 0 calc(1*var(--u)) 0 rgba(255,255,255,.9),inset 0 calc(-2*var(--u)) calc(4*var(--u)) rgba(0,0,0,.14),0 calc(4*var(--u)) calc(10*var(--u)) rgba(0,0,0,.5)}
+.pill i{position:absolute;top:calc(8*var(--u));width:calc(5*var(--u));height:calc(9*var(--u));border-radius:999px;background:rgb(var(--eye));
+  box-shadow:0 0 calc(6*var(--u)) calc(1*var(--u)) rgba(var(--eye),.75);animation:blink 5s infinite}
+.pill i:nth-child(1){left:calc(14*var(--u))}.pill i:nth-child(2){right:calc(14*var(--u))}.pill i:nth-child(3){display:none}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+
+/* ---------- top bar ---------- */
+.top{position:fixed;top:0;left:0;right:0;z-index:20;-webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);background:rgba(5,6,8,.55);border-bottom:1px solid var(--line)}
+.top div{max-width:70rem;margin:0 auto;padding-inline:20px;height:48px;display:flex;align-items:center;gap:6px}
+.top .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;text-decoration:none;--u:.45px}
+
+/* ---------- scenes: a tall box, a pinned screen inside, scroll progress drives the motion ---------- */
+.scene{position:relative;height:var(--len,260vh);view-timeline:--sc block}
+.pin{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.4fr);align-items:center;gap:4vw;
+  padding:64px max(20px,4vw) 24px;max-width:84rem;margin:0 auto}
+@media (max-width:820px){.pin{grid-template-columns:1fr;grid-template-rows:auto auto;align-content:center;gap:4vh;padding-top:68px}}
+
+/* The animation drivers. Every moving part has class "a" and a keyframe named k-*. The keyframes are paused and read at --p, the
+   scene's progress from 0 to 1, which the script sets. Where the browser has scroll-driven animations the scene's own timeline
+   drives them instead and the script does nothing, so the page also moves without any script. */
+.a{animation-duration:1s;animation-timing-function:linear;animation-fill-mode:both;animation-play-state:paused;animation-delay:calc(var(--p,0)*-1s)}
+@supports (animation-timeline:view()){
+  html:not(.fb) .a{animation-timeline:--sc;animation-range:contain 0% contain 100%;animation-play-state:running;animation-delay:0s;animation-duration:auto}
+}
+
+/* ---------- the mock Mac screen, built in cqw so it scales ---------- */
+.screen{container-type:inline-size;position:relative;width:100%;max-width:880px;aspect-ratio:16/10;border-radius:16px;overflow:hidden;justify-self:center;
+  box-shadow:0 30px 80px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.12)}
+.wall{position:absolute;inset:0;background:radial-gradient(60cqw 40cqw at 18% 8%,#3b4d86,transparent 70%),radial-gradient(55cqw 40cqw at 92% 95%,#1f6a86aa,transparent 70%),linear-gradient(160deg,#151b2e,#0a0d15)}
+.bar{position:absolute;top:0;left:0;right:0;height:3.4cqw;background:rgba(255,255,255,.08)}
+.bar b{position:absolute;top:1.2cqw;height:1cqw;border-radius:.5cqw;background:rgba(255,255,255,.35)}
+.win{position:absolute;left:6cqw;top:8cqw;width:60cqw;height:42cqw;border-radius:1.4cqw;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .1cqw rgba(255,255,255,.14)}
+.win::before{content:"";position:absolute;left:2cqw;top:1.4cqw;width:6cqw;height:1.2cqw;border-radius:.6cqw;background:rgba(255,255,255,.3)}
+.win::after{content:"";position:absolute;inset:5cqw 4cqw 3cqw;background:repeating-linear-gradient(180deg,rgba(255,255,255,.14) 0 1cqw,transparent 1cqw 3cqw);-webkit-mask:linear-gradient(90deg,#000 80%,transparent);mask:linear-gradient(90deg,#000 80%,transparent)}
+.glassy{background:linear-gradient(180deg,rgba(var(--tint),.16),rgba(var(--tint),.05)),rgb(28,31,39);box-shadow:inset 0 .1cqw 0 rgba(255,255,255,.26),inset 0 0 0 .08cqw rgba(255,255,255,.1)}
+.tab{position:absolute;right:0;width:9cqw;height:20cqw;top:calc(var(--y)*1cqw - 10cqw);border-radius:2.4cqw 0 0 2.4cqw;display:grid;place-items:center;--u:.1cqw}
+
+/* ---------- keyframes: the end of each is the finished picture; the base styles are the static (reduced motion) picture ---------- */
+@keyframes k-h1{0%,12%{transform:none;opacity:1}100%{transform:translateY(-12vh) scale(.8);opacity:0}}
+@keyframes k-tag{0%,8%{opacity:1}30%,100%{opacity:0}}
+@keyframes k-hs{0%{transform:translateY(40vh) scale(.88)}65%,100%{transform:translateY(-21vh) scale(1)}}
+@keyframes k-tabh{0%,40%{transform:translateX(100%)}72%,100%{transform:none}}
+.k-h1{animation-name:k-h1}.k-tag{animation-name:k-tag}.k-hs{animation-name:k-hs}.k-tabh{animation-name:k-tabh}
+
+/* ---------- hero ---------- */
+.hero .pin{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;padding-top:12vh;max-width:none;text-align:center}
+.hero h1{font-size:clamp(3.8rem,16vw,11rem);line-height:.95;font-weight:800;letter-spacing:-.05em;background:linear-gradient(180deg,#fff 30%,#8fa6c4);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.06em}
+.hero .tag{font-size:clamp(1.1rem,2.6vw,1.7rem);color:var(--t2);margin-top:1.4vh}
+.hero .screen{margin-top:5vh;width:min(92vw,860px,96vh)}
+.hero .glow{position:absolute;left:50%;top:48%;width:80vw;height:60vh;transform:translate(-50%,0);background:radial-gradient(closest-side,rgba(var(--glow),.18),transparent);pointer-events:none}
+
+/* ---------- closing screen ---------- */
+.end{text-align:center;padding:16vh 20px 14vh}
+.end .pill{margin:0 auto 22px;--u:1.5px}
+.end p{color:var(--t2);max-width:34ch;margin:0 auto;font-size:1.1rem}
+.end b{display:block;font-size:clamp(2.6rem,9vw,6rem);letter-spacing:-.045em;line-height:1;color:var(--t1);margin-bottom:16px}
+
+/* ---------- reduced motion: no pinning, no scroll motion, the finished picture of every scene ---------- */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .scene{height:auto}.pin{position:static;height:auto;min-height:0;padding-block:72px 40px}
+  .a,html:not(.fb) .a{animation:none!important}
+  .pill i{animation:none!important}
+  .hero .pin{padding-top:96px}.hero .screen{margin-top:30px}
+}
+/* Forced colors drop backgrounds, which would leave the gradient headline invisible. */
+@media (forced-colors:active){.hero h1{background:none;color:CanvasText}}
+</style>
+</head>
+<body>
+<header class="top"><div>
+  <a class="brand" href="#top"><span class="pill" aria-hidden="true"><i></i><i></i><i></i></span>Steward</a>
+</div></header>
+
+<main id="top">
+
+<!-- 1. Hero: Steward, very large; the screen rises and the tab slides out as you scroll -->
+<section class="scene hero" style="--len:230vh"><div class="pin">
+  <div class="glow" aria-hidden="true"></div>
+  <h1 class="a k-h1">Steward</h1>
+  <p class="a k-tag tag">A small helper at the edge of your screen.</p>
+  <div class="screen a k-hs" aria-hidden="true">
+    <div class="wall"></div><div class="bar"><b style="left:2cqw;width:4cqw"></b><b style="left:8cqw;width:6cqw"></b><b style="left:16cqw;width:5cqw"></b></div><div class="win"></div>
+    <div class="tab glassy a k-tabh" style="--y:34"><span class="pill"><i></i><i></i><i></i></span></div>
+  </div>
+</div></section>
+
+<!-- The scenes go here: edge, moods, quiet, notch, request, then the clips, the demo and how it is built. -->
+
+<section class="end">
+  <span class="pill" aria-hidden="true"><i></i><i></i><i></i></span>
+  <b>Steward</b>
+  <p>A personal project, made for one person. It is not for sale and has no download or waitlist.</p>
+</section>
+</main>
+
+<script>
+// Script driver: set --p (0 to 1) on each scene from its scroll position. Not needed where CSS scroll-driven animations drive the page.
+if (!CSS.supports('animation-timeline: view()') || document.documentElement.classList.contains('fb')) {
+  const scenes = [...document.querySelectorAll('.scene')];
+  let queued = false;
+  const update = () => {
+    queued = false;
+    for (const s of scenes) {
+      const r = s.getBoundingClientRect(), span = r.height - innerHeight;
+      if (r.bottom < -100 || r.top > innerHeight + 100 || span <= 0) continue;
+      s.style.setProperty('--p', Math.min(1, Math.max(0, -r.top / span)).toFixed(4));
+    }
+  };
+  addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(update); } }, { passive: true });
+  addEventListener('resize', update);
+  update();
+}
+</script>
+</body>
+</html>
