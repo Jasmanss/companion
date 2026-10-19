@@ -1547,16 +1547,20 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await sleep(500)
   const bottom = work.y + work.height - tabH
   need(presenceNow.revealed && w.isVisible() && w.getBounds().y === bottom, `after leaving the edge, a push at the bottom brought the tab to ${w.isVisible() ? w.getBounds().y : 'nowhere'}, not ${bottom}`)
+  // macOS animates the window between the tab and the panel, and takes longer at some times than others (with a
+  // full-screen app's Space showing, say): wait for it to get there, up to 1.5 s.
+  const settles = async (ok: () => boolean) => {
+    const until = Date.now() + 1500
+    while (!ok() && Date.now() < until) await sleep(50)
+    return ok()
+  }
   setDock('expanded')
-  await sleep(400)
-  const panelAt = boundsFor('expanded')
-  need(w.getBounds().y === topAround(work, bottom, tabH, panelAt.height, 24), `the panel opened at ${w.getBounds().y}, not around the tab at ${bottom}`)
+  const panelTop = topAround(work, bottom, tabH, boundsFor('expanded').height, 24)
+  need(await settles(() => w.getBounds().y === panelTop), `the panel opened at ${w.getBounds().y}, not around the tab at ${bottom} (${panelTop})`)
   setDock('collapsed')
-  await sleep(500)
-  need(w.isVisible() && w.getBounds().y === bottom, `closing the panel put the tab at ${w.getBounds().y}, not back where it was (${bottom})`)
+  need(await settles(() => w.isVisible() && w.getBounds().y === bottom), `closing the panel put the tab at ${w.getBounds().y}, not back where it was (${bottom})`)
   raise({ key: 'approval:smoke-comes-to-you', level: 'urgent', title: 'A session needs you' })
-  await sleep(500)
-  need(dock === 'nudge' && w.getBounds().y === bottom, `the nudge came out at ${w.getBounds().y}, not from the tab at ${bottom}`)
+  need(await settles(() => dock === 'nudge' && w.getBounds().y === bottom), `the nudge came out at ${w.getBounds().y}, not from the tab at ${bottom}`)
   setDock('collapsed')
   await sleep(500)
   await w.webContents.executeJavaScript(`window.steward.dock.drag('start'); window.steward.dock.drag('move', -100); window.steward.dock.drag('end')`)
