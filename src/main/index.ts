@@ -1626,10 +1626,11 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   }
 
   // Dim when idle: after 20 s at rest the tab's eyes fade and stop; the cursor coming near wakes them. The 20 s began
-  // when the tab last came to rest, about 3 s before this point, so it isn't dim 14 s from here, and is by 28 s.
+  // when the tab last came to rest, about 3 s before this point (plus STEWARD_SMOKE_IDLE's wait, which is at rest too),
+  // so it isn't dim 14 s from here (less that wait), and is by 28 s.
   const dimmed = async () => Boolean(await w.webContents.executeJavaScript(`Boolean(document.querySelector('.pill-host.dimmed'))`))
   const waiting = Date.now()
-  await sleep(DIM_AFTER_MS - 6000)
+  await sleep(DIM_AFTER_MS - 6000 - idle * 1000)
   need(!(await dimmed()), 'the eyes dimmed well before 20 s at rest')
   while (!(await dimmed()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
   const tookS = ((Date.now() - waiting) / 1000).toFixed(1)
