@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
-import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, TAB_SIZES, panelTint } from '../../shared/steward'
+import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, SUGGESTED_STEP_ASIDE_APPS, TAB_SIZES, panelTint } from '../../shared/steward'
 import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
@@ -304,6 +304,44 @@ const ALERT_PEEK_NOTES: Record<StewardPrefs['alertPeek'], string> = {
   none: 'Nothing. They wait in the menu bar.',
 }
 
+/** Step aside: Steward hides while an app fills its screen, or while an app on the list is in front. Alerts wait meanwhile. */
+function StepAsideGroup({ look, run, set }: { look: StewardPrefs; run: ReturnType<typeof runner>; set: (patch: Partial<StewardPrefs>) => void }) {
+  const apps = look.hideInApps
+  const suggested = SUGGESTED_STEP_ASIDE_APPS.filter((s) => !apps.some((a) => a.id === s.id))
+  return (
+    <Group title="Step aside" note="Steward hides, and alerts wait in the menu bar until you’re back.">
+      <SwitchRow label="In full-screen apps" note="While an app fills the screen Steward is on." checked={look.hideInFullScreen} onChange={(hideInFullScreen) => set({ hideInFullScreen })} />
+      {apps.map((a) => (
+        <div className="set-row" key={a.id}>
+          <div className="set-label">
+            <span>{a.name}</span>
+            <small>While it’s in front</small>
+          </div>
+          <div className="set-ctl">
+            <button className="btn small quiet" onClick={() => set({ hideInApps: apps.filter((x) => x.id !== a.id) })} aria-label={`Remove ${a.name}`}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+      <div className="set-row">
+        <button className="btn" onClick={() => run(api().settings.addStepAsideApp())}>
+          Add app…
+        </button>
+        {suggested.length > 0 && (
+          <div className="set-chips">
+            {suggested.map((s) => (
+              <button key={s.id} className="chip" onClick={() => set({ hideInApps: [...apps, s] })}>
+                + {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Group>
+  )
+}
+
 /** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
 export function StewardSection(props: SectionProps) {
   // (A main process from before the character, or before the panel's tint, sends less: the defaults fill in.)
@@ -399,6 +437,8 @@ export function StewardSection(props: SectionProps) {
         </Row>
         <SwitchRow label="Dim when idle" note="The eyes fade after 20 seconds at rest." checked={look.dimWhenIdle} onChange={(dimWhenIdle) => set({ dimWhenIdle })} />
       </Group>
+
+      <StepAsideGroup look={look} run={run} set={set} />
 
       <Group title="The panel">
         <Row label="Tint" note={panelTint(look.tint).name}>

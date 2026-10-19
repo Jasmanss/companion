@@ -47,6 +47,7 @@ const api: StewardAPI = {
     setVercelToken: (token) => ipcRenderer.invoke('settings:setVercelToken', token),
     addProject: () => ipcRenderer.invoke('settings:addProject'),
     addProjectAndSwitch: () => ipcRenderer.invoke('settings:addProjectAndSwitch'),
+    addStepAsideApp: () => ipcRenderer.invoke('settings:addStepAsideApp'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),

@@ -84,6 +84,16 @@ export interface StewardPrefs {
   dimWhenIdle: boolean
   /** Viewers and recordings don't see Steward. Saved now; it does something from a later build. */
   hideFromScreenShare: boolean
+  /** Step aside: hidden while an app is full screen on Steward's screen. */
+  hideInFullScreen: boolean
+  /** Step aside: hidden while one of these apps is in front. */
+  hideInApps: StepAsideApp[]
+}
+
+/** An app Steward steps aside for: its bundle id, and its name to show in Settings. */
+export interface StepAsideApp {
+  id: string
+  name: string
 }
 
 export interface TrayItem {
@@ -370,6 +380,8 @@ export interface StewardAPI {
     addProject(): Promise<SettingsView>
     /** Pick a folder, add it as a project if it's new, and switch to it. */
     addProjectAndSwitch(): Promise<SettingsView>
+    /** Pick an app in Finder and add it to Step aside's list. */
+    addStepAsideApp(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>

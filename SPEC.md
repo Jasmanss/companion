@@ -46,6 +46,13 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   moment after it starts, with a one-line note on how to bring it back.
 - **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
   eyes fade and stop moving, until something happens or the cursor comes near.
+- **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
+  open panel) while an app fills the screen it's on (on for a new install), or
+  while an app on your list is in front ("Add app…", or one click for Keynote,
+  Zoom or FaceTime). Alerts wait in the menu bar and peek out once you're
+  back; the hotkey and the menu bar icon still open the panel. It listens to
+  macOS's own app-switch and Space notifications, and asks macOS only when the
+  Space changes, so nothing runs in between.
 - **Alerts that peek out (Settings → Steward → Presence):** only when a session
   needs me (the default in "Only when needed"), everything switched on in
   Notifications (the default in "Always visible"), or nothing. What doesn't peek

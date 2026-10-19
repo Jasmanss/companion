@@ -1,4 +1,4 @@
-import type { AlertPeek, PanelTint, PillColor, Presence, StewardPrefs } from './types'
+import type { AlertPeek, PanelTint, PillColor, Presence, StepAsideApp, StewardPrefs } from './types'
 
 /** The character's colors, at most six. Silver comes first: it's the default. */
 export const PILL_COLOR_IDS = ['silver', 'sky', 'lilac', 'mint', 'peach', 'graphite'] as const satisfies readonly PillColor[]
@@ -79,7 +79,19 @@ export const DEFAULT_STEWARD: StewardPrefs = {
   alertPeek: DEFAULT_ALERT_PEEK.quiet,
   dimWhenIdle: true,
   hideFromScreenShare: true,
+  hideInFullScreen: true,
+  hideInApps: [],
 }
+
+/** A bundle id as macOS writes them, like com.apple.iWork.Keynote. */
+export const isBundleId = (s: unknown): s is string => typeof s === 'string' && s.length <= 255 && /^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(s)
+
+/** Offered in Settings for Step aside's list, one click each: presenting and calls. */
+export const SUGGESTED_STEP_ASIDE_APPS: StepAsideApp[] = [
+  { id: 'com.apple.iWork.Keynote', name: 'Keynote' },
+  { id: 'us.zoom.xos', name: 'Zoom' },
+  { id: 'com.apple.FaceTime', name: 'FaceTime' },
+]
 
 export const colorHex = (id: PillColor): string => (PILL_COLORS.find((c) => c.id === id) ?? PILL_COLORS[0]).hex
 

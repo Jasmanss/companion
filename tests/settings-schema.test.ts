@@ -3,7 +3,7 @@ import { DEFAULT_ALLOWLIST, DEFAULT_NOTIFICATIONS, defaultSettings, migrateSetti
 import { DEFAULT_STEWARD } from '../src/shared/steward'
 
 /** The character's options for a settings file from before quiet mode: today's behavior, not a fresh install's. */
-const AS_BEFORE = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false } as const
+const AS_BEFORE = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false, hideInFullScreen: false, hideInApps: [] } as const
 const OLD_FILE_STEWARD = { ...DEFAULT_STEWARD, ...AS_BEFORE }
 
 describe('migrateSettings', () => {
@@ -96,6 +96,20 @@ describe('migrateSettings', () => {
     expect(migrateSettings({ steward: { presence: 'hidden', alertPeek: 'some', dimWhenIdle: 'yes', hideFromScreenShare: 1 } }).steward).toMatchObject(AS_BEFORE)
   })
 
+  it('steps aside in full-screen apps on a fresh install, not for a file that already exists, and starts both with no apps', () => {
+    expect(DEFAULT_STEWARD).toMatchObject({ hideInFullScreen: true, hideInApps: [] })
+    expect(migrateSettings({ steward: {} }).steward).toMatchObject({ hideInFullScreen: false, hideInApps: [] })
+    expect(migrateSettings({ steward: { hideInFullScreen: true } }).steward.hideInFullScreen).toBe(true)
+  })
+
+  it("keeps the apps to step aside for that have a real bundle id and a name, each once, and drops the rest", () => {
+    const keynote = { id: 'com.apple.iWork.Keynote', name: 'Keynote' }
+    const zoom = { id: 'us.zoom.xos', name: 'Zoom' }
+    const raw = [keynote, zoom, { ...keynote, name: 'Keynote again' }, { id: 'not a bundle id', name: 'X' }, { id: 'com.example.noname' }, 'com.apple.FaceTime', null]
+    expect(migrateSettings({ steward: { hideInApps: raw } }).steward.hideInApps).toEqual([keynote, zoom])
+    expect(migrateSettings({ steward: { hideInApps: 'Keynote' } }).steward.hideInApps).toEqual([])
+  })
+
   it('keeps the shortcuts you changed, tidied up, and drops ones it can’t use', () => {
     const migrated = migrateSettings({
       shortcuts: { togglePanel: 'option+space', hideFromEdge: '', switchProject: 'Hyper+K', openSettings: 7, somethingElse: 'Command+J' },
@@ -134,6 +148,9 @@ describe('parseSettingsPatch', () => {
     expect(parseSettingsPatch({ steward: { notch: true, notchStyle: 'wings' } })).toEqual({ steward: { notch: true, notchStyle: 'wings' } })
     expect(parseSettingsPatch({ steward: { presence: 'quiet', alertPeek: 'none' } })).toEqual({ steward: { presence: 'quiet', alertPeek: 'none' } })
     expect(parseSettingsPatch({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })).toEqual({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })
+    const apps = [{ id: 'com.apple.iWork.Keynote', name: 'Keynote' }]
+    expect(parseSettingsPatch({ steward: { hideInFullScreen: false, hideInApps: apps } })).toEqual({ steward: { hideInFullScreen: false, hideInApps: apps } })
+    expect(parseSettingsPatch({ steward: { hideInApps: [] } })).toEqual({ steward: { hideInApps: [] } })
   })
 
   it('refuses anything else, so the window can only change what it shows', () => {
@@ -153,6 +170,12 @@ describe('parseSettingsPatch', () => {
       { steward: { presence: 'hidden' } },
       { steward: { alertPeek: 'some' } },
       { steward: { dimWhenIdle: 'yes' } },
+      { steward: { hideInFullScreen: 'yes' } },
+      { steward: { hideInApps: 'com.apple.iWork.Keynote' } },
+      { steward: { hideInApps: [{ id: 'not a bundle id', name: 'X' }] } },
+      { steward: { hideInApps: [{ id: 'com.apple.iWork.Keynote', name: '' }] } },
+      { steward: { hideInApps: [{ id: 'us.zoom.xos', name: 'Zoom' }, { id: 'us.zoom.xos', name: 'Zoom' }] } },
+      { steward: { hideInApps: Array.from({ length: 41 }, (_, i) => ({ id: `com.example.app${i}`, name: `App ${i}` })) } },
       { steward: { frost: 101 } },
       { steward: { frost: -1 } },
       { steward: { frost: 42.5 } },
