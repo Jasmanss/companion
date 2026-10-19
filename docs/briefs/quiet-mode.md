@@ -260,7 +260,7 @@ Status stays `ready`: Phase 3 is not built. The user typed the Phase 2.1 go into
 - **Checks:** lint, typecheck, 285 tests (8 runs in all) and 2 smoke runs pass.
 - **Not checked:** the feel with a real scrollbar, the left edge in smoke, and the Dock on a side edge.
 - **Note:** the front door set Part 2c to ready in this brief (`d04ad15`) on the user's go.
-- **Waiting on the user:** try Phase 2.1 by hand (push anywhere on the edge, try a scrollbar).
+- **Update 2026-10-19:** the user tried it by hand: pushing anywhere on the edge brings the tab out at the cursor. They did not mention the scrollbar, so that is still not tried. PR #20 CI is green (lint, typecheck, test, and the macOS build, smoke and package jobs). It is still a draft and waits for the user's OK to merge.
 
 ### Phase 3
 Not started.
