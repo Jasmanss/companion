@@ -1721,11 +1721,12 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   raise({ key: 'approval:smoke-aside', level: 'urgent', title: 'A session needs you' })
   await sleep(300)
   need(dock === 'collapsed' && !w.isVisible() && asideAlerts.length === 1, 'an alert peeked out while stepping aside, or was lost')
-  // Steward itself coming forward (its panel, opened by the hotkey) changes nothing; the panel still opens.
+  // Steward itself coming forward (its panel, opened by the hotkey) changes nothing; the panel still opens. Looked at
+  // right away: an open panel that loses focus folds away, and the person using the Mac may click elsewhere meanwhile.
   noteFront({ app: 'com.github.Electron', pid: process.pid })
   setDock('expanded')
+  need(steppedAside && dock === 'expanded' && w.isVisible(), 'the panel did not open from the hotkey while stepping aside')
   await sleep(400)
-  need(steppedAside && w.isVisible(), 'the panel did not open from the hotkey while stepping aside')
   setDock('collapsed')
   await sleep(400)
   need(steppedAside && !w.isVisible(), 'the tab came back when the panel closed, while stepping aside')
