@@ -1456,6 +1456,8 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   }
   need(settings.steward().presence === 'quiet' && settings.steward().alertPeek === 'needs-me', 'a fresh install did not start quiet')
   need(settings.steward().dimWhenIdle && settings.steward().hideFromScreenShare, 'a fresh install did not start with dim and screen-share hiding on')
+  // The tab is placed in the work area of the moment, so a display change during the run (a CI runner's Dock) is logged.
+  screen.on('display-metrics-changed', (_e, d, changed) => console.log(`smoke: display ${d.id} changed (${changed.join(', ')}): work area ${JSON.stringify(d.workArea)}`))
   // A push against the edge at the tab's saved spot for 300 ms comes out; leaving goes back after 1.5 s. The cursor is
   // made up: on the edge, or away in the middle of the screen.
   const display = screen.getPrimaryDisplay()
@@ -1531,7 +1533,14 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   // tucked away it's back at its saved spot.
   const work = display.workArea
   const tabH = TAB_SIZES[settings.steward().size].tab.height
-  const saved = savedTabTop()
+  // Where the tab should be comes from the app's own rule (clampTop, topFor) on the work area as it is now: the app
+  // places the tab in the work area of the moment, and again whenever the display changes (a CI runner's Dock can
+  // change it by a point during the run). The saved spot is compared as the place that's stored, not as a top.
+  const workNow = () => screen.getPrimaryDisplay().workArea
+  const spotFor = (cursorY: number) => clampTop(workNow(), tabH, cursorY - tabH / 2)
+  const areas = () => `(work area ${JSON.stringify(work)} at the start, ${JSON.stringify(workNow())} now)`
+  const placeId = String(display.id)
+  const savedPlace = tabPlaces[placeId]
   const hold = async (p: Electron.Point, ms: number) => {
     const until = Date.now() + ms
     do {
@@ -1550,20 +1559,23 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await hold(high, 220)
   need(presenceNow.revealed, `a push held still for ${EDGE_FAR_DWELL_MS} ms high on the edge did not bring the tab out`)
   await sleep(500)
-  need(w.isVisible() && w.getBounds().y === work.y, `the tab came out at ${w.getBounds().y} for a push at the top, not at ${work.y} (under the menu bar)`)
-  need(savedTabTop() === saved, 'a push moved the saved spot')
+  const top = spotFor(high.y)
+  need(w.isVisible() && w.getBounds().y === top && top === workNow().y, `the tab came out at ${w.getBounds().y} for a push at the top, not at ${top} (under the menu bar) ${areas()}`)
+  need(tabPlaces[placeId] === savedPlace, 'a push moved the saved spot')
   // Down the edge, still: the tab tucks away from under it and stays away while the cursor rests there.
   const low = edgeAt(work.y + work.height - 10)
   await hold(low, TUCK_MS + SLIDE_MS + 400)
   need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away with the cursor resting further down the edge')
-  need(boundsFor('collapsed').y === saved, `the tucked-away tab is at ${boundsFor('collapsed').y}, not back at its saved spot (${saved})`)
+  need(boundsFor('collapsed').y === savedTabTop(), `the tucked-away tab is at ${boundsFor('collapsed').y}, not back at its saved spot (${savedTabTop()})`)
   await hold(low, 800)
   need(!presenceNow.revealed, 'the tab came back with the cursor still resting on the edge')
   lookAtEdge(away)
   await hold(low, EDGE_FAR_DWELL_MS + 100)
   await sleep(500)
-  const bottom = work.y + work.height - tabH
-  need(presenceNow.revealed && w.isVisible() && w.getBounds().y === bottom, `after leaving the edge, a push at the bottom brought the tab to ${w.isVisible() ? w.getBounds().y : 'nowhere'}, not ${bottom}`)
+  // At the bottom of the work area: the cursor is 10 points above it, so the tab is shifted up to stay inside.
+  const bottom = spotFor(low.y)
+  need(bottom === workNow().y + workNow().height - tabH, `a push 10 points above the bottom would put the tab at ${bottom}, not against the bottom of the work area ${areas()}`)
+  need(presenceNow.revealed && w.isVisible() && w.getBounds().y === bottom, `after leaving the edge, a push at the bottom brought the tab to ${w.isVisible() ? w.getBounds().y : 'nowhere'}, not ${bottom} ${areas()}`)
   // macOS animates the window between the tab and the panel, and takes longer at some times than others (with a
   // full-screen app's Space showing, say): wait for it to get there, up to 1.5 s.
   const settles = async (ok: () => boolean) => {
@@ -1572,7 +1584,7 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
     return ok()
   }
   setDock('expanded')
-  const panelTop = topAround(work, bottom, tabH, boundsFor('expanded').height, 24)
+  const panelTop = topAround(workNow(), bottom, tabH, boundsFor('expanded').height, 24)
   need(await settles(() => w.getBounds().y === panelTop), `the panel opened at ${w.getBounds().y}, not around the tab at ${bottom} (${panelTop})`)
   setDock('collapsed')
   need(await settles(() => w.isVisible() && w.getBounds().y === bottom), `closing the panel put the tab at ${w.getBounds().y}, not back where it was (${bottom})`)
@@ -1586,7 +1598,7 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await tuck()
   need(!w.isVisible() && boundsFor('collapsed').y === bottom - 100, 'after a drag, the tucked-away tab is not at its new saved spot')
   await resetTabPlace()
-  need(savedTabTop() === saved, 'Reset did not bring the saved spot back')
+  need(tabPlaces[placeId] === undefined && savedTabTop() === topFor(workNow(), tabH, undefined), `Reset did not bring the tab back to the middle ${areas()}`)
   console.log(`smoke: the tab comes to you: a push held ${EDGE_FAR_DWELL_MS} ms brings it out at the cursor (top and bottom), sliding along the edge doesn't, a push counts again only after leaving the edge, the panel and a nudge grow from where it is, and a drag there saves it`)
 
   // Alerts: only a session that needs me peeks out. The rest wait (a dot in the menu bar) and show when the panel opens.
