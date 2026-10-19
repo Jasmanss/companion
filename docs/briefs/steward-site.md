@@ -12,16 +12,39 @@ The user's words: "what if we made a website to showcase steward for people to m
 - **Not picked:** a features and roadmap section. A one-line intro of what Steward is, and nothing about upcoming features like Visual Review and Overnight Watch.
 - **Home:** its own small site, hosted free.
 - **Timing:** design now, build after quiet mode Phase 3. Going live is outward-facing and needs the user's OK at that time.
+- **Direction added 2026-10-19:** "The website should feel like a product release. Like when apply changes there website for their new products like that." A product-launch page: a full-bleed hero, one idea per screen, scroll storytelling, cinematic clips, a specs-style close. Take the feel from such pages without copying them: no Apple logos, images, product names or wording.
 - **Rules:** no new dependency without asking, no CDN libraries, no three.js or WebGL, Steward's look, animations tested at a normal frame rate in headless Chrome, plain language, no em dashes.
 
 ## Design (Roadmap & design)
 
 ### What it is
-One page, no framework: a header, a hero, "Watch it work" (five clips), "Try it" (a live demo), "How it's built", and a footer. Steward's own look (the Ice tint, glass panels, the system font, light and dark, phone width). The design page is `design/site.html`, a working mock of the whole page that the build copies the look from. In it the clips are placeholders and the demo is a small CSS mock of what the real one does.
+A product-launch page, one HTML file with no framework, in nine screens. The design page is `design/site.html` (a working page, open it and scroll). The page is built from the app's own look in HTML and CSS (the Ice tint, glass, the Pill, the edge tab, the notch), not from screenshots, so it stays light and sharp.
 
-**The honest line is in three places:** a note in the hero ("A personal project. It is not available to download."), the footer ("made for one person. It is not for sale and has no download or waitlist."), and nothing anywhere that could read as a call to action. No buttons that go anywhere except the page's own sections.
+1. **Hero.** "Steward" very large, one tagline ("A small helper at the edge of your screen."), and a mock Mac screen that rises as you scroll while the tab slides out of the edge with the Pill's face on it.
+2. **It comes to you.** The cursor stops at the edge, the tab slides out at that height, tucks away, and comes out again lower down.
+3. **A face that tells you.** The Pill changes mood as you scroll: resting, thinking, talking, needs you, sleepy.
+4. **Quiet until it matters.** A desktop with nothing on it, then one alert slides out.
+5. **At home in the notch.** The notch is plain black, then the chin grows and the eyes wake up and follow the cursor.
+6. **Ask. Watch. Done.** A small request, shown as the steps Steward takes.
+7. **See it for real.** The five recorded clips, one full-width moment each.
+8. **Try it.** The interactive demo.
+9. **How it's built.** A spec sheet (Chats, Phases, Checks, CI, Merge, Code), then a closing line.
 
-**Copy rules:** one-line intro (what it does today, from SPEC: it keeps watch while the user codes with Claude Code, tells them when a session needs them, collects screenshots in a tray, stays out of the way). Nothing about Visual Review, Overnight Watch, or any planned feature. No names of the user's projects (SPEC.md lists some), no real folder paths, no names of chats or sessions, no PR numbers or links, no keys. The "How it's built" section says "four chats with four roles", "one phase at a time", "CI on every phase", and a test count written as "more than 280" so it does not go stale; the code is called private.
+**One idea per screen, very little copy.** Each headline is two to five words and each sentence under 15. No feature lists, no roadmap, nothing about unbuilt features.
+
+**Look: dark, one look, no toggle.** Chosen because the two things the page shows best are light on black: the Pill's lit eyes and the notch, which is black by nature. A dark page makes them glow, and it is how pro product pages usually look. The app's own panel and cards are glass, and they read well on dark. A light mode would halve the polish work (every scene would be designed twice) and make the notch scene weaker; a mixed page (some screens light) would break the "one object, lit from inside" feel. If the user wants light for daytime reading, a light version is an add-on after the first launch, not part of it.
+
+**The honest line:** the closing screen says "A personal project, made for one person. It is not for sale and has no download or waitlist." The demo says "Nothing here is saved or sent anywhere." There is no download or buy button, and nothing that reads as a call to action. The top bar has only links to the page's own sections.
+
+**Scroll storytelling (how it works):**
+- Each of the six story screens is a tall box with a pinned screen inside (`position: sticky`). Scrolling through the box drives a "progress" from 0 to 1, and every moving part is a CSS keyframe animation on `transform` or `opacity` only.
+- **In Chrome and other browsers with scroll-driven animations** (`animation-timeline: view()`), CSS drives it directly. **Everywhere else** a small script (about 15 lines) sets the progress on each scene from the scroll position, and the same keyframes follow it. Open the page with `?fallback` to force the script and compare. Both were checked and look the same.
+- **Reduced motion:** with `prefers-reduced-motion` on, nothing is pinned and nothing moves with scroll. Every screen shows its finished picture (the moods become a row of five, the alert and both tabs are shown), the Pill's blinking stops, and smooth scrolling is off.
+- **Phone:** the same scenes stack (headline above, mock below) and still pin.
+- **No script at all:** the pinned scenes stay at their first state. Acceptable for a showcase page, noted as a known limit.
+- **Cost:** no images, no fonts, no libraries; the whole page is one file of roughly 25 KB before the clips.
+
+**Copy rules:** the intro line says what it does today (from SPEC). Nothing about Visual Review, Overnight Watch, or any planned feature. No names of the user's projects (SPEC.md lists some; the demos use "my-site"), no real folder paths, no names of chats or sessions, no PR numbers or links, no keys. "How it's built" says four chats with four roles, one phase at a time, CI on every phase, "more than 280 tests" (so it does not go stale), and that the code is private.
 
 ### The five clips (the user records them)
 Silent, looping, each short. The site shows a poster image first and loads the video only when played, so the page stays light.
@@ -34,10 +57,11 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 | 4 | Living in the notch | about 8 s | The notch asleep, rest the cursor on it, the black grows and the eyes follow the cursor. (Record again after notch Phase 3, when the panel drops from the notch.) |
 | 5 | A request, start to finish | about 15 s | Ask for something small in a demo project and show the steps and the answer. |
 
-**Format and size (what keeps the page light):**
-- MP4, H.264, no audio track, 30 fps, 960 pixels wide at most (crop to the part of the screen that matters, for example the right third for the edge, rather than the whole display).
-- Aim for 2 to 3 MB per clip and no more than 12 MB for all five. `ffmpeg` is installed on this Mac (`/opt/homebrew/bin/ffmpeg`), so Claude can compress the raw recordings: roughly `ffmpeg -i in.mov -an -vf "scale=960:-2,fps=30" -c:v libx264 -crf 28 -preset slow -movflags +faststart out.mp4`. A poster frame of about 60 KB each (WebP or JPEG) comes from the same tool.
-- Markup: `<video muted loop playsinline preload="none" poster="...">`, with a play button, and the reduced-motion setting means no autoplay.
+**Format and size (revisited for the launch layout, where each clip is a full-width moment):**
+- All five clips are **16:10** (the same shape as a Mac screen), so every block on the page lines up. Crop to the part that matters: for the edge clips the right 60% of the screen, for the notch clip the top-center, always at 16:10.
+- MP4, H.264, no audio track, 30 fps, **1280 pixels wide**, because the clips now show full width on large screens (960 would look soft). Aim for 3 to 4 MB each and no more than 16 MB for all five. `ffmpeg` is installed (`/opt/homebrew/bin/ffmpeg`), so Claude compresses the raw recordings, roughly `ffmpeg -i in.mov -an -vf "scale=1280:-2,fps=30" -c:v libx264 -crf 28 -preset slow -movflags +faststart out.mp4`, and extracts a poster frame (WebP or JPEG, about 80 KB).
+- **Playback:** muted loops that start when the clip is in view and stop when it leaves, each with a visible Pause button (a keyboard-reachable control, so it is never a clip you cannot stop). Nothing downloads until the clip is near the screen: `preload="none"`, with the poster showing first. Reduced motion means no autoplay; the clip waits for the Play button.
+- **Why shots may change:** the clips are the real thing, the scenes above are the explainer. If a scene already shows an idea well, its clip can be shorter. The user decides after seeing the first scenes live.
 - **How to record:** the built-in ⌘⇧5 "Record Selected Portion". Record a part of the screen, not the whole thing.
 - **Before recording:**
   - Use a demo project and a clean desktop: no personal tabs, bookmarks, notifications, other apps' windows or private project names. The menu bar shows personal items, so crop it out where possible.
@@ -64,11 +88,12 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 - **Going live needs the user's OK at that time.** Publishing is outward-facing and not undone by deleting later (copies and caches can persist). Nothing is deployed until the user says so.
 
 ### Build phases (after quiet mode Phase 3; each its own draft PR into main, CI green before it counts as done)
-1. **Site shell:** `site/index.html`, its CSS, the hero, how-it-built and footer copy, and `site/build.mjs`, viewable locally. The "Watch" and "Try it" sections are hidden until they have real content, so no placeholders ship.
-2. **A site check:** `site/check.mjs` (plain Node) that fails if the built site contains private strings (`/Users/`, `local_`, `claude/` branch names, `Jasmanss`, PR numbers, the SPEC project names, "planned", "Visual Review", "Overnight Watch"), a clip over 3 MB or more than 12 MB in total, an external URL other than links the user approves, or a missing alt/poster. Run it in CI.
-3. **Clips:** the user records the five clips, Claude compresses them, adds posters, and turns the "Watch" section on. This phase waits for the recordings.
-4. **Live demo:** the trimmed demo build and the iframe section, with the check updated for it. Test animations in headless Chrome at a normal frame rate, and at phone width.
-5. **Go live:** the user sets up Vercel (above), a protected preview first, then the user looks and says OK before anything is public.
+1. **The page shell and the hero:** `site/index.html`, `site/build.mjs`, the dark look, the top bar, the hero with its scroll-driven screen, and the closing screen. Viewable locally. Includes the script fallback and the reduced-motion layout, because every later scene depends on them.
+2. **The five scenes:** edge, moods, quiet, notch and request (they share the scene pattern from phase 1). Checked in headless Chrome at a normal frame rate, at desktop and phone width, with the script fallback and with reduced motion.
+3. **A site check:** `site/check.mjs` (plain Node) that fails if the built site contains private strings (`/Users/`, `local_`, `claude/` branch names, `Jasmanss`, PR numbers, the SPEC project names, "planned", "Visual Review", "Overnight Watch"), a clip over 4 MB or 16 MB in total, an external URL, or a missing poster or label. Run it in CI.
+4. **Clips:** the user records the five clips, Claude compresses them, adds posters, and turns the "See it for real" screen on (hidden until then, so no placeholders ship). Waits for the recordings.
+5. **Try it and the spec sheet:** the trimmed demo build in an iframe, and the "How it's built" screen, with the check updated for them.
+6. **Go live:** the user sets up Vercel (above), a protected preview first, then the user looks and says OK before anything is public.
 
 ### Files likely touched
 - **New:** `site/` (page, CSS, `build.mjs`, `check.mjs`, clips and posters), a `site` entry in `.gitignore` for the output folder, and a CI step that runs the check.
@@ -81,14 +106,18 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 2. **Clips age.** The app is still changing (quiet mode Phase 3, notch Phase 3). Re-recording is cheap, but the site should say nothing a clip would contradict.
 3. **A "try it" demo is not the app.** It shows the character and the panel, not the real work Steward does. The page says so ("Nothing here is saved or sent anywhere"), and does not claim more.
 4. **Vercel details to confirm at setup:** the preview protection default, and that the free plan's terms cover a personal showcase site. Both are the user's to check in their own account.
-5. **Name collision:** SPEC mentions an open check on whether the name Steward is taken. A public site makes that check more relevant. It is already on the ideas list ("Name availability check").
+5. **Scroll motion is the main craft risk.** Scroll-driven animation is native in Chrome and Safari-class browsers that support it and runs from a script elsewhere. On an old phone the script path could drop frames. Each scene is built so a dropped frame only looks slightly steppy, never broken, and reduced motion removes it entirely. Phase 2 tests at a normal frame rate; a real phone is the user's check.
+6. **Name collision:** SPEC mentions an open check on whether the name Steward is taken. A public site makes that check more relevant. It is already on the ideas list ("Name availability check").
 
 **Answered by the user (2026-10-19, via the front door):**
 - **"How it's built" is OK to show publicly, as designed** ("Yes, show it"). It names the roles and the flow, and nothing about the code, the chats' names or any link.
 - **Start on a free `.vercel.app` address.** A domain can come later.
 
 ### How to test
-- **Page:** open `design/site.html` (and the build later) in a browser at 375, 768 and 1100 pixels wide, in light and dark. No horizontal scroll, the demo's pickers work by keyboard, reduced motion stops the blinking.
+- **Page:** open `design/site.html` (and the build later) at 390, 820 and 1280 pixels wide and scroll slowly through every screen. Nothing may stutter at a normal frame rate (headless Chrome, not the throttled preview pane), nothing may overflow sideways, and every screen must read on its own.
+- **Both drivers:** compare the page with and without `?fallback`; the scenes should look the same at the same scroll position.
+- **Reduced motion:** turn it on in the system settings and check that every screen shows its finished picture and nothing moves or pins.
+- **Keyboard:** the top-bar links, the demo's pickers and each clip's Pause button work by keyboard and show a focus ring.
 - **Check script:** run it against a build that contains a planted bad string (a path, a "planned") and see it fail, then clean and see it pass.
 - **Clips:** play each at phone width; total download for the first screen stays small (the videos do not load until played).
 - **Demo:** every mood and color in the demo shows what the app shows, in headless Chrome at a normal frame rate. Compare with `design/moods.html`.
