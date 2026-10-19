@@ -13,6 +13,8 @@ is for picking an approach. Brief: `docs/briefs/quiet-mode.md`, Part 3.
 - **Hide from screen sharing: keep it, but don't promise too much.** It's one call per window and it works for some
   capture tools, but macOS lets newer screen-sharing apps capture the window anyway. Only a hand test on your Mac can
   say which of your apps respect it. The setting already exists (on for new installs); nothing applies it yet.
+- **Decided (2026-10-19):** approach A is built (Phase 3). In the user's share test the protected window showed up in
+  the share, so "Hide from screen sharing" is left out for now. Its saved setting stays, unused and not shown.
 
 ## 1. Hide from screen sharing and recordings
 
@@ -33,6 +35,9 @@ is for picking an approach. Brief: `docs/briefs/quiet-mode.md`, Part 3.
   
   I can show that test window for a minute whenever you're ready to share. If none of the apps you use respect it, the
   option isn't worth a Settings line.
+
+  **Hand test, 2026-10-19:** a protected window and an unprotected one side by side, with the user sharing the whole
+  screen on macOS 27.0.1. The protected one showed up in the share, so the option was left out.
 - **Side effects:** where it works, Steward also disappears from your own screenshots and demo recordings, so the
   Settings line has to say so. Sharing a single window instead of the whole screen never shows Steward anyway.
 
