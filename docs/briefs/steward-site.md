@@ -106,7 +106,7 @@ Silent, looping, each short. The site shows a poster image first and loads the v
 2. **Clips age.** The app is still changing (quiet mode Phase 3, notch Phase 3). Re-recording is cheap, but the site should say nothing a clip would contradict.
 3. **A "try it" demo is not the app.** It shows the character and the panel, not the real work Steward does. The page says so ("Nothing here is saved or sent anywhere"), and does not claim more.
 4. **Vercel details to confirm at setup:** the preview protection default, and that the free plan's terms cover a personal showcase site. Both are the user's to check in their own account.
-5. **Scroll motion is the main craft risk.** Scroll-driven animation is native in Chrome and Safari-class browsers that support it and runs from a script elsewhere. On an old phone the script path could drop frames. Each scene is built so a dropped frame only looks slightly steppy, never broken, and reduced motion removes it entirely. Phase 2 tests at a normal frame rate; a real phone is the user's check.
+5. **Scroll motion is the main craft risk.** Scroll-driven animation is native in Chrome and other browsers that support it, and runs from a script elsewhere. On an old phone the script path could drop frames. Each scene is built so a dropped frame only looks slightly steppy, never broken, and reduced motion removes it entirely. Phase 2 tests at a normal frame rate; a real phone is the user's check.
 6. **Name collision:** SPEC mentions an open check on whether the name Steward is taken. A public site makes that check more relevant. It is already on the ideas list ("Name availability check").
 
 **Answered by the user (2026-10-19, via the front door):**

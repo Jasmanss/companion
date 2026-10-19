@@ -23,7 +23,7 @@
       "title": "Up next",
       "items": [
         { "name": "Quiet mode, Phase 3", "line": "Step aside (screen sharing, full-screen apps, listed apps). Starts with an investigation report. Waits for your go, typed into Main building.", "date": "2026-10-16" },
-        { "name": "Steward showcase site", "line": "Designed, built after quiet mode Phase 3: five clips you record, a live demo, how it is built. Brief docs/briefs/steward-site.md, page design/site.html. Waits for your go.", "date": "2026-10-19" },
+        { "name": "Steward showcase site", "line": "Designed as a product-launch page (dark, scroll scenes, full-width clips you record, a live demo, a spec sheet). Built after quiet mode Phase 3. Brief docs/briefs/steward-site.md, page design/site.html. Waits for your go.", "date": "2026-10-19" },
         { "name": "Notch dock, Phase 3", "line": "Designed, waiting for you. 3a hover and panel from the notch, 3b alerts below the menu bar, 3c drop images, 3d optional morph.", "date": "2026-10-15" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
