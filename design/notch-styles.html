@@ -125,7 +125,7 @@ button:focus-visible,input:focus-visible{outline:2px solid #5aa9ff;outline-offse
 .rm .mv,.rm .eye,.rm .pad,.rm .chin,.rm .wL,.rm .wR,.rm .dp,.rm .vs,.rm .pl,.rm .slit{transform:none!important;animation:none!important;transition:opacity .2s linear!important;transition-delay:0s!important}
 .rm .te,.rm .wL .eye,.rm .wR .eye{display:none!important}
 .rm .A .we,.rm .B .we,.rm .A .ce,.rm .B .ce{display:block!important}
-.rm .we,.rm .wL,.rm .wR{opacity:1}.rm [data-s=alert] .we,.rm [data-s=alert] .wL,.rm [data-s=alert] .wR{opacity:0}
+.rm .we,.rm .wL,.rm .wR{opacity:1}.rm :is(.A,.B,.C)[data-s=alert] :is(.we,.wL,.wR){opacity:0}
 .rm .A .chin,.rm .B .chin,.rm .C .chin,.rm .R2 .chin{opacity:0}.rm [data-s=alert] .chin{opacity:1}
 .rm .A .ce,.rm .B .ce,.rm .C .ce,.rm .R2 .ce{opacity:0}.rm [data-s=alert] .ce{opacity:1}
 .rm .R2[data-s=alert] .ce{display:none!important}
