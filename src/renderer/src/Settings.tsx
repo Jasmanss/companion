@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
 import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, SUGGESTED_STEP_ASIDE_APPS, TAB_SIZES, panelTint } from '../../shared/steward'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
 import type { Glint } from './pill/eyes'
@@ -520,6 +520,8 @@ export function ProjectsSection(props: SectionProps) {
         </Group>
       )}
 
+      {settings.projects.length > 0 && <ReviewGroup projects={settings.projects} run={run} />}
+
       <Group title="Commands that skip approval" note="Exact commands only, one per line. Everything else asks first, and deploys, rollbacks and git push always do.">
         <div className="set-field">
           <textarea rows={6} value={allowlist} spellCheck={false} onChange={(e) => setAllowlist(e.target.value)} aria-label="Commands that skip approval" />
@@ -642,8 +644,110 @@ function SecretField({
   )
 }
 
+/** One project's Visual Review address: where its app runs on this Mac, and a button to see that Steward can capture it. */
+function ReviewAddressRow({ project, run }: { project: Project; run: (p: Promise<SettingsView>) => Promise<boolean> }) {
+  const saved = project.url ?? ''
+  const [text, setText] = useState(saved)
+  const [trying, setTrying] = useState(false)
+  const [result, setResult] = useState<ReviewTryResult | null>(null)
+  const dirty = text.trim() !== saved
+
+  // Once saved (tidied up), or changed elsewhere, the field shows the address as it is.
+  useEffect(() => setText(saved), [saved])
+
+  const save = () => run(api().settings.setProjectUrl(project.path, text))
+  const tryIt = async () => {
+    setResult(null)
+    setTrying(true)
+    // "Try it now" looks at the saved address, so a changed one is saved (and checked) first.
+    if (!dirty || (await save())) setResult(await api().review.tryIt(project.path))
+    setTrying(false)
+  }
+
+  return (
+    <div className="set-row column">
+      <div className="set-label">
+        <span>{project.name}</span>
+        <small>{saved ? 'Visual Review is on' : 'Off. Paste the address your app runs at.'}</small>
+      </div>
+      <div className="set-inline">
+        <input
+          type="text"
+          className="set-address"
+          value={text}
+          placeholder="localhost:3000"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && dirty && save()}
+          aria-label={`App address for ${project.name}`}
+        />
+        <button className="btn" disabled={!dirty} onClick={save}>
+          Save
+        </button>
+        <button className="btn" disabled={trying || !text.trim()} onClick={tryIt}>
+          {trying ? 'Looking…' : 'Try it now'}
+        </button>
+      </div>
+      {result && (result.ok ? (
+        <figure className="set-shot">
+          <img src={result.image} alt={`${project.name} as Steward sees it`} />
+          <figcaption>
+            Captured {result.width} × {result.height} px in {(result.ms / 1000).toFixed(1)} s.
+          </figcaption>
+        </figure>
+      ) : (
+        <p className="set-note flush" role="alert">
+          {result.error}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+/** Visual Review: when a session stops and the running page looks different, Steward shows the before and after. */
+function ReviewGroup({ projects, run }: { projects: Project[]; run: (p: Promise<SettingsView>) => Promise<boolean> }) {
+  const [usage, setUsage] = useState<{ count: number; bytes: number } | null>(null)
+  useEffect(() => {
+    api().review.usage().then(setUsage, () => setUsage(null))
+  }, [])
+  const size = usage ? (usage.bytes < 1_000_000 ? `${Math.max(1, Math.round(usage.bytes / 1000))} KB` : `${Math.round(usage.bytes / 1_000_000)} MB`) : ''
+
+  return (
+    <Group
+      title="Visual Review"
+      note="When a Claude Code session in a project stops and the page at its address looks different, Steward shows what changed, before and after. Only addresses on this Mac work (localhost, 127.0.0.1). The pictures stay on this Mac, and Steward never signs in, so a page behind a login looks the same twice. It also needs the Claude Code connection in Connections."
+    >
+      {projects.map((p) => (
+        <ReviewAddressRow key={p.path} project={p} run={run} />
+      ))}
+      <div className="set-row">
+        <div className="set-label">
+          <span>Review pictures</span>
+          <small>{usage ? (usage.count ? `${usage.count} kept, ${size}.` : 'None kept.') : ''} Up to 10 per project, 14 days, about 300 MB.</small>
+        </div>
+        <div className="set-ctl">
+          <button
+            className="btn"
+            disabled={!usage?.count}
+            onClick={() =>
+              api()
+                .review.clear()
+                .then(() => api().review.usage())
+                .then(setUsage)
+            }
+          >
+            Clear review pictures
+          </button>
+        </div>
+      </div>
+    </Group>
+  )
+}
+
 /** The "Connect to Claude Code" switch. Connecting always shows the exact change first. */
-function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
+function ClaudeConnect({ onError, reviewAddress }: { onError: (message: string) => void; reviewAddress: boolean }) {
   const [status, setStatus] = useState<ClaudeHookStatus | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const fail = (err: unknown) => onError(message(err))
@@ -655,6 +759,8 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
   }, [])
 
   if (!status) return null
+  // Visual Review needs the prompt hook. A connection from before it is still fine for everything else.
+  const needsReviewHook = reviewAddress && status.connected && !status.reviewHook
   return (
     <Group
       title="Claude Code"
@@ -665,6 +771,7 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
             : status.outdated
               ? 'Your hooks were set up before the rename and still read from the old data folder. They work for now; update them so they point at Steward.'
               : 'See every Claude Code session in the panel, and get a nudge when one needs you or finishes.'}
+          {reviewAddress && !status.connected && ' Visual Review needs this connection to know when a prompt is sent.'}
           {!status.serverRunning && ' The listener isn’t running, so events won’t arrive until Steward restarts.'}
           {status.error && ` ${status.error}`}
         </>
@@ -694,6 +801,19 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
           </button>
         </div>
       )}
+      {needsReviewHook && !status.outdated && preview === null && (
+        <div className="set-row">
+          <div className="set-label">
+            <span>Visual Review needs one more hook</span>
+            <small>It tells Steward a prompt was sent, so it can photograph your app before Claude changes it.</small>
+          </div>
+          <div className="set-ctl">
+            <button className="btn" onClick={() => api().claude.preview().then(setPreview, fail)}>
+              Update hooks
+            </button>
+          </div>
+        </div>
+      )}
       {preview !== null && (
         <div className="set-row column">
           <p className="set-note flush">
@@ -701,6 +821,11 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
             {status.outdated ? ', replacing the old entries in place' : ''}. Everything else in it stays as is, the original is backed up to{' '}
             <code>{status.backupFile}</code>, and turning this off removes only these entries.
           </p>
+          {!status.reviewHook && (
+            <p className="set-note flush">
+              This includes <code>UserPromptSubmit</code>, for Visual Review: it tells Steward a prompt was sent. What you type is dropped as it arrives and never kept.
+            </p>
+          )}
           <pre className="set-code">{preview}</pre>
           <div className="set-actions">
             <button className="btn" onClick={() => setPreview(null)}>
@@ -717,7 +842,7 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
                   }, fail)
               }
             >
-              {status.outdated ? 'Update these hooks' : 'Add these hooks'}
+              {status.outdated || status.connected ? 'Update these hooks' : 'Add these hooks'}
             </button>
           </div>
         </div>
@@ -769,7 +894,7 @@ export function ConnectionsSection(props: SectionProps) {
           onSave={(token) => run(api().settings.setVercelToken(token))}
         />
       </Group>
-      <ClaudeConnect onError={onError} />
+      <ClaudeConnect onError={onError} reviewAddress={settings.projects.some((p) => p.url)} />
     </>
   )
 }
