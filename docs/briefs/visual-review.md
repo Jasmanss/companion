@@ -96,11 +96,12 @@ The design page is `design/visual-review.html` (a working mock: drag the slider,
 6. **Hook change on existing installs** needs the user to press an update button once.
 7. **Anthropic's own preview pane** (research, medium confidence) is the nearest overlap. Steward's difference is the finish-time before/after with a decision, not a preview. Worth rechecking before the site claims anything about it.
 
-**For the user, as questions (none blocks the design; each has a recommendation):**
-1. **One address per project, and the root page of it.** Changes on other pages are missed in version 1. OK? (Recommendation: yes, and the address may include a path.)
-2. **"Send it back" is copy-and-paste in version 1.** The real send needs holding every turn open for review, so it comes later as an opt-in. OK? (Recommendation: yes.)
-3. **A card only when the page looks different.** Server-only turns stay quiet. OK? (Recommendation: yes.)
-4. **Storage limits:** 10 reviews per project, 14 days, about 300 MB, with a clear button. OK?
+**Answered by the user (2026-10-20, via the front door): "Accept all".**
+1. **One address per project**, and a path in the address is fine. Changes on other pages are missed in version 1.
+2. **"Send it back" copies a note** in version 1. The real send comes later as an opt-in hold on the Stop hook (Phase 4).
+3. **A card only when the page looks different.** Server-only turns stay quiet.
+4. **Storage:** 10 reviews per project, 14 days, about 300 MB, with a "Clear review pictures" button.
+Nothing is left open for the user. Phase 1 was started on the same day (see the Result section).
 
 ### How to test
 - **Unit tests:** the compare gate (identical, tiny change, big change, different heights), retention (count, age, size), loopback-only address validation (accepts localhost and 127.0.0.1, refuses other hosts, refuses a hook-supplied URL), the `review:` key counting as "needs me" and mapping to no Notifications switch, the hook payload for `UserPromptSubmit` dropping the prompt, project parsing keeping `url`.
@@ -112,7 +113,10 @@ The design page is `design/visual-review.html` (a working mock: drag the slider,
   - Phase 2: the alert in quiet mode ("needs me" peeks out; nothing else does), full-screen step aside holding it, the notch.
 - **Privacy check:** after a run, confirm the files are only under the Steward data folder, and nothing else was opened or sent.
 
-## Result (Main building)
+## Result (Feature building)
+
+### Phase 1: See it (started 2026-10-20)
+The user answered "Yes, start Phase 1" and Feature building began on branch `claude/visual-review-phase-1`, with the go in its opening task. The front door set this brief's Status to `ready`.
 - What was built, files changed, check results
 - Branch / worktree
 - Anything unfinished or uncertain

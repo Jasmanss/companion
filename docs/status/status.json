@@ -7,7 +7,6 @@
       "items": [
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
         { "name": "OK the merge of #25", "line": "Notch 3b. Merge once CI is green.", "date": "2026-10-20" },
-        { "name": "Visual Review: four quick answers and the Phase 1 go", "line": "One address per project, Send it back is copy-and-paste first, a card only when the page looks different, and the storage limits. Each has a recommendation in the brief. Then the Phase 1 go, typed into Feature building.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -18,6 +17,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
+        { "name": "Visual Review, Phase 1: See it", "line": "Feature building is building it on claude/visual-review-phase-1: the address field, capture before and after, and the card in the panel. You said \"Accept all\" to the four questions.", "date": "2026-10-20" },
         { "name": "Notch 3b: draft PR #25", "line": "Built: alerts come out under the notch, below the menu bar (claude/notch-phase-3b). CI running.", "date": "2026-10-20" }
       ]
     },
@@ -25,7 +25,6 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Visual Review", "line": "Designed, built by Feature building: before and after of your running app when a session stops, with Looks good and Send it back. 5 small phases; Phase 1 shows it working. Brief docs/briefs/visual-review.md, page design/visual-review.html. Waits for your go.", "date": "2026-10-20" },
         { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
