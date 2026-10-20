@@ -1387,7 +1387,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 75_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 95_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       app.exit(0)
@@ -1901,6 +1901,64 @@ async function checkNotch(out: string): Promise<void> {
       await sleep(400)
       if (!notch.visible || win!.isVisible()) throw new Error('closing the panel did not bring Steward back to the notch')
       console.log(`smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back`)
+
+      // Every way of closing goes back up into the notch: while the panel goes, the window stays where it is (it never
+      // takes the edge's bounds, not even for a frame), the exit plays, and then the window goes and the notch is back,
+      // awake or asleep as Presence says. After Hide, Steward stays out of sight until it's brought back.
+      await settings.update({ keepPanelOpen: true })
+      const opens = { click: () => setDock('expanded'), 'Option Space': () => toggleDock(), 'the menu bar': () => setDock('expanded') }
+      const closes = {
+        Esc: () => void win!.webContents.executeJavaScript('window.steward.dock.collapse()'),
+        'Option Space': () => toggleDock(),
+        'clicking away': () => setDock('collapsed'),
+        'the hide button': () => void win!.webContents.executeJavaScript('window.steward.dock.hide()'),
+        'the chevron': () => void win!.webContents.executeJavaScript('window.steward.dock.collapse()'),
+      }
+      const paths: [keyof typeof opens, keyof typeof closes, 'always' | 'quiet'][] = [
+        ['click', 'Esc', 'always'],
+        ['Option Space', 'Option Space', 'always'],
+        ['the menu bar', 'clicking away', 'always'],
+        ['click', 'the hide button', 'always'],
+        ['Option Space', 'the chevron', 'quiet'],
+      ]
+      for (const [opener, closer, presence] of paths) {
+        if (settings.steward().presence !== presence) {
+          await settings.update({ steward: { presence } })
+          presenceChanged()
+        }
+        opens[opener]()
+        await sleep(600)
+        const panelAt = win!.getBounds()
+        if (dock !== 'expanded' || !win!.isVisible()) throw new Error(`the panel did not open from ${opener} in the notch`)
+        const edgeAt = boundsFor('collapsed')
+        const started = Date.now()
+        closes[closer]()
+        let visibleFor = 0
+        let exit = false
+        while (Date.now() - started < 900) {
+          if (!win!.isVisible()) break
+          visibleFor = Date.now() - started
+          const b = win!.getBounds()
+          if (b.x === edgeAt.x && b.width === edgeAt.width) throw new Error(`closing with ${closer} (opened by ${opener}) put the window at the edge: ${JSON.stringify(b)}`)
+          if (JSON.stringify(b) !== JSON.stringify(panelAt)) throw new Error(`closing with ${closer} (opened by ${opener}) moved the window to ${JSON.stringify(b)}, from ${JSON.stringify(panelAt)}`)
+          exit ||= Boolean(await win!.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-leaving')`))
+          await sleep(10)
+        }
+        if (win!.isVisible()) throw new Error(`closing with ${closer} (opened by ${opener}) did not let the window go`)
+        if (!exit || visibleFor < 100) throw new Error(`closing with ${closer} (opened by ${opener}) did not play the way back into the notch (out after ${visibleFor} ms)`)
+        const hidden = closer === 'the hide button'
+        await sleep(200)
+        if (notch.visible === hidden) throw new Error(hidden ? 'after the hide button, the notch still shows' : `after closing with ${closer}, the notch did not come back`)
+        if (!hidden && notch.state().awake !== (presence === 'always')) throw new Error(`after closing with ${closer}, the notch is ${notch.state().awake ? 'awake' : 'asleep'} in ${presence}`)
+        console.log(`smoke: notch: opened by ${opener}, closing with ${closer} (${presence === 'always' ? 'Always visible' : 'Only when needed'}) goes back up into the notch in ${visibleFor} ms, never at the edge`)
+        if (hidden) {
+          setDock('collapsed')
+          await sleep(300)
+          if (!notch.visible) throw new Error('the notch did not come back after being hidden')
+        }
+      }
+      await settings.update({ keepPanelOpen: keptOpen, steward: { presence: 'always' } })
+      presenceChanged()
     }
 
     // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
