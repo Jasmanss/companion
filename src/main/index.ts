@@ -373,6 +373,15 @@ function placeNotch(): void {
   notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge') && !steppedAside)
 }
 
+/**
+ * A display changed (the Dock or the menu bar moved, another resolution): the window goes where it belongs now. Not in
+ * the notch at rest: the window is gone there, or on its way back up into the notch, and is never at the edge.
+ */
+function placeAfterDisplayChange(): void {
+  if (!win || win.isDestroyed() || (inNotch() && (dock === 'collapsed' || dock === 'hidden'))) return
+  win.setBounds(boundsFor(dock))
+}
+
 /** The tab or the notch follows whether Steward is out: it slides in or out, or the notch wakes or goes to sleep. */
 function applyPresence(): void {
   notch?.setAwake(out())
@@ -1978,6 +1987,8 @@ async function checkNotch(out: string): Promise<void> {
         const edgeAt = boundsFor('collapsed')
         const started = Date.now()
         closes[closer]()
+        // A display change on its way back (the Dock showing, say) doesn't send it to the edge either.
+        setTimeout(placeAfterDisplayChange, 60)
         let visibleFor = 0
         let exit = false
         while (Date.now() - started < 900) {
@@ -2256,7 +2267,7 @@ app.whenReady().then(async () => {
     setInterval(() => void sessions.refresh().then((changed) => changed && sendSessions()), 3000)
   }
 
-  screen.on('display-metrics-changed', () => win?.setBounds(boundsFor(dock)))
+  screen.on('display-metrics-changed', placeAfterDisplayChange)
   // A display added or removed, the lid closed or opened, or another resolution: look for the notch again.
   let recheck: ReturnType<typeof setTimeout> | undefined
   const notchLater = () => {
