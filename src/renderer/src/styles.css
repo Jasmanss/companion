@@ -406,6 +406,170 @@ pre {
   height: 12px;
 }
 
+/* ---------- the nudge under the notch ----------
+   Docked in the notch, the nudge is black, like the notch, and joins its chin (design/notch.html, "A nudge"). The
+   window's top is the menu bar line: concave corners join the chin's sides just under it, and the body starts 8 points
+   down, wide, with one line of text under the chin. The chin itself is the notch window's, drawn over this one.
+   Coming out, the body grows from narrow (hidden behind the chin) to full width while it drops 30 points into place:
+   its middle scales sideways and its two rounded ends slide out, so the corners never squash. Only transform and
+   opacity move. No overshoot: the window's edges would clip it. Going back is the same in reverse, quicker. */
+.notch-nudge {
+  position: relative;
+  height: 100%;
+  cursor: pointer;
+}
+
+.notch-nudge > i {
+  position: absolute;
+  background: #000;
+}
+
+.nn-mid,
+.nn-side,
+.notch-nudge > .nn-fil {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation-fill-mode: both;
+}
+
+.nn-mid,
+.nn-side {
+  top: 8px;
+  bottom: 0;
+}
+
+.nn-mid {
+  left: 16px;
+  right: 16px;
+  animation-name: nudge-mid-in;
+}
+
+/* A point wider than the corners, so the middle overlaps them: black on black, no seam. */
+.nn-side {
+  width: 17px;
+}
+
+.nn-side.l {
+  left: 0;
+  border-radius: 14px 0 0 16px;
+  animation-name: nudge-l-in;
+}
+
+.nn-side.r {
+  right: 0;
+  border-radius: 0 14px 16px 0;
+  animation-name: nudge-r-in;
+}
+
+/* The concave corners between the chin's sides and the body's top: black, minus a circle. */
+.notch-nudge > .nn-fil {
+  top: 0;
+  width: 8px;
+  height: 9px;
+  background: transparent;
+  animation-name: nudge-fil-in;
+}
+
+.nn-fil.l {
+  left: calc(50% - var(--neck) / 2 - 8px);
+  background: radial-gradient(circle at 0 0, transparent 7.5px, #000 8px);
+  transform-origin: 100% 100%;
+}
+
+.nn-fil.r {
+  left: calc(50% + var(--neck) / 2);
+  background: radial-gradient(circle at 100% 0, transparent 7.5px, #000 8px);
+  transform-origin: 0 100%;
+}
+
+.nn-line {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  color: #f2f3f5;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  animation: nudge-text-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.14s both;
+}
+
+.nn-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nn-text b {
+  color: var(--lit);
+}
+
+.nn-more {
+  flex: none;
+  color: rgba(242, 243, 245, 0.6);
+}
+
+/* Shown while the cursor is on the nudge, over the line's end (black, so the text under it doesn't show through). */
+.nn-close {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #000;
+  color: rgba(242, 243, 245, 0.7);
+  opacity: 0;
+  transition: opacity 0.15s linear;
+}
+
+.notch-nudge:hover .nn-close {
+  opacity: 1;
+}
+
+.nn-close:hover {
+  background: #2a2a2c;
+  color: #f2f3f5;
+}
+
+.nn-close svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Going back up into the notch: the pieces, not the whole (App.tsx waits for the middle's end). */
+:root[data-leaving] #root > .notch-nudge {
+  animation: none;
+}
+
+:root[data-leaving] .nn-mid {
+  animation: nudge-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-side.l {
+  animation: nudge-l-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-side.r {
+  animation: nudge-r-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .notch-nudge > .nn-fil {
+  animation: nudge-fil-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-line {
+  animation: nudge-text-out 0.1s linear forwards;
+}
+
 /* ---------- panel ---------- */
 .panel {
   position: relative;
@@ -2142,6 +2306,71 @@ a.icon-btn {
   }
 }
 
+/* The nudge under the notch, from narrow (140 points of its 340) and 30 points up, behind the chin. */
+@keyframes nudge-mid-in {
+  from {
+    transform: translateY(-30px) scaleX(0.35);
+  }
+}
+
+@keyframes nudge-l-in {
+  from {
+    transform: translate(100px, -30px);
+  }
+}
+
+@keyframes nudge-r-in {
+  from {
+    transform: translate(-100px, -30px);
+  }
+}
+
+@keyframes nudge-fil-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+@keyframes nudge-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes nudge-up {
+  to {
+    transform: translateY(-30px) scaleX(0.35);
+  }
+}
+
+@keyframes nudge-l-up {
+  to {
+    transform: translate(100px, -30px);
+  }
+}
+
+@keyframes nudge-r-up {
+  to {
+    transform: translate(-100px, -30px);
+  }
+}
+
+/* Its own name: App.tsx takes panel-fade-out's end as the end of the whole way back. */
+@keyframes nudge-text-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes nudge-fil-up {
+  to {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
 @keyframes nudge-in {
   from {
     opacity: 0;
@@ -2344,6 +2573,24 @@ a.icon-btn {
 
   :root[data-leaving] #root > * {
     animation-name: panel-fade-out;
+  }
+
+  /* The nudge under the notch fades in and out whole, its pieces still. */
+  .notch-nudge > i,
+  .notch-nudge > .nn-fil,
+  .nn-line,
+  :root[data-leaving] .notch-nudge > i,
+  :root[data-leaving] .notch-nudge > .nn-fil,
+  :root[data-leaving] .nn-line {
+    animation: none;
+  }
+
+  .notch-nudge {
+    animation: fadein 0.2s linear both;
+  }
+
+  :root[data-leaving] #root > .notch-nudge {
+    animation: panel-fade-out 0.2s linear forwards;
   }
 
   :root[data-slide='out'] #root {
