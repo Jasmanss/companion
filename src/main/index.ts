@@ -8,7 +8,7 @@ import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, i
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
 import { DIM_AFTER_MS } from '../shared/dim'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -1416,7 +1416,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 95_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       app.exit(0)
@@ -1768,6 +1768,7 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
     raise({ key: `approval:smoke-${edge}`, level: 'urgent', title: 'A session needs you', detail: 'mirrored on both edges' })
     need(dock === 'nudge', `a session that needs me did not peek out on the ${edge} edge`)
     await sleep(700)
+    need(Boolean(await w.webContents.executeJavaScript(`Boolean(document.querySelector('.nudge')) && !document.querySelector('.notch-nudge')`)), `the nudge on the ${edge} edge is not the edge's own`)
     await flush('the nudge', edge, edge === 'left' ? '-left-nudge.png' : undefined)
     setDock('collapsed')
     await sleep(700)
@@ -2017,6 +2018,8 @@ async function checkNotch(out: string): Promise<void> {
       presenceChanged()
     }
 
+    await checkNotchNudge(out, notchStyle)
+
     // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
     await settings.update({ steward: { presence: 'quiet' } })
     presenceChanged()
@@ -2069,6 +2072,106 @@ async function checkNotch(out: string): Promise<void> {
   replaceForNotch()
   if (!win?.isVisible()) throw new Error('the tab did not come back to the edge')
   console.log('smoke: notch off, the tab is back at the edge')
+}
+
+/**
+ * Docked in the notch, an alert that peeks out comes out under the notch, below the menu bar, never from the edge:
+ * centered on the notch, its top on the menu bar line, joined to the chin (Wings grows one for it), with one line of
+ * text under the chin. It comes down out of the notch and goes back up into it, and the window never moves on its way.
+ * Only when needed (checked in Chin), it wakes the notch, and after it the notch stays awake until the cursor has left
+ * it, like the tab at the edge.
+ */
+async function checkNotchNudge(out: string, notchStyle: NotchStyle): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const w = win!
+  const geo = notchGeo!
+  const layout = notch.state().layout!
+  const area = notchDisplay().workArea
+  const want = nudgeUnderNotch(geo, area, NUDGE_WIDTH)
+  const body = await motionLook(w.webContents, '.nn-mid', '.notch-nudge')
+  for (const presence of notchStyle === 'chin' ? (['always', 'quiet'] as const) : (['always'] as const)) {
+    if (settings.steward().presence !== presence) {
+      await settings.update({ steward: { presence } })
+      presenceChanged()
+      await sleep(600)
+    }
+    const how = `${notchStyle}, ${presence === 'always' ? 'Always visible' : 'Only when needed'}`
+    if (presence === 'quiet' && notch.state().awake) throw new Error('the notch is awake at rest in Only when needed')
+    const peek = () => {
+      raise({ key: `approval:smoke-notch-${notchStyle}-${presence}`, level: 'urgent', title: 'A session needs you', detail: 'under the notch' })
+      alerts.flush()
+    }
+    smoothly(`a nudge coming out of the notch (${how})${body.label}`, await watchMotion(w.webContents, body, 800, peek))
+    const at = w.getBounds()
+    if (dock !== 'nudge' || !w.isVisible()) throw new Error(`an alert that needs me did not come out of the notch (${how})`)
+    if (JSON.stringify(at) !== JSON.stringify(want)) throw new Error(`the nudge came out at ${JSON.stringify(at)}, not under the notch (${JSON.stringify(want)})`)
+    if (at.y < area.y) throw new Error('the nudge under the notch covers the menu bar')
+    const s = notch.state()
+    if (!notch.visible || !s.awake || !s.nudge || s.hover) throw new Error(`with a nudge out, the notch is ${JSON.stringify({ visible: notch.visible, awake: s.awake, nudge: s.nudge, hover: s.hover })}, not awake and joined to it`)
+    const chin = (await notch.capture())!
+    if (alphaAt(chin, layout.cx, layout.height + NOTCH_LIP - 4, NOTCH_WINDOW.width) <= 200) throw new Error(`with a nudge out, the notch (${notchStyle}) has no chin for it to join`)
+    const page = (await w.webContents.executeJavaScript(`(() => {
+      const line = document.querySelector('.notch-nudge .nn-line'), text = line?.querySelector('.nn-text'), r = line?.getBoundingClientRect()
+      return { notch: Boolean(line), edge: Boolean(document.querySelector('.nudge')), top: r?.top ?? 0, height: r?.height ?? 0, wide: text?.scrollWidth ?? 0, room: line?.clientWidth ?? 0 }
+    })()`)) as { notch: boolean; edge: boolean; top: number; height: number; wide: number; room: number }
+    if (!page.notch || page.edge) throw new Error('docked in the notch, the page drew the edge nudge')
+    if (page.height > 17) throw new Error(`the nudge's text is ${page.height} points tall, more than one line`)
+    // Below the chin, even talking's taller one.
+    const chinBottom = geo.y + geo.height + NOTCH_LIP + 5 - at.y
+    if (page.top < chinBottom) throw new Error(`the nudge's text starts ${page.top} points down, under the chin (${chinBottom})`)
+    const shot = await w.webContents.capturePage()
+    const alpha = (x: number, y: number) => alphaAt(shot, x, y, at.width)
+    if (alpha(at.width / 2, at.height - 3) <= 200 || alpha(12, at.height / 2 + 6) <= 200 || alpha(at.width - 12, at.height / 2 + 6) <= 200) throw new Error('the nudge under the notch is not black where its body is')
+    if (alpha(3, 2) > 20 || alpha(at.width - 3, 2) > 20) throw new Error('the nudge under the notch draws beside the chin, right under the menu bar line')
+    // Both windows, to see them together: the nudge, and the notch above it.
+    if (presence === 'always') {
+      await fs.writeFile(out.replace(/\.png$/, `-notch-nudge-${notchStyle}.png`), shot.toPNG())
+      await fs.writeFile(out.replace(/\.png$/, `-notch-nudge-${notchStyle}-notch.png`), chin.toPNG())
+    }
+    if (presence === 'always' && notchStyle === 'chin') {
+      // The first-launch note comes out here too, and has to fit on the line whole.
+      const note = firstPeekNote(noteFor())
+      w.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', ...note, at: Date.now() }])
+      await sleep(300)
+      const [wide, shown] = (await w.webContents.executeJavaScript(`(() => { const t = document.querySelector('.nn-text'); return t ? [t.scrollWidth, t.clientWidth] : [0, 0] })()`)) as number[]
+      if (wide > shown) throw new Error(`under the notch, the first-launch note "${note.title} · ${note.detail}" is cut: ${shown} of its ${wide} points show`)
+      console.log(`smoke: notch: on a line of ${page.room} points, the test alert takes ${page.wide} and the first-launch note "${note.title} · ${note.detail}" ${wide}, whole`)
+    }
+
+    // Tucked away, it goes back up into the notch, the window staying where it is until it goes.
+    let visibleFor = 0
+    let exit = false
+    let moved = ''
+    const tuckAway = async () => {
+      const started = Date.now()
+      void w.webContents.executeJavaScript('window.steward.dock.collapse()')
+      setTimeout(placeAfterDisplayChange, 60)
+      while (Date.now() - started < 700 && w.isVisible()) {
+        visibleFor = Date.now() - started
+        if (JSON.stringify(w.getBounds()) !== JSON.stringify(at)) moved ||= JSON.stringify(w.getBounds())
+        exit ||= Boolean(await w.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-leaving')`))
+        await sleep(10)
+      }
+    }
+    smoothly(`a nudge going back into the notch (${how})${body.label}`, await watchMotion(w.webContents, body, 800, tuckAway))
+    if (moved) throw new Error(`tucking the nudge away moved the window to ${moved}`)
+    if (w.isVisible()) throw new Error('tucking the nudge away did not let the window go')
+    // The way back takes 0.2 s: the window goes once it's over, not partway.
+    if (!exit || visibleFor < 160) throw new Error(`tucking the nudge away did not play its way back into the notch (out after ${visibleFor} ms)`)
+    if (!notch.visible || notch.state().nudge || !notch.state().awake) throw new Error(`after the nudge, the notch is ${JSON.stringify({ visible: notch.visible, ...notch.state(), layout: undefined })}, not awake on its own`)
+    if (presence === 'quiet') {
+      // Like the tab at the edge: out until the cursor has been away a moment, then the notch goes back to sleep.
+      lookAtCursor(false, false, NOTCH_DWELL_MS)
+      await sleep(TUCK_MS + 200)
+      lookAtCursor(false, false, NOTCH_DWELL_MS)
+      if (presenceNow.revealed || notch.state().awake) throw new Error('after a nudge, the notch did not go back to sleep once the cursor had left it')
+    }
+    console.log(`smoke: notch (${how}): an alert comes out under the notch (${at.width}x${at.height} at ${at.x},${at.y}), joined to the chin, on one line, and goes back up into it in ${visibleFor} ms${presence === 'quiet' ? '; it woke the notch, which sleeps once the cursor has left' : ''}`)
+  }
+  if (settings.steward().presence !== 'always') {
+    await settings.update({ steward: { presence: 'always' } })
+    presenceChanged()
+  }
 }
 
 /** Opens Settings and screenshots it (every section with STEWARD_SMOKE_SECTIONS), next to the smoke screenshot. */
