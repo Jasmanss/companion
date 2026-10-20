@@ -20,6 +20,7 @@ import {
   hookState,
   hooksPreview,
   readClaudeSettings,
+  reviewHookInstalled,
   withStewardHooks,
   withoutStewardHooks,
   writeClaudeSettings,
@@ -57,6 +58,9 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
+import { ReviewTracker } from './review'
+import { cardPicture, comparePictures } from './review-diff'
+import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
@@ -114,6 +118,9 @@ let settings: SettingsStore
 let tray: TrayStore
 let agent: Agent
 let sessions: SessionTracker
+/** Visual Review: the before and after of a project's running page. */
+let reviews: ReviewTracker
+let reviewStore: ReviewStore
 let appState: AppState
 let alerts: AlertQueue
 const moods = new MoodBoard()
@@ -1100,18 +1107,28 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
+  // A prompt was sent: photograph the page now (in the background), before Claude changes it.
+  if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
   const alert = await sessions.apply(event)
   sendSessions()
   if (alert) raise(alert)
+  // The turn ended: photograph it again, and keep a review if the page looks different.
+  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event)
+}
+
+/** The reviews waiting for a decision go to the panel: the card at its top. */
+function sendReviews(): void {
+  void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
 }
 
 const stewardHookCommand = () => hookCommand(app.getPath('userData'))
 
 async function claudeStatus(): Promise<ClaudeHookStatus> {
-  const base = { connected: false, outdated: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE, backupFile: path.basename(await backupFile()) }
+  const base = { connected: false, outdated: false, reviewHook: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE, backupFile: path.basename(await backupFile()) }
   try {
-    const state = hookState(await readClaudeSettings(), stewardHookCommand())
-    return { ...base, connected: state === 'current', outdated: state === 'outdated' }
+    const claude = await readClaudeSettings()
+    const state = hookState(claude, stewardHookCommand())
+    return { ...base, connected: state === 'current', outdated: state === 'outdated', reviewHook: reviewHookInstalled(claude, stewardHookCommand()) }
   } catch (err) {
     return { ...base, error: (err as Error).message }
   }
@@ -1192,6 +1209,11 @@ function registerIpc(): void {
   ipcMain.handle('agent:reset', () => agent.reset())
 
   ipcMain.handle('settings:get', () => settings.view())
+  ipcMain.handle('settings:setProjectUrl', async (_e, projectPath: unknown, address: unknown) => {
+    if (typeof projectPath !== 'string' || typeof address !== 'string') throw new Error('Bad request')
+    await settings.setProjectUrl(projectPath, address)
+    return settings.view()
+  })
   ipcMain.handle('settings:setApiKey', async (_e, key: string) => {
     await settings.setSecret('anthropic', key)
     return settings.view()
@@ -1286,6 +1308,23 @@ function registerIpc(): void {
     sessions.dismiss(id)
     sendSessions()
   })
+
+  // Visual Review. The address always comes from Settings (the project's own), never from the window or a hook.
+  ipcMain.handle('review:list', () => reviews.pending())
+  ipcMain.handle('review:tryIt', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.tryIt(projectPath) : { ok: false, error: 'Bad request' }))
+  ipcMain.handle('review:markGood', (_e, id: unknown) => (isReviewId(id) ? reviews.markGood(id) : undefined))
+  ipcMain.handle('review:sendBack', async (_e, id: unknown, note: unknown) => {
+    if (!isReviewId(id) || typeof note !== 'string') throw new Error('Bad request')
+    const text = await reviews.sendBack(id, note.slice(0, 2000))
+    clipboard.writeText(text)
+    return text
+  })
+  ipcMain.handle('review:openFull', async (_e, id: unknown, which: unknown) => {
+    const file = isReviewId(id) && (which === 'before' || which === 'after') ? reviewStore.file(id, which) : null
+    if (file) await shell.openPath(file)
+  })
+  ipcMain.handle('review:usage', () => reviewStore.usage())
+  ipcMain.handle('review:clear', () => reviews.clear())
 
   // Connecting merges Steward's hooks into ~/.claude/settings.json; the renderer shows the preview first.
   ipcMain.handle('claude:status', () => claudeStatus())
@@ -2148,6 +2187,17 @@ app.whenReady().then(async () => {
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })
+  reviewStore = new ReviewStore(path.join(userData, 'reviews'))
+  await reviewStore.load()
+  reviews = new ReviewTracker({
+    projects: () => settings.projects(),
+    capture: (url) => capturePage(url, { review: { settleMs: 10_000 } }),
+    compare: comparePictures,
+    card: cardPicture,
+    store: reviewStore,
+    onChange: sendReviews,
+    log: (message) => console.error(`[steward] visual review: ${message}`),
+  })
   alerts = new AlertQueue({ show: showAlerts })
   deploys = new DeployWatcher({ projects: () => settings.projects(), token: () => settings.vercelToken(), onChanges: onDeployChanges })
   agent = new Agent({

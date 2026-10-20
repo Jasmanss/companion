@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -51,6 +51,7 @@ const api: StewardAPI = {
     addStepAsideApp: () => ipcRenderer.invoke('settings:addStepAsideApp'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
+    setProjectUrl: (path, url) => ipcRenderer.invoke('settings:setProjectUrl', path, url),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
@@ -73,6 +74,16 @@ const api: StewardAPI = {
   },
   deploys: {
     status: () => ipcRenderer.invoke('deploys:status'),
+  },
+  review: {
+    list: () => ipcRenderer.invoke('review:list'),
+    onChanged: (cb) => subscribe<ReviewView[]>('review:changed', cb),
+    tryIt: (path) => ipcRenderer.invoke('review:tryIt', path),
+    markGood: (id) => ipcRenderer.invoke('review:markGood', id),
+    sendBack: (id, note) => ipcRenderer.invoke('review:sendBack', id, note),
+    openFull: (id, which) => ipcRenderer.invoke('review:openFull', id, which),
+    usage: () => ipcRenderer.invoke('review:usage'),
+    clear: () => ipcRenderer.invoke('review:clear'),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
