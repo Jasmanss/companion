@@ -5,8 +5,10 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
+        { "name": "Try Visual Review by hand", "line": "Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.", "date": "2026-10-20" },
+        { "name": "Pick what replaces notch look D", "line": "Eyes inside the notch probably can't show (it has no pixels). Choose: keep Chin and build only the Wings hand-off (recommended), a slim chin, or another look.", "date": "2026-10-20" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
-        { "name": "OK the merge of #25", "line": "Notch 3b. Merge once CI is green.", "date": "2026-10-20" },
+        { "name": "OK the merge of #25, then #26", "line": "#25 is notch 3b (CI green). #26 is Visual Review Phase 1 and conflicts with #25, so #25 merges first, then Feature building brings main in.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -17,7 +19,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Visual Review, Phase 1: See it", "line": "Feature building is building it on claude/visual-review-phase-1: the address field, capture before and after, and the card in the panel. You said \"Accept all\" to the four questions.", "date": "2026-10-20" },
+        { "name": "Visual Review, Phase 1: built, draft PR #26", "line": "Built by Feature building on claude/visual-review-phase-1: the address field, capture before and after, the change gate, and the card in the panel. 351 tests pass, CI running. Merges after #25.", "date": "2026-10-20" },
         { "name": "Notch 3b: draft PR #25", "line": "Built: alerts come out under the notch, below the menu bar (claude/notch-phase-3b). CI running.", "date": "2026-10-20" }
       ]
     },

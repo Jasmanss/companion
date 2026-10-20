@@ -119,6 +119,20 @@ Nothing is left open for the user. Phase 1 was started on the same day (see the 
 
 ### Phase 1: See it (started 2026-10-20)
 The user answered "Yes, start Phase 1" and Feature building began on branch `claude/visual-review-phase-1`, with the go in its opening task. The front door set this brief's Status to `ready`.
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Phase 1 built (recorded 2026-10-20, from the front door)
+Status stays `ready`: Phases 2 to 5 are not built. Built by Feature building.
+- **Branch / PR:** `claude/visual-review-phase-1`, commits `bf2e67b`, `3edbe30`, `8abfc1e`, `018c4c3`, `7c49bc0`, `3ddf764`. Draft PR #26, CI running when recorded.
+- **Built:**
+  - The App address per project, with "Try it now".
+  - The `UserPromptSubmit` hook (fire-and-forget, the prompt is dropped) and the Connections notice.
+  - Capture with frozen animations, settling until two captures match, loopback only, and redirects refused.
+  - The change gate at about 0.3% of one screen, counted per screen and not over the whole page, so long pages still count.
+  - The store with its limits and the clear button.
+  - The card with the slider, Looks good, Send it back (copies a note) and an X "Later".
+- **Checks:** lint, typecheck and 351 tests (Feature building and the front door). Smoke passed on runs 3 and 4. Run 2 failed once in the notch close check right after display-change events, likely the 3a bug that notch 3b's `0bfeb17` fixes (not in main yet). Idle CPU under about 1%.
+- **Spike result (Task 1):** `UserPromptSubmit` arrives from the terminal CLI (`-p`) and from the desktop app's bundled Claude Code, with the same prompt_id as Stop. The interactive terminal and a real Code tab session are not verified.
+- **Not checked:** a real project and a real Claude turn by hand, dark mode, and logins.
+- **Merge order:** #26 conflicts with #25 (notch 3b) in shared renderer files. #25 merges first (its CI is green), then Feature building brings main in.
+- **Waiting on the user:** try Visual Review by hand, then OK the merge of #25, then #26.
+- **Next:** Phase 2 (Tell me), after the user tries Phase 1. The user types that go into Feature building.
