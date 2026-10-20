@@ -5,6 +5,7 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
+        { "name": "Pick a notch style", "line": "design/notch-styles.html: three ways for the Wings to turn into eyes (A Slide, B Melt, C Hand-off) and four new styles (D Inside, E Drops, F Visor, G Pill drop). My pick: D for rest, C for the animation.", "date": "2026-10-20" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
         { "name": "OK the merge of #25", "line": "Notch 3b. Merge once CI is green.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
