@@ -57,40 +57,20 @@ All four already exist as animations on `design/notch.html` (the States section:
 **3d: The morph (optional, the user decides after seeing 3a).**
 - The black shape drops down and becomes the panel, as on the design page. The notch window and the panel are two separate windows, so this is a crossfade of the two with the black growing in the notch window over about 0.3 s, then the panel appearing under it. Only transform and opacity animate. If it flickers or the two windows drift apart, drop it: 3a's simple entrance is the fallback and is already acceptable.
 
-**3e: The look the user picked, "Inside", and the Wings hand-off (added 2026-10-20).**
-The user compared seven looks on `design/notch-styles.html` and picked **D, Inside** for how Steward rests in the notch and **C, Hand-off** for how the Wings turn into eyes. Visual source: stages D and C on that page. Build it after 3b is merged, because it changes the same shape and alert code. Its own go from the user.
+**3e: The Wings hand-off (added 2026-10-20, shrunk the same day).**
+On `design/notch-styles.html` the user picked **C, Hand-off** as the way the Wings turn into eyes. Visual source: stage C on that page. Build it after 3b is merged, because it changes the same shape and alert code. It needs its own go from the user. No new look and no new setting value: Chin stays the default and Wings stays an option.
 
-*Step 0, a check before any building (about 10 minutes, on the real Mac).* D lights the eyes inside the notch's own rectangle. The notch is hardware: the screen has no pixels there and the bezel covers the spot. I expect that anything drawn in that rectangle is invisible, which would make D impossible as drawn. I should have caught this before putting D on the comparison page; its stage draws a black notch, so it can't show the problem. To check: the notch window fills the exact notch rectangle with bright green for a few seconds and the user looks at the real notch. A screenshot can't settle it, because it captures what the Mac draws, not what shows through the bezel. Report what was seen before step 1.
-- Invisible (expected): D can't be built. Go to "If D can't be drawn" below. The user picks.
-- Visible: build D as described next.
+*Dropped: D, Inside.* The user first picked D (eyes lit inside the notch) for the resting look. It was dropped because the notch is hardware with no pixels, so eyes drawn inside it would not show. The user chose to keep Chin as the resting look.
 
-*D, Inside, as picked (only if step 0 passes).*
-- **At rest** (Always visible): the notch stays its own size, 185×32 pt, with nothing below it and no wings. Two eyes (7×14 pt, the Pill's eye color) are lit inside it, 12 pt apart and centered on the notch, 9 pt below the top of the screen. They are dim, about 55% brightness.
-- **Asleep** (quiet mode, Only when needed): the eyes are off and the notch is only its own black, as today. The 250 ms hover wake fades the eyes on. That fade is the grow, so nothing else moves.
-- **Hover** (Always visible): the eyes go to full brightness and grow 12% over 0.4 s. When the cursor leaves, they settle back after 250 ms. Nothing else grows, so the place to hover is the notch itself.
-- **With an alert:** the eyes stay in the notch at full brightness and 112% size, and 3b's alert shape hangs below the notch exactly as built: one black shape from the notch's bottom edge, rounded bottom corners, one line of text. The eyes do not move. Which alerts show is still quiet mode's filter.
-- **Thinking and talking** need the middle (dots, mouth) and Inside has none. Thinking: the two eyes pulse in turn, slowly. Talking: both pulse together. No dots and no mouth. (My call; Main building can tune it.)
-- **Reduce Motion:** no 12% growth. Brightness changes by a 150 ms fade. The thinking and talking pulses become steady full brightness.
-
-*C, Hand-off: how it plays and reverses.* It applies to Wings only, since Chin and Inside have no wings.
+*C, Hand-off: how it plays and reverses.* It applies to the Wings style only.
 - **On an alert:** the eyes in the wings fade out over 0.25 s while the wings fade and shrink over 0.3 s. The chin drops from the notch's bottom edge (22 pt, 0.35 s, starting 0.1 s in) and the chin's eyes grow in from 55% size with a small overshoot (0.35 s, starting 0.18 s in). About 0.5 s in all, with no eye traveling across the menu bar. 3b's alert text line then hangs below the chin as one black shape.
-- **When the alert ends:** it runs back, about 0.35 s: chin eyes out, chin up, wing eyes and wings back. A new alert or hover during either direction reverses from wherever it is, with no jump.
+- **When the alert ends:** it runs back in about 0.35 s: chin eyes out, chin up, wing eyes and wings back. A new alert or hover during either direction reverses from wherever it is, with no jump.
 - **Thinking and talking** in Wings keep today's behavior (the chin grows for the dots and the mouth). The hand-off is only for alerts.
-- **Reduce Motion:** the eyes swap by opacity only, 150 ms. The chin appears by opacity too. No scale, no overshoot.
+- **Reduce Motion:** the eyes swap by opacity only, in 150 ms. The chin appears by opacity too. No scale, no overshoot.
 
-*What happens to today's Chin and Wings.*
-- Both stay. Settings → Steward → Screen edge → "In the notch" becomes **Inside | Chin | Wings**. The user said the chin's eyes look fine, and Wings is better with the hand-off. Nothing is removed.
-- **New installs:** the notch is off by default (`notch: false`); whoever turns it on gets **Inside**, if step 0 passed. If it didn't, they get Chin as today.
-- **Existing installs keep what is saved.** The settings file already holds `chin` or `wings` for anyone who set it, and Steward never switches a look on its own. The user's own Mac changes with one click in Settings. Not a question for the user.
+*Files for 3e.* `src/shared/notch.ts`: only if the drawing needs to be told that an alert is out in Wings (the shape for Wings during an alert includes the chin). `src/renderer/src/Notch.tsx` and the face code it calls: the hand-off. `SPEC.md` and `README.md`: one line on it. No change to `types.ts`, `settings-schema.ts`, `steward.ts` or `Settings.tsx`.
 
-*If D can't be drawn.* Options, my recommendation first:
-1. **Keep Chin as the resting look and build only C for Wings.** The user already said the chin's eyes look fine. 3e shrinks to the hand-off; no new style, no new setting value, Chin stays the default.
-2. **A slim chin.** A lip about 12 pt tall with smaller eyes, the nearest thing to D's "almost nothing grows". I would mock it on the comparison page first; one more design round.
-3. **Another look from the page** (E Drops, F Visor, G Pill drop). All three hang below the notch, so they can be drawn.
-
-*Files for 3e.* `src/shared/types.ts`: `NotchStyle` gains `'inside'`. `src/main/settings-schema.ts`: `'inside'` added to `STEWARD_CHOICES.notchStyle` (the zod enum reads it). `src/shared/steward.ts`: default only if step 0 passes. `src/shared/notch.ts`: `notchShape('inside', ...)` is the notch's own size with no wings, for every mood, plus whatever field tells the drawing which eyes to light. `src/renderer/src/Notch.tsx` and the face code it calls: the Inside eyes, the pulses, the hand-off for Wings. `src/renderer/src/Settings.tsx`: the third option and its one-line note ("The eyes light up inside the notch itself."). `src/main/index.ts`: the smoke loop that captures each style gets `inside`. `SPEC.md` and `README.md`: the look list. The hit area for Inside is just the notch rectangle (`notchBoxes`).
-
-*Tests for 3e.* Unit: `notchShape('inside', mood, notch)` is `{ lip: notch.height, wings: 0 }` for every mood; the settings file accepts `inside` and still falls back to the default for an unknown value; the shape for Wings during an alert includes the chin. Smoke: a capture of the notch window in Inside at rest, hover and with an alert. Motion: the same 59 fps measurement the page used, run on the real notch window with the hand-off playing. By hand: step 0; Inside at rest, hover, asleep and waking, and an alert; Wings with an alert in and out; Reduce Motion on; a light wallpaper (the dim eyes must still read).
+*Tests for 3e.* Unit: the Wings shape during an alert includes the chin, and the Chin and no-alert shapes are unchanged. Smoke: a capture of the notch window in Wings with an alert. Motion: the same 59 fps measurement the page used, run on the real notch window with the hand-off playing. By hand: Wings with an alert in and out; a second alert or a hover during the change; Reduce Motion on; a light wallpaper.
 
 ### Files likely touched
 - **Shared files (keep small and additive, list in the Result):**
@@ -114,8 +94,6 @@ The user compared seven looks on `design/notch-styles.html` and picked **D, Insi
 5. **Wings style.** (3e now gives Wings the hand-off on alerts.) The wings sit in the menu bar band and cover items; hover grow on Wings should grow the chin only when the mood needs the middle, or add a few points to the wings. Main building picks the smallest change that reads and reports it.
 6. **Panel top gap.** The menu bar is 33 pt and the notch 32 pt on this Mac. The panel's top sits at the work area's top, so it hangs just under the menu bar line; on other Macs use the work area, not a fixed number.
 
-**Needs the user (3e, only if step 0 fails):** which fallback for D (see "If D can't be drawn"). Recommendation: keep Chin and build only the Wings hand-off.
-
 **Needs the user (one decision, not blocking the design):** whether the black-into-panel morph (3d) is worth doing. Recommendation: build 3a with the simple entrance, look at it, and decide after. The other choices are made above and the user can overrule any of them at go.
 
 ### How to test
@@ -128,7 +106,7 @@ The user compared seven looks on `design/notch-styles.html` and picked **D, Insi
   - All: a full-screen app, a second display, Reduced Motion on.
 
 ### Build order
-3a, then 3b, then 3c (its spike first), then 3d only if the user wants it. 3e (the picked look) goes after 3b is merged, with its step 0 check first; it does not depend on 3c or 3d. The user's go between phases; one phase per build chat, each as a draft PR into main with CI green before it counts as done.
+3a, then 3b, then 3c (its spike first), then 3d only if the user wants it. 3e (the Wings hand-off) goes after 3b is merged; it does not depend on 3c or 3d. The user's go between phases; one phase per build chat, each as a draft PR into main with CI green before it counts as done.
 
 ## Result (Main building)
 
@@ -162,6 +140,6 @@ Status stays `ready`: 3c and 3d are not built. Built by Main building.
 - **Next:** 3c (drop images, starting with its spike) and 3d (the morph), each waiting for its own go.
 
 ### Notch style pick (recorded 2026-10-20, from the front door)
-- On `design/notch-styles.html` the user picked **D, Inside** for the resting look and **C, Hand-off** for the wings-to-eyes animation ("D + C", my recommendation).
-- Written up as phase **3e** above. Not built. It waits for 3b to merge and for the user's go.
-- **Risk found while writing it up:** D lights the eyes inside the notch's own rectangle, which is hardware with no pixels, so I expect it to be invisible. 3e starts with a 10-minute check on the real Mac (step 0). If it fails, the user chooses a fallback; my recommendation is to keep Chin and build only the hand-off.
+- On `design/notch-styles.html` the user picked **D, Inside** for the resting look and **C, Hand-off** for the wings-to-eyes animation.
+- D was dropped the same day: the notch has no pixels, so eyes inside it would not show. The user's answer: "Keep Chin as the resting look and build only the C hand-off for Wings."
+- Written up as phase **3e** above, now only the Wings hand-off. Not built. It waits for 3b to merge and for the user's go, typed into Main building.
