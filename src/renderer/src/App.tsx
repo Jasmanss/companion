@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
-import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
+import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
 import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
@@ -11,11 +11,12 @@ import { ContextPill, ProjectSwitcher } from './ContextPill'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
-import { Nudge } from './Nudge'
+import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
+import { palette } from './pill/render'
 import { SessionStrip } from './SessionStrip'
 import { useTabDrag } from './tab-drag'
 import { useDimmed } from './dim'
@@ -211,15 +212,15 @@ export function App() {
     document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
   }, [look.notch, notchGeo])
 
-  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was open (the panel or the viewer)
-  // stays, goes back up into the notch (styles.css), and then tells main the window can go. Worked out while rendering,
-  // so the tab never shows for a frame in between.
+  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out (the panel, the viewer or a
+  // nudge) stays, goes back up into the notch (styles.css), and then tells main the window can go. Worked out while
+  // rendering, so the tab never shows for a frame in between.
   const [leaving, setLeaving] = useState<DockState | null>(null)
   const [shownDock, setShownDock] = useState(dock)
   if (dock !== shownDock) {
     setShownDock(dock)
-    const wasOpen = shownDock === 'expanded' || shownDock === 'viewing'
-    setLeaving(wasOpen && (dock === 'collapsed' || dock === 'hidden') && look.notch && notchGeo !== null ? shownDock : null)
+    const wasOut = shownDock === 'expanded' || shownDock === 'viewing' || shownDock === 'nudge'
+    setLeaving(wasOut && (dock === 'collapsed' || dock === 'hidden') && look.notch && notchGeo !== null ? shownDock : null)
   }
   useEffect(() => {
     if (!leaving) return
@@ -232,7 +233,7 @@ export function App() {
     }
     // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
     const ended = (e: AnimationEvent) => {
-      if (e.animationName === 'panel-rise' || e.animationName === 'panel-fade-out') done()
+      if (e.animationName === 'panel-rise' || e.animationName === 'panel-fade-out' || e.animationName === 'nudge-up') done()
     }
     document.addEventListener('animationend', ended)
     const timer = setTimeout(done, 400)
@@ -528,6 +529,11 @@ export function App() {
         onDragOut={dragOut}
       />
     )
+  }
+
+  if (view === 'nudge' && look.notch && notchGeo) {
+    const lit = palette(look.version, { color: colorHex(look.color), tinted: true, light: false, mouth: look.mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
+    return <NotchNudge alerts={nudgeAlerts} notchWidth={notchGeo.width} lit={lit} onOpen={() => api.dock.expand()} onDismiss={tuckAway} />
   }
 
   if (view === 'nudge') {
