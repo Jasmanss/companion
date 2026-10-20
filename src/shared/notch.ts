@@ -4,7 +4,7 @@
 // The notch is pure black, so the character's body becomes a black shape with the real notch, and its color becomes
 // the light of its eyes. Chin: the notch grows a lip below it, as wide as the notch, with the eyes in it. Wings: one
 // eye on each side of the notch, in the menu bar; the thinking dots and the talking mouth need the middle, so for
-// those it grows the chin too. Asleep, it's only the notch's own black.
+// those it grows the chin too. Asleep, it's only the notch's own black. With the cursor on it, it grows a little.
 import type { Mood, NotchLayout, NotchStyle } from './types'
 
 /** How tall the eyes are, in points; the lip and the wings are sized from it. */
@@ -17,6 +17,9 @@ export const NOTCH_WING = NOTCH_EYE + 14
 export const NOTCH_RADIUS = 10
 /** The window along the top of the screen that holds it, centered on the notch. */
 export const NOTCH_WINDOW = { width: 360, height: 96 } as const
+/** Hovered (the cursor on the black, Always visible): the chin this much taller, or the wings this much wider in all. */
+export const NOTCH_HOVER_LIP = 4
+export const NOTCH_HOVER_WINGS = 8
 
 /** Moods whose face needs the middle: the thinking dots, the talking mouth. */
 const MIDDLE: ReadonlySet<Mood> = new Set(['thinking', 'talking'])
@@ -27,14 +30,46 @@ export interface NotchShape {
   lip: number
   wings: number
 }
-export function notchShape(style: NotchStyle, mood: Mood, notch: { width: number; height: number }, awake = true): NotchShape {
+/** hover: the cursor is on it, so it grows a little (the chin taller, or the wings wider). Only while awake. */
+export function notchShape(style: NotchStyle, mood: Mood, notch: { width: number; height: number }, awake = true, hover = false): NotchShape {
   // Asleep (Only when needed, at rest): exactly the notch, no chin and no wings, so nothing under it is covered.
   if (!awake) return { lip: notch.height, wings: 0 }
   const middle = needsMiddle(mood)
   // Talking's mouth sits under the eyes, so the lip grows a little to make room.
   const chin = notch.height + NOTCH_LIP + (mood === 'talking' ? 5 : 0)
-  if (style === 'wings') return { lip: middle ? chin : notch.height, wings: notch.width + 2 * NOTCH_WING }
-  return { lip: chin, wings: 0 }
+  if (style === 'wings') return { lip: middle ? chin : notch.height, wings: notch.width + 2 * NOTCH_WING + (hover ? NOTCH_HOVER_WINGS : 0) }
+  return { lip: chin + (hover ? NOTCH_HOVER_LIP : 0), wings: 0 }
+}
+
+/** The cursor on the black this long before it counts as hovering, and off it this long before it stops, so the edge of the black never flickers. */
+export const HOVER_IN_MS = 80
+export const HOVER_OUT_MS = 250
+
+/** Hovering or not, and since when the cursor has been saying otherwise (null: it agrees). */
+export interface HoverState {
+  hover: boolean
+  since: number | null
+}
+export const noHover = (): HoverState => ({ hover: false, since: null })
+
+/** One look: over is whether the cursor is on the black now. It switches only once it has said so for long enough. */
+export function stepHover(s: HoverState, over: boolean, now: number): HoverState {
+  if (over === s.hover) return { hover: s.hover, since: null }
+  const since = s.since ?? now
+  return now - since >= (over ? HOVER_IN_MS : HOVER_OUT_MS) ? { hover: over, since: null } : { hover: s.hover, since }
+}
+
+/**
+ * Where something that comes out of the notch goes (the panel now; a nudge later): centered under the notch on the
+ * notch's own screen, its top at the top of that screen's work area (just under the menu bar), kept inside the work
+ * area with margin points to spare at the sides.
+ */
+export function underNotch(notch: { x: number; width: number }, area: Box, size: { width: number; height: number }, margin = 8): Box {
+  const width = Math.min(size.width, area.width - 2 * margin)
+  const height = Math.min(size.height, area.height)
+  const centered = notch.x + notch.width / 2 - width / 2
+  const x = Math.round(Math.min(area.x + area.width - margin - width, Math.max(area.x + margin, centered)))
+  return { x, y: area.y, width, height }
 }
 
 export interface Box {

@@ -3,7 +3,7 @@ import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
@@ -200,6 +200,48 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
   }, [look.edge])
+
+  // Docked in the notch, the panel comes down from it instead of in from the side (styles.css).
+  const [notchGeo, setNotchGeo] = useState<NotchGeometry | null>(null)
+  useEffect(() => {
+    void api.notch.geometry().then(setNotchGeo)
+    return api.notch.onGeometry(setNotchGeo)
+  }, [])
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
+  }, [look.notch, notchGeo])
+
+  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was open (the panel or the viewer)
+  // stays, goes back up into the notch (styles.css), and then tells main the window can go. Worked out while rendering,
+  // so the tab never shows for a frame in between.
+  const [leaving, setLeaving] = useState<DockState | null>(null)
+  const [shownDock, setShownDock] = useState(dock)
+  if (dock !== shownDock) {
+    setShownDock(dock)
+    const wasOpen = shownDock === 'expanded' || shownDock === 'viewing'
+    setLeaving(wasOpen && (dock === 'collapsed' || dock === 'hidden') && look.notch && notchGeo !== null ? shownDock : null)
+  }
+  useEffect(() => {
+    if (!leaving) return
+    const root = document.documentElement
+    root.setAttribute('data-leaving', '')
+    const done = () => {
+      root.removeAttribute('data-leaving')
+      setLeaving(null)
+      api.dock.intoNotchEnded()
+    }
+    // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
+    const ended = (e: AnimationEvent) => {
+      if (e.animationName === 'panel-rise' || e.animationName === 'panel-fade-out') done()
+    }
+    document.addEventListener('animationend', ended)
+    const timer = setTimeout(done, 400)
+    return () => {
+      document.removeEventListener('animationend', ended)
+      clearTimeout(timer)
+      root.removeAttribute('data-leaving')
+    }
+  }, [leaving])
 
   // The glass's tint and frost, from Settings → Steward.
   useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])
@@ -472,7 +514,10 @@ export function App() {
   // Working: what it's on right now. Idle: the last file it read here.
   const pillTouch: Touch | null = (busy && touch) || (lastFile ? { kind: 'file', text: lastFile } : null)
 
-  if (dock === 'viewing' && items.length > 0) {
+  // Going back into the notch, what was open stays on screen until it's gone (see leaving, above).
+  const view = leaving ?? dock
+
+  if (view === 'viewing' && items.length > 0) {
     return (
       <Viewer
         items={items}
@@ -485,7 +530,7 @@ export function App() {
     )
   }
 
-  if (dock === 'nudge') {
+  if (view === 'nudge') {
     return (
       <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
         <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
@@ -493,7 +538,7 @@ export function App() {
     )
   }
 
-  if (dock === 'collapsed' || dock === 'hidden') {
+  if (view === 'collapsed' || view === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
       <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>

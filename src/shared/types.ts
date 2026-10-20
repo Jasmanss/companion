@@ -51,6 +51,8 @@ export interface NotchState {
   glint: PillGlint
   /** Asleep (Only when needed, at rest): just the notch's own black, no eyes. */
   awake: boolean
+  /** The cursor is on the black (Always visible): it grows a little. */
+  hover?: boolean
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
@@ -350,6 +352,8 @@ export interface StewardAPI {
     /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
     overhang(): Promise<number>
     onOverhang(cb: (points: number) => void): Unsubscribe
+    /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
+    intoNotchEnded(): void
   }
   tray: {
     list(): Promise<TrayItem[]>

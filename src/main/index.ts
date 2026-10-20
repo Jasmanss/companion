@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { NOTCH_WINDOW } from '../shared/notch'
+import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, underNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
@@ -127,6 +127,8 @@ let notch: NotchDock
 let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
+/** The screen with the notch: the built-in one, which isn't always the main screen (an external one can be). */
+const notchDisplay = (): Electron.Display => screen.getAllDisplays().find((d) => d.id === notchGeo?.displayId) ?? screen.getPrimaryDisplay()
 
 /** Presence is "Only when needed": Steward is out of sight until a push, an alert, work or the hotkey brings it out. */
 const quiet = (): boolean => settings?.steward().presence === 'quiet'
@@ -145,6 +147,8 @@ let lastTuck: { ms: number; why: string } | null = null
 let screenAsleep = false
 /** The smoke check feeds the rules the cursor itself, so the real one (wherever it is parked) is left out. */
 const drivenBySmoke = Boolean(SMOKE_OUT)
+/** The cursor the smoke check shows the notch window instead (null: far away). */
+let smokeNotchCursor: Electron.Point | null = null
 /** Alerts that didn't peek out, newest first: the menu bar's dot now, and cards when the panel next opens. */
 let heldAlerts: AlertView[] = []
 /** Stepping aside: an app fills Steward's screen, or an app on the list is in front (see step-aside.ts). */
@@ -203,9 +207,16 @@ let sentOverhang = -1
 
 /**
  * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
- * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered.
+ * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered. Docked in
+ * the notch, the panel and the viewer come down from the notch instead, on the notch's own screen.
  */
 function boundsFor(state: DockState): Electron.Rectangle {
+  if ((state === 'expanded' || state === 'viewing') && inNotch() && notchGeo) {
+    const area = notchDisplay().workArea
+    if (state === 'expanded') return underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
+    const size = { width: Math.min(VIEWER_MAX_WIDTH, area.width - 120), height: area.height - 48 }
+    return { ...underNotch(notchGeo, area, size), y: area.y + Math.round((area.height - size.height) / 2) }
+  }
   const area = screen.getPrimaryDisplay().workArea
   const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab
@@ -305,6 +316,25 @@ function slideEnded(by: 'drawn' | 'clock'): void {
   hideTab(by === 'drawn' ? 'its slide ending' : SLIDE_END_UNDRAWN)
 }
 
+/** How long the panel's way back up into the notch may take before the window goes anyway (the page's exit is 0.2 s). */
+const INTO_NOTCH_MS = 450
+
+/**
+ * Docked in the notch, the panel closed: its page plays the panel going back up into the notch (styles.css) and says
+ * when it's done (intoNotchEnded); the window goes then, where it is. If the page never says, this does.
+ */
+function intoNotch(): void {
+  clearTimeout(slideTimer)
+  slideTimer = setTimeout(intoNotchEnded, INTO_NOTCH_MS)
+}
+
+/** The panel's way back into the notch is over: the window goes, unless the panel was opened again meanwhile. */
+function intoNotchEnded(): void {
+  clearTimeout(slideTimer)
+  if (!win || win.isDestroyed() || (dock !== 'collapsed' && dock !== 'hidden')) return
+  hideTab()
+}
+
 /**
  * Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge, and the tab
  * is back at its saved spot for the next time (a push brings it to the cursor again).
@@ -389,14 +419,17 @@ function setDock(state: DockState): void {
   updateMenuBar()
   placeNotch()
   if (state === 'hidden') {
-    hideTab()
+    // Docked in the notch, an open panel goes back up into it first, as when it's closed.
+    if (wasOpen && inNotch() && win.isVisible()) intoNotch()
+    else hideTab()
     return syncWatch()
   }
   if (state === 'collapsed' || state === 'nudge') {
     if (state === 'collapsed' && inNotch()) {
-      win.setBounds(boundsFor(state), !wasHidden)
-      // In the notch there's no tab at the edge: the notch window is the character.
-      hideTab()
+      // In the notch there's no tab at the edge: the notch window is the character. An open panel goes back up into
+      // the notch (its page plays that) before the window goes, and the window stays where it is: never at the edge.
+      if (wasOpen && win.isVisible()) intoNotch()
+      else hideTab()
     } else if (state === 'collapsed' && !out()) tuckTab()
     // Peeking never takes keyboard focus, so it can't interrupt typing. Out of hiding, it comes in from the edge.
     else showTab(boundsFor(state), !wasHidden)
@@ -1101,6 +1134,7 @@ function registerIpc(): void {
     if (MOODS.includes(mood as Mood) && GLINTS.includes(glint as PillGlint)) notch.setMood(mood as Mood, glint as PillGlint)
   })
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
+  ipcMain.on('dock:intoNotchEnded', () => intoNotchEnded())
   ipcMain.handle('dock:hide', () => setDock('hidden'))
   ipcMain.handle('dock:view', () => setDock('viewing'))
   ipcMain.handle('appearance:get', (e) => (settingsWin && e.sender === settingsWin.webContents ? settingsAppearance() : appearance()))
@@ -1329,12 +1363,12 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
     app.exit(1)
   }
   // The panel has 30 s to show; the presence check before it (with its 20 s wait for Dim when idle) has its own budget.
-  const timer = setTimeout(() => fail('timed out'), 30_000 + 80_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+  const timer = setTimeout(() => fail('timed out'), 30_000 + 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
-      const presenceTimer = setTimeout(() => fail('presence timed out'), 80_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+      const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
       await checkPresence(w, out)
       clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
@@ -1353,7 +1387,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 75_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 95_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       app.exit(0)
@@ -1445,6 +1479,8 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   }
   need(settings.steward().presence === 'quiet' && settings.steward().alertPeek === 'needs-me', 'a fresh install did not start quiet')
   need(settings.steward().dimWhenIdle && settings.steward().hideFromScreenShare, 'a fresh install did not start with dim and screen-share hiding on')
+  // The tab is placed in the work area of the moment, so a display change during the run (a CI runner's Dock) is logged.
+  screen.on('display-metrics-changed', (_e, d, changed) => console.log(`smoke: display ${d.id} changed (${changed.join(', ')}): work area ${JSON.stringify(d.workArea)}`))
   // A push against the edge at the tab's saved spot for 300 ms comes out; leaving goes back after 1.5 s. The cursor is
   // made up: on the edge, or away in the middle of the screen.
   const display = screen.getPrimaryDisplay()
@@ -1520,7 +1556,14 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   // tucked away it's back at its saved spot.
   const work = display.workArea
   const tabH = TAB_SIZES[settings.steward().size].tab.height
-  const saved = savedTabTop()
+  // Where the tab should be comes from the app's own rule (clampTop, topFor) on the work area as it is now: the app
+  // places the tab in the work area of the moment, and again whenever the display changes (a CI runner's Dock can
+  // change it by a point during the run). The saved spot is compared as the place that's stored, not as a top.
+  const workNow = () => screen.getPrimaryDisplay().workArea
+  const spotFor = (cursorY: number) => clampTop(workNow(), tabH, cursorY - tabH / 2)
+  const areas = () => `(work area ${JSON.stringify(work)} at the start, ${JSON.stringify(workNow())} now)`
+  const placeId = String(display.id)
+  const savedPlace = tabPlaces[placeId]
   const hold = async (p: Electron.Point, ms: number) => {
     const until = Date.now() + ms
     do {
@@ -1539,20 +1582,23 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await hold(high, 220)
   need(presenceNow.revealed, `a push held still for ${EDGE_FAR_DWELL_MS} ms high on the edge did not bring the tab out`)
   await sleep(500)
-  need(w.isVisible() && w.getBounds().y === work.y, `the tab came out at ${w.getBounds().y} for a push at the top, not at ${work.y} (under the menu bar)`)
-  need(savedTabTop() === saved, 'a push moved the saved spot')
+  const top = spotFor(high.y)
+  need(w.isVisible() && w.getBounds().y === top && top === workNow().y, `the tab came out at ${w.getBounds().y} for a push at the top, not at ${top} (under the menu bar) ${areas()}`)
+  need(tabPlaces[placeId] === savedPlace, 'a push moved the saved spot')
   // Down the edge, still: the tab tucks away from under it and stays away while the cursor rests there.
   const low = edgeAt(work.y + work.height - 10)
   await hold(low, TUCK_MS + SLIDE_MS + 400)
   need(!presenceNow.revealed && !w.isVisible(), 'the tab did not tuck away with the cursor resting further down the edge')
-  need(boundsFor('collapsed').y === saved, `the tucked-away tab is at ${boundsFor('collapsed').y}, not back at its saved spot (${saved})`)
+  need(boundsFor('collapsed').y === savedTabTop(), `the tucked-away tab is at ${boundsFor('collapsed').y}, not back at its saved spot (${savedTabTop()})`)
   await hold(low, 800)
   need(!presenceNow.revealed, 'the tab came back with the cursor still resting on the edge')
   lookAtEdge(away)
   await hold(low, EDGE_FAR_DWELL_MS + 100)
   await sleep(500)
-  const bottom = work.y + work.height - tabH
-  need(presenceNow.revealed && w.isVisible() && w.getBounds().y === bottom, `after leaving the edge, a push at the bottom brought the tab to ${w.isVisible() ? w.getBounds().y : 'nowhere'}, not ${bottom}`)
+  // At the bottom of the work area: the cursor is 10 points above it, so the tab is shifted up to stay inside.
+  const bottom = spotFor(low.y)
+  need(bottom === workNow().y + workNow().height - tabH, `a push 10 points above the bottom would put the tab at ${bottom}, not against the bottom of the work area ${areas()}`)
+  need(presenceNow.revealed && w.isVisible() && w.getBounds().y === bottom, `after leaving the edge, a push at the bottom brought the tab to ${w.isVisible() ? w.getBounds().y : 'nowhere'}, not ${bottom} ${areas()}`)
   // macOS animates the window between the tab and the panel, and takes longer at some times than others (with a
   // full-screen app's Space showing, say): wait for it to get there, up to 1.5 s.
   const settles = async (ok: () => boolean) => {
@@ -1561,7 +1607,7 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
     return ok()
   }
   setDock('expanded')
-  const panelTop = topAround(work, bottom, tabH, boundsFor('expanded').height, 24)
+  const panelTop = topAround(workNow(), bottom, tabH, boundsFor('expanded').height, 24)
   need(await settles(() => w.getBounds().y === panelTop), `the panel opened at ${w.getBounds().y}, not around the tab at ${bottom} (${panelTop})`)
   setDock('collapsed')
   need(await settles(() => w.isVisible() && w.getBounds().y === bottom), `closing the panel put the tab at ${w.getBounds().y}, not back where it was (${bottom})`)
@@ -1575,7 +1621,7 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   await tuck()
   need(!w.isVisible() && boundsFor('collapsed').y === bottom - 100, 'after a drag, the tucked-away tab is not at its new saved spot')
   await resetTabPlace()
-  need(savedTabTop() === saved, 'Reset did not bring the saved spot back')
+  need(tabPlaces[placeId] === undefined && savedTabTop() === topFor(workNow(), tabH, undefined), `Reset did not bring the tab back to the middle ${areas()}`)
   console.log(`smoke: the tab comes to you: a push held ${EDGE_FAR_DWELL_MS} ms brings it out at the cursor (top and bottom), sliding along the edge doesn't, a push counts again only after leaving the edge, the panel and a nudge grow from where it is, and a drag there saves it`)
 
   // Alerts: only a session that needs me peeks out. The rest wait (a dot in the menu bar) and show when the panel opens.
@@ -1615,10 +1661,11 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
   }
 
   // Dim when idle: after 20 s at rest the tab's eyes fade and stop; the cursor coming near wakes them. The 20 s began
-  // when the tab last came to rest, about 3 s before this point, so it isn't dim 14 s from here, and is by 28 s.
+  // when the tab last came to rest, about 3 s before this point (plus STEWARD_SMOKE_IDLE's wait, which is at rest too),
+  // so it isn't dim 14 s from here (less that wait), and is by 28 s.
   const dimmed = async () => Boolean(await w.webContents.executeJavaScript(`Boolean(document.querySelector('.pill-host.dimmed'))`))
   const waiting = Date.now()
-  await sleep(DIM_AFTER_MS - 6000)
+  await sleep(DIM_AFTER_MS - 6000 - idle * 1000)
   need(!(await dimmed()), 'the eyes dimmed well before 20 s at rest')
   while (!(await dimmed()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
   const tookS = ((Date.now() - waiting) / 1000).toFixed(1)
@@ -1700,6 +1747,31 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
     await flush('the tab after a drag', edge)
     await resetTabPlace()
     await sleep(600)
+    // On a side edge, closing the panel goes back to that side, as it always has: the window ends at the tab's spot on
+    // this edge, and the notch's way up is never played. (Where it goes follows where Steward is docked; the notch's
+    // close is checked in checkNotch.)
+    const keptOpen = settings.keepPanelOpen()
+    await settings.update({ keepPanelOpen: true })
+    for (const [how, close] of [
+      ['Esc', () => void w.webContents.executeJavaScript('window.steward.dock.collapse()')],
+      ['Option Space', () => toggleDock()],
+    ] as const) {
+      setDock('expanded')
+      await sleep(500)
+      need(dock === 'expanded' && w.getBounds().width !== boundsFor('collapsed').width, `the panel did not open on the ${edge} edge`)
+      close()
+      const tab = () => JSON.stringify(w.getBounds()) === JSON.stringify(boundsFor('collapsed'))
+      let upIntoNotch = false
+      const started = Date.now()
+      while (Date.now() - started < 1500 && !(dock === 'collapsed' && w.isVisible() && tab())) {
+        upIntoNotch ||= Boolean(await w.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-leaving')`))
+        await sleep(20)
+      }
+      need(!upIntoNotch, `closing with ${how} on the ${edge} edge played the notch's way up`)
+      need(dock === 'collapsed' && w.isVisible() && tab(), `closing with ${how} on the ${edge} edge left the window at ${JSON.stringify(w.getBounds())}, not at the tab's spot ${JSON.stringify(boundsFor('collapsed'))}`)
+    }
+    await settings.update({ keepPanelOpen: keptOpen })
+    console.log(`smoke: on the ${edge} edge, closing the panel (Esc, Option Space) goes back to that edge`)
   }
   await settings.update({ steward: { edge: 'right' } })
   win!.setBounds(boundsFor(dock))
@@ -1805,6 +1877,113 @@ async function checkNotch(out: string): Promise<void> {
       await sleep(300)
       if (!notch.visible) throw new Error('the notch did not come back once the full-screen app was gone')
       console.log('smoke: notch: it steps aside for a full-screen app on its screen, and comes back')
+    }
+
+    // Always visible, the cursor on the black grows it a little: the chin taller, or the wings wider. The real watcher
+    // is shown a made-up cursor. With Reduce Motion on it doesn't grow.
+    const page = notch.contents()!
+    const reducedNow = Boolean(await page.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`))
+    const grownAt: [number, number] = notchStyle === 'chin' ? [layout.cx, layout.height + NOTCH_LIP + NOTCH_HOVER_LIP / 2] : [layout.cx - (layout.width / 2 + NOTCH_WING + NOTCH_HOVER_WINGS / 4), layout.height / 2]
+    const grown = async () => solid((await notch.capture())!, ...grownAt)
+    if (await grown()) throw new Error(`the notch (${notchStyle}) is grown before the cursor is on it`)
+    const onBlack = { x: notchGeo.x + notchGeo.width / 2, y: notchGeo.y + 10 }
+    const hoverLook = await motionLook(page, MOVING_BLACK[notchStyle], '.nt')
+    if (reducedNow) {
+      smokeNotchCursor = onBlack
+      await sleep(600)
+    } else smoothly(`the notch growing on hover (${notchStyle})`, await watchMotion(page, hoverLook, 700, () => void (smokeNotchCursor = onBlack)))
+    if (!notch.state().hover) throw new Error(`the notch (${notchStyle}) did not see the cursor on it`)
+    if ((await grown()) === reducedNow) throw new Error(reducedNow ? 'the notch grew on hover with Reduce Motion on' : `the notch (${notchStyle}) did not grow with the cursor on it`)
+    await fs.writeFile(file.replace(/\.png$/, '-hover.png'), (await notch.capture())!.toPNG())
+    smokeNotchCursor = null
+    await sleep(900)
+    if (notch.state().hover || (await grown())) throw new Error(`the notch (${notchStyle}) did not shrink back once the cursor left`)
+    console.log(`smoke: notch ${notchStyle}: the cursor on it ${reducedNow ? 'is seen (Reduce Motion: no growth)' : 'grows it a little'}, and leaving shrinks it back`)
+
+    // A click opens the panel under the notch, on the notch's screen, its top just under the menu bar, coming down from
+    // it. Closing it brings Steward back to the notch.
+    if (notchStyle === 'chin') {
+      // Kept open for the check: an open panel that loses focus folds away, and someone may be using another app.
+      const keptOpen = settings.keepPanelOpen()
+      await settings.update({ keepPanelOpen: true })
+      setDock('expanded')
+      const area = notchDisplay().workArea
+      const want = underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
+      const at = win!.getBounds()
+      if (at.x !== want.x || at.y !== area.y || at.width !== want.width || at.height !== want.height) throw new Error(`the panel opened at ${JSON.stringify(at)}, not under the notch (${JSON.stringify(want)})`)
+      if (notch.visible) throw new Error('the notch window still shows with the panel open')
+      let entrance = ''
+      for (let tries = 0; tries < 12 && !entrance; tries++) {
+        await sleep(50)
+        entrance = String(await win!.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-notch') ? getComputedStyle(document.querySelector('.panel') ?? document.body).animationName : 'no notch'`))
+        if (entrance === 'none') entrance = ''
+      }
+      if (entrance !== (reducedNow ? 'fadein' : 'panel-drop')) throw new Error(`the panel from the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the drop from the notch'}`)
+      await sleep(500)
+      await fs.writeFile(out.replace(/\.png$/, '-notch-panel.png'), (await win!.webContents.capturePage()).toPNG())
+      setDock('collapsed')
+      await settings.update({ keepPanelOpen: keptOpen })
+      await sleep(400)
+      if (!notch.visible || win!.isVisible()) throw new Error('closing the panel did not bring Steward back to the notch')
+      console.log(`smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back`)
+
+      // Every way of closing goes back up into the notch: while the panel goes, the window stays where it is (it never
+      // takes the edge's bounds, not even for a frame), the exit plays, and then the window goes and the notch is back,
+      // awake or asleep as Presence says. After Hide, Steward stays out of sight until it's brought back.
+      await settings.update({ keepPanelOpen: true })
+      const opens = { click: () => setDock('expanded'), 'Option Space': () => toggleDock(), 'the menu bar': () => setDock('expanded') }
+      const closes = {
+        Esc: () => void win!.webContents.executeJavaScript('window.steward.dock.collapse()'),
+        'Option Space': () => toggleDock(),
+        'clicking away': () => setDock('collapsed'),
+        'the hide button': () => void win!.webContents.executeJavaScript('window.steward.dock.hide()'),
+        'the chevron': () => void win!.webContents.executeJavaScript('window.steward.dock.collapse()'),
+      }
+      const paths: [keyof typeof opens, keyof typeof closes, 'always' | 'quiet'][] = [
+        ['click', 'Esc', 'always'],
+        ['Option Space', 'Option Space', 'always'],
+        ['the menu bar', 'clicking away', 'always'],
+        ['click', 'the hide button', 'always'],
+        ['Option Space', 'the chevron', 'quiet'],
+      ]
+      for (const [opener, closer, presence] of paths) {
+        if (settings.steward().presence !== presence) {
+          await settings.update({ steward: { presence } })
+          presenceChanged()
+        }
+        opens[opener]()
+        await sleep(600)
+        const panelAt = win!.getBounds()
+        if (dock !== 'expanded' || !win!.isVisible()) throw new Error(`the panel did not open from ${opener} in the notch`)
+        const edgeAt = boundsFor('collapsed')
+        const started = Date.now()
+        closes[closer]()
+        let visibleFor = 0
+        let exit = false
+        while (Date.now() - started < 900) {
+          if (!win!.isVisible()) break
+          visibleFor = Date.now() - started
+          const b = win!.getBounds()
+          if (b.x === edgeAt.x && b.width === edgeAt.width) throw new Error(`closing with ${closer} (opened by ${opener}) put the window at the edge: ${JSON.stringify(b)}`)
+          if (JSON.stringify(b) !== JSON.stringify(panelAt)) throw new Error(`closing with ${closer} (opened by ${opener}) moved the window to ${JSON.stringify(b)}, from ${JSON.stringify(panelAt)}`)
+          exit ||= Boolean(await win!.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-leaving')`))
+          await sleep(10)
+        }
+        if (win!.isVisible()) throw new Error(`closing with ${closer} (opened by ${opener}) did not let the window go`)
+        if (!exit || visibleFor < 100) throw new Error(`closing with ${closer} (opened by ${opener}) did not play the way back into the notch (out after ${visibleFor} ms)`)
+        const hidden = closer === 'the hide button'
+        await sleep(200)
+        if (notch.visible === hidden) throw new Error(hidden ? 'after the hide button, the notch still shows' : `after closing with ${closer}, the notch did not come back`)
+        if (!hidden && notch.state().awake !== (presence === 'always')) throw new Error(`after closing with ${closer}, the notch is ${notch.state().awake ? 'awake' : 'asleep'} in ${presence}`)
+        console.log(`smoke: notch: opened by ${opener}, closing with ${closer} (${presence === 'always' ? 'Always visible' : 'Only when needed'}) goes back up into the notch in ${visibleFor} ms, never at the edge`)
+        if (hidden) {
+          setDock('collapsed')
+          await sleep(300)
+          if (!notch.visible) throw new Error('the notch did not come back after being hidden')
+        }
+      }
+      await settings.update({ keepPanelOpen: keptOpen, steward: { presence: 'always' } })
+      presenceChanged()
     }
 
     // Only when needed: asleep it is the notch's own black and nothing else, so what is under it stays clickable.
@@ -2004,7 +2183,15 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') app.dock?.hide()
 
   registerIpc()
-  notch = new NotchDock({ preload: path.join(__dirname, '../preload/index.js'), load: (w) => loadPage(w, 'notch.html'), style: () => settings.steward().notchStyle, onCursor: lookAtNotch, cursor: () => (drivenBySmoke ? null : screen.getCursorScreenPoint()) })
+  notch = new NotchDock({
+    preload: path.join(__dirname, '../preload/index.js'),
+    load: (w) => loadPage(w, 'notch.html'),
+    style: () => settings.steward().notchStyle,
+    onCursor: lookAtNotch,
+    cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
+    // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
+    hoverable: () => !quiet(),
+  })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.

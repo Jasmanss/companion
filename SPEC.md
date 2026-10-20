@@ -46,6 +46,13 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   moment after it starts, with a one-line note on how to bring it back.
 - **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
   eyes fade and stop moving, until something happens or the cursor comes near.
+- **In the notch (Settings → Steward → Screen edge → Notch, on a MacBook that
+  has one):** Steward becomes a black shape around the notch with its eyes lit
+  in it (a chin below it, or wings beside it). With the cursor on it, the black
+  grows a little and the eyes follow the cursor (in "Only when needed", waking
+  up is that grow). A click opens the panel centered under the notch, coming
+  down from it, on the notch's own screen; closing it puts Steward back in the
+  notch. Alerts still peek from the side edge for now.
 - **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
   open panel) while an app fills the screen it's on (on for a new install), or
   while an app on your list is in front ("Add app…", or one click for Keynote,
@@ -331,4 +338,4 @@ the panel.
 
 ## Open questions
 
-- The notch: a third spot to sit, under the MacBook notch (planned after the character)
+- The notch, still to come: alerts below the menu bar, dropping images on the notch, and the black growing into the panel (docs/briefs/notch-dock-phase-3.md)
