@@ -1,6 +1,8 @@
 # Visual Review: see what Claude changed
 
-Status: designed
+Status: ready
+
+Set by the front door on the user's go, 2026-10-20: "Yes, start Phase 1" (and "Accept all" on the four questions). Feature building builds it, one phase at a time, with the user's go between phases.
 
 ## Ask (front door)
 The user, 2026-10-20: "Lets make some actual progress... What is the next big thing?" They picked **Visual Review**, one of the two headline features (memory: headline-features-decision.md; research: memory/research/2026-10-16-winning-feature.md). Pitch: "Claude Code changes your code. Steward shows you what changed."
