@@ -108,3 +108,18 @@ Status stays `ready`: 3b, 3c and 3d are not built. The user typed the 3a go into
 - **CI flake fixed on this PR:** the intermittent smoke failure "a push at the bottom brought the tab to 573, not 574" hit PRs #22 and #23. The check now uses the app's own `clampTop` on the current work area (`477e76f` on #24), likely because the CI runner's Dock moved the work area mid-run. Not proven yet. #23's rerun passed and #24 is green.
 - **Waiting on the user:** try 3a by hand again after the close fix, then OK the merge once CI is green.
 - **Next:** 3b (alerts below the menu bar), after the 3a close fix. The user types that go into Main building.
+
+### 3a merged, with the close fix (recorded 2026-10-20, from the front door)
+- PR #24 (notch 3a) was merged into main by the user: merge commit `4a30bc9`. It includes the close-into-the-notch fix (every close goes back into the notch, never via the side edge) and the smoke flake fix (`477e76f`).
+
+### 3b: alerts below the menu bar (recorded 2026-10-20, from the front door)
+Status stays `ready`: 3c and 3d are not built. Built by Main building.
+- **Branch / PR:** `claude/notch-phase-3b`, commits `da371d5`, `0bfeb17`, `9b51a12`, `597c621`, `636df43`. Draft PR #25 into main, CI running when recorded.
+- **Where alerts appear:** in the notch, an alert comes out under the notch, below the menu bar, as a black shape joined to the chin with one line of text. It grows out in 0.42 s and goes back up in 0.2 s, or fades with Reduce Motion on.
+- **Interaction:** a click opens the panel. A close button appears on hover. In "Only when needed" the alert wakes the notch.
+- **Left out:** no action button under the notch (the deploy action stays on the panel banner) and no springy overshoot. The first-launch note in the notch is shorter so it fits: "Rest the cursor on the notch · or press ⌥ Space."
+- **A 3a bug fixed:** a display change during the close no longer sends the panel to the side.
+- **Checks:** lint, typecheck, 310 tests (3 runs by Main building, 1 by the front door) and a full smoke run.
+- **Not checked:** the feel by hand, full screen, a second display, Reduce Motion by hand, and idle CPU.
+- **Waiting on the user:** try 3b by hand, then OK the merge once CI is green.
+- **Next:** 3c (drop images, starting with its spike) and 3d (the morph), each waiting for its own go.

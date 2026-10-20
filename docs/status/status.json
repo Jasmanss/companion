@@ -5,11 +5,10 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Visual Review: four quick answers", "line": "One address per project, Send it back is copy-and-paste first, a card only when the page looks different, and the storage limits. Each has a recommendation in the brief.", "date": "2026-10-20" },
+        { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
+        { "name": "OK the merge of #25", "line": "Notch 3b. Merge once CI is green.", "date": "2026-10-20" },
+        { "name": "Visual Review: four quick answers and the Phase 1 go", "line": "One address per project, Send it back is copy-and-paste first, a card only when the page looks different, and the storage limits. Each has a recommendation in the brief. Then the Phase 1 go, typed into Feature building.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
-        { "name": "Try notch Phase 3a by hand", "line": "Rest the cursor near the notch (the black grows), click it (the panel opens under the notch).", "date": "2026-10-19" },
-        { "name": "Look at the site hero", "line": "Open the built page from site Phase 1 and scroll through the hero, on desktop and on your phone.", "date": "2026-10-19" },
-        { "name": "OK the merges of #22, #23 and #24", "line": "Docs, site Phase 1 and notch Phase 3a. Merge each once its CI is green.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
         { "name": "Overnight Watch account", "line": "Set up the phone/text account. Registration takes days.", "date": "2026-10-15", "tag": "unconfirmed: only in research notes" }
@@ -19,9 +18,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Notch dock, Phase 3a", "line": "Built (draft PR #24, claude/notch-phase-3a), CI green. A fix is in progress from your hand test: closing must go back into the notch, never via the side edge.", "date": "2026-10-19" },
-        { "name": "Steward showcase site, Phase 1", "line": "Phase 1 built (draft PR #23, CI green). Phase 2 waits for your vision talk.", "date": "2026-10-19" },
-        { "name": "Docs PR #22", "line": "Site building added to CLAUDE.md. Waits for your merge OK.", "date": "2026-10-19" }
+        { "name": "Notch 3b: draft PR #25", "line": "Built: alerts come out under the notch, below the menu bar (claude/notch-phase-3b). CI running.", "date": "2026-10-20" }
       ]
     },
     {
@@ -29,7 +26,7 @@
       "title": "Up next",
       "items": [
         { "name": "Visual Review", "line": "Designed, built by Feature building: before and after of your running app when a session stops, with Looks good and Send it back. 5 small phases; Phase 1 shows it working. Brief docs/briefs/visual-review.md, page design/visual-review.html. Waits for your go.", "date": "2026-10-20" },
-        { "name": "Notch 3b: next, after the 3a close fix", "line": "Alerts below the menu bar. Your go, typed into Main building. Then 3c (drop images) and 3d (the optional morph).", "date": "2026-10-19" },
+        { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
@@ -67,6 +64,9 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Notch dock, Phase 3a", "line": "Merged into main (PR #24, 4a30bc9): hover grows the black, the panel opens from the notch and closes back into it. Includes the smoke flake fix.", "date": "2026-10-20" },
+        { "name": "Steward showcase site, Phase 1", "line": "Merged into main (PR #23, 6629f38): the page shell and the hero. Phase 2 waits for your vision talk.", "date": "2026-10-20" },
+        { "name": "Docs PR #22", "line": "Merged into main (6cc3bf6): the Feature and Site building chats in CLAUDE.md.", "date": "2026-10-20" },
         { "name": "Quiet mode, Phase 3", "line": "Merged into main (PR #21, 88e8527): step aside in full-screen apps and listed apps. Hide from screen sharing was left out, because your test showed the window in the share. All planned quiet mode parts are built.", "date": "2026-10-19" },
         { "name": "Quiet mode, Phase 2.1", "line": "Merged into main (PR #20, d67a4f1): the tab comes to you. CI on main was still running when recorded. Scrollbar feel not tried yet.", "date": "2026-10-19" },
         { "name": "Chat flow and this status page", "line": "Docs PR #19 merged into main (b81df3a): the chat flow, standing rules and a PR template. The status page is live.", "date": "2026-10-19" },

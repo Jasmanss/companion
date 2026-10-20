@@ -138,4 +138,4 @@ Built by Site building, a separate long-lived chat. Status stays `ready`: phases
 - **Checks:** lint, typecheck and 285 tests, plus headless Chrome at 60 fps (desktop and phone, both scroll paths, and reduced motion) and a private-string scan of the built page.
 - **Not checked:** a real phone, Safari and Firefox.
 - **Next:** phase 2 (the five scenes) waits for the user's go, typed into Site building.
-- **Waiting on the user:** look at the hero, then OK the merge once CI is green.
+- **Merged (2026-10-20):** the user merged PR #23 into main: merge commit `6629f38`. Docs PR #22 (the Feature and Site building chats in CLAUDE.md) merged too (`6cc3bf6`). Phase 2 still waits for the user's vision talk about the website.
