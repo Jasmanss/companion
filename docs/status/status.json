@@ -5,7 +5,6 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Pick a notch style", "line": "design/notch-styles.html: three ways for the Wings to turn into eyes (A Slide, B Melt, C Hand-off) and four new styles (D Inside, E Drops, F Visor, G Pill drop). My pick: D for rest, C for the animation.", "date": "2026-10-20" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
         { "name": "OK the merge of #25", "line": "Notch 3b. Merge once CI is green.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
@@ -26,6 +25,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
+        { "name": "Notch 3e: the Inside look and the Wings hand-off", "line": "You picked D (Inside) and C (Hand-off). Main building starts with a 10-minute check that eyes can show inside the notch at all (it is hardware, so they may not). If they can, Inside becomes the new look; if not, you choose a fallback. Waits for 3b to merge and for your go.", "date": "2026-10-20" },
         { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
