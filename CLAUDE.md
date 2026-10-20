@@ -12,7 +12,8 @@ The user talks only to the front door. Work moves between chats through brief fi
 |---|---|
 | Front door | The user's only contact. Takes in ideas and questions, answers quick ones, makes small tweaks on its own branch, routes work. On the user's go it sets the brief's `Status: ready` itself and tells the user the one line to type into Main building. Starts and removes the other chats. |
 | Roadmap & design | Plans ideas and designs briefs. Writes brief files (except the `ready` line, which the front door sets on the user's go) and records Main building's Result. Owns the status page. Never writes app code. |
-| Main building | The one long-lived build chat, in its own worktree. The user types each go for a new phase or brief into it directly. Builds one phase at a time: lint, typecheck, test, smoke, commit, screenshots, report to the front door, stop. Fixes CI failures on its phase's PR. |
+| Main building | The long-lived build chat for the app, in its own worktree. The user types each go for a new phase or brief into it directly. Builds one phase at a time: lint, typecheck, test, smoke, commit, screenshots, report to the front door, stop. Fixes CI failures on its phase's PR. |
+| Site building | The long-lived build chat for the showcase website, in its own worktree. Works only in `site/` and never touches app code. Same phase routine and gos as Main building. |
 | Research | Answers bigger questions and saves each answer as a file outside the repo. |
 
 Why approvals stay with the front door: Claude Code's safety check does not let a chat act on an approval passed along from another chat. An approval counts only when the user says it to the chat itself, or when it is in the opening task of a chat the front door starts. So the user types build gos into Main building; everything else goes through the front door.
