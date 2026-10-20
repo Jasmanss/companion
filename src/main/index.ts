@@ -1515,16 +1515,16 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
     need(shown.first, 'the card is not at the top of the panel')
     const card = await wc.executeJavaScript(`(() => { const r = document.querySelector('.card.review').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
-    const panelShot = await wc.capturePage()
-    await fs.writeFile(out.replace(/\.png$/, '-review-card.png'), panelShot.toPNG())
-    // Drag the slider.
+    // Drag the slider most of the way left, so the picture shows mostly the page as it is now, and keep that.
     const x = await wc.executeJavaScript(`(() => {
       const r = document.querySelector('.rv-ba input[type=range]')
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(r, '20')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(r, '30')
       r.dispatchEvent(new Event('input', { bubbles: true }))
       return document.querySelector('.rv-ba').style.getPropertyValue('--x')
     })()`)
-    need(x === '20%', `the slider did not move the picture (${x})`)
+    need(x === '30%', `the slider did not move the picture (${x})`)
+    await sleep(200)
+    await fs.writeFile(out.replace(/\.png$/, '-review-card.png'), (await wc.capturePage()).toPNG())
     // Send it back asks for a note and shows what will be copied; Looks good takes the card away.
     const click = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.card.review button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
     await click('Send it back')

@@ -38,6 +38,8 @@ function getReviewSession(): Electron.Session {
   return reviewSession
 }
 
+const SENT_AWAY = 'The page tried to send Steward to another site, so it was not captured'
+
 export interface CaptureOptions {
   /** Text of a heading or phrase; capture the section it starts instead of the whole page. */
   section?: string
@@ -105,6 +107,8 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
   try {
     await Promise.race([
       win.loadURL(target.toString()).catch((err: Error) => {
+        // A redirect we refused ends the load with an error of its own.
+        if (sentAway) throw new Error(SENT_AWAY)
         // Redirects and client-side navigations abort the first load; the page still renders.
         if (!err.message.includes('ERR_ABORTED')) throw err
       }),
@@ -144,7 +148,7 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
       description = section ? `the full page (couldn't find "${section}" on it${cut})` : `the full page${cut}`
     }
 
-    if (sentAway) throw new Error('The page tried to send Steward to another site, so it was not captured')
+    if (sentAway) throw new Error(SENT_AWAY)
     if (image.isEmpty()) throw new Error('The page rendered blank')
     const { width, height } = image.getSize()
     return { png: image.toPNG(), preview: preview(image), width, height, description }
