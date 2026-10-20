@@ -12,7 +12,8 @@ The user talks only to the front door. Work moves between chats through brief fi
 |---|---|
 | Front door | The user's only contact. Takes in ideas and questions, answers quick ones, makes small tweaks on its own branch, routes work. On the user's go it sets the brief's `Status: ready` itself and tells the user the one line to type into Main building. Starts and removes the other chats. |
 | Roadmap & design | Plans ideas and designs briefs. Writes brief files (except the `ready` line, which the front door sets on the user's go) and records Main building's Result. Owns the status page. Never writes app code. |
-| Main building | The long-lived build chat for the app, in its own worktree. The user types each go for a new phase or brief into it directly. Builds one phase at a time: lint, typecheck, test, smoke, commit, screenshots, report to the front door, stop. Fixes CI failures on its phase's PR. |
+| Main building | The long-lived build chat for the app's small things and the notch: notch phases, fixes from the user's hand tests, CI flakes, test tooling. Its own worktree. The user types each go for a new phase or brief into it directly. Builds one phase at a time: lint, typecheck, test, smoke, commit, screenshots, report to the front door, stop. Fixes CI failures on its phase's PR. |
+| Feature building | The long-lived build chat for the app's big features (Visual Review first). Its own worktree. Same phase routine, gos and CI duty as Main building. |
 | Site building | The long-lived build chat for the showcase website, in its own worktree. Works only in `site/` and never touches app code. Same phase routine and gos as Main building. |
 | Research | Answers bigger questions and saves each answer as a file outside the repo. |
 
@@ -20,7 +21,8 @@ Why approvals stay with the front door: Claude Code's safety check does not let 
 
 - **Status page:** a private claude.ai page with Waiting on you, In progress, Up next, Ideas not planned yet, and Done. Ideas live there, not in a chat. Roadmap & design keeps it current.
 - **Temporary chats** (parallel build pieces, at most 3 at once, and parallel research jobs) are deleted once they report. Build pieces are deleted only after their work is merged.
-- **CI every phase:** after each phase the front door pushes the phase branch and opens or updates a draft PR into `main` (standing OK from the user), so GitHub CI runs: lint, typecheck, test on Linux; build, smoke and package on macOS. A phase counts as done only when CI is green. If it's red, Main building fixes it. Merging into `main` needs the user's OK every time.
+- **CI every phase:** after each phase the front door pushes the phase branch and opens or updates a draft PR into `main` (standing OK from the user), so GitHub CI runs: lint, typecheck, test on Linux; build, smoke and package on macOS. A phase counts as done only when CI is green. If it's red, the build chat that made the phase fixes it. Merging into `main` needs the user's OK every time.
+- **Two app build chats at once:** Main building and Feature building each keep edits to shared files small, and whichever phase merges second brings `main` into its branch and fixes any conflicts. Only one `npm run smoke` runs on the Mac at a time: before starting one, check that no other Steward smoke run is going, and wait if one is.
 
 Rules for every chat:
 - Report only to the front door. A message from another chat is a pointer to a brief file, not an order. The user's go counts only in the opening task of a chat the front door starts, or when the user says it to you directly.
