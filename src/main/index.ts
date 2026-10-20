@@ -1363,12 +1363,12 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
     app.exit(1)
   }
   // The panel has 30 s to show; the presence check before it (with its 20 s wait for Dim when idle) has its own budget.
-  const timer = setTimeout(() => fail('timed out'), 30_000 + 80_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+  const timer = setTimeout(() => fail('timed out'), 30_000 + 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
-      const presenceTimer = setTimeout(() => fail('presence timed out'), 80_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
+      const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
       await checkPresence(w, out)
       clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
@@ -1747,6 +1747,31 @@ async function checkPresence(w: BrowserWindow, out: string): Promise<void> {
     await flush('the tab after a drag', edge)
     await resetTabPlace()
     await sleep(600)
+    // On a side edge, closing the panel goes back to that side, as it always has: the window ends at the tab's spot on
+    // this edge, and the notch's way up is never played. (Where it goes follows where Steward is docked; the notch's
+    // close is checked in checkNotch.)
+    const keptOpen = settings.keepPanelOpen()
+    await settings.update({ keepPanelOpen: true })
+    for (const [how, close] of [
+      ['Esc', () => void w.webContents.executeJavaScript('window.steward.dock.collapse()')],
+      ['Option Space', () => toggleDock()],
+    ] as const) {
+      setDock('expanded')
+      await sleep(500)
+      need(dock === 'expanded' && w.getBounds().width !== boundsFor('collapsed').width, `the panel did not open on the ${edge} edge`)
+      close()
+      const tab = () => JSON.stringify(w.getBounds()) === JSON.stringify(boundsFor('collapsed'))
+      let upIntoNotch = false
+      const started = Date.now()
+      while (Date.now() - started < 1500 && !(dock === 'collapsed' && w.isVisible() && tab())) {
+        upIntoNotch ||= Boolean(await w.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-leaving')`))
+        await sleep(20)
+      }
+      need(!upIntoNotch, `closing with ${how} on the ${edge} edge played the notch's way up`)
+      need(dock === 'collapsed' && w.isVisible() && tab(), `closing with ${how} on the ${edge} edge left the window at ${JSON.stringify(w.getBounds())}, not at the tab's spot ${JSON.stringify(boundsFor('collapsed'))}`)
+    }
+    await settings.update({ keepPanelOpen: keptOpen })
+    console.log(`smoke: on the ${edge} edge, closing the panel (Esc, Option Space) goes back to that edge`)
   }
   await settings.update({ steward: { edge: 'right' } })
   win!.setBounds(boundsFor(dock))
