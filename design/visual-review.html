@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: Visual Review</title>
+<style>
+/* Design page for Visual Review (docs/briefs/visual-review.md). Plain HTML, CSS and a little JS, no libraries, no web fonts.
+   The tokens are Steward's own (src/renderer/src/styles.css). The pages inside the cards are drawn in CSS, not screenshots. */
+:root{--tint:200,228,255;--glow:96,190,255;--ink:18,70,120;--soft:178,220,255;--live:26,140,255;--t1:#0d1015;--t3:rgba(18,70,120,.78);
+  --fill:255,255,255;--solid:244,246,250;--edge:rgba(255,255,255,.85);--inset:rgba(18,70,120,.07);--inset2:rgba(18,70,120,.14);--line:rgba(18,70,120,.12);
+  --ok:31,138,76;--warm:176,100,0;--page:#e9f0fa;--shadow:rgba(20,30,60,.2);--btn:rgb(18,70,120);--btnt:#fff;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--t1:#f5f7fa;--t3:rgba(178,220,255,.78);--fill:24,27,34;--solid:28,31,39;--edge:rgba(255,255,255,.26);--inset:rgba(255,255,255,.07);--inset2:rgba(255,255,255,.12);
+  --line:rgba(255,255,255,.1);--ok:95,214,142;--warm:255,196,107;--page:#0c1017;--shadow:rgba(0,0,0,.5);--btn:rgb(96,190,255);--btnt:#0b0d12;color-scheme:dark;--live:96,190,255}}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(60rem 30rem at 85% -10%,rgba(var(--glow),.25),transparent 70%),var(--page);color:var(--t1);font:500 14px/1.45 var(--font);-webkit-font-smoothing:antialiased;padding:32px 20px 80px}
+main{max-width:64rem;margin:0 auto}
+h1{font-size:2rem;letter-spacing:-.03em;margin:0 0 6px}h2{font-size:1.15rem;margin:44px 0 4px}h3{font-size:.95rem;margin:0 0 6px}
+p{margin:0 0 10px;color:var(--t3);max-width:68ch}
+.note{background:var(--inset);border-radius:12px;padding:10px 14px;color:var(--t3);max-width:68ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;align-items:start;margin-top:14px}
+.cap{font-size:.78rem;color:var(--t3);margin-top:8px;max-width:48ch}
+.glass{border-radius:16px;background:linear-gradient(180deg,rgba(var(--tint),.2),rgba(var(--tint),.06)),rgba(var(--fill),.78);box-shadow:inset 0 1px 0 var(--edge),0 14px 34px var(--shadow);border:1px solid var(--line)}
+.btn{font:700 .86rem var(--font);border:0;border-radius:999px;padding:8px 16px;cursor:pointer;background:var(--btn);color:var(--btnt)}
+.btn.ghost{background:var(--inset);color:var(--t1)}.btn:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid rgb(var(--live));outline-offset:2px}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--inset);color:var(--t3)}
+.chip.ok{background:rgba(var(--ok),.18);color:rgb(var(--ok))}.chip.later{background:rgba(var(--warm),.16);color:rgb(var(--warm))}
+
+/* the timeline */
+.flow{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.step{flex:1 1 140px;padding:12px;border-radius:12px;background:var(--inset)}
+.step b{display:block;font-size:.88rem}.step span{font-size:.78rem;color:var(--t3)}
+.step i{font-style:normal;font-size:.7rem;font-weight:700;color:rgb(var(--live));letter-spacing:.05em;text-transform:uppercase}
+
+/* the Pill */
+.pill{display:block;position:relative;flex:none;width:36px;height:20px;border-radius:999px;background:linear-gradient(180deg,#e9eef5,#8d99ab);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 3px rgba(0,0,0,.14)}
+.pill i{position:absolute;top:6px;width:4px;height:8px;border-radius:99px;background:rgb(var(--glow));box-shadow:0 0 5px 1px rgba(var(--glow),.7)}.pill i:first-child{left:11px}.pill i:last-child{right:11px}
+
+/* the page inside the cards: a small landing page in CSS, in two versions */
+.site{position:absolute;inset:0;background:#f7f8fa;color:#1c2330;font:600 11px/1.3 var(--font);overflow:hidden}
+.site nav{display:flex;gap:10px;align-items:center;padding:8px 14px;background:#fff;border-bottom:1px solid #e3e6ec}.site nav b{margin-right:auto}.site nav span{color:#6b7385}
+.site .hero{padding:22px 18px 10px}.site h4{margin:0 0 6px;font-size:20px;letter-spacing:-.02em}.site p{margin:0 0 12px;color:#6b7385;font-weight:500;max-width:none;font-size:11px}
+.site .cta{display:inline-block;padding:6px 12px;border-radius:7px;background:#cfd4de;color:#3a4250}
+.site .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 18px}.site .cards div{height:44px;border-radius:8px;background:#fff;border:1px solid #e3e6ec}
+.after .cta{background:#2f6feb;color:#fff;padding:7px 14px}.after .cards{gap:12px;padding-top:14px}.after .cards div{border-color:#c9d6f6}
+.diff{position:absolute;border:2px solid rgba(255,90,90,.9);border-radius:6px;pointer-events:none;display:none}.hl .diff{display:block}
+
+/* before/after slider */
+.ba{position:relative;aspect-ratio:1440/900;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--line);--x:55%;user-select:none;touch-action:pan-y}
+.ba .layer{position:absolute;inset:0}.ba .layer.after{clip-path:inset(0 0 0 var(--x))}
+.ba .tag{position:absolute;top:8px;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:rgba(0,0,0,.6);color:#fff;padding:2px 8px;border-radius:99px;z-index:2}
+.ba .tag.b{left:8px}.ba .tag.a{right:8px}
+.ba .bar{position:absolute;top:0;bottom:0;left:var(--x);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.5);z-index:3;pointer-events:none}
+.ba .bar::after{content:"";position:absolute;top:50%;left:50%;width:22px;height:22px;margin:-11px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.ba input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;z-index:4;margin:0}
+.ba input:focus-visible+.ring{opacity:1}.ring{position:absolute;inset:0;border-radius:10px;box-shadow:inset 0 0 0 2px rgb(var(--live));opacity:0;pointer-events:none;z-index:5}
+
+/* the panel and the cards */
+.panel{width:min(400px,100%);padding:14px;display:flex;flex-direction:column;gap:12px}
+.panel .hd{display:flex;align-items:center;gap:10px;font-weight:700}.panel .hd small{display:block;color:var(--t3);font-weight:500}
+.rcard{background:var(--inset);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.rcard .top{display:flex;align-items:center;gap:8px}.rcard .top b{margin-right:auto}
+.facts{display:flex;flex-wrap:wrap;gap:6px}
+.acts{display:flex;gap:8px}.acts .btn{flex:1}
+.send{display:none;flex-direction:column;gap:8px}.sending .send{display:flex}.sending .acts{display:none}
+textarea{width:100%;min-height:64px;border-radius:10px;border:1px solid var(--line);background:rgba(var(--fill),.5);color:var(--t1);font:500 .88rem var(--font);padding:8px 10px;resize:vertical}
+.copied{display:none;color:rgb(var(--ok));font-weight:700;font-size:.86rem}.done .copied{display:block}.done .acts,.done .send{display:none}
+.out{background:rgba(var(--fill),.5);border-radius:10px;padding:9px 11px;font:500 .78rem/1.4 ui-monospace,Menlo,monospace;color:var(--t3);white-space:pre-wrap}
+
+/* the screen mocks: edge, notch */
+.screen{position:relative;height:210px;border-radius:14px;overflow:hidden;background:radial-gradient(60% 50% at 20% 10%,rgba(80,110,190,.5),transparent 70%),linear-gradient(160deg,#171d30,#0a0d15);box-shadow:0 0 0 1px var(--line)}
+.screen .bar{position:absolute;top:0;left:0;right:0;height:14px;background:rgba(255,255,255,.08)}
+.alert{position:absolute;display:flex;align-items:center;gap:10px;padding:10px 14px;color:#f5f7fa;font-size:.82rem;line-height:1.3;background:linear-gradient(180deg,rgba(200,228,255,.16),rgba(200,228,255,.05)),rgb(28,31,39);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 0 0 .5px rgba(96,190,255,.45)}
+.alert small{display:block;color:rgba(178,220,255,.78)}
+.alert.edge{right:0;top:62px;width:290px;border-radius:18px 0 0 18px}
+.alert.notch{left:50%;top:14px;transform:translateX(-50%);width:300px;border-radius:0 0 18px 18px}
+.notchblk{position:absolute;left:50%;top:0;width:64px;height:14px;margin-left:-32px;background:#000;border-radius:0 0 6px 6px}
+.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px}
+.state{padding:12px;border-radius:12px;background:var(--inset)}.state p{font-size:.82rem;margin:4px 0 0}
+.field{display:flex;flex-direction:column;gap:6px;font-size:.85rem}.field input{font:500 .9rem ui-monospace,Menlo,monospace;color:var(--t1);background:rgba(var(--fill),.5);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.proj{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Visual Review</h1>
+  <p>"Claude Code changes your code. Steward shows you what changed." When a session stops after changing files in a project with a running app, Steward slides out with a before and after of the page, and two buttons.</p>
+  <div class="note">A design page for the brief. The pages inside the cards are drawn in CSS. Drag the slider, try the buttons, and compare the three places the card can show.</div>
+
+  <h2>How it happens</h2>
+  <div class="flow">
+    <div class="step"><i>1 You send a prompt</i><b>Before</b><span>The prompt hook tells Steward. It takes a picture of your running app.</span></div>
+    <div class="step"><i>2 Claude works</i><b>Nothing to do</b><span>Steward stays quiet. No extra calls, no model.</span></div>
+    <div class="step"><i>3 The session stops</i><b>After</b><span>The stop hook tells Steward. It takes a second picture and compares.</span></div>
+    <div class="step"><i>4 Something changed</i><b>The card</b><span>Only if the page looks different. Otherwise it stays in the history.</span></div>
+  </div>
+
+  <h2>The review card</h2>
+  <p>In the panel, at the top, like "where you left off". The slider reveals the page as it was (left) and as it is now (right). The two buttons are the whole decision.</p>
+  <div class="grid">
+    <div>
+      <div class="glass panel" id="panel">
+        <div class="hd"><span class="pill"><i></i><i></i></span><div>Steward<small>my-site finished</small></div></div>
+        <div class="rcard" id="rc">
+          <div class="top"><b>What changed in my-site</b><span class="chip">localhost:3000</span></div>
+          <div class="ba" id="ba">
+            <div class="layer before"><div class="site"><nav><b>Acme</b><span>Docs</span><span>Pricing</span></nav><div class="hero"><h4>Build faster</h4><p>A small toolkit for web teams.</p><span class="cta">Learn more</span></div><div class="cards"><div></div><div></div><div></div></div></div></div>
+            <div class="layer after"><div class="site after"><nav><b>Acme</b><span>Docs</span><span>Pricing</span></nav><div class="hero"><h4>Build faster, ship calmer</h4><p>A small toolkit for web teams.</p><span class="cta">Get started</span></div><div class="cards"><div></div><div></div><div></div></div>
+              <i class="diff" style="left:12px;top:48px;width:240px;height:32px"></i><i class="diff" style="left:12px;top:112px;width:92px;height:28px"></i></div></div>
+            <span class="tag b">Before</span><span class="tag a">After</span><div class="bar"></div>
+            <input type="range" min="5" max="95" value="55" aria-label="Before and after slider" id="rng"><div class="ring"></div>
+          </div>
+          <div class="facts"><span class="chip">3 files changed</span><span class="chip ok">Tests pass</span><span class="chip later">Highlight changes</span><span class="chip later">Risk: touches the header</span></div>
+          <div class="acts"><button class="btn" id="good" type="button">Looks good</button><button class="btn ghost" id="back" type="button">Send it back</button></div>
+          <div class="send">
+            <textarea id="note" aria-label="What should change?">The button should say Start free, and the heading is too long.</textarea>
+            <div class="out" id="out"></div>
+            <div class="acts"><button class="btn" id="copy" type="button">Copy note for the session</button><button class="btn ghost" id="cancel" type="button">Cancel</button></div>
+          </div>
+          <div class="copied" id="copied">Copied. Paste it into the session. The picture is saved at the path in the note.</div>
+        </div>
+      </div>
+      <p class="cap"><span class="chip later">Later phases</span> chips: Highlight changes, the risk line. The tests badge and the file count come in phase 2.</p>
+    </div>
+    <div>
+      <h3>Where it shows</h3>
+      <p>It is an alert that counts as "needs me", so it passes quiet mode's filter and steps aside for full-screen apps like any other. A click opens the panel on the card.</p>
+      <div class="screen" aria-label="Edge alert"><div class="bar"></div><div class="alert edge"><span class="pill"><i></i><i></i></span><div><b>my-site changed</b><small>Review what Claude did?</small></div></div></div>
+      <p class="cap">On the screen edge, like every other alert.</p>
+      <div class="screen" style="margin-top:14px" aria-label="Notch alert"><div class="bar"></div><div class="notchblk"></div><div class="alert notch"><span class="pill"><i></i><i></i></span><div><b>my-site changed</b><small>Review what Claude did?</small></div></div></div>
+      <p class="cap">In the notch, it drops below the menu bar (this arrives with notch phase 3b).</p>
+    </div>
+  </div>
+
+  <h2>Not every turn makes a card</h2>
+  <div class="states">
+    <div class="state"><b>Nothing looks different</b><p>No card, no alert. It is saved in the history. A refactor that does not change the page stays quiet.</p></div>
+    <div class="state"><b>The app is not running</b><p>No card. The history says "my-site was not running at localhost:3000", so you know why.</p></div>
+    <div class="state"><b>No before picture</b><p>Steward started mid-turn, or the app was down at the start. It shows only the after, labeled so.</p></div>
+    <div class="state"><b>A login screen</b><p>Steward does not sign in, so a page behind a login looks the same twice. Version 1 does not support it, and says so in Settings.</p></div>
+  </div>
+
+  <h2>Setting it up</h2>
+  <p>One field per project, in Settings → Projects. Empty means Visual Review is off for that project.</p>
+  <div class="glass" style="padding:14px 16px;max-width:520px">
+    <div class="proj"><b>my-site</b><label class="field">App address<input value="http://localhost:3000" aria-label="App address"></label></div>
+    <div class="proj" style="border:0"><b>notes</b><label class="field">App address<input placeholder="Off. Paste the address your app runs at" aria-label="App address, empty"></label></div>
+    <p class="cap" style="margin:8px 0 0">Only addresses on this Mac (localhost, 127.0.0.1) are accepted. Pictures stay on this Mac.</p>
+  </div>
+</main>
+<script>
+// The slider, the two buttons and the note. The note is what "Send it back" copies for the session.
+const ba = document.getElementById('ba'), rng = document.getElementById('rng'), rc = document.getElementById('rc'), note = document.getElementById('note'), out = document.getElementById('out');
+rng.addEventListener('input', () => ba.style.setProperty('--x', rng.value + '%'));
+const text = () => `Visual Review of my-site (localhost:3000): please change this.\n${note.value.trim() || '(no note)'}\nWhat I saw: ~/Library/Application Support/Steward/reviews/my-site/after.png`;
+document.getElementById('back').onclick = () => { rc.classList.add('sending'); out.textContent = text(); note.focus(); };
+note.addEventListener('input', () => { out.textContent = text(); });
+document.getElementById('cancel').onclick = () => rc.classList.remove('sending');
+document.getElementById('good').onclick = () => { rc.classList.add('done'); document.getElementById('copied').textContent = 'Marked as reviewed.'; };
+document.getElementById('copy').onclick = () => { try { navigator.clipboard.writeText(text()).catch(() => {}); } catch (e) {} rc.classList.remove('sending'); rc.classList.add('done'); };
+const chip = document.querySelector('.chip.later'); // "Highlight changes" toggles the red outlines
+document.querySelectorAll('.facts .chip.later')[0].addEventListener('click', () => ba.classList.toggle('hl'));
+</script>
+</body>
+</html>
