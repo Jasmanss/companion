@@ -5,6 +5,7 @@
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
+        { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
         { "name": "Try notch Phase 3a by hand", "line": "Rest the cursor near the notch (the black grows), click it (the panel opens under the notch).", "date": "2026-10-19" },
         { "name": "Look at the site hero", "line": "Open the built page from site Phase 1 and scroll through the hero, on desktop and on your phone.", "date": "2026-10-19" },
         { "name": "OK the merges of #22, #23 and #24", "line": "Docs, site Phase 1 and notch Phase 3a. Merge each once its CI is green.", "date": "2026-10-19" },
@@ -17,8 +18,8 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Notch dock, Phase 3a", "line": "Built: hover grows the black, the panel opens from the notch (draft PR #24, claude/notch-phase-3a), CI running. Try it by hand first.", "date": "2026-10-19" },
-        { "name": "Steward showcase site, Phase 1", "line": "Built: the page shell and the hero (draft PR #23, claude/site-phase-1), CI running. Phase 2, the five scenes, waits for your go in Site building.", "date": "2026-10-19" },
+        { "name": "Notch dock, Phase 3a", "line": "Built (draft PR #24, claude/notch-phase-3a), CI green. A fix is in progress from your hand test: closing must go back into the notch, never via the side edge.", "date": "2026-10-19" },
+        { "name": "Steward showcase site, Phase 1", "line": "Phase 1 built (draft PR #23, CI green). Phase 2 waits for your vision talk.", "date": "2026-10-19" },
         { "name": "Docs PR #22", "line": "Site building added to CLAUDE.md. Waits for your merge OK.", "date": "2026-10-19" }
       ]
     },
@@ -26,8 +27,8 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Site, Phase 2: the five scenes", "line": "Edge, moods, quiet, notch and request. Waits for your go, typed into Site building.", "date": "2026-10-19" },
-        { "name": "Notch dock, Phase 3b to 3d", "line": "Alerts below the menu bar, drop images, and the optional morph. Waits for you to try 3a.", "date": "2026-10-19" },
+        { "name": "Notch 3b: next, after the 3a close fix", "line": "Alerts below the menu bar. Your go, typed into Main building. Then 3c (drop images) and 3d (the optional morph).", "date": "2026-10-19" },
+        { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
       ]
     },

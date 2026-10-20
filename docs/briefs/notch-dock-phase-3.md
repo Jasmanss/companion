@@ -104,4 +104,7 @@ Status stays `ready`: 3b, 3c and 3d are not built. The user typed the 3a go into
 - **Not checked:** idle CPU in the notch (the Mac went to sleep mid-run), full screen, a second display, Reduce Motion by hand, and the user's hand feel.
 - **Next decision:** 3d (the black growing into the panel), after the user tries 3a.
 - **Note:** the front door set this brief's Status to `ready` (`d173a29`) on the user's go.
-- **Waiting on the user:** try 3a by hand, then OK the merge once CI is green.
+- **Fix in progress (2026-10-19, from the user's hand test):** "Make sure for the notch, that when i close it doesnt go to the side it goes back into the notch." Every close path (click away, Esc, the hotkey, the menu bar) must go straight back into the notch with a reverse drop-down, or a fade with Reduce Motion, and never via the side edge. Sent to Main building as a fix on `claude/notch-phase-3a` (PR #24).
+- **CI flake fixed on this PR:** the intermittent smoke failure "a push at the bottom brought the tab to 573, not 574" hit PRs #22 and #23. The check now uses the app's own `clampTop` on the current work area (`477e76f` on #24), likely because the CI runner's Dock moved the work area mid-run. Not proven yet. #23's rerun passed and #24 is green.
+- **Waiting on the user:** try 3a by hand again after the close fix, then OK the merge once CI is green.
+- **Next:** 3b (alerts below the menu bar), after the 3a close fix. The user types that go into Main building.
