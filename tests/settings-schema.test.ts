@@ -6,6 +6,21 @@ import { DEFAULT_STEWARD } from '../src/shared/steward'
 const AS_BEFORE = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false, hideInFullScreen: false, hideInApps: [] } as const
 const OLD_FILE_STEWARD = { ...DEFAULT_STEWARD, ...AS_BEFORE }
 
+describe('project addresses (Visual Review)', () => {
+  const project = (url: unknown) => migrateSettings({ projects: [{ name: 'haven', path: '/Users/me/haven', url }] }).projects[0]
+
+  it('keeps an address on this Mac, tidied', () => {
+    expect(project('localhost:3000')).toEqual({ name: 'haven', path: '/Users/me/haven', url: 'http://localhost:3000' })
+    expect(project('http://127.0.0.1:5173/pricing')).toMatchObject({ url: 'http://127.0.0.1:5173/pricing' })
+  })
+
+  it('drops one that was edited into another host, or is not an address', () => {
+    for (const url of ['https://example.com', 'http://localhost.evil.com', 'file:///etc/passwd', 'javascript:alert(1)', 7, null, '']) {
+      expect(project(url)).toEqual({ name: 'haven', path: '/Users/me/haven' })
+    }
+  })
+})
+
 describe('migrateSettings', () => {
   it('brings a file from before the Settings window across, adding the new switches with their defaults', () => {
     const old = {
