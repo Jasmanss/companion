@@ -64,6 +64,7 @@ import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
+import { startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1422,6 +1423,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
       if (SMOKE_DEMO) await captureDemo(w, out, SMOKE_DEMO)
+      const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
+      await checkReview(w, out)
+      clearTimeout(reviewTimer)
       // The Settings window is its own page, so it gets checked too.
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
@@ -1434,6 +1438,129 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       fail(String(err))
     }
   })
+}
+
+/**
+ * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
+ * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
+ */
+async function checkReview(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const until = async (wc: Electron.WebContents, script: string, why: string, ms = 8000) => {
+    for (const started = Date.now(); Date.now() - started < ms; await sleep(150)) if (await wc.executeJavaScript(script)) return
+    throw new Error(why)
+  }
+  const server = await startPageServer()
+  const projectDir = path.join(os.tmpdir(), 'steward-smoke-review-project')
+  await fs.mkdir(projectDir, { recursive: true })
+  const turn = (id: string) => ({ session_id: 'smoke-review', prompt_id: id, cwd: projectDir })
+  /** A prompt is sent: wait until the page has been loaded for the before picture, so the page can change now. */
+  const prompt = async (id: string) => {
+    const before = server.hits()
+    reviews.turnStarted({ ...turn(id), hook_event_name: 'UserPromptSubmit' })
+    for (const started = Date.now(); server.hits() === before; await sleep(50)) if (Date.now() - started > 15_000) throw new Error('the before picture never asked for the page')
+  }
+  try {
+    await settings.addProject(projectDir)
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}`)
+    need(settings.projects().find((p) => p.path === projectDir)?.url === `http://localhost:${server.port}`, 'the address was not kept')
+
+    // A turn that leaves the page as it was makes no review, even with a spinner and a fade running on it.
+    await prompt('same')
+    need((await reviews.turnStopped({ ...turn('same'), hook_event_name: 'Stop' })) === null, 'a page that did not change made a review')
+    need(reviewStore.list().length === 0, 'a page that did not change was kept')
+
+    // A turn that changes it does, with both pictures and both card pictures.
+    await prompt('changed')
+    server.setVersion('b')
+    const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop' })
+    need(review !== null && review.before === 'turn-start', 'a page that changed made no review with a before picture')
+    for (const which of ['before', 'after', 'before-card', 'after-card'] as const) {
+      const file = reviewStore.file(review!.id, which)
+      need(file !== null && (await fs.stat(file).then((s) => s.size, () => 0)) > 0, `the review has no ${which} picture`)
+    }
+    need(reviewStore.file(review!.id, 'after')!.startsWith(path.join(app.getPath('userData'), 'reviews')), 'a review picture is outside the Steward data folder')
+    console.log(`smoke: a changed page made a review (${review!.changedPixels} small pixels changed, it takes ${review!.minPixels})`)
+
+    // The same page again makes none.
+    await prompt('again')
+    need((await reviews.turnStopped({ ...turn('again'), hook_event_name: 'Stop' })) === null, 'a page that stayed changed made a second review')
+    need(reviewStore.list().length === 1, 'the store holds more than one review')
+
+    // Only this Mac: another host is refused, and a page that sends the window elsewhere is not captured.
+    const refused = await capturePage('http://example.com/', { review: { settleMs: 1000 } }).then(() => false, () => true)
+    need(refused, 'Visual Review captured a page that is not on this Mac')
+    const away = await capturePage(`http://localhost:${server.port}/away`, { review: { settleMs: 1000 } }).then(
+      () => 'captured',
+      (err: Error) => err.message,
+    )
+    need(/another site/.test(away), `a page that sends the visitor elsewhere was not refused (${away})`)
+    console.log('smoke: only pages on this Mac are captured, and a redirect away is refused')
+
+    // The panel shows the card at its top.
+    setDock('expanded')
+    const wc = w.webContents
+    await until(wc, 'Boolean(document.querySelector(".card.review .rv-layer img"))', 'the panel never showed the review card')
+    await sleep(600)
+    const shown = await wc.executeJavaScript(`({
+      images: [...document.querySelectorAll('.card.review .rv-layer img')].map((i) => i.naturalWidth),
+      buttons: [...document.querySelectorAll('.card.review button')].map((b) => b.textContent),
+      slider: Boolean(document.querySelector('.card.review input[type=range]')),
+      first: document.querySelector('.body')?.firstElementChild?.classList.contains('review'),
+    })`)
+    need(shown.images.length === 2 && shown.images.every((n: number) => n > 0), 'the card does not show both pictures')
+    need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
+    need(shown.first, 'the card is not at the top of the panel')
+    const card = await wc.executeJavaScript(`(() => { const r = document.querySelector('.card.review').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
+    const panelShot = await wc.capturePage()
+    await fs.writeFile(out.replace(/\.png$/, '-review-card.png'), panelShot.toPNG())
+    // Drag the slider.
+    const x = await wc.executeJavaScript(`(() => {
+      const r = document.querySelector('.rv-ba input[type=range]')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(r, '20')
+      r.dispatchEvent(new Event('input', { bubbles: true }))
+      return document.querySelector('.rv-ba').style.getPropertyValue('--x')
+    })()`)
+    need(x === '20%', `the slider did not move the picture (${x})`)
+    // Send it back asks for a note and shows what will be copied; Looks good takes the card away.
+    const click = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.card.review button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+    await click('Send it back')
+    await until(wc, 'Boolean(document.querySelector(".rv-send textarea"))', 'Send it back did not ask for a note')
+    const copied = await wc.executeJavaScript('document.querySelector(".rv-out").textContent')
+    need(copied.includes(reviewStore.file(review!.id, 'after')!) && copied.includes('please change this'), 'the note does not point at the picture')
+    await click('Cancel')
+    await click('Looks good')
+    await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good did not clear the card')
+    need(reviewStore.get(review!.id)?.status === 'good', 'Looks good was not remembered')
+    console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}), the slider moves, Looks good clears it`)
+
+    // Settings: the address, and Try it now.
+    openSettings('projects')
+    const sw = settingsWin!
+    await new Promise<void>((resolve, reject) => {
+      sw.webContents.once('did-finish-load', () => resolve())
+      sw.webContents.once('did-fail-load', (_e, code, description) => reject(new Error(`settings load failed: ${code} ${description}`)))
+    })
+    const field = 'input.set-address'
+    await until(sw.webContents, `Boolean(document.querySelector(${JSON.stringify(field)}))`, 'Settings has no App address field')
+    need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}`, 'the field does not show the saved address')
+    await sw.webContents.executeJavaScript(`[...document.querySelectorAll('.set-row button')].find((b) => b.textContent === 'Try it now')?.click()`)
+    await until(sw.webContents, 'Boolean(document.querySelector(".set-shot img"))', 'Try it now showed no picture', 20_000)
+    await sw.webContents.executeJavaScript(`document.querySelector('.set-shot')?.scrollIntoView({ block: 'center' })`)
+    await sleep(500)
+    await fs.writeFile(out.replace(/\.png$/, '-review-settings.png'), (await sw.webContents.capturePage()).toPNG())
+    console.log('smoke: Settings shows the address, and Try it now shows the page')
+    sw.close()
+    await sleep(300)
+  } finally {
+    await reviews.clear()
+    await settings.removeProject(projectDir)
+    server.close()
+    await fs.rm(projectDir, { recursive: true, force: true })
+  }
 }
 
 /** How opaque one pixel of a capture of a transparent window is (0 to 255), at a point in the window's own coordinates. */

@@ -88,10 +88,14 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
     },
   })
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  /** The page tried to go somewhere that isn't this Mac. */
+  let sentAway = false
   if (review) {
-    // A redirect to a login on another site, say, ends here: the window stays on this Mac.
+    // A redirect to a login on another site, say, ends here: the window stays on this Mac, and nothing is kept of the page.
     const stay = (details: Electron.Event & { url: string }) => {
-      if (!isLoopbackUrl(details.url)) details.preventDefault()
+      if (isLoopbackUrl(details.url)) return
+      sentAway = true
+      details.preventDefault()
     }
     win.webContents.on('will-navigate', stay)
     win.webContents.on('will-redirect', stay)
@@ -140,6 +144,7 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
       description = section ? `the full page (couldn't find "${section}" on it${cut})` : `the full page${cut}`
     }
 
+    if (sentAway) throw new Error('The page tried to send Steward to another site, so it was not captured')
     if (image.isEmpty()) throw new Error('The page rendered blank')
     const { width, height } = image.getSize()
     return { png: image.toPNG(), preview: preview(image), width, height, description }

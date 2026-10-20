@@ -61,7 +61,7 @@ export function describeCaptureError(err: unknown, address: string): string {
   if (/took too long/.test(text)) return `${where} didn't finish loading in 20 seconds.`
   if (/blank/.test(text)) return `${where} loaded, but the page is blank.`
   if (/ERR_CERT|ERR_SSL/.test(text)) return `${where} has a certificate problem that Steward can't get past. Try the http address.`
-  if (/only looks at pages on this Mac/.test(text)) return text
+  if (/only looks at pages on this Mac|send Steward to another site/.test(text)) return text
   return `Couldn't capture ${where}: ${text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`
 }
 
