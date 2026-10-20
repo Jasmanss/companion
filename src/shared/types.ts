@@ -352,6 +352,8 @@ export interface StewardAPI {
     /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
     overhang(): Promise<number>
     onOverhang(cb: (points: number) => void): Unsubscribe
+    /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
+    intoNotchEnded(): void
   }
   tray: {
     list(): Promise<TrayItem[]>

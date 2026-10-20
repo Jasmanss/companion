@@ -18,6 +18,7 @@ const api: StewardAPI = {
     resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),
     overhang: () => ipcRenderer.invoke('dock:overhang'),
     onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
+    intoNotchEnded: () => ipcRenderer.send('dock:intoNotchEnded'),
   },
   tray: {
     list: () => ipcRenderer.invoke('tray:list'),

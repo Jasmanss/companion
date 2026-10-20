@@ -425,6 +425,13 @@ pre {
   animation-name: panel-drop;
 }
 
+/* Closing goes back up into the notch, the entrance in reverse, and then the window goes (App.tsx says when). */
+:root[data-leaving] #root > * {
+  transform-origin: 50% 0;
+  animation: panel-rise 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -2122,6 +2129,19 @@ a.icon-btn {
   }
 }
 
+@keyframes panel-rise {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+@keyframes panel-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes nudge-in {
   from {
     opacity: 0;
@@ -2317,9 +2337,13 @@ a.icon-btn {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
-  /* From the notch, the panel only fades in. */
+  /* From the notch, the panel only fades in, and out. */
   :root[data-notch] .panel {
     animation-name: fadein;
+  }
+
+  :root[data-leaving] #root > * {
+    animation-name: panel-fade-out;
   }
 
   :root[data-slide='out'] #root {

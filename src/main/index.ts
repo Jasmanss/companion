@@ -316,6 +316,25 @@ function slideEnded(by: 'drawn' | 'clock'): void {
   hideTab(by === 'drawn' ? 'its slide ending' : SLIDE_END_UNDRAWN)
 }
 
+/** How long the panel's way back up into the notch may take before the window goes anyway (the page's exit is 0.2 s). */
+const INTO_NOTCH_MS = 450
+
+/**
+ * Docked in the notch, the panel closed: its page plays the panel going back up into the notch (styles.css) and says
+ * when it's done (intoNotchEnded); the window goes then, where it is. If the page never says, this does.
+ */
+function intoNotch(): void {
+  clearTimeout(slideTimer)
+  slideTimer = setTimeout(intoNotchEnded, INTO_NOTCH_MS)
+}
+
+/** The panel's way back into the notch is over: the window goes, unless the panel was opened again meanwhile. */
+function intoNotchEnded(): void {
+  clearTimeout(slideTimer)
+  if (!win || win.isDestroyed() || (dock !== 'collapsed' && dock !== 'hidden')) return
+  hideTab()
+}
+
 /**
  * Take the window off the screen. Only when needed, its page waits slid out, ready to come in from the edge, and the tab
  * is back at its saved spot for the next time (a push brings it to the cursor again).
@@ -400,14 +419,17 @@ function setDock(state: DockState): void {
   updateMenuBar()
   placeNotch()
   if (state === 'hidden') {
-    hideTab()
+    // Docked in the notch, an open panel goes back up into it first, as when it's closed.
+    if (wasOpen && inNotch() && win.isVisible()) intoNotch()
+    else hideTab()
     return syncWatch()
   }
   if (state === 'collapsed' || state === 'nudge') {
     if (state === 'collapsed' && inNotch()) {
-      win.setBounds(boundsFor(state), !wasHidden)
-      // In the notch there's no tab at the edge: the notch window is the character.
-      hideTab()
+      // In the notch there's no tab at the edge: the notch window is the character. An open panel goes back up into
+      // the notch (its page plays that) before the window goes, and the window stays where it is: never at the edge.
+      if (wasOpen && win.isVisible()) intoNotch()
+      else hideTab()
     } else if (state === 'collapsed' && !out()) tuckTab()
     // Peeking never takes keyboard focus, so it can't interrupt typing. Out of hiding, it comes in from the edge.
     else showTab(boundsFor(state), !wasHidden)
@@ -1112,6 +1134,7 @@ function registerIpc(): void {
     if (MOODS.includes(mood as Mood) && GLINTS.includes(glint as PillGlint)) notch.setMood(mood as Mood, glint as PillGlint)
   })
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
+  ipcMain.on('dock:intoNotchEnded', () => intoNotchEnded())
   ipcMain.handle('dock:hide', () => setDock('hidden'))
   ipcMain.handle('dock:view', () => setDock('viewing'))
   ipcMain.handle('appearance:get', (e) => (settingsWin && e.sender === settingsWin.webContents ? settingsAppearance() : appearance()))

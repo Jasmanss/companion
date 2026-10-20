@@ -211,6 +211,38 @@ export function App() {
     document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
   }, [look.notch, notchGeo])
 
+  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was open (the panel or the viewer)
+  // stays, goes back up into the notch (styles.css), and then tells main the window can go. Worked out while rendering,
+  // so the tab never shows for a frame in between.
+  const [leaving, setLeaving] = useState<DockState | null>(null)
+  const [shownDock, setShownDock] = useState(dock)
+  if (dock !== shownDock) {
+    setShownDock(dock)
+    const wasOpen = shownDock === 'expanded' || shownDock === 'viewing'
+    setLeaving(wasOpen && (dock === 'collapsed' || dock === 'hidden') && look.notch && notchGeo !== null ? shownDock : null)
+  }
+  useEffect(() => {
+    if (!leaving) return
+    const root = document.documentElement
+    root.setAttribute('data-leaving', '')
+    const done = () => {
+      root.removeAttribute('data-leaving')
+      setLeaving(null)
+      api.dock.intoNotchEnded()
+    }
+    // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
+    const ended = (e: AnimationEvent) => {
+      if (e.animationName === 'panel-rise' || e.animationName === 'panel-fade-out') done()
+    }
+    document.addEventListener('animationend', ended)
+    const timer = setTimeout(done, 400)
+    return () => {
+      document.removeEventListener('animationend', ended)
+      clearTimeout(timer)
+      root.removeAttribute('data-leaving')
+    }
+  }, [leaving])
+
   // The glass's tint and frost, from Settings → Steward.
   useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])
 
@@ -482,7 +514,10 @@ export function App() {
   // Working: what it's on right now. Idle: the last file it read here.
   const pillTouch: Touch | null = (busy && touch) || (lastFile ? { kind: 'file', text: lastFile } : null)
 
-  if (dock === 'viewing' && items.length > 0) {
+  // Going back into the notch, what was open stays on screen until it's gone (see leaving, above).
+  const view = leaving ?? dock
+
+  if (view === 'viewing' && items.length > 0) {
     return (
       <Viewer
         items={items}
@@ -495,7 +530,7 @@ export function App() {
     )
   }
 
-  if (dock === 'nudge') {
+  if (view === 'nudge') {
     return (
       <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
         <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
@@ -503,7 +538,7 @@ export function App() {
     )
   }
 
-  if (dock === 'collapsed' || dock === 'hidden') {
+  if (view === 'collapsed' || view === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
       <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
