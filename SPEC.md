@@ -52,7 +52,11 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   grows a little and the eyes follow the cursor (in "Only when needed", waking
   up is that grow). A click opens the panel centered under the notch, coming
   down from it, on the notch's own screen; closing it puts Steward back in the
-  notch. Alerts still peek from the side edge for now.
+  notch. An alert that peeks out comes out under the notch instead of from the
+  side: a black shape below the menu bar line, joined to the chin (Wings grows
+  one for it), with one line of text. A click opens the panel (an alert's
+  action is on its banner there), and it goes back up into the notch when it
+  tucks away. It never covers the menu bar.
 - **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
   open panel) while an app fills the screen it's on (on for a new install), or
   while an app on your list is in front ("Add app…", or one click for Keynote,
@@ -338,4 +342,4 @@ the panel.
 
 ## Open questions
 
-- The notch, still to come: alerts below the menu bar, dropping images on the notch, and the black growing into the panel (docs/briefs/notch-dock-phase-3.md)
+- The notch, still to come: dropping images on the notch, and the black growing into the panel (docs/briefs/notch-dock-phase-3.md)
