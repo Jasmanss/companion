@@ -6,6 +6,13 @@ import { HOOK_PATH } from './hook-server'
 
 export const CLAUDE_SETTINGS_FILE = path.join(os.homedir(), '.claude', 'settings.json')
 export const HOOK_EVENTS = ['PermissionRequest', 'Notification', 'Stop'] as const
+/**
+ * Visual Review's one more hook: it says a turn has started, so the page can be photographed before Claude changes it.
+ * Connecting adds it with the others. A connection from before it is still "connected"; Connections offers the update
+ * once a project has an address.
+ */
+export const REVIEW_HOOK_EVENT = 'UserPromptSubmit'
+const ALL_HOOK_EVENTS = [...HOOK_EVENTS, REVIEW_HOOK_EVENT] as const
 const HOOK_TIMEOUT_SECONDS = 5
 
 type Settings = Record<string, unknown>
@@ -36,8 +43,9 @@ export function hookCommand(dataDir: string, home = os.homedir()): string {
 const isStewardHook = (hook: { type: string; [key: string]: unknown }) => typeof hook.command === 'string' && hook.command.includes(HOOK_PATH)
 
 /**
- * current: each event has exactly one of our hooks, running this command · outdated: ours are there but point
- * somewhere else (such as the data folder from before the rename), are missing for an event, or are doubled · missing: none of ours.
+ * current: each event has exactly one of our hooks, running this command (the prompt hook may be missing, see reviewHookInstalled)
+ * · outdated: ours are there but point somewhere else (such as the data folder from before the rename), are missing for an
+ * event, or are doubled · missing: none of ours.
  */
 export type HookState = 'missing' | 'current' | 'outdated'
 
@@ -54,7 +62,7 @@ function hooksOf(settings: Settings): Hooks {
  */
 export function withStewardHooks(settings: Settings, command: string): Settings {
   const hooks = hooksOf(settings)
-  for (const event of HOOK_EVENTS) {
+  for (const event of ALL_HOOK_EVENTS) {
     let placed = false
     const groups = (hooks[event] ?? []).flatMap((group) => {
       const kept = group.hooks.flatMap((hook) => {
@@ -95,9 +103,22 @@ export function hookState(settings: Settings, command: string): HookState {
   } catch {
     return 'missing'
   }
-  const ours = HOOK_EVENTS.map((event) => (hooks[event] ?? []).flatMap((g) => g.hooks.filter(isStewardHook)))
+  const ours = ALL_HOOK_EVENTS.map((event) => (hooks[event] ?? []).flatMap((g) => g.hooks.filter(isStewardHook)))
   if (ours.every((list) => list.length === 0)) return 'missing'
-  return ours.every((list) => list.length === 1 && list[0].command === command) ? 'current' : 'outdated'
+  const right = (list: typeof ours[number]) => list.length === 1 && list[0].command === command
+  const [prompt] = ours.slice(-1)
+  // Without the prompt hook it's the connection from before Visual Review: still current. With one, it has to be right too.
+  return ours.slice(0, -1).every(right) && (prompt.length === 0 || right(prompt)) ? 'current' : 'outdated'
+}
+
+/** Whether the prompt hook Visual Review needs is in place, with this command. */
+export function reviewHookInstalled(settings: Settings, command: string): boolean {
+  try {
+    const ours = (hooksOf(settings)[REVIEW_HOOK_EVENT] ?? []).flatMap((g) => g.hooks.filter(isStewardHook))
+    return ours.length === 1 && ours[0].command === command
+  } catch {
+    return false
+  }
 }
 
 /** Exactly what connecting adds, for the preview. */

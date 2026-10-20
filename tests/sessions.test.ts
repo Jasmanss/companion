@@ -86,3 +86,12 @@ describe('SessionTracker', () => {
     expect(read).toEqual([])
   })
 })
+
+describe('SessionTracker and a turn starting', () => {
+  it('says nothing and changes nothing: Visual Review handles it', async () => {
+    const tracker = new SessionTracker({ projects: () => projects, now: () => 1000 })
+    const event: HookPayload = { hook_event_name: 'UserPromptSubmit', session_id: 's1', cwd: '/Users/me/Documents/steward', prompt_id: 'p1' }
+    expect(await tracker.apply(event)).toBeNull()
+    expect(tracker.list()).toEqual([])
+  })
+})
