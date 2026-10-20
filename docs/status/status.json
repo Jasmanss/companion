@@ -28,7 +28,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Visual Review", "line": "Designed: before and after of your running app when a session stops, with Looks good and Send it back. 5 small phases; Phase 1 shows it working. Brief docs/briefs/visual-review.md, page design/visual-review.html. Waits for your go.", "date": "2026-10-20" },
+        { "name": "Visual Review", "line": "Designed, built by Feature building: before and after of your running app when a session stops, with Looks good and Send it back. 5 small phases; Phase 1 shows it working. Brief docs/briefs/visual-review.md, page design/visual-review.html. Waits for your go.", "date": "2026-10-20" },
         { "name": "Notch 3b: next, after the 3a close fix", "line": "Alerts below the menu bar. Your go, typed into Main building. Then 3c (drop images) and 3d (the optional morph).", "date": "2026-10-19" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
