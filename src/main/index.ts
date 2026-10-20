@@ -44,9 +44,9 @@ import {
   menuBarTitle,
   nextLookMs,
   NOTCH_DWELL_MS,
+  firstPeekNote,
   firstPeekOver,
   presenceNote,
-  presenceNoteParts,
   pushAlongEdge,
   showFirstPeek,
   screenBeside,
@@ -1004,8 +1004,8 @@ function maybeFirstPeek(): void {
   if (!showFirstPeek({ freshInstall: settings.missing && appState.missing, quiet: quiet(), shown: appState.firstPeekShown })) return
   // The note was the panel's first-time note; this shows it instead.
   void appState.update({ firstPeekShown: true, presenceNoteSeen: true })
-  const { title, how } = presenceNoteParts(noteFor())
-  win.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', title, detail: how, at: Date.now() }])
+  const { title, detail } = firstPeekNote(noteFor())
+  win.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', title, detail, at: Date.now() }])
   setDock('nudge')
   firstPeek = { startedAt: Date.now(), touched: false }
   watchPeek()

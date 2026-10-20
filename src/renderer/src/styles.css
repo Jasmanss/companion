@@ -484,8 +484,8 @@ pre {
 
 .nn-line {
   position: absolute;
-  left: 26px;
-  right: 26px;
+  left: 14px;
+  right: 14px;
   bottom: 8px;
   display: flex;
   justify-content: center;
@@ -513,9 +513,10 @@ pre {
   color: rgba(242, 243, 245, 0.6);
 }
 
+/* Shown while the cursor is on the nudge, over the line's end (black, so the text under it doesn't show through). */
 .nn-close {
   position: absolute;
-  right: 4px;
+  right: 6px;
   bottom: 5px;
   display: grid;
   place-items: center;
@@ -524,7 +525,7 @@ pre {
   padding: 0;
   border: none;
   border-radius: 6px;
-  background: transparent;
+  background: #000;
   color: rgba(242, 243, 245, 0.7);
   opacity: 0;
   transition: opacity 0.15s linear;
@@ -535,7 +536,7 @@ pre {
 }
 
 .nn-close:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: #2a2a2c;
   color: #f2f3f5;
 }
 
@@ -566,7 +567,7 @@ pre {
 }
 
 :root[data-leaving] .nn-line {
-  animation: panel-fade-out 0.1s linear forwards;
+  animation: nudge-text-out 0.1s linear forwards;
 }
 
 /* ---------- panel ---------- */
@@ -2353,6 +2354,13 @@ a.icon-btn {
 @keyframes nudge-r-up {
   to {
     transform: translate(-100px, -30px);
+  }
+}
+
+/* Its own name: App.tsx takes panel-fade-out's end as the end of the whole way back. */
+@keyframes nudge-text-out {
+  to {
+    opacity: 0;
   }
 }
 

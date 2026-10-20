@@ -208,6 +208,19 @@ export function presenceNoteParts(o: NoteFor): { title: string; how: string } {
   return { title: 'Hides until you need it.', how }
 }
 
+/**
+ * The first-launch peek's note. Under the notch it has one short line, so it leads with how to bring Steward out (the
+ * whole note doesn't fit); at the edge it's the note in its two parts.
+ */
+export function firstPeekNote(o: NoteFor): { title: string; detail: string } {
+  if (o.where !== 'notch') {
+    const { title, how } = presenceNoteParts(o)
+    return { title, detail: how }
+  }
+  const hotkey = o.hotkey ? formatAccelerator(o.hotkey).replace(' ', '\u00a0') : ''
+  return { title: 'Rest the cursor on the notch', detail: hotkey ? `or press ${hotkey}.` : 'or use the menu bar icon.' }
+}
+
 /* ---------- The first-launch peek ---------- */
 
 /** How long the first-launch peek stays out, at least, unless the cursor has been on it. */
