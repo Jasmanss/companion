@@ -1,6 +1,8 @@
 # Movable panel: drag it anywhere, and it opens where you left it
 
-Status: designed
+Status: ready
+
+Set by the front door, 2026-10-21: the user typed the go for Phase 1 into Main building directly. Phase 2 waits for its own go.
 
 ## Ask (front door)
 The user's words, 2026-10-21: "new feature we should do now. Make the companion screen movable and where you left it is where it would pop up." The "companion screen" is Steward's panel (the tray, the greeting, the input). Their answers:
