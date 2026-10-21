@@ -3,7 +3,7 @@ import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
@@ -11,6 +11,7 @@ import { ContextPill, ProjectSwitcher } from './ContextPill'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
+import { ReviewCard, ReviewProblems } from './ReviewCard'
 import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
@@ -67,6 +68,10 @@ export function App() {
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
+  /** Visual Review: what changed on a running page, waiting for a decision. "Later" hides one until the panel opens again. */
+  const [reviews, setReviews] = useState<ReviewView[]>([])
+  const [laterReviews, setLaterReviews] = useState<ReadonlySet<string>>(new Set())
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const [switcher, setSwitcher] = useState(false)
   const switcherShown = usePresence(switcher)
@@ -89,9 +94,14 @@ export function App() {
     api.tray.list().then(setItems, showError)
     api.settings.get().then(setSettings, showError)
     api.sessions.list().then(setSessions, showError)
+    api.review.list().then(setReviews, showError)
     // The agent can switch projects too.
     const offSettings = api.settings.onChanged(setSettings)
-    const offDock = api.dock.onState(setDock)
+    const offDock = api.dock.onState((state) => {
+      setDock(state)
+      if (state === 'expanded') setLaterReviews(new Set())
+    })
+    const offReview = api.review.onChanged(setReviews)
     const offTray = api.tray.onChanged(setItems)
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
@@ -115,6 +125,7 @@ export function App() {
       offMood()
       offLeftOff()
       offBrief()
+      offReview()
       clearInterval(clock)
       offDock()
       offTray()
@@ -519,6 +530,7 @@ export function App() {
   useEffect(() => api.presence.onNear(setNear), [])
   const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
+  const shownReviews = reviews.filter((r) => !laterReviews.has(r.id))
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
   const runAction = (alert: AlertView) => {
@@ -666,6 +678,25 @@ export function App() {
               Got it
             </button>
           </div>
+        )}
+        <ReviewProblems />
+        {reviewNotice && (
+          <div className="notice" role="status">
+            {reviewNotice}
+            <button className="chip" onClick={() => setReviewNotice(null)}>
+              Got it
+            </button>
+          </div>
+        )}
+        {shownReviews[0] && (
+          <ReviewCard
+            key={shownReviews[0].id}
+            review={shownReviews[0]}
+            more={shownReviews.length - 1}
+            onLater={() => setLaterReviews(new Set(laterReviews).add(shownReviews[0].id))}
+            onDone={setReviewNotice}
+            onError={setToast}
+          />
         )}
         {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
         {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}

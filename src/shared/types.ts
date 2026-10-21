@@ -117,6 +117,8 @@ export interface TrayItem {
 export interface Project {
   name: string
   path: string
+  /** Where the project's app runs on this Mac (Visual Review). Empty means Visual Review is off for the project. */
+  url?: string
 }
 
 /** Which alerts peek out from the screen edge, and which cards the panel shows. All on by default. */
@@ -239,11 +241,53 @@ export interface ClaudeHookStatus {
   connected: boolean
   /** Some are there but need updating, e.g. still pointing at the data folder from before the rename. */
   outdated: boolean
+  /** The prompt hook Visual Review needs (UserPromptSubmit) is in ~/.claude/settings.json with the current command. */
+  reviewHook: boolean
   /** The backup kept from before Steward first changed the settings (file name). */
   backupFile: string
   serverRunning: boolean
   settingsFile: string
   error?: string
+}
+
+/** Visual Review: one finished turn whose page looks different, waiting for a decision. */
+export interface ReviewView {
+  id: string
+  project: string
+  projectPath: string
+  /** The address that was captured, as typed in Settings. */
+  address: string
+  createdAt: number
+  /** The top of each page, small, as data URLs for the slider. `before` is null when there is no earlier picture. */
+  before: string | null
+  after: string
+  /** When the before picture was taken: as the prompt was sent, the last time Steward looked, or never. */
+  beforeFrom: 'turn-start' | 'last-look' | 'none'
+  /** Page heights in pixels, so the card can say the page is taller now. */
+  heightBefore: number | null
+  heightAfter: number
+  /** The full-page pictures on disk (the note for the session points at them). */
+  files: { before: string | null; after: string }
+}
+
+/**
+ * What "Try it now" in Settings found: the page as Steward sees it, or why it couldn't. `note` says where the page ended up
+ * when it isn't the address (a redirect), and `login` that it looks like a login page.
+ */
+export type ReviewTryResult =
+  | { ok: true; image: string; width: number; height: number; ms: number; note?: string; login?: boolean }
+  | { ok: false; error: string }
+
+/** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
+export interface ReviewProblem {
+  projectPath: string
+  project: string
+  /** The address it tried. */
+  address: string
+  /** In plain words, such as "Nothing is answering at localhost:3000. Start the app, then try again." */
+  reason: string
+  login: boolean
+  at: number
 }
 
 /** The "where you left off" card for a project. */
@@ -398,6 +442,8 @@ export interface StewardAPI {
     addStepAsideApp(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
+    /** Visual Review's address for a project: an address on this Mac, or '' to turn it off. Throws when it isn't one. */
+    setProjectUrl(path: string, url: string): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
@@ -427,6 +473,26 @@ export interface StewardAPI {
   }
   deploys: {
     status(): Promise<DeployStatus>
+  }
+  /** Visual Review: what Claude changed on the running page. */
+  review: {
+    /** Reviews waiting for a decision, newest first. */
+    list(): Promise<ReviewView[]>
+    onChanged(cb: (reviews: ReviewView[]) => void): Unsubscribe
+    /** Projects whose page Visual Review can't see right now, and why. */
+    problems(): Promise<ReviewProblem[]>
+    onProblems(cb: (problems: ReviewProblem[]) => void): Unsubscribe
+    /** Capture a project's page once, so Settings can show it works. */
+    tryIt(path: string): Promise<ReviewTryResult>
+    markGood(id: string): Promise<void>
+    /** Marks it sent back and copies the note for the session; resolves to what was copied. */
+    sendBack(id: string, note: string): Promise<string>
+    /** Open the full-page picture. */
+    openFull(id: string, which: 'before' | 'after'): Promise<void>
+    /** How many reviews are kept and how much space they take. */
+    usage(): Promise<{ count: number; bytes: number }>
+    /** Delete every review picture. */
+    clear(): Promise<void>
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */

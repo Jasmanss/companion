@@ -21,6 +21,7 @@ import {
   hookState,
   hooksPreview,
   readClaudeSettings,
+  reviewHookInstalled,
   withStewardHooks,
   withoutStewardHooks,
   writeClaudeSettings,
@@ -58,9 +59,13 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
+import { ReviewTracker } from './review'
+import { cardPicture, comparePictures } from './review-diff'
+import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample } from './smoke-motion'
+import { deadPort, startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -115,6 +120,9 @@ let settings: SettingsStore
 let tray: TrayStore
 let agent: Agent
 let sessions: SessionTracker
+/** Visual Review: the before and after of a project's running page. */
+let reviews: ReviewTracker
+let reviewStore: ReviewStore
 let appState: AppState
 let alerts: AlertQueue
 const moods = new MoodBoard()
@@ -1238,18 +1246,34 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
+  // A prompt was sent: photograph the page now (in the background), before Claude changes it.
+  if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
   const alert = await sessions.apply(event)
   sendSessions()
   if (alert) raise(alert)
+  // The turn ended: photograph it again, and keep a review if the page looks different.
+  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event)
+}
+
+/** The reviews waiting for a decision go to the panel: the card at its top. */
+function sendReviews(): void {
+  void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
+}
+
+/** Why a project's page can't be seen goes to the panel (a quiet line) and to Settings (under the address). */
+function sendReviewProblems(): void {
+  const list = reviews.problems()
+  for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('review:problems', list)
 }
 
 const stewardHookCommand = () => hookCommand(app.getPath('userData'))
 
 async function claudeStatus(): Promise<ClaudeHookStatus> {
-  const base = { connected: false, outdated: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE, backupFile: path.basename(await backupFile()) }
+  const base = { connected: false, outdated: false, reviewHook: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE, backupFile: path.basename(await backupFile()) }
   try {
-    const state = hookState(await readClaudeSettings(), stewardHookCommand())
-    return { ...base, connected: state === 'current', outdated: state === 'outdated' }
+    const claude = await readClaudeSettings()
+    const state = hookState(claude, stewardHookCommand())
+    return { ...base, connected: state === 'current', outdated: state === 'outdated', reviewHook: reviewHookInstalled(claude, stewardHookCommand()) }
   } catch (err) {
     return { ...base, error: (err as Error).message }
   }
@@ -1336,6 +1360,13 @@ function registerIpc(): void {
   ipcMain.handle('agent:reset', () => agent.reset())
 
   ipcMain.handle('settings:get', () => settings.view())
+  ipcMain.handle('settings:setProjectUrl', async (_e, projectPath: unknown, address: unknown) => {
+    if (typeof projectPath !== 'string' || typeof address !== 'string') throw new Error('Bad request')
+    await settings.setProjectUrl(projectPath, address)
+    // A problem with the old address is no longer news.
+    sendReviewProblems()
+    return settings.view()
+  })
   ipcMain.handle('settings:setApiKey', async (_e, key: string) => {
     await settings.setSecret('anthropic', key)
     return settings.view()
@@ -1430,6 +1461,24 @@ function registerIpc(): void {
     sessions.dismiss(id)
     sendSessions()
   })
+
+  // Visual Review. The address always comes from Settings (the project's own), never from the window or a hook.
+  ipcMain.handle('review:list', () => reviews.pending())
+  ipcMain.handle('review:problems', () => reviews.problems())
+  ipcMain.handle('review:tryIt', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.tryIt(projectPath) : { ok: false, error: 'Bad request' }))
+  ipcMain.handle('review:markGood', (_e, id: unknown) => (isReviewId(id) ? reviews.markGood(id) : undefined))
+  ipcMain.handle('review:sendBack', async (_e, id: unknown, note: unknown) => {
+    if (!isReviewId(id) || typeof note !== 'string') throw new Error('Bad request')
+    const text = await reviews.sendBack(id, note.slice(0, 2000))
+    clipboard.writeText(text)
+    return text
+  })
+  ipcMain.handle('review:openFull', async (_e, id: unknown, which: unknown) => {
+    const file = isReviewId(id) && (which === 'before' || which === 'after') ? reviewStore.file(id, which) : null
+    if (file) await shell.openPath(file)
+  })
+  ipcMain.handle('review:usage', () => reviewStore.usage())
+  ipcMain.handle('review:clear', () => reviews.clear())
 
   // Connecting merges Steward's hooks into ~/.claude/settings.json; the renderer shows the preview first.
   ipcMain.handle('claude:status', () => claudeStatus())
@@ -1527,6 +1576,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
       if (SMOKE_DEMO) await captureDemo(w, out, SMOKE_DEMO)
+      const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
+      await checkReview(w, out)
+      clearTimeout(reviewTimer)
       // The Settings window is its own page, so it gets checked too.
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
@@ -1542,6 +1594,162 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       fail(String(err))
     }
   })
+}
+
+/**
+ * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
+ * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
+ */
+async function checkReview(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const until = async (wc: Electron.WebContents, script: string, why: string, ms = 8000) => {
+    for (const started = Date.now(); Date.now() - started < ms; await sleep(150)) if (await wc.executeJavaScript(script)) return
+    throw new Error(why)
+  }
+  const server = await startPageServer()
+  const projectDir = path.join(os.tmpdir(), 'steward-smoke-review-project')
+  await fs.mkdir(projectDir, { recursive: true })
+  const turn = (id: string) => ({ session_id: 'smoke-review', prompt_id: id, cwd: projectDir })
+  /** A prompt is sent: wait until the page has been loaded for the before picture, so the page can change now. */
+  const prompt = async (id: string) => {
+    const before = server.hits()
+    reviews.turnStarted({ ...turn(id), hook_event_name: 'UserPromptSubmit' })
+    for (const started = Date.now(); server.hits() === before; await sleep(50)) if (Date.now() - started > 15_000) throw new Error('the before picture never asked for the page')
+  }
+  try {
+    await settings.addProject(projectDir)
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}`)
+    need(settings.projects().find((p) => p.path === projectDir)?.url === `http://localhost:${server.port}`, 'the address was not kept')
+
+    // A turn that leaves the page as it was makes no review, even with a spinner and a fade running on it.
+    await prompt('same')
+    need((await reviews.turnStopped({ ...turn('same'), hook_event_name: 'Stop' })) === null, 'a page that did not change made a review')
+    need(reviewStore.list().length === 0, 'a page that did not change was kept')
+
+    // A turn that changes it does, with both pictures and both card pictures.
+    await prompt('changed')
+    server.setVersion('b')
+    const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop' })
+    need(review !== null && review.before === 'turn-start', 'a page that changed made no review with a before picture')
+    for (const which of ['before', 'after', 'before-card', 'after-card'] as const) {
+      const file = reviewStore.file(review!.id, which)
+      need(file !== null && (await fs.stat(file).then((s) => s.size, () => 0)) > 0, `the review has no ${which} picture`)
+    }
+    need(reviewStore.file(review!.id, 'after')!.startsWith(path.join(app.getPath('userData'), 'reviews')), 'a review picture is outside the Steward data folder')
+    console.log(`smoke: a changed page made a review (${review!.changedPixels} small pixels changed, it takes ${review!.minPixels})`)
+
+    // The same page again makes none.
+    await prompt('again')
+    need((await reviews.turnStopped({ ...turn('again'), hook_event_name: 'Stop' })) === null, 'a page that stayed changed made a second review')
+    need(reviewStore.list().length === 1, 'the store holds more than one review')
+
+    // Only this Mac: another host is refused, and a page that sends the window elsewhere is not captured.
+    const refused = await capturePage('http://example.com/', { review: { settleMs: 1000 } }).then(() => false, () => true)
+    need(refused, 'Visual Review captured a page that is not on this Mac')
+    const away = await capturePage(`http://localhost:${server.port}/away`, { review: { settleMs: 1000 } }).then(
+      () => 'captured',
+      (err: Error) => err.message,
+    )
+    need(/another site/.test(away), `a page that sends the visitor elsewhere was not refused (${away})`)
+    console.log('smoke: only pages on this Mac are captured, and a redirect away is refused')
+
+    // The panel shows the card at its top.
+    setDock('expanded')
+    const wc = w.webContents
+    await until(wc, 'Boolean(document.querySelector(".card.review .rv-layer img"))', 'the panel never showed the review card')
+    await sleep(600)
+    const shown = await wc.executeJavaScript(`({
+      images: [...document.querySelectorAll('.card.review .rv-layer img')].map((i) => i.naturalWidth),
+      buttons: [...document.querySelectorAll('.card.review button')].map((b) => b.textContent),
+      slider: Boolean(document.querySelector('.card.review input[type=range]')),
+      first: document.querySelector('.body')?.firstElementChild?.classList.contains('review'),
+    })`)
+    need(shown.images.length === 2 && shown.images.every((n: number) => n > 0), 'the card does not show both pictures')
+    need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
+    need(shown.first, 'the card is not at the top of the panel')
+    const card = await wc.executeJavaScript(`(() => { const r = document.querySelector('.card.review').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
+    // Drag the slider most of the way left, so the picture shows mostly the page as it is now, and keep that.
+    const x = await wc.executeJavaScript(`(() => {
+      const r = document.querySelector('.rv-ba input[type=range]')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(r, '30')
+      r.dispatchEvent(new Event('input', { bubbles: true }))
+      return document.querySelector('.rv-ba').style.getPropertyValue('--x')
+    })()`)
+    need(x === '30%', `the slider did not move the picture (${x})`)
+    await sleep(200)
+    await fs.writeFile(out.replace(/\.png$/, '-review-card.png'), (await wc.capturePage()).toPNG())
+    // Send it back asks for a note and shows what will be copied; Looks good takes the card away.
+    const click = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.card.review button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+    await click('Send it back')
+    await until(wc, 'Boolean(document.querySelector(".rv-send textarea"))', 'Send it back did not ask for a note')
+    const copied = await wc.executeJavaScript('document.querySelector(".rv-out").textContent')
+    need(copied.includes(reviewStore.file(review!.id, 'after')!) && copied.includes('please change this'), 'the note does not point at the picture')
+    await click('Cancel')
+    await click('Looks good')
+    await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good did not clear the card')
+    need(reviewStore.get(review!.id)?.status === 'good', 'Looks good was not remembered')
+    console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}), the slider moves, Looks good clears it`)
+
+    // A capture that fails says why, quietly, where the card would be. No alert.
+    const dead = await deadPort()
+    await settings.setProjectUrl(projectDir, `localhost:${dead}`)
+    reviews.turnStarted({ ...turn('down'), hook_event_name: 'UserPromptSubmit' })
+    for (const started = Date.now(); !reviews.problems().length; await sleep(100)) if (Date.now() - started > 15_000) throw new Error('a failed capture left no message')
+    await until(
+      wc,
+      `[...document.querySelectorAll('.review-problem')].some((n) => n.textContent.includes('Couldn\\'t photograph') && n.textContent.includes('nothing is answering at localhost:${dead}'))`,
+      'the panel did not say why the page could not be photographed',
+    )
+    await sleep(300)
+    await fs.writeFile(out.replace(/\.png$/, '-review-problem.png'), (await wc.capturePage()).toPNG())
+    need((await reviews.turnStopped({ ...turn('down'), hook_event_name: 'Stop' })) === null, 'a turn with the app down made a review')
+    need(reviews.problems().length === 1, 'the same failure made two messages')
+    console.log(`smoke: with nothing at the address, the panel says "${reviews.problems()[0].reason}"`)
+
+    // A page that sends you to a login says so, in Try it now and in the panel.
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}/private`)
+    const tried = await reviews.tryIt(projectDir)
+    need(tried.ok && tried.login === true && Boolean(tried.note?.includes('sends you to /login')), `Try it now did not spot the login (${JSON.stringify(tried.ok ? tried.note : tried.error)})`)
+    await until(wc, `[...document.querySelectorAll('.review-problem')].some((n) => n.textContent.includes('sends you to /login'))`, 'the panel did not say the page is a login')
+    console.log('smoke: a page that sends you to /login is spotted, in Try it now and the panel')
+
+    // Settings: the address, and Try it now.
+    openSettings('projects')
+    const sw = settingsWin!
+    await new Promise<void>((resolve, reject) => {
+      sw.webContents.once('did-finish-load', () => resolve())
+      sw.webContents.once('did-fail-load', (_e, code, description) => reject(new Error(`settings load failed: ${code} ${description}`)))
+    })
+    const field = 'input.set-address'
+    await until(sw.webContents, `Boolean(document.querySelector(${JSON.stringify(field)}))`, 'Settings has no App address field')
+    need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}/private`, 'the field does not show the saved address')
+    await until(sw.webContents, `[...document.querySelectorAll('.set-problem')].some((n) => n.textContent.includes('sends you to /login'))`, 'Settings does not say the address is a login')
+    await sw.webContents.executeJavaScript(`[...document.querySelectorAll('.set-row button')].find((b) => b.textContent === 'Try it now')?.click()`)
+    await until(sw.webContents, 'Boolean(document.querySelector(".set-shot img"))', 'Try it now showed no picture', 20_000)
+    await until(sw.webContents, `document.querySelector('.set-shot')?.textContent.includes('sends you to /login')`, 'Try it now did not say the page is a login')
+    await sw.webContents.executeJavaScript(`document.querySelector('.set-shot')?.scrollIntoView({ block: 'center' })`)
+    await sleep(500)
+    await fs.writeFile(out.replace(/\.png$/, '-review-settings.png'), (await sw.webContents.capturePage()).toPNG())
+    // The hook notice depends on this Mac's own ~/.claude/settings.json (only read here), so it's logged, not judged.
+    const hookNotice = await sw.webContents.executeJavaScript(`document.body.textContent.includes('Visual Review needs')`)
+    console.log(`smoke: Settings shows the address, the problem under it, and Try it now shows the page and names the login (hook notice ${hookNotice ? 'shown' : 'not needed here'})`)
+    sw.close()
+    await sleep(300)
+
+    // A capture that works clears the message.
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}`)
+    need((await reviews.tryIt(projectDir)).ok && reviews.problems().length === 0, 'a capture that worked did not clear the message')
+    await until(wc, '!document.querySelector(".review-problem")', 'the panel still shows a message after a capture worked')
+    console.log('smoke: a capture that works clears the message')
+  } finally {
+    await reviews.clear()
+    await settings.removeProject(projectDir)
+    server.close()
+    await fs.rm(projectDir, { recursive: true, force: true })
+  }
 }
 
 /** How opaque one pixel of a capture of a transparent window is (0 to 255), at a point in the window's own coordinates. */
@@ -2625,6 +2833,18 @@ app.whenReady().then(async () => {
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })
+  reviewStore = new ReviewStore(path.join(userData, 'reviews'))
+  await reviewStore.load()
+  reviews = new ReviewTracker({
+    projects: () => settings.projects(),
+    capture: (url) => capturePage(url, { review: { settleMs: 10_000 } }),
+    compare: comparePictures,
+    card: cardPicture,
+    store: reviewStore,
+    onChange: sendReviews,
+    onProblems: sendReviewProblems,
+    log: (message) => console.error(`[steward] visual review: ${message}`),
+  })
   alerts = new AlertQueue({ show: showAlerts })
   deploys = new DeployWatcher({ projects: () => settings.projects(), token: () => settings.vercelToken(), onChanges: onDeployChanges })
   agent = new Agent({
