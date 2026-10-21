@@ -2269,7 +2269,7 @@ function demoImage(): Buffer {
 }
 
 app.whenReady().then(async () => {
-  // (Taken here, not at load: before the app is ready the hold doesn't take.)
+  // The Mac stays awake for the run (pmset shows the hold once the app is ready).
   if (SMOKE_OUT) keepMacAwake(powerSaveBlocker)
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
