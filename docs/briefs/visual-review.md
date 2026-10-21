@@ -136,3 +136,8 @@ Status stays `ready`: Phases 2 to 5 are not built. Built by Feature building.
 - **Merge order:** #26 conflicts with #25 (notch 3b) in shared renderer files. #25 merges first (its CI is green), then Feature building brings main in.
 - **Waiting on the user:** try Visual Review by hand, then OK the merge of #25, then #26.
 - **Next:** Phase 2 (Tell me), after the user tries Phase 1. The user types that go into Feature building.
+
+### Phase 1 fixes and a decision (recorded 2026-10-21, from the front door)
+- **Fixes in** (`9b48db4` on PR #26): problems now show in the panel and in Settings, a login redirect gets a warning, and the hook notice sits under the App address. Smoke and CI pass.
+- **Decided by the user:** Visual Review stays **Claude Code only**. There are no reviews for Steward's own chat.
+- **Still to do:** the user tries it by hand, then OKs the merge of #26. #27 (movable panel) conflicts with it in renderer files; whichever merges second brings main in.

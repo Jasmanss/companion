@@ -81,6 +81,17 @@ Design page: `design/movable-panel.html` (live: drag the top bar, close and reop
 - **By hand (what the user looks at):** drag and let go, close, open (it pops in the same place); click each button and the chip; double-click the bar and the name; do it in the notch and in Only when needed and with the pin on; an alert while the panel is moved; ⌥ Space; Reduce Motion on; a second screen; a full-screen app.
 
 ## Result (Main building)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Phase 1 built (recorded 2026-10-21, from the front door)
+Status line: the front door sets it (`ready` on the user's go). Phase 2 is not built. Built by Main building.
+- **Branch / PR:** `claude/movable-panel-1`, commits `5667802`, `6672713`, `93ca003`, `1156183`, `bf1a3ca`. Draft PR #27, CI running when recorded.
+- **Built:**
+  - A JS drag by the top bar (no native drag region, so the frost stays and the double-click works).
+  - It reopens in place with a 0.3 s fade and grow, and closes in place by shrinking and fading over 0.2 s.
+  - A double-click on the bar, or Settings → Steward → Place → Reset, glides it home. The Settings "Height" row became "Place", and it now also shows in notch mode.
+  - Also fixed: the tab flashing for a frame inside the panel window.
+- **Checks:** lint, typecheck, 319 tests, and the last smoke run. A 60-step drag moved the window 60 times, with the longest gap 26 ms.
+- **Not checked:** the feel, frost flicker, Reduce Motion, a second screen, full screen, the pin, and Only when needed. Phase 2 covers screens and edge cases.
+- **Merge order:** #27 conflicts with #26 (Visual Review) in renderer files. Whichever merges second brings main in.
+- **Waiting on the user:** try it by hand (drag, close, reopen, double-click), then OK the merge.
+- **Next:** Phase 2 (screens and edges), after the user tries Phase 1. The user types that go into Main building.
