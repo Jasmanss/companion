@@ -64,6 +64,7 @@ import { cardPicture, comparePictures } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
+import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample } from './smoke-motion'
 import { deadPort, startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
@@ -1427,7 +1428,7 @@ function registerIpc(): void {
     if (openAtLogin !== undefined && loginItem().available) app.setLoginItemSettings({ openAtLogin })
     const before = settings.steward()
     // Saving broadcasts; open at login isn't saved here, so it's broadcast on its own.
-    if (patch.keepPanelOpen !== undefined || patch.notifications || patch.steward) await settings.update(patch)
+    if (patch.keepPanelOpen !== undefined || patch.commandMode !== undefined || patch.notifications || patch.steward) await settings.update(patch)
     else broadcastSettings()
     // The other screen edge, or another size: the window moves there now.
     const after = settings.steward()
@@ -1583,6 +1584,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
+      const autoTimer = setTimeout(() => fail('auto mode timed out'), 40_000)
+      await runAutoSmoke(w, out)
+      clearTimeout(autoTimer)
       const panelTimer = setTimeout(() => fail('the movable panel timed out'), 60_000)
       await checkMovablePanel()
       clearTimeout(panelTimer)
@@ -2788,6 +2792,39 @@ async function captureDemo(w: BrowserWindow, out: string, seconds: string): Prom
   }
 }
 
+/** Auto mode in the real app: the Settings choice, then a safe command with no card and a risky one with it (smoke-auto.ts). */
+async function runAutoSmoke(w: BrowserWindow, out: string): Promise<void> {
+  if (!isOpen(dock)) setDock('expanded')
+  await new Promise((resolve) => setTimeout(resolve, 600))
+  const shot = async (target: BrowserWindow, suffix: string) => {
+    const file = out.replace(/\.png$/, `-${suffix}.png`)
+    await fs.writeFile(file, (await target.webContents.capturePage()).toPNG())
+    console.log(`smoke: ${suffix} -> ${file}`)
+  }
+  await checkAutoMode({
+    panel: w,
+    openSettings: async (section) => {
+      openSettings(section)
+      const sw = settingsWin!
+      await new Promise<void>((resolve) => (sw.webContents.isLoading() ? sw.webContents.once('did-finish-load', () => resolve()) : resolve()))
+      return sw
+    },
+    commandMode: () => settings.commandMode(),
+    setCommandMode: (commandMode) => settings.update({ commandMode }),
+    useProject: async (folder) => {
+      await settings.addProject(folder)
+      await settings.setCurrentProject(folder)
+    },
+    dropProject: (folder) => settings.removeProject(folder),
+    runCommand: async (command) => {
+      const tools = agent as unknown as { runTool(block: object, signal: AbortSignal): Promise<{ content: unknown }> }
+      const result = await tools.runTool({ type: 'tool_use', id: 'smoke-auto', name: 'run_command', input: { command } }, new AbortController().signal)
+      return String(result.content)
+    },
+    shot,
+  })
+}
+
 /** A made-up screenshot for the demo request: a soft gradient, like a page header. */
 function demoImage(): Buffer {
   const width = 480
@@ -2854,6 +2891,7 @@ app.whenReady().then(async () => {
     currentProject: () => settings.currentProject(),
     setCurrentProject: (p) => switchProject(p),
     allowlist: () => settings.allowlist(),
+    commandMode: () => settings.commandMode(),
     tray,
     capturePage,
     deployLogs,

@@ -29,7 +29,23 @@ describe('migrateSettings', () => {
       allowlist: ['npm test'],
       secrets: { anthropic: 'djEwYWJj' },
     }
-    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, notifications: DEFAULT_NOTIFICATIONS, shortcuts: {}, steward: OLD_FILE_STEWARD })
+    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, commandMode: 'ask', notifications: DEFAULT_NOTIFICATIONS, shortcuts: {}, steward: OLD_FILE_STEWARD })
+  })
+
+  it('asks before each command, for a new install and for any file that has not chosen Auto', () => {
+    expect(defaultSettings().commandMode).toBe('ask')
+    expect(migrateSettings({}).commandMode).toBe('ask')
+    expect(migrateSettings(null).commandMode).toBe('ask')
+    expect(migrateSettings({ projects: [], allowlist: ['npm test'], keepPanelOpen: true }).commandMode).toBe('ask')
+    // A value Steward doesn't know never turns Auto on.
+    for (const junk of ['Auto', 'yes', true, 1, null, [], {}, 'always']) expect(migrateSettings({ commandMode: junk }).commandMode).toBe('ask')
+  })
+
+  it('keeps Auto once it has been chosen, and Ask each time when that was chosen', () => {
+    expect(migrateSettings({ commandMode: 'auto' }).commandMode).toBe('auto')
+    expect(migrateSettings({ commandMode: 'ask' }).commandMode).toBe('ask')
+    // It survives a round trip through the file.
+    expect(migrateSettings(JSON.parse(JSON.stringify({ ...defaultSettings(), commandMode: 'auto' }))).commandMode).toBe('auto')
   })
 
   it('keeps the switches a file has, and fills in the ones it lacks one at a time', () => {
@@ -53,6 +69,7 @@ describe('migrateSettings', () => {
       allowlist: ['git status'],
       secrets: { vercel: 'dG9r' },
       keepPanelOpen: false,
+      commandMode: 'ask',
       notifications: { ...DEFAULT_NOTIFICATIONS, buildFailed: false },
       shortcuts: {},
       steward: OLD_FILE_STEWARD,
@@ -155,6 +172,8 @@ describe('parseSettingsPatch', () => {
   it('lets through the switches Settings can change', () => {
     expect(parseSettingsPatch({ keepPanelOpen: true })).toEqual({ keepPanelOpen: true })
     expect(parseSettingsPatch({ openAtLogin: false })).toEqual({ openAtLogin: false })
+    expect(parseSettingsPatch({ commandMode: 'auto' })).toEqual({ commandMode: 'auto' })
+    expect(parseSettingsPatch({ commandMode: 'ask' })).toEqual({ commandMode: 'ask' })
     expect(parseSettingsPatch({ notifications: { morningBrief: false, leftOff: true } })).toEqual({ notifications: { morningBrief: false, leftOff: true } })
     expect(parseSettingsPatch({ steward: { color: 'graphite', version: 'flat' } })).toEqual({ steward: { color: 'graphite', version: 'flat' } })
     expect(parseSettingsPatch({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })).toEqual({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })
@@ -171,6 +190,9 @@ describe('parseSettingsPatch', () => {
   it('refuses anything else, so the window can only change what it shows', () => {
     for (const bad of [
       { keepPanelOpen: 'true' },
+      { commandMode: 'always' },
+      { commandMode: true },
+      { commandMode: 'AUTO' },
       { allowlist: ['rm -rf /'] },
       { secrets: { anthropic: 'x' } },
       { notifications: { somethingNew: true } },
