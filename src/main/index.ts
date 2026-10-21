@@ -94,7 +94,6 @@ let unseen: Unseen | null = null
 if (SMOKE_OUT) {
   app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
   if (smokeHidden(process.env)) unseen = keepOffTheUsersScreen(app, BrowserWindow)
-  keepMacAwake(powerSaveBlocker)
   // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
   // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
   for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)
@@ -2270,6 +2269,8 @@ function demoImage(): Buffer {
 }
 
 app.whenReady().then(async () => {
+  // (Taken here, not at load: before the app is ready the hold doesn't take.)
+  if (SMOKE_OUT) keepMacAwake(powerSaveBlocker)
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
   // The smoke check starts as a fresh install every time, which is quiet: its throwaway data folder is emptied first.
