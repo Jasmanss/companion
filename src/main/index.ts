@@ -7,7 +7,7 @@ import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
-import { PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
+import { clampPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
 import { Agent } from './agent'
@@ -60,7 +60,7 @@ import {
 } from './presence'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
-import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
+import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample } from './smoke-motion'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1530,6 +1530,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
+      const panelTimer = setTimeout(() => fail('the movable panel timed out'), 60_000)
+      await checkMovablePanel()
+      clearTimeout(panelTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -2286,6 +2289,217 @@ async function checkNotchNudge(out: string, notchStyle: NotchStyle): Promise<voi
     await settings.update({ steward: { presence: 'always' } })
     presenceChanged()
   }
+}
+
+/**
+ * The movable panel. Dragged by its top bar it follows the pointer, a press that moves 5 points or less doesn't, and it
+ * stays inside the work area however far it's dragged. A press on a control that moves leaves the window alone and
+ * still clicks. A moved panel closes where it is (the window is never anywhere between there and the tab) and opens
+ * there again, popping in. A double-click on the bar puts it back, with the old way in. A spot for a screen that isn't
+ * there is ignored. Driven with the page's own input events (what a mouse gives), and in the notch through the same
+ * messages the page sends.
+ */
+async function checkMovablePanel(): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const w = win!
+  const page = w.webContents
+  const same = (a: Rect, b: Rect) => JSON.stringify(a) === JSON.stringify(b)
+  // Read fresh each time (TypeScript would otherwise keep what an earlier check narrowed it to).
+  const dockNow = (): DockState => dock
+  const near = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && a.width === b.width && a.height === b.height
+  const settles = async (ok: () => boolean, ms = 1500) => {
+    const until = Date.now() + ms
+    while (!ok() && Date.now() < until) await sleep(30)
+    return ok()
+  }
+  /** The mouse, at a point on the screen: sent to the page in its own coordinates, wherever the window is now. */
+  const mouse = (type: 'mouseDown' | 'mouseUp' | 'mouseMove', at: Electron.Point, clickCount = 1) => {
+    const b = w.getBounds()
+    // The screen point too: without it the page's pointer events say the pointer is at 0,0 on the screen.
+    const pressed = type === 'mouseMove' ? (['leftbuttondown'] as const) : []
+    page.sendInputEvent({ type, x: Math.round(at.x - b.x), y: Math.round(at.y - b.y), globalX: Math.round(at.x), globalY: Math.round(at.y), button: 'left', clickCount, modifiers: [...pressed] })
+  }
+  const on = (selector: string) => page.executeJavaScript(`(() => { const r = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect(); return r ? { x: r.left, y: r.top, width: r.width, height: r.height } : null })()`) as Promise<Rect | null>
+  const entrance = async () => {
+    let name = ''
+    for (let tries = 0; tries < 12 && !name; tries++) {
+      await sleep(40)
+      name = String(await page.executeJavaScript(`getComputedStyle(document.querySelector('.panel') ?? document.body).animationName`))
+      if (name === 'none') name = ''
+    }
+    return name
+  }
+  const reduced = Boolean(await page.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`))
+  const popIn = reduced ? 'fadein' : 'panel-settle-in'
+  const keptOpen = settings.keepPanelOpen()
+  // Kept open for the check: an open panel that loses focus folds away, and someone may be using another app.
+  await settings.update({ keepPanelOpen: true })
+  await resetPanelPlace()
+  setDock('collapsed')
+  await sleep(600)
+  setDock('expanded')
+  await sleep(700)
+  const home = boundsFor('expanded')
+  const area = screen.getDisplayMatching(home).workArea
+  if (!same(w.getBounds(), home)) throw new Error(`the unmoved panel opened at ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(home)}`)
+
+  // Dragged by the bar (the name, not a button), it follows the pointer; 3 points is still a click.
+  const name = (await on('.panel-head .name'))!
+  const grab = { x: home.x + name.x + 6, y: home.y + name.y + name.height / 2 }
+  mouse('mouseDown', grab)
+  mouse('mouseMove', { x: grab.x + 3, y: grab.y + 2 })
+  await sleep(150)
+  if (!same(w.getBounds(), home)) throw new Error('a press on the bar that moved 3 points moved the panel')
+  const by = { x: -120, y: 40 }
+  mouse('mouseMove', { x: grab.x + by.x, y: grab.y + by.y })
+  const followed = clampPanel(area, { ...home, x: home.x + by.x, y: home.y + by.y })
+  if (!(await settles(() => same(w.getBounds(), followed), 800))) throw new Error(`dragged by ${by.x},${by.y}, the panel went to ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(followed)}`)
+  if (!(await page.executeJavaScript(`document.querySelector('.panel-head').classList.contains('dragging')`))) throw new Error('the bar does not show it is being dragged')
+  // However far it's dragged, it stays inside the work area: top left, then bottom right.
+  for (const [dx, dy] of [
+    [-5000, -5000],
+    [5000, 5000],
+  ]) {
+    mouse('mouseMove', { x: grab.x + dx, y: grab.y + dy })
+    const corner = dx < 0 ? { ...home, x: area.x, y: area.y } : { ...home, x: area.x + area.width - home.width, y: area.y + area.height - home.height }
+    if (!(await settles(() => same(w.getBounds(), corner), 800))) throw new Error(`dragged far past the ${dx < 0 ? 'top left' : 'bottom right'}, the panel is at ${JSON.stringify(w.getBounds())}, not inside the work area at ${JSON.stringify(corner)}`)
+  }
+  // A long drag, a move every 16 ms: the window keeps up (measured as it's moved; Screen Recording isn't granted).
+  const sweep = (i: number) => ({ x: grab.x - 60 - 8 * i, y: grab.y + 20 })
+  mouse('mouseMove', sweep(0))
+  await sleep(200)
+  panelMoves.length = 0
+  const swept = Date.now()
+  for (let i = 1; i <= 60; i++) {
+    mouse('mouseMove', sweep(i))
+    await sleep(16)
+  }
+  await sleep(120)
+  const sweptMs = Date.now() - swept
+  mouse('mouseUp', sweep(60))
+  await sleep(200)
+  const gaps = panelMoves.slice(1).map((m, i) => m.at - panelMoves[i].at)
+  const longest = Math.round(Math.max(0, ...gaps))
+  const took = Math.max(0, ...panelMoves.map((m) => m.took)).toFixed(1)
+  const line = `motion dragging the panel: ${panelMoves.length} moves of the window in ${sweptMs} ms for 60 pointer moves; longest wait between moves ${longest} ms; moving it took at most ${took} ms`
+  console.log(`smoke: ${line}`)
+  if (panelMoves.length < MIN_POSITIONS || (!process.env.CI && longest > MAX_GAP_MS)) throw new Error(`dragging the panel is not smooth: ${line}`)
+  const spot = w.getBounds()
+  const saved = panelPlaces[String(screen.getDisplayMatching(spot).id)]
+  if (!placed() || !saved || !near(panelRect(area, { width: spot.width, height: spot.height }, saved), spot)) throw new Error(`letting go did not save where the panel is: ${JSON.stringify(saved)} for ${JSON.stringify(spot)}`)
+  if (!(await page.executeJavaScript(`document.documentElement.hasAttribute('data-placed') && !document.querySelector('.panel-head').classList.contains('dragging')`))) throw new Error('the page does not know the panel was moved, or still shows it being dragged')
+  console.log(`smoke: the panel follows a drag by its top bar (${by.x},${by.y}), not a 3-point press, stays inside the work area however far it goes, and is saved where it's let go`)
+
+  // A press on a control that moves 30 points: the window stays, and the click happens (the project chip opens the switcher).
+  const chip = (await on('.panel-head .ctx'))!
+  const press = { x: spot.x + chip.x + 6, y: spot.y + chip.y + chip.height / 2 }
+  const slide = Math.min(30, chip.width - 10)
+  mouse('mouseDown', press)
+  mouse('mouseMove', { x: press.x + slide, y: press.y })
+  await sleep(120)
+  mouse('mouseUp', { x: press.x + slide, y: press.y })
+  await sleep(250)
+  if (!same(w.getBounds(), spot)) throw new Error('a press on the project chip that moved moved the panel')
+  if (!(await page.executeJavaScript(`Boolean(document.querySelector('.switcher'))`))) throw new Error(`a press on the project chip that moved ${slide} points did not click it`)
+  await page.executeJavaScript(`document.querySelector('.panel-head .ctx').click()`)
+  await sleep(300)
+  console.log(`smoke: a press on the project chip that moves ${slide} points still clicks it, and leaves the panel where it is`)
+
+  // Closed, a moved panel shrinks where it is: the window is there or at the tab, never anywhere between. Opened again, it
+  // pops in at the same spot.
+  const tab = boundsFor('collapsed')
+  const started = Date.now()
+  setDock('collapsed')
+  let inPlace = false
+  let leftAfter = 0
+  while (Date.now() - started < 900) {
+    const b = w.getBounds()
+    if (!same(b, spot) && !same(b, tab)) throw new Error(`closing the moved panel put the window at ${JSON.stringify(b)}, between its spot and the tab`)
+    if (same(b, tab) && !leftAfter) leftAfter = Date.now() - started
+    inPlace ||= (await page.executeJavaScript(`document.documentElement.getAttribute('data-leaving')`)) === 'in-place'
+    if (leftAfter) break
+    await sleep(10)
+  }
+  if (!inPlace || leftAfter < 150) throw new Error(`closing the moved panel did not shrink where it is first (in place ${inPlace}, at the tab after ${leftAfter} ms)`)
+  if (!w.isVisible() || dockNow() !== 'collapsed') throw new Error('after the moved panel closed, the tab is not there')
+  await sleep(300)
+  setDock('expanded')
+  const popped = await entrance()
+  if (!near(w.getBounds(), spot)) throw new Error(`the moved panel opened at ${JSON.stringify(w.getBounds())}, not where it was left (${JSON.stringify(spot)})`)
+  if (popped !== popIn) throw new Error(`the moved panel came in with "${popped}", not ${popIn}`)
+  console.log(`smoke: a moved panel closes where it is (the tab is back after ${leftAfter} ms, the window never in between) and opens there again with ${popped}`)
+
+  // A double-click on the bar puts it back where it opens, with its old way in, and macOS does nothing else.
+  await sleep(500)
+  const nameNow = (await on('.panel-head .name'))!
+  const at = { x: spot.x + nameNow.x + 6, y: spot.y + nameNow.y + nameNow.height / 2 }
+  mouse('mouseDown', at, 1)
+  mouse('mouseUp', at, 1)
+  mouse('mouseDown', at, 2)
+  mouse('mouseUp', at, 2)
+  if (!(await settles(() => !placed() && same(w.getBounds(), home)))) throw new Error(`a double-click on the bar left the panel at ${JSON.stringify(w.getBounds())}, not back at ${JSON.stringify(home)}`)
+  if (w.isMinimized() || !w.isVisible() || dockNow() !== 'expanded') throw new Error('a double-click on the bar did something else to the window')
+  if (await page.executeJavaScript(`document.documentElement.hasAttribute('data-placed') || Boolean(window.getSelection()?.toString())`)) throw new Error('after a double-click the page still thinks the panel is moved, or the name got selected')
+  setDock('collapsed')
+  await sleep(500)
+  setDock('expanded')
+  const old = await entrance()
+  if (old !== (reduced ? 'fadein' : 'panel-in')) throw new Error(`put back, the panel came in with "${old}", not its old entrance`)
+  console.log(`smoke: a double-click on the bar puts the panel back (${home.x},${home.y}) and its old entrance (${old}) is back`)
+
+  // A spot for a screen that isn't connected is ignored, and kept.
+  panelPlaces = { '987654321': { x: 0.1, y: 0.1 } }
+  panelDisplay = '987654321'
+  if (placed() || !same(boundsFor('expanded'), home)) throw new Error('a spot for a screen that is not there moved the panel')
+  await resetPanelPlace()
+  console.log("smoke: a spot for a screen that isn't connected is ignored")
+
+  // In the notch: before it's moved it drops from the notch; moved, it closes and opens where it is, not into the notch.
+  if (notchGeo) {
+    setDock('collapsed')
+    await settings.update({ steward: { notch: true } })
+    replaceForNotch()
+    await sleep(800)
+    setDock('expanded')
+    const drop = await entrance()
+    const under = w.getBounds()
+    if (drop !== (reduced ? 'fadein' : 'panel-drop')) throw new Error(`in the notch, the unmoved panel came in with "${drop}"`)
+    // The same messages the page sends.
+    const p0 = { x: under.x + 100, y: under.y + 20 }
+    dragPanel('start', p0.x, p0.y)
+    dragPanel('move', p0.x - 300, p0.y + 50)
+    dragPanel('end')
+    const there = w.getBounds()
+    if (same(there, under) || !placed()) throw new Error('in the notch, the panel did not move')
+    const closing = Date.now()
+    setDock('collapsed')
+    let rose = false
+    let shrank = false
+    while (w.isVisible() && Date.now() - closing < 900) {
+      if (!same(w.getBounds(), there)) throw new Error(`in the notch, closing the moved panel moved the window to ${JSON.stringify(w.getBounds())}`)
+      const how = await page.executeJavaScript(`document.documentElement.getAttribute('data-leaving')`)
+      shrank ||= how === 'in-place'
+      rose ||= how === ''
+      await sleep(10)
+    }
+    if (!shrank || rose || w.isVisible()) throw new Error(`in the notch, the moved panel did not close where it is (in place ${shrank}, into the notch ${rose})`)
+    await sleep(300)
+    if (!notch.visible) throw new Error('in the notch, after the moved panel closed, the notch is not back')
+    setDock('expanded')
+    const back = await entrance()
+    if (!near(w.getBounds(), there) || back !== popIn) throw new Error(`in the notch, the moved panel opened at ${JSON.stringify(w.getBounds())} with "${back}", not at ${JSON.stringify(there)} with ${popIn}`)
+    await resetPanelPlace()
+    if (!(await settles(() => same(w.getBounds(), under)))) throw new Error('in the notch, putting the panel back did not bring it under the notch')
+    setDock('collapsed')
+    await sleep(500)
+    await settings.update({ steward: { notch: false } })
+    replaceForNotch()
+    await sleep(300)
+    console.log('smoke: in the notch, the panel drops from it until it is moved, then closes and opens where it is, and putting it back brings it under the notch')
+  }
+  await settings.update({ keepPanelOpen: keptOpen })
+  setDock('collapsed')
+  await sleep(500)
 }
 
 /** Opens Settings and screenshots it (every section with STEWARD_SMOKE_SECTIONS), next to the smoke screenshot. */
