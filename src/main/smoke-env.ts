@@ -1,7 +1,7 @@
 // How the smoke check stays off the user's screen, and the notch it pretends to have on a Mac without one. Only the
 // smoke check (STEWARD_SMOKE_OUT set) uses any of this; the app itself never does. The decisions are pure and tested;
 // keepOffTheUsersScreen takes Electron's app and BrowserWindow as arguments so it can be tested with stand-ins.
-import type { App, BrowserWindow, Display } from 'electron'
+import type { App, BrowserWindow, Display, PowerSaveBlocker } from 'electron'
 import type { NotchGeometry } from '../shared/types'
 
 type Env = Record<string, string | undefined>
@@ -35,6 +35,14 @@ export function withNotchedMenuBar(env: Env, display: Display): Display {
   const { x, y, width, height } = display.workArea
   if (y >= top) return display
   return { ...display, workArea: { x, y: top, width, height: y + height - top } }
+}
+
+/**
+ * A smoke run is minutes of timers and frames. A Mac that sleeps or dims its display in the middle (on battery, with
+ * nobody at it) fails the run on time alone, as one did here after a 26 minute gap. The hold ends when the run does.
+ */
+export function keepMacAwake(blocker: Pick<PowerSaveBlocker, 'start'>): void {
+  blocker.start('prevent-display-sleep')
 }
 
 export interface Unseen {

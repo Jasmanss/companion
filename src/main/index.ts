@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, screen, shell, systemPreferences, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, shell, systemPreferences, Tray } from 'electron'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -60,7 +60,7 @@ import {
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
-import { keepOffTheUsersScreen, pretendNotch, smokeHidden, withNotchedMenuBar, type Unseen } from './smoke-env'
+import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, smokeHidden, withNotchedMenuBar, type Unseen } from './smoke-env'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -94,6 +94,7 @@ let unseen: Unseen | null = null
 if (SMOKE_OUT) {
   app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
   if (smokeHidden(process.env)) unseen = keepOffTheUsersScreen(app, BrowserWindow)
+  keepMacAwake(powerSaveBlocker)
   // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
   // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
   for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { App, BrowserWindow, Display } from 'electron'
-import { HIDDEN_OPACITY, keepOffTheUsersScreen, pretendNotch, PRETEND_MENU_BAR, smokeHidden, withNotchedMenuBar } from '../src/main/smoke-env'
+import { HIDDEN_OPACITY, keepMacAwake, keepOffTheUsersScreen, pretendNotch, PRETEND_MENU_BAR, smokeHidden, withNotchedMenuBar } from '../src/main/smoke-env'
 
 const SMOKE = { STEWARD_SMOKE_OUT: 'out/smoke.png' }
 /** A CI runner's screen: 1920 x 1080, menu bar 25 pt, Dock at the bottom. */
@@ -103,5 +103,13 @@ describe('keeping the windows off the screen', () => {
     const f = fakes()
     keepOffTheUsersScreen(f.app as unknown as App, f.FakeWindow as unknown as typeof BrowserWindow)
     if (process.platform === 'darwin') expect(f.calls).toContain('policy accessory')
+  })
+})
+
+describe('keeping the Mac awake for the run', () => {
+  it('holds off sleep and display sleep until the run ends', () => {
+    const asked: string[] = []
+    keepMacAwake({ start: (type) => (asked.push(type), 1) })
+    expect(asked).toEqual(['prevent-display-sleep'])
   })
 })
