@@ -101,7 +101,7 @@ export async function acquire({
     if (now() - began >= waitMs) throw new LockBusy(held, now() - began)
     if (toldAt === null || now() - toldAt >= 30_000) {
       toldAt = now()
-      log(`smoke: another smoke run is going (pid ${held.pid}, started ${new Date(held.started).toLocaleTimeString()}, in ${held.where}); waiting for it, up to ${Math.round(waitMs / 60_000)} minutes`)
+      log(`smoke: another smoke run is going (pid ${held.pid}, started ${new Date(held.started).toLocaleTimeString()}, in ${held.where}); waiting for it, up to ${waitMs >= 120_000 ? `${Math.round(waitMs / 60_000)} minutes` : `${Math.round(waitMs / 1000)} seconds`}`)
     }
     await sleep(pollMs)
   }

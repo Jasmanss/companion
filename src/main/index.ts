@@ -60,6 +60,7 @@ import {
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
+import { keepOffTheUsersScreen, pretendNotch, smokeHidden, withNotchedMenuBar, type Unseen } from './smoke-env'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -86,9 +87,13 @@ const SLIDE_END_UNDRAWN = "its slide's end time, with no frame drawn"
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
+/** Set when the smoke check runs hidden (the default, see smoke-env.ts): its windows are see-through and never take focus. */
+let unseen: Unseen | null = null
+
 // The smoke check runs alongside a normal copy, with its own throwaway data.
 if (SMOKE_OUT) {
   app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
+  if (smokeHidden(process.env)) unseen = keepOffTheUsersScreen(app, BrowserWindow)
   // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
   // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
   for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)
@@ -128,7 +133,8 @@ let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
 /** The screen with the notch: the built-in one, which isn't always the main screen (an external one can be). */
-const notchDisplay = (): Electron.Display => screen.getAllDisplays().find((d) => d.id === notchGeo?.displayId) ?? screen.getPrimaryDisplay()
+const notchDisplay = (): Electron.Display =>
+  withNotchedMenuBar(process.env, screen.getAllDisplays().find((d) => d.id === notchGeo?.displayId) ?? screen.getPrimaryDisplay())
 
 /** Presence is "Only when needed": Steward is out of sight until a push, an alert, work or the hotkey brings it out. */
 const quiet = (): boolean => settings?.steward().presence === 'quiet'
@@ -401,7 +407,7 @@ function restingPresence(afterNudge = false): PresenceState {
 
 /** Ask macOS where the notch is (at launch, and whenever a display changes), and put Steward where it belongs. */
 async function refreshNotch(): Promise<void> {
-  const found = findNotch(await probeScreens(), screen.getAllDisplays())
+  const found = pretendNotch(process.env, screen.getPrimaryDisplay()) ?? findNotch(await probeScreens(), screen.getAllDisplays())
   if (JSON.stringify(found) === JSON.stringify(notchGeo)) return
   notchGeo = found
   notch?.setNotch(found)
@@ -1396,6 +1402,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
+      console.log(unseen ? 'smoke: hidden: the windows are real but nearly see-through (1%), click-through and never focused (--visible shows them)' : 'smoke: visible: the windows are on screen, and take focus')
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
       const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
       await checkPresence(w, out)
@@ -1419,6 +1426,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
+      if (unseen?.focusTaken()) return fail('a window took keyboard focus in a hidden run')
       app.exit(0)
     } catch (err) {
       fail(String(err))

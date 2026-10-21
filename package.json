@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "smoke": "electron-vite build && node scripts/smoke.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "design": "node scripts/design-server.mjs",
     "site:build": "node site/build.mjs",
     "site:serve": "node site/build.mjs --serve",
