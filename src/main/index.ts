@@ -1264,8 +1264,9 @@ function registerIpc(): void {
   ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
   ipcMain.on('presence:slideEnded', (_e, by: unknown) => slideEnded(by === 'clock' ? 'clock' : 'drawn'))
   ipcMain.handle('dock:overhang', () => edgeOverhang())
+  // Settings → Steward → Reset: the tab's height and the panel's spot. In the notch there's no tab, so only the panel.
   ipcMain.handle('dock:resetPlace', async () => {
-    await resetTabPlace()
+    if (!inNotch()) await resetTabPlace()
     await resetPanelPlace()
   })
   ipcMain.on('dock:dragPanel', (_e, phase: unknown, x: unknown, y: unknown) => dragPanel(phase, x, y))
@@ -2342,6 +2343,9 @@ async function checkMovablePanel(): Promise<void> {
   const home = boundsFor('expanded')
   const area = screen.getDisplayMatching(home).workArea
   if (!same(w.getBounds(), home)) throw new Error(`the unmoved panel opened at ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(home)}`)
+  // Someone's real mouse over the panel would join in (it's the same pointer): the window lets it through meanwhile.
+  // The check's own events go straight to the page.
+  w.setIgnoreMouseEvents(true)
 
   // Dragged by the bar (the name, not a button), it follows the pointer; 3 points is still a click.
   const name = (await on('.panel-head .name'))!
@@ -2355,17 +2359,9 @@ async function checkMovablePanel(): Promise<void> {
   const followed = clampPanel(area, { ...home, x: home.x + by.x, y: home.y + by.y })
   if (!(await settles(() => same(w.getBounds(), followed), 800))) throw new Error(`dragged by ${by.x},${by.y}, the panel went to ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(followed)}`)
   if (!(await page.executeJavaScript(`document.querySelector('.panel-head').classList.contains('dragging')`))) throw new Error('the bar does not show it is being dragged')
-  // However far it's dragged, it stays inside the work area: top left, then bottom right.
-  for (const [dx, dy] of [
-    [-5000, -5000],
-    [5000, 5000],
-  ]) {
-    mouse('mouseMove', { x: grab.x + dx, y: grab.y + dy })
-    const corner = dx < 0 ? { ...home, x: area.x, y: area.y } : { ...home, x: area.x + area.width - home.width, y: area.y + area.height - home.height }
-    if (!(await settles(() => same(w.getBounds(), corner), 800))) throw new Error(`dragged far past the ${dx < 0 ? 'top left' : 'bottom right'}, the panel is at ${JSON.stringify(w.getBounds())}, not inside the work area at ${JSON.stringify(corner)}`)
-  }
-  // A long drag, a move every 16 ms: the window keeps up (measured as it's moved; Screen Recording isn't granted).
-  const sweep = (i: number) => ({ x: grab.x - 60 - 8 * i, y: grab.y + 20 })
+  // A long drag, a move every 16 ms: the window keeps up (measured as it's moved; Screen Recording isn't granted). The
+  // pointer stays on the bar all along, as the window follows it.
+  const sweep = (i: number) => ({ x: grab.x - 120 - 8 * i, y: grab.y + 40 })
   mouse('mouseMove', sweep(0))
   await sleep(200)
   panelMoves.length = 0
@@ -2380,14 +2376,30 @@ async function checkMovablePanel(): Promise<void> {
   await sleep(200)
   const gaps = panelMoves.slice(1).map((m, i) => m.at - panelMoves[i].at)
   const longest = Math.round(Math.max(0, ...gaps))
+  const longestAt = gaps.indexOf(Math.max(...gaps)) + 1
   const took = Math.max(0, ...panelMoves.map((m) => m.took)).toFixed(1)
-  const line = `motion dragging the panel: ${panelMoves.length} moves of the window in ${sweptMs} ms for 60 pointer moves; longest wait between moves ${longest} ms; moving it took at most ${took} ms`
+  const line = `motion dragging the panel: ${panelMoves.length} moves of the window in ${sweptMs} ms for 60 pointer moves; longest wait between moves ${longest} ms (move ${longestAt}); moving it took at most ${took} ms`
   console.log(`smoke: ${line}`)
   if (panelMoves.length < MIN_POSITIONS || (!process.env.CI && longest > MAX_GAP_MS)) throw new Error(`dragging the panel is not smooth: ${line}`)
   const spot = w.getBounds()
   const saved = panelPlaces[String(screen.getDisplayMatching(spot).id)]
   if (!placed() || !saved || !near(panelRect(area, { width: spot.width, height: spot.height }, saved), spot)) throw new Error(`letting go did not save where the panel is: ${JSON.stringify(saved)} for ${JSON.stringify(spot)}`)
   if (!(await page.executeJavaScript(`document.documentElement.hasAttribute('data-placed') && !document.querySelector('.panel-head').classList.contains('dragging')`))) throw new Error('the page does not know the panel was moved, or still shows it being dragged')
+  // However far it's dragged, it stays inside the work area: top left, then bottom right. Through the messages the page
+  // sends, since the check's own pointer would leave the window here.
+  for (const [dx, dy] of [
+    [-5000, -5000],
+    [5000, 5000],
+  ]) {
+    const from = { x: spot.x + 100, y: spot.y + 20 }
+    dragPanel('start', from.x, from.y)
+    dragPanel('move', from.x + dx, from.y + dy)
+    const corner = dx < 0 ? { ...home, x: area.x, y: area.y } : { ...home, x: area.x + area.width - home.width, y: area.y + area.height - home.height }
+    if (!same(w.getBounds(), corner)) throw new Error(`dragged far past the ${dx < 0 ? 'top left' : 'bottom right'}, the panel is at ${JSON.stringify(w.getBounds())}, not inside the work area at ${JSON.stringify(corner)}`)
+    dragPanel('move', from.x, from.y)
+    dragPanel('end')
+  }
+  if (!same(w.getBounds(), spot)) throw new Error(`dragged back, the panel is at ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(spot)}`)
   console.log(`smoke: the panel follows a drag by its top bar (${by.x},${by.y}), not a 3-point press, stays inside the work area however far it goes, and is saved where it's let go`)
 
   // A press on a control that moves 30 points: the window stays, and the click happens (the project chip opens the switcher).
@@ -2446,6 +2458,7 @@ async function checkMovablePanel(): Promise<void> {
   const old = await entrance()
   if (old !== (reduced ? 'fadein' : 'panel-in')) throw new Error(`put back, the panel came in with "${old}", not its old entrance`)
   console.log(`smoke: a double-click on the bar puts the panel back (${home.x},${home.y}) and its old entrance (${old}) is back`)
+  w.setIgnoreMouseEvents(false)
 
   // A spot for a screen that isn't connected is ignored, and kept.
   panelPlaces = { '987654321': { x: 0.1, y: 0.1 } }
