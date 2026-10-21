@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: Movable panel</title>
+<style>
+/* Design page for the movable panel (docs/briefs/movable-panel.md). Plain HTML, CSS and a little JS, no libraries, no web fonts.
+   The screen is a MacBook Pro 14 at 1440 x 900 points, drawn at a scale. The panel inside it is the real size (400 x 760) and
+   is scaled with it, so the header, the sizes and the clamping are what the app will have. */
+:root{--tint:200,228,255;--glow:96,190,255;--t1:#0d1015;--t3:rgba(18,70,120,.78);--fill:255,255,255;--edge:rgba(255,255,255,.85);
+  --inset:rgba(18,70,120,.07);--inset2:rgba(18,70,120,.14);--line:rgba(18,70,120,.12);--ok:31,138,76;--page:#e9f0fa;--shadow:rgba(20,30,60,.2);
+  --live:26,140,255;--btn:rgb(18,70,120);--btnt:#fff;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--t1:#f5f7fa;--t3:rgba(178,220,255,.78);--fill:24,27,34;--edge:rgba(255,255,255,.26);--inset:rgba(255,255,255,.07);
+  --inset2:rgba(255,255,255,.12);--line:rgba(255,255,255,.1);--ok:95,214,142;--page:#0c1017;--shadow:rgba(0,0,0,.5);--live:96,190,255;--btn:rgb(96,190,255);--btnt:#0b0d12;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(60rem 30rem at 85% -10%,rgba(var(--glow),.25),transparent 70%),var(--page);color:var(--t1);font:500 14px/1.45 var(--font);-webkit-font-smoothing:antialiased;padding:32px 16px 72px}
+main{max-width:62rem;margin:0 auto}
+h1{font-size:2rem;letter-spacing:-.03em;margin:0 0 6px}h2{font-size:1.1rem;margin:36px 0 6px}
+p{margin:0 0 10px;color:var(--t3);max-width:68ch}
+.glass{border-radius:12px;background:linear-gradient(180deg,rgba(var(--tint),.22),rgba(var(--tint),.08)),rgba(var(--fill),.82);box-shadow:inset 0 1px 0 var(--edge),0 18px 40px var(--shadow);border:1px solid var(--line);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+
+/* the screen */
+.stage{position:relative;width:100%;aspect-ratio:1440/900;border-radius:12px;overflow:hidden;margin-top:14px;user-select:none;-webkit-user-select:none;
+  background:radial-gradient(90% 80% at 20% 15%,#7fb6f5,transparent 60%),radial-gradient(70% 70% at 85% 90%,#b99cf2,transparent 65%),#6c8fd6;box-shadow:0 0 0 1px var(--line)}
+.menubar{position:absolute;left:0;right:0;top:0;background:rgba(10,14,24,.55);border-bottom:1px solid rgba(255,255,255,.12)}
+.notch{position:absolute;top:0;background:#000;border-radius:0 0 10px 10px;display:none;cursor:pointer}
+.notchmode .notch{display:block}
+.tab{position:absolute;right:0;background:rgb(18,24,38);border-radius:10px 0 0 10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tab i{display:block;width:5px;height:14px;border-radius:9px;background:rgb(var(--glow));box-shadow:0 0 6px rgba(var(--glow),.8);margin:0 3px}
+.notchmode .tab{display:none}
+.work{position:absolute;left:0;right:0;border:1.5px dashed rgba(255,255,255,.75);border-radius:2px;display:none;pointer-events:none}
+.zones .work{display:block}
+.work::after{content:"work area: the panel stays inside this";position:absolute;left:8px;bottom:6px;font:700 11px var(--font);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+
+/* the panel: pw is placed and scaled, sc is the real size, pn is what animates */
+.pw{position:absolute;left:0;top:0;display:none}
+.pw.on{display:block}
+.sc{width:400px;transform-origin:0 0}
+.pn{position:relative;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;color:var(--t1)}
+.hd{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 12px;border-bottom:1px solid var(--line);position:relative;cursor:default;touch-action:none}
+.dragging .hd,.dragging{cursor:grabbing}
+.hd .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.hd .top{display:flex;align-items:center;gap:6px}.hd .name{font-weight:800;font-size:15px;margin-right:auto}
+.pillbox{width:64px;height:40px;display:flex;align-items:center;justify-content:center;flex:none}
+.pill{position:relative;width:54px;height:30px;border-radius:999px;background:linear-gradient(180deg,#e9eef5,#8d99ab);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 3px rgba(0,0,0,.14)}
+.pill i{position:absolute;top:9px;width:6px;height:12px;border-radius:99px;background:rgb(var(--glow));box-shadow:0 0 7px 1px rgba(var(--glow),.7)}.pill i:first-child{left:16px}.pill i:last-child{right:16px}
+.ib{width:26px;height:26px;border-radius:8px;border:0;background:transparent;color:var(--t3);display:grid;place-items:center;cursor:pointer;padding:0}
+.ib:hover{background:var(--inset)}.ib:focus-visible,.chip:focus-visible{outline:2px solid rgb(var(--live));outline-offset:1px}
+.ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.chip{align-self:flex-start;border:0;background:var(--inset);color:var(--t1);font:700 12px var(--font);padding:3px 10px;border-radius:999px;cursor:pointer}
+.body{flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13.5px}
+.msg{max-width:84%;padding:9px 12px;border-radius:14px;background:var(--inset);color:var(--t1)}.msg.me{align-self:flex-end;background:rgba(var(--live),.16)}
+.tray{margin-top:auto;display:flex;gap:8px}.tray div{flex:1;height:64px;border-radius:10px;background:var(--inset)}
+.inp{margin:0 14px 14px;padding:11px 14px;border-radius:12px;background:var(--inset);color:var(--t3)}
+.zones .hd{background:rgba(var(--live),.14)}
+.zones .hd::before{content:"drag here · double-click puts it back";position:absolute;right:12px;bottom:3px;font:700 10px var(--font);color:rgb(var(--live));letter-spacing:.02em}
+.zones .ib,.zones .chip{box-shadow:0 0 0 1.5px rgba(214,120,20,.9)}
+
+/* entrances and exits */
+@keyframes pin{from{opacity:0;transform:translateX(12px)}}
+@keyframes pdrop{from{opacity:0;transform:translateY(-8px) scale(.96)}}
+@keyframes settle-in{from{opacity:0;transform:scale(.94)}}
+@keyframes settle-out{to{opacity:0;transform:scale(.96)}}
+@keyframes pout{to{opacity:0;transform:translateX(12px)}}
+@keyframes prise{to{opacity:0;transform:translateY(-8px) scale(.96)}}
+@keyframes fade{from{opacity:0}}@keyframes fadeout{to{opacity:0}}
+.pn{transform-origin:50% 50%}
+.a-in-edge{animation:pin .35s cubic-bezier(.2,.9,.25,1.1) backwards}
+.a-in-notch{animation:pdrop .35s cubic-bezier(.2,.9,.25,1.1) backwards;transform-origin:50% 0}
+.a-in-spot{animation:settle-in .3s cubic-bezier(.2,.8,.2,1) backwards}
+.a-out-spot{animation:settle-out .2s cubic-bezier(.4,0,1,1) forwards}
+.a-out-edge{animation:pout .2s cubic-bezier(.4,0,1,1) forwards}
+.a-out-notch{animation:prise .2s cubic-bezier(.4,0,1,1) forwards;transform-origin:50% 0}
+.rm .a-in-edge,.rm .a-in-notch,.rm .a-in-spot{animation:fade .15s linear backwards}
+.rm .a-out-spot,.rm .a-out-edge,.rm .a-out-notch{animation:fadeout .15s linear forwards}
+.glide{transition:left .34s cubic-bezier(.3,.8,.2,1),top .34s cubic-bezier(.3,.8,.2,1),opacity .34s linear}
+.rm .glide{transition:none}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;margin-top:14px}
+.controls label{display:flex;align-items:center;gap:7px;font-weight:600}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}legend{float:left;margin-right:12px;font-weight:700;padding:0}
+.btn{font:700 .86rem var(--font);border:0;border-radius:999px;padding:8px 16px;cursor:pointer;background:var(--btn);color:var(--btnt)}.btn.ghost{background:var(--inset);color:var(--t1)}
+input:focus-visible,.btn:focus-visible{outline:2px solid rgb(var(--live));outline-offset:2px}
+.log{margin-top:12px;padding:10px 14px;border-radius:12px;background:var(--inset);font:500 12.5px/1.5 ui-monospace,Menlo,monospace;color:var(--t3);min-height:4.6em}
+.log b{color:var(--t1)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:10px}
+.card{padding:14px 16px;border-radius:14px;background:var(--inset)}.card b{display:block;margin-bottom:4px}.card span{color:var(--t3);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--t3);font-weight:700}
+@media (max-width:560px){h1{font-size:1.6rem}}
+</style>
+</head>
+<body>
+<main>
+<h1>Move the panel, and it opens where you left it</h1>
+<p>Drag the top bar of the panel. Close it and open it again from the tab: it pops in right where you left it. Double-click the top bar to put it back. This is the real panel size on a MacBook Pro 14 screen, drawn smaller. Everything on the page works.</p>
+
+<div class="stage" id="stage" aria-label="A screen with Steward's panel">
+  <div class="work" id="work"></div>
+  <div class="menubar" id="menubar"></div>
+  <div class="notch" id="notch" title="Click to open Steward" role="button" tabindex="0" aria-label="Open Steward from the notch"></div>
+  <div class="tab" id="tab" title="Click to open Steward" role="button" tabindex="0" aria-label="Open Steward from the tab"><i></i><i></i></div>
+  <div class="pw" id="pw"><div class="sc" id="sc"><div class="pn glass" id="pn">
+    <header class="hd" id="hd" title="Drag to move. Double-click to put it back.">
+      <div class="pillbox"><div class="pill"><i></i><i></i></div></div>
+      <div class="txt">
+        <div class="top"><span class="name">Steward</span>
+          <button class="ib" data-n="New chat" aria-label="New chat"><svg viewBox="0 0 15 15"><path d="M7.5 3v9M3 7.5h9"/></svg></button>
+          <button class="ib" data-n="Keep panel open" aria-label="Keep panel open"><svg viewBox="0 0 15 15"><path d="M5.5 2.5h4l-.8 3.6 2 2H4.3l2-2zM7.5 8.2v4.3"/></svg></button>
+          <button class="ib" data-n="Settings" aria-label="Settings"><svg viewBox="0 0 15 15"><circle cx="7.5" cy="7.5" r="2.2"/><circle cx="7.5" cy="7.5" r="5.2"/></svg></button>
+          <button class="ib" data-n="Hide from the screen edge" aria-label="Hide from the screen edge"><svg viewBox="0 0 15 15"><path d="M2.5 7.5h10"/></svg></button>
+          <button class="ib" id="close" data-n="Tuck away" aria-label="Tuck away"><svg viewBox="0 0 15 15"><path d="M5.5 3l4.5 4.5L5.5 12"/></svg></button>
+        </div>
+        <button class="chip" data-n="Project chip">my-site</button>
+      </div>
+    </header>
+    <div class="body">
+      <div class="msg">my-site finished. Want a look at what changed?</div>
+      <div class="msg me">Yes, show me.</div>
+      <div class="msg">Three files changed. The checks pass.</div>
+      <div class="tray"><div></div><div></div><div></div></div>
+    </div>
+    <div class="inp">Ask Steward</div>
+  </div></div></div>
+</div>
+
+<div class="controls">
+  <fieldset><legend>Closing a panel you moved</legend>
+    <label><input type="radio" name="close" value="spot" checked> Shrinks and fades where it is (recommended)</label>
+    <label><input type="radio" name="close" value="glide"> Glides back to the tab</label>
+  </fieldset>
+</div>
+<div class="controls">
+  <label><input type="checkbox" id="notchmode"> Steward is in the notch</label>
+  <label><input type="checkbox" id="rm"> Reduce Motion</label>
+  <label><input type="checkbox" id="zones"> Show the zones</label>
+  <button class="btn ghost" id="reset">Reset position (Settings)</button>
+</div>
+<div class="log" id="log" aria-live="polite"></div>
+
+<h2>What happens</h2>
+<div class="cards">
+  <div class="card"><b>Drag the top bar</b><span>Press on the Pill, the name or the empty space and move more than 5 points. The panel follows and never leaves the work area (the dashed box under "Show the zones"). The buttons and the project chip still click.</span></div>
+  <div class="card"><b>Open where you left it</b><span>Once you have moved it, every way of opening it (the tab, the notch, an alert, the menu bar icon, ⌥ Space) pops it in at that spot: a fade with a small grow. Until you move it, nothing changes.</span></div>
+  <div class="card"><b>Put it back</b><span>Double-click the top bar, or Settings → Steward → Reset. It glides home and the old entrance from the edge or the notch comes back.</span></div>
+  <div class="card"><b>Closing</b><span>A moved panel shrinks and fades where it is, the pop-in in reverse, and then the tab or the notch is there as usual. It does not fly across the screen. With Reduce Motion it fades.</span></div>
+</div>
+
+<h2>Where it works</h2>
+<table>
+<tr><th>Case</th><th>What happens</th></tr>
+<tr><td>Only when needed (quiet mode)</td><td>Nothing hides while the panel is open. After it closes, the tab comes and goes at the edge as today, and a click on it opens the panel at the saved spot.</td></tr>
+<tr><td>Keep panel open (pin)</td><td>A pinned panel stays where it is. Moving it does not unpin it.</td></tr>
+<tr><td>In the notch</td><td>Before the first move the panel drops from the notch. After it, it opens in place. Close it in place. The notch is the character at rest as before. Reset brings the drop back.</td></tr>
+<tr><td>Alerts and the Visual Review card</td><td>The alert still comes from the edge or the notch. A click on it opens the panel at the saved spot. The card is inside the panel, so it is wherever the panel is.</td></tr>
+<tr><td>Stepping aside, full-screen apps</td><td>As today. The spot is kept as a fraction of the screen's work area, so it stays on screen if the Dock or the resolution changes.</td></tr>
+<tr><td>A second screen</td><td>The spot is saved per screen. It opens on the screen where you last left it, if that screen is still connected. If not, it falls back to today's placement and the saved spot waits for the screen to come back.</td></tr>
+</table>
+</main>
+
+<script>
+(function(){
+  'use strict';
+  var SW=1440, SH=900, MENU=33, PW=400, TABW=22, TABH=64, GAP=8;
+  var H=Math.min(760, SH-MENU-48);              // the panel is 760 tall here, as in the app
+  var AREA={x:0,y:MENU,w:SW,h:SH-MENU};
+  var $=function(id){return document.getElementById(id)};
+  var stage=$('stage'), pw=$('pw'), sc=$('sc'), pn=$('pn'), hd=$('hd'), logEl=$('log');
+  var k=1, open=false, spot=null /* {fx,fy} fractions of the free room, or null: not moved */, busy=false, timer=0;
+  var lines=[];
+  function say(t){lines.unshift(t); lines=lines.slice(0,4); logEl.innerHTML=lines.map(function(l,i){return i?l:'<b>'+l+'</b>'}).join('<br>')}
+  function reduced(){return $('rm').checked}
+  function notchMode(){return $('notchmode').checked}
+  function closeStyle(){return document.querySelector('input[name=close]:checked').value}
+
+  // places, in screen points
+  var tab={x:SW-TABW, y:Math.round(AREA.y+AREA.h/2-TABH/2), w:TABW, h:TABH};
+  var notch={x:SW/2-185/2, y:0, w:185, h:32};
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+  function defaultPos(){
+    if(notchMode()) return {x:Math.round(SW/2-PW/2), y:AREA.y};
+    var y=clamp(Math.round(tab.y+tab.h/2-H/2), AREA.y+24, AREA.y+AREA.h-H-24);
+    return {x:AREA.x+AREA.w-PW-GAP, y:y};
+  }
+  function spotPos(s){return {x:Math.round(AREA.x+s.fx*(AREA.w-PW)), y:Math.round(AREA.y+s.fy*(AREA.h-H))}}
+  function toSpot(p){return {fx:clamp((p.x-AREA.x)/(AREA.w-PW),0,1), fy:clamp((p.y-AREA.y)/(AREA.h-H),0,1)}}
+  function place(p){pw.style.left=p.x*k+'px'; pw.style.top=p.y*k+'px'}
+  function layout(){
+    k=stage.clientWidth/SW;
+    $('menubar').style.height=MENU*k+'px';
+    var n=$('notch'); n.style.left=notch.x*k+'px'; n.style.width=notch.w*k+'px'; n.style.height=notch.h*k+'px'; n.style.borderRadius='0 0 '+10*k+'px '+10*k+'px';
+    var t=$('tab'); t.style.top=tab.y*k+'px'; t.style.width=tab.w*k+'px'; t.style.height=tab.h*k+'px'; t.style.borderRadius=10*k+'px 0 0 '+10*k+'px';
+    t.firstChild.style.transform=t.lastChild.style.transform='scale('+k*1.6+')';
+    var w=$('work'); w.style.top=AREA.y*k+'px'; w.style.height=AREA.h*k+'px';
+    pw.style.width=PW*k+'px'; pw.style.height=H*k+'px';
+    sc.style.height=H+'px'; sc.style.transform='scale('+k+')';
+    if(open) place(spot?spotPos(spot):defaultPos());
+  }
+  function strip(){pn.className='pn glass'; pw.classList.remove('glide'); pw.style.opacity=''}
+  function describe(){return spot?'saved spot x '+spot.fx.toFixed(2)+', y '+spot.fy.toFixed(2)+' (of the free room on this screen)':'no saved spot: the usual place'}
+
+  function doOpen(from){
+    if(open||busy) return;
+    clearTimeout(timer); strip();
+    var p=spot?spotPos(spot):defaultPos();
+    place(p); pw.classList.add('on'); open=true;
+    void pn.offsetWidth;
+    pn.classList.add(spot?'a-in-spot':(notchMode()?'a-in-notch':'a-in-edge'));
+    say((spot?'Popped in at the saved spot':notchMode()?'Dropped from the notch':'Slid in from the edge')+' · '+describe()+(from?' · from '+from:''));
+  }
+  function doClose(){
+    if(!open||busy) return;
+    busy=true; clearTimeout(timer); strip();
+    var done=function(){pw.classList.remove('on'); strip(); open=false; busy=false};
+    if(spot&&closeStyle()==='glide'&&!reduced()){
+      var to=notchMode()?{x:notch.x+notch.w/2-PW/2, y:0}:{x:SW-PW-GAP+PW*0.9, y:tab.y};
+      pw.classList.add('glide'); place(to); pw.style.opacity='0';
+      timer=setTimeout(done,380); say('Glided back to the tab · the whole panel crosses the screen in 0.34 s');
+    } else {
+      pn.classList.add(spot?'a-out-spot':(notchMode()?'a-out-notch':'a-out-edge'));
+      timer=setTimeout(done,reduced()?170:240);
+      say((spot?'Shrank and faded where it was':notchMode()?'Went back up into the notch':'Tucked back to the edge')+(reduced()?' (a fade, Reduce Motion)':''));
+    }
+  }
+  function toggle(from){open?doClose():doOpen(from)}
+  function putBack(why){
+    spot=null;
+    if(open&&!busy){ pw.classList.add('glide'); place(defaultPos()); clearTimeout(timer); timer=setTimeout(function(){pw.classList.remove('glide')},400) }
+    say('Put back · '+why+' · '+describe());
+  }
+
+  // opening and closing
+  $('tab').addEventListener('click',function(){toggle('the tab')});
+  $('notch').addEventListener('click',function(){toggle('the notch')});
+  ['tab','notch'].forEach(function(id){$(id).addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle(id==='tab'?'the tab':'the notch')}})});
+  $('close').addEventListener('click',function(e){e.stopPropagation();doClose()});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape') doClose()});
+  $('reset').addEventListener('click',function(){putBack('Settings → Steward → Reset')});
+  $('notchmode').addEventListener('change',function(){stage.classList.toggle('notchmode',notchMode()); if(open&&!spot) place(defaultPos()); say(notchMode()?'Steward is in the notch':'Steward is at the edge')});
+  $('rm').addEventListener('change',function(){stage.classList.toggle('rm',reduced()); document.body.classList.toggle('rm',reduced())});
+  $('zones').addEventListener('change',function(){stage.classList.toggle('zones',$('zones').checked)});
+  window.addEventListener('resize',layout);
+
+  // buttons and the chip click; they never start a drag
+  pn.addEventListener('click',function(e){var b=e.target.closest('button[data-n]'); if(b&&b.id!=='close') say('Clicked: '+b.getAttribute('data-n')+' (still works)')});
+
+  // the drag: a press on the top bar, not on a button, that moves more than 5 points
+  var press=null;
+  hd.addEventListener('pointerdown',function(e){
+    if(e.button!==0||!open||busy||e.target.closest('button')) return;
+    hd.setPointerCapture(e.pointerId);
+    var cur=spot?spotPos(spot):defaultPos();
+    press={sx:e.clientX,sy:e.clientY,x:cur.x,y:cur.y,on:false};
+  });
+  hd.addEventListener('pointermove',function(e){
+    if(!press) return;
+    var dx=(e.clientX-press.sx)/k, dy=(e.clientY-press.sy)/k;
+    if(!press.on&&Math.hypot(dx,dy)>5){press.on=true; pw.classList.remove('glide'); stage.classList.add('dragging')}
+    if(!press.on) return;
+    var p={x:clamp(press.x+dx,AREA.x,AREA.x+AREA.w-PW), y:clamp(press.y+dy,AREA.y,AREA.y+AREA.h-H)};
+    spot=toSpot(p); place(p);
+  });
+  function end(){
+    if(press&&press.on){say('Moved · '+describe())}
+    press=null; stage.classList.remove('dragging');
+  }
+  hd.addEventListener('pointerup',end); hd.addEventListener('pointercancel',end);
+  // a double-click on the bar (not on a button) puts the panel back. No window dragging is native here, so nothing else happens.
+  hd.addEventListener('dblclick',function(e){if(!e.target.closest('button')) putBack('double-click on the top bar')});
+
+  layout();
+  say('Click the tab on the right edge to open the panel.');
+})();
+</script>
+</body>
+</html>
