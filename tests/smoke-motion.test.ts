@@ -32,6 +32,63 @@ describe('judging a watched animation on a Mac', () => {
   })
 })
 
+/** The nudge under the notch with Reduce Motion on, on the CI runner (run 39657596430): 39 frames drawn, none of them different. */
+const NOTHING_MOVED: Motion = { frames: 0, positions: 1, spanMs: 0, maxGapMs: 0, maxGapAtMs: 0, stuck: 0, stillGapMs: 35, drawn: 39, watchedMs: 800, visibility: 'visible' }
+const FADEIN = { name: 'fadein', durationMs: 200 }
+
+describe('when nothing moved in any frame the page drew', () => {
+  it('says the element never came, if the page never had it', () => {
+    const m = { ...NOTHING_MOVED, seen: { appeared: 0, animated: null } }
+    for (const onCI of [true, false]) {
+      expect(judgeMotion('a nudge coming out', m, onCI)).toMatchObject({ result: 'not smooth', line: expect.stringContaining('it never appeared in the page') })
+    }
+  })
+
+  it("on a runner, says it could not measure a fade that was already over when the page drew its first frame of it", () => {
+    const m = { ...NOTHING_MOVED, seen: { appeared: 39, animated: { ...FADEIN, finished: true } } }
+    expect(judgeMotion('a nudge coming out', m, true)).toEqual({
+      result: 'not measurable',
+      line: 'motion a nudge coming out: not measurable here: its animation (fadein, 200 ms) was already over when the page drew its first frame of it; the page drew 39 frames in 800 ms (visible)',
+    })
+  })
+
+  it('fails the same thing on a Mac with a screen, where the first frame is not that late', () => {
+    const m = { ...NOTHING_MOVED, drawn: 93, seen: { appeared: 93, animated: { ...FADEIN, finished: true } } }
+    expect(judgeMotion('a nudge coming out', m, false)).toMatchObject({ result: 'not smooth', line: expect.stringContaining('fadein of 200 ms, already over in its first frame') })
+  })
+
+  it('fails an element that was there with no animation at all, on a runner too, saying so', () => {
+    const m = { ...NOTHING_MOVED, seen: { appeared: 39, animated: { name: '', durationMs: 0, finished: false } } }
+    expect(judgeMotion('a nudge coming out', m, true)).toMatchObject({ result: 'not smooth', line: expect.stringContaining('it was in 39 of the frames, with an animation of 0 ms, still running in its first frame') })
+  })
+
+  it('without the page saying anything about the element, fails as it always did', () => {
+    expect(judgeMotion('x', NOTHING_MOVED, true).result).toBe('not smooth')
+    expect(judgeMotion('x', NOTHING_MOVED, false).result).toBe('not smooth')
+  })
+})
+
+describe('a short fade on a CI runner', () => {
+  /** A 200 ms fade on a runner drawing 40 frames a second: 8 frames at the most, a new position in each. */
+  const SHORT: Motion = { frames: 7, positions: 7, spanMs: 190, maxGapMs: 30, maxGapAtMs: 60, stuck: 0, stillGapMs: 30, drawn: 32, watchedMs: 800, visibility: 'visible' }
+
+  it("is held to the steps the runner could draw in it, not to 8", () => {
+    expect(judgeMotion('a nudge going back', SHORT, true).result).toBe('smooth')
+    expect(judgeMotion('a nudge going back', { ...SHORT, frames: 5, positions: 5 }, true).result).toBe('smooth')
+    expect(judgeMotion('a nudge going back', { ...SHORT, frames: 4, positions: 4 }, true).result).toBe('smooth')
+    expect(judgeMotion('a nudge going back', { ...SHORT, frames: 3, positions: 3 }, true)).toMatchObject({ result: 'not smooth', line: expect.stringContaining('fewer than 4 positions') })
+  })
+
+  it('still needs a new position in every frame it drew, and 3 at least', () => {
+    expect(judgeMotion('x', { ...SHORT, stuck: 2 }, true).result).toBe('not smooth')
+    expect(judgeMotion('x', { ...SHORT, frames: 2, positions: 2, spanMs: 40 }, true).result).toBe('not smooth')
+  })
+
+  it('is not held to less on a Mac with a screen', () => {
+    expect(judgeMotion('x', { ...SMOOTH, frames: 5, positions: 5, drawn: 90 }, false).result).toBe('not smooth')
+  })
+})
+
 describe('judging a watched animation on a CI runner', () => {
   it('passes a fade with a new position in every frame the page drew, logging a long wait instead of failing on it', () => {
     expect(judgeMotion('the tab sliding in', CI_FADE, true)).toEqual({
@@ -84,6 +141,12 @@ describe('measuring what a page drew', () => {
   it("doesn't count holding at a turning point: the notch's fade goes out, holds while the shape changes, and comes back", () => {
     const outAndBack = [1, 1, 0.6, 0.2, 0, 0, 0, 0.3, 0.7, 1, 1]
     expect(measureMotion(drawn(outAndBack), 1300, 'visible')).toMatchObject({ frames: 9, stuck: 0 })
+  })
+
+  it('carries what the page said about the element along', () => {
+    const seen = { appeared: 3, animated: { name: 'fadein', durationMs: 200, finished: true } }
+    expect(measureMotion(drawn([1, 1, 1], 20), 700, 'visible', seen)).toMatchObject({ frames: 0, seen })
+    expect(measureMotion(drawn([0, 0.5, 1], 20), 700, 'visible')).not.toHaveProperty('seen')
   })
 
   it('says when nothing moved, with the longest wait the page had', () => {

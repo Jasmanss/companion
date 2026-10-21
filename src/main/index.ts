@@ -64,7 +64,7 @@ import { cardPicture, comparePictures } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
-import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample } from './smoke-motion'
+import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
 import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, smokeHidden, type Unseen } from './smoke-env'
 import { deadPort, startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
@@ -1776,18 +1776,27 @@ function alphaAt(img: Electron.NativeImage, x: number, y: number, windowWidth: n
 async function watchMotion(wc: Electron.WebContents, look: MotionLook, ms: number, trigger: () => void | Promise<void>): Promise<Motion> {
   const sampling = wc.executeJavaScript(`new Promise((resolve) => {
     const samples = []
+    let appeared = 0, animated = null
     const frame = (t) => {
       const el = document.querySelector(${JSON.stringify(look.selector)})
+      if (el) {
+        appeared++
+        // The element's animation as of the first frame it was in: a page whose animation ran out before it drew anything shows as finished.
+        if (!animated) {
+          const a = el.getAnimations()[0]
+          animated = a ? { name: a.animationName || a.transitionProperty || '', durationMs: Math.round(a.effect?.getComputedTiming().duration ?? 0), finished: a.playState === 'finished' } : { name: '', durationMs: 0, finished: false }
+        }
+      }
       samples.push([t, el ? getComputedStyle(el).${look.property} : ''])
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
-    setTimeout(() => resolve({ samples, visibility: document.visibilityState }), ${ms})
-  })`) as Promise<{ samples: Sample[]; visibility: string }>
+    setTimeout(() => resolve({ samples, visibility: document.visibilityState, appeared, animated }), ${ms})
+  })`) as Promise<{ samples: Sample[]; visibility: string } & Seen>
   await new Promise((resolve) => setTimeout(resolve, 30))
   await trigger()
-  const { samples, visibility } = await sampling
-  return measureMotion(samples, ms, visibility)
+  const { samples, visibility, appeared, animated } = await sampling
+  return measureMotion(samples, ms, visibility, { appeared, animated })
 }
 
 /** What to watch: an element, and whether it moves (its transform) or, with Reduce Motion on, fades (its opacity). */
