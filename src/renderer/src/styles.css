@@ -1331,6 +1331,21 @@ pre {
   gap: 8px;
 }
 
+/* Why a project's page can't be seen: quiet, where the card would be. */
+.notice.review-problem {
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--t2);
+}
+
+.notice.review-problem strong {
+  color: var(--t1);
+}
+
+.notice.review-problem .rv-actions {
+  flex: none;
+}
+
 .rv-buttons .btn {
   flex: 1;
 }

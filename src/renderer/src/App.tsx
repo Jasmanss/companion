@@ -11,7 +11,7 @@ import { ContextPill, ProjectSwitcher } from './ContextPill'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
-import { ReviewCard } from './ReviewCard'
+import { ReviewCard, ReviewProblems } from './ReviewCard'
 import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
@@ -658,6 +658,7 @@ export function App() {
             </button>
           </div>
         )}
+        <ReviewProblems />
         {reviewNotice && (
           <div className="notice" role="status">
             {reviewNotice}

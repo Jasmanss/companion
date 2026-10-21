@@ -1,6 +1,6 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { addressLabel, reviewNote } from '../../shared/review'
-import type { ReviewView } from '../../shared/types'
+import type { ReviewProblem, ReviewView } from '../../shared/types'
 import { CloseIcon } from './icons'
 
 const api = () => window.steward
@@ -119,5 +119,52 @@ export function ReviewCard({
         </div>
       )}
     </section>
+  )
+}
+
+/** "Nothing is answering…" reads on after a colon as "nothing is answering…". */
+const afterColon = (text: string) => (/^[A-Z][a-z]/.test(text) ? text[0].toLowerCase() + text.slice(1) : text)
+
+/**
+ * Visual Review couldn't see a project's page: a quiet line where the card would be, one per project, gone once a capture
+ * works. Hiding one hides that message until it changes. It never peeks out.
+ */
+export function ReviewProblems() {
+  const [problems, setProblems] = useState<ReviewProblem[]>([])
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    api().review.problems().then(setProblems, () => {})
+    return api().review.onProblems(setProblems)
+  }, [])
+  const keyOf = (p: ReviewProblem) => `${p.projectPath}\n${p.address}\n${p.reason}`
+
+  return (
+    <>
+      {problems
+        .filter((p) => !hidden.has(keyOf(p)))
+        .map((p) => (
+          <div className="notice review-problem" role="status" key={p.projectPath}>
+            <span>
+              {p.login ? (
+                <>
+                  <strong>Visual Review, {p.project}:</strong> {p.reason}
+                </>
+              ) : (
+                <>
+                  <strong>Couldn't photograph {p.project}:</strong> {afterColon(p.reason)}
+                </>
+              )}
+            </span>
+            <span className="rv-actions">
+              <button className="chip" onClick={() => api().settings.open('projects')}>
+                Settings
+              </button>
+              <button className="icon-btn" aria-label="Hide this message" onClick={() => setHidden(new Set(hidden).add(keyOf(p)))}>
+                <CloseIcon />
+              </button>
+            </span>
+          </div>
+        ))}
+    </>
   )
 }

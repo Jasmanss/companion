@@ -328,6 +328,14 @@
   box-shadow: 0 0 0 1px var(--line);
 }
 
+.set-problem {
+  color: var(--t1);
+}
+
+.set-shot .set-note {
+  margin-top: 6px;
+}
+
 .set-shot figcaption {
   margin-top: 4px;
   color: var(--t2);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
 import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, SUGGESTED_STEP_ASIDE_APPS, TAB_SIZES, panelTint } from '../../shared/steward'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewProblem, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
 import type { Glint } from './pill/eyes'
@@ -520,7 +520,7 @@ export function ProjectsSection(props: SectionProps) {
         </Group>
       )}
 
-      {settings.projects.length > 0 && <ReviewGroup projects={settings.projects} run={run} />}
+      {settings.projects.length > 0 && <ReviewGroup projects={settings.projects} run={run} onError={props.onError} />}
 
       <Group title="Commands that skip approval" note="Exact commands only, one per line. Everything else asks first, and deploys, rollbacks and git push always do.">
         <div className="set-field">
@@ -645,7 +645,7 @@ function SecretField({
 }
 
 /** One project's Visual Review address: where its app runs on this Mac, and a button to see that Steward can capture it. */
-function ReviewAddressRow({ project, run }: { project: Project; run: (p: Promise<SettingsView>) => Promise<boolean> }) {
+function ReviewAddressRow({ project, problem, run }: { project: Project; problem?: ReviewProblem; run: (p: Promise<SettingsView>) => Promise<boolean> }) {
   const saved = project.url ?? ''
   const [text, setText] = useState(saved)
   const [trying, setTrying] = useState(false)
@@ -696,32 +696,105 @@ function ReviewAddressRow({ project, run }: { project: Project; run: (p: Promise
           <figcaption>
             Captured {result.width} × {result.height} px in {(result.ms / 1000).toFixed(1)} s.
           </figcaption>
+          {result.note && (
+            <p className={`set-note flush${result.login ? ' set-problem' : ''}`} role={result.login ? 'alert' : undefined}>
+              {result.note}
+            </p>
+          )}
         </figure>
       ) : (
-        <p className="set-note flush" role="alert">
+        <p className="set-note flush set-problem" role="alert">
           {result.error}
         </p>
       ))}
+      {/* The last capture's trouble (from a session, or an earlier try), until one works. Try it now's own answer says it already. */}
+      {!result && problem && (
+        <p className="set-note flush set-problem" role="status">
+          {problem.reason}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Visual Review needs the prompt hook. Said right under the addresses (not only in Connections), with the same
+ * "show the exact change, then add it" as the Connect switch.
+ */
+function ReviewHookNotice({ onError }: { onError: (message: string) => void }) {
+  const [status, setStatus] = useState<ClaudeHookStatus | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const fail = (err: unknown) => onError(message(err))
+
+  useEffect(() => {
+    api().claude.status().then(setStatus, () => setStatus(null))
+  }, [])
+
+  if (!status || (status.connected && status.reviewHook)) return null
+  const update = status.connected || status.outdated
+  if (preview === null)
+    return (
+      <div className="set-row">
+        <div className="set-label">
+          <span>{update ? 'Visual Review needs one more hook' : "Visual Review needs Steward's Claude Code hooks"}</span>
+          <small>They tell Steward when a prompt is sent and when a session stops, so it can photograph your app before and after. What you type is dropped as it arrives and never kept.</small>
+        </div>
+        <div className="set-ctl">
+          <button className="btn" onClick={() => api().claude.preview().then(setPreview, fail)}>
+            {update ? 'Update hooks' : 'Add hooks'}
+          </button>
+        </div>
+      </div>
+    )
+  return (
+    <div className="set-row column">
+      <p className="set-note flush">
+        This is merged into <code>{status.settingsFile}</code>. Everything else in it stays as is, the original is backed up to <code>{status.backupFile}</code>,
+        and turning Connect to Claude Code off removes only these entries.
+      </p>
+      <pre className="set-code">{preview}</pre>
+      <div className="set-actions">
+        <button className="btn" onClick={() => setPreview(null)}>
+          Cancel
+        </button>
+        <button
+          className="btn primary"
+          onClick={() =>
+            api()
+              .claude.connect()
+              .then((next) => {
+                setStatus(next)
+                setPreview(null)
+              }, fail)
+          }
+        >
+          {update ? 'Update these hooks' : 'Add these hooks'}
+        </button>
+      </div>
     </div>
   )
 }
 
 /** Visual Review: when a session stops and the running page looks different, Steward shows the before and after. */
-function ReviewGroup({ projects, run }: { projects: Project[]; run: (p: Promise<SettingsView>) => Promise<boolean> }) {
+function ReviewGroup({ projects, run, onError }: { projects: Project[]; run: (p: Promise<SettingsView>) => Promise<boolean>; onError: (message: string) => void }) {
   const [usage, setUsage] = useState<{ count: number; bytes: number } | null>(null)
+  const [problems, setProblems] = useState<ReviewProblem[]>([])
   useEffect(() => {
     api().review.usage().then(setUsage, () => setUsage(null))
+    api().review.problems().then(setProblems, () => setProblems([]))
+    return api().review.onProblems(setProblems)
   }, [])
   const size = usage ? (usage.bytes < 1_000_000 ? `${Math.max(1, Math.round(usage.bytes / 1000))} KB` : `${Math.round(usage.bytes / 1_000_000)} MB`) : ''
 
   return (
     <Group
       title="Visual Review"
-      note="When a Claude Code session in a project stops and the page at its address looks different, Steward shows what changed, before and after. Only addresses on this Mac work (localhost, 127.0.0.1). The pictures stay on this Mac, and Steward never signs in, so a page behind a login looks the same twice. It also needs the Claude Code connection in Connections."
+      note="When a Claude Code session in a project stops and the page at its address looks different, Steward shows what changed, before and after. Only addresses on this Mac work (localhost, 127.0.0.1). The pictures stay on this Mac, and Steward never signs in, so for a page behind a login it only sees the login page: use one that doesn't need it."
     >
       {projects.map((p) => (
-        <ReviewAddressRow key={p.path} project={p} run={run} />
+        <ReviewAddressRow key={p.path} project={p} problem={problems.find((x) => x.projectPath === p.path)} run={run} />
       ))}
+      {projects.some((p) => p.url) && <ReviewHookNotice onError={onError} />}
       <div className="set-row">
         <div className="set-label">
           <span>Review pictures</span>
