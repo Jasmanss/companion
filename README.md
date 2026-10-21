@@ -11,8 +11,11 @@ code. Pull it out to collect images, research designs, and run commands.
   just the section you asked about, into the tray and checks each shot), find
   photos, look at your project's code, or run commands in your project. It
   reads files without asking (read-only, inside the project, never `.env`,
-  keys or credentials). Commands always show an approval card first unless
-  you've allowlisted them.
+  keys or credentials). Commands show an approval card first unless you've
+  allowlisted them. Settings → Projects → Running commands can switch to
+  Auto, which runs safe commands without asking and still asks for risky ones
+  (deleting or overwriting files, git push, installs, deploys, network writes,
+  anything outside the project). The default is Ask each time.
 - **Context pill:** the header shows the project and what Steward is on, like
   `haven › src/app/page.tsx`, with a live dot while it works. Click it or press
   ⌘K to switch projects (type to search, arrows and Enter) or add one.

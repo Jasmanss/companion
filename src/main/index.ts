@@ -59,6 +59,7 @@ import {
 } from './presence'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
+import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
@@ -1416,6 +1417,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
       clearTimeout(settingsTimer)
+      const autoTimer = setTimeout(() => fail('auto mode timed out'), 40_000)
+      await runAutoSmoke(w, out)
+      clearTimeout(autoTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -2237,6 +2241,39 @@ async function captureDemo(w: BrowserWindow, out: string, seconds: string): Prom
     await fs.writeFile(file, (await w.webContents.capturePage()).toPNG())
     console.log(`smoke: demo ${t}s -> ${file}`)
   }
+}
+
+/** Auto mode in the real app: the Settings choice, then a safe command with no card and a risky one with it (smoke-auto.ts). */
+async function runAutoSmoke(w: BrowserWindow, out: string): Promise<void> {
+  if (!isOpen(dock)) setDock('expanded')
+  await new Promise((resolve) => setTimeout(resolve, 600))
+  const shot = async (target: BrowserWindow, suffix: string) => {
+    const file = out.replace(/\.png$/, `-${suffix}.png`)
+    await fs.writeFile(file, (await target.webContents.capturePage()).toPNG())
+    console.log(`smoke: ${suffix} -> ${file}`)
+  }
+  await checkAutoMode({
+    panel: w,
+    openSettings: async (section) => {
+      openSettings(section)
+      const sw = settingsWin!
+      await new Promise<void>((resolve) => (sw.webContents.isLoading() ? sw.webContents.once('did-finish-load', () => resolve()) : resolve()))
+      return sw
+    },
+    commandMode: () => settings.commandMode(),
+    setCommandMode: (commandMode) => settings.update({ commandMode }),
+    useProject: async (folder) => {
+      await settings.addProject(folder)
+      await settings.setCurrentProject(folder)
+    },
+    dropProject: (folder) => settings.removeProject(folder),
+    runCommand: async (command) => {
+      const tools = agent as unknown as { runTool(block: object, signal: AbortSignal): Promise<{ content: unknown }> }
+      const result = await tools.runTool({ type: 'tool_use', id: 'smoke-auto', name: 'run_command', input: { command } }, new AbortController().signal)
+      return String(result.content)
+    },
+    shot,
+  })
 }
 
 /** A made-up screenshot for the demo request: a soft gradient, like a page header. */

@@ -188,6 +188,9 @@ only change the fields it shows.
 
 - **Every command and file edit shows an approval card** with the exact command
   or diff, unless it's on an allowlist I set (e.g. `npm test`, `git status`).
+  **Auto** (Settings → Running commands, off by default) also skips the card for
+  commands that aren't risky; risky ones, deploys, rollbacks and `git push`
+  still ask.
 - Only works inside project folders I've added.
 - **Reading files is read-only and stays in the current project.** `read_file` and
   `list_files` need no approval, but every read shows as a step. Paths are resolved to
