@@ -58,6 +58,8 @@ export interface Capture {
   height: number
   /** What was captured, in words, for the tool result. */
   description: string
+  /** Visual Review: the address the page ended up at (after redirects and the app's own router). */
+  landedOn?: string
 }
 
 /**
@@ -151,7 +153,7 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
     if (sentAway) throw new Error(SENT_AWAY)
     if (image.isEmpty()) throw new Error('The page rendered blank')
     const { width, height } = image.getSize()
-    return { png: image.toPNG(), preview: preview(image), width, height, description }
+    return { png: image.toPNG(), preview: preview(image), width, height, description, ...(review ? { landedOn: win.webContents.getURL() } : {}) }
   } finally {
     win.destroy()
   }

@@ -270,8 +270,25 @@ export interface ReviewView {
   files: { before: string | null; after: string }
 }
 
-/** What "Try it now" in Settings found: the page as Steward sees it, or why it couldn't. */
-export type ReviewTryResult = { ok: true; image: string; width: number; height: number; ms: number } | { ok: false; error: string }
+/**
+ * What "Try it now" in Settings found: the page as Steward sees it, or why it couldn't. `note` says where the page ended up
+ * when it isn't the address (a redirect), and `login` that it looks like a login page.
+ */
+export type ReviewTryResult =
+  | { ok: true; image: string; width: number; height: number; ms: number; note?: string; login?: boolean }
+  | { ok: false; error: string }
+
+/** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
+export interface ReviewProblem {
+  projectPath: string
+  project: string
+  /** The address it tried. */
+  address: string
+  /** In plain words, such as "Nothing is answering at localhost:3000. Start the app, then try again." */
+  reason: string
+  login: boolean
+  at: number
+}
 
 /** The "where you left off" card for a project. */
 export interface LeftOff {
@@ -454,6 +471,9 @@ export interface StewardAPI {
     /** Reviews waiting for a decision, newest first. */
     list(): Promise<ReviewView[]>
     onChanged(cb: (reviews: ReviewView[]) => void): Unsubscribe
+    /** Projects whose page Visual Review can't see right now, and why. */
+    problems(): Promise<ReviewProblem[]>
+    onProblems(cb: (problems: ReviewProblem[]) => void): Unsubscribe
     /** Capture a project's page once, so Settings can show it works. */
     tryIt(path: string): Promise<ReviewTryResult>
     markGood(id: string): Promise<void>

@@ -1,5 +1,5 @@
-import type { Project, ReviewTryResult, ReviewView } from '../shared/types'
-import { addressLabel, reviewNote } from '../shared/review'
+import type { Project, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
+import { addressLabel, landingNote, reviewNote } from '../shared/review'
 import type { HookPayload } from './hook-payload'
 import type { Diff } from './review-diff'
 import type { ReviewRecord, ReviewStore } from './review-store'
@@ -13,6 +13,8 @@ export interface Shot {
   png: Buffer
   width: number
   height: number
+  /** The address the page ended up at, after redirects. */
+  landedOn?: string
 }
 
 export interface ReviewDeps {
@@ -25,6 +27,8 @@ export interface ReviewDeps {
   store: ReviewStore
   /** The list of reviews waiting for a decision changed. */
   onChange(): void
+  /** The list of projects whose page can't be seen changed. */
+  onProblems?(): void
   now?(): number
   log?(message: string): void
 }
@@ -49,6 +53,9 @@ interface Turn {
   /** The page as the prompt was sent, or null when it couldn't be captured. */
   before: Promise<Look | null>
 }
+
+/** Too many captures were waiting: that says nothing about the app, so it's no problem to show. */
+const BUSY = 'Steward is busy looking at other pages'
 
 const turnKey = (event: { session_id: string; prompt_id?: string }) => `${event.session_id}:${event.prompt_id ?? ''}`
 const dataUrl = (jpeg: Buffer) => `data:image/jpeg;base64,${jpeg.toString('base64')}`
@@ -77,6 +84,8 @@ export class ReviewTracker {
   /** Captures run one at a time: each opens a hidden window, and the page is the same page. */
   private tail: Promise<void> = Promise.resolve()
   private queued = 0
+  /** Per project, why its page can't be seen right now. One at a time; the next capture that works clears it. */
+  private troubles = new Map<string, ReviewProblem>()
 
   constructor(private readonly deps: ReviewDeps) {}
 
@@ -90,10 +99,11 @@ export class ReviewTracker {
     const before = this.capture(address).then(
       (shot) => {
         this.remember(project.path, shot)
+        this.looked(project, address, shot)
         return shot
       },
       (err) => {
-        this.log(`no before picture of ${project.name}: ${describeCaptureError(err, address)}`)
+        this.failed(project, address, err, 'no before picture')
         return null
       },
     )
@@ -120,8 +130,16 @@ export class ReviewTracker {
         before = await this.lastLook(project.path)
         from = before ? 'last-look' : 'none'
       }
-      const after = await this.capture(address)
+      let after: Shot
+      try {
+        after = await this.capture(address)
+      } catch (err) {
+        this.failed(project, address, err, 'no after picture')
+        return null
+      }
       this.remember(project.path, after)
+      // A login page is all Steward would ever see there: say so, and make no card of it.
+      if (this.looked(project, address, after)?.login) return null
       const diff = before ? await this.deps.compare(before.png, after.png) : null
       // Nothing to compare with shows the page as it is; a page that looks the same makes no card.
       if (diff && !diff.changed) return null
@@ -146,7 +164,7 @@ export class ReviewTracker {
       this.deps.onChange()
       return record
     } catch (err) {
-      this.log(`no review of ${project.name}: ${describeCaptureError(err, address)}`)
+      this.log(`no review of ${project.name}: ${err instanceof Error ? err.message : String(err)}`)
       return null
     }
   }
@@ -159,10 +177,25 @@ export class ReviewTracker {
     try {
       const shot = await this.capture(project.url)
       this.remember(project.path, shot)
-      return { ok: true, image: dataUrl(this.deps.card(shot.png)), width: shot.width, height: shot.height, ms: this.now() - started }
+      const landing = this.looked(project, project.url, shot)
+      return {
+        ok: true,
+        image: dataUrl(this.deps.card(shot.png)),
+        width: shot.width,
+        height: shot.height,
+        ms: this.now() - started,
+        ...(landing ? { note: landing.text, login: landing.login } : {}),
+      }
     } catch (err) {
+      this.failed(project, project.url, err, 'try it now')
       return { ok: false, error: describeCaptureError(err, project.url) }
     }
+  }
+
+  /** Projects whose page can't be seen right now, for the panel and Settings. Only for the address each has now. */
+  problems(): ReviewProblem[] {
+    const projects = this.deps.projects()
+    return [...this.troubles.values()].filter((p) => projects.some((q) => q.path === p.projectPath && q.url === p.address)).sort((a, b) => b.at - a.at)
   }
 
   /** The reviews waiting for a decision, newest first, with their pictures for the card. */
@@ -226,6 +259,30 @@ export class ReviewTracker {
     this.deps.log?.(message)
   }
 
+  /** A capture worked: whether the page ended up somewhere else, and if it's a login page, that's the project's problem now. Otherwise it has none. */
+  private looked(project: Project, address: string, shot: Shot): { login: boolean; text: string } | null {
+    const landing = landingNote(address, shot.landedOn)
+    if (landing?.login) this.trouble(project, address, landing.text, true)
+    else this.fine(project.path)
+    return landing
+  }
+
+  private failed(project: Project, address: string, err: unknown, what: string): void {
+    const reason = describeCaptureError(err, address)
+    this.log(`${what} of ${project.name}: ${reason}`)
+    if (!(err instanceof Error && err.message === BUSY)) this.trouble(project, address, reason, false)
+  }
+
+  private trouble(project: Project, address: string, reason: string, login: boolean): void {
+    const was = this.troubles.get(project.path)
+    this.troubles.set(project.path, { projectPath: project.path, project: project.name, address, reason, login, at: this.now() })
+    if (was?.reason !== reason || was.address !== address) this.deps.onProblems?.()
+  }
+
+  private fine(projectPath: string): void {
+    if (this.troubles.delete(projectPath)) this.deps.onProblems?.()
+  }
+
   private remember(projectPath: string, shot: Look): void {
     this.lastLooks.set(projectPath, { shot, at: this.now() })
   }
@@ -242,7 +299,7 @@ export class ReviewTracker {
 
   /** Capture, after any capture already running. Refused when too many are waiting. */
   private capture(address: string): Promise<Shot> {
-    if (this.queued >= MAX_QUEUED) return Promise.reject(new Error('Steward is busy looking at other pages'))
+    if (this.queued >= MAX_QUEUED) return Promise.reject(new Error(BUSY))
     this.queued++
     const run = this.tail.then(() => this.deps.capture(address))
     // The next capture waits for this one, whether it worked or not. The caller gets the failure.

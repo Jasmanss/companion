@@ -51,3 +51,33 @@ export function reviewNote(r: { project: string; address: string; note: string; 
 
 /** The picture in the card shows the top of the page, this wide and 16:10, like the design. */
 export const CARD_SHOT = { width: 1440, height: 900 } as const
+
+/** A path that is a login page: /login, /sign-in, /auth/callback, /api/auth/signin, #/login and the like. */
+const LOGIN_PATH = /log-?in|log_in|sign-?in|sign_in|\bauth\b|\boauth|\bsso\b/i
+
+/**
+ * Where the page ended up, when it isn't the address that was asked for (a redirect, or the app's own router), in words.
+ * `login` when it looks like a login page: Steward never signs in, so all it would ever see is that page.
+ */
+export function landingNote(address: string, landedOn: string | undefined): { login: boolean; text: string } | null {
+  if (!landedOn) return null
+  let asked: URL
+  let landed: URL
+  try {
+    asked = new URL(address)
+    landed = new URL(landedOn)
+  } catch {
+    return null
+  }
+  const where = (u: URL) => `${u.pathname === '/' ? '' : u.pathname}${u.search}${u.hash}`
+  if (where(asked) === where(landed)) return null
+  const path = where(landed) || '/'
+  const label = addressLabel(address)
+  if (LOGIN_PATH.test(path)) {
+    return {
+      login: true,
+      text: `${label} sends you to ${path}, so Visual Review would only see the login page. Use a page that doesn't need a login, like ${asked.protocol}//${asked.host}/some-page.`,
+    }
+  }
+  return { login: false, text: `${label} goes on to ${path}. Visual Review looks at the page it ends up on.` }
+}

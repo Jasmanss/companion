@@ -25,7 +25,7 @@ afterEach(async () => {
 })
 
 /** A tracker over a real store in a temp folder, with captures it is told to make: a page that is whatever `page` says now. */
-async function setup(opts: { projects?: typeof project[]; page?: () => string | Error; changed?: boolean } = {}) {
+async function setup(opts: { projects?: typeof project[]; page?: () => string | Error | Shot; changed?: boolean } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
   dirs.push(dir)
   const store = new ReviewStore(dir, REVIEW_LIMITS)
@@ -33,21 +33,23 @@ async function setup(opts: { projects?: typeof project[]; page?: () => string | 
   const captured: string[] = []
   const log: string[] = []
   const onChange = vi.fn()
+  const onProblems = vi.fn()
   const tracker = new ReviewTracker({
     projects: () => opts.projects ?? [project],
     capture: async (url) => {
       captured.push(url)
       const now = opts.page ? opts.page() : state.page
       if (now instanceof Error) throw now
-      return shot(now)
+      return typeof now === 'string' ? shot(now) : now
     },
     compare: (a, b) => diff(state.changed && a.toString() !== b.toString()),
     card: (png) => Buffer.from(`card:${png.toString()}`),
     store,
     onChange,
+    onProblems,
     log: (m) => log.push(m),
   })
-  return { tracker, store, state, captured, log, onChange }
+  return { tracker, store, state, captured, log, onChange, onProblems }
 }
 
 describe('ReviewTracker, a turn that changed the page', () => {
@@ -214,6 +216,73 @@ describe('ReviewTracker, Try it now', () => {
 
     const down = await setup({ page: () => new Error('ERR_CONNECTION_REFUSED (-102)') })
     expect(await down.tracker.tryIt(project.path)).toEqual({ ok: false, error: 'Nothing is answering at localhost:3000. Start the app, then try again.' })
+  })
+})
+
+describe('ReviewTracker, problems the user should see', () => {
+  const refused = () => new Error("ERR_CONNECTION_REFUSED (-102) loading 'http://localhost:3000/'")
+
+  it('keeps one plain message per project when the app is not running, and clears it when a capture works', async () => {
+    let down = true
+    const { tracker, onProblems } = await setup({ page: () => (down ? refused() : 'page') })
+    tracker.turnStarted(start())
+    await tick()
+    expect(tracker.problems()).toEqual([
+      expect.objectContaining({ projectPath: project.path, project: 'site', address: 'http://localhost:3000', login: false, reason: 'Nothing is answering at localhost:3000. Start the app, then try again.' }),
+    ])
+    await tracker.turnStopped(stop())
+    expect(tracker.problems()).toHaveLength(1) // the same message again: still one
+    expect(onProblems).toHaveBeenCalledTimes(1)
+
+    down = false
+    expect(await tracker.tryIt(project.path)).toMatchObject({ ok: true })
+    expect(tracker.problems()).toEqual([])
+    expect(onProblems).toHaveBeenCalledTimes(2)
+  })
+
+  it('says so when the page only shows a login, makes no card of it, and tells Try it now', async () => {
+    const login = (text: string): Shot => ({ ...shot(text), landedOn: 'http://localhost:3000/login' })
+    let n = 0
+    const { tracker, store } = await setup({ page: () => login(`login page ${++n}`) })
+    tracker.turnStarted(start())
+    await tick()
+    expect(await tracker.turnStopped(stop())).toBeNull()
+    expect(store.list()).toEqual([])
+    const [problem] = tracker.problems()
+    expect(problem).toMatchObject({ login: true })
+    expect(problem.reason).toContain('sends you to /login')
+
+    const tried = await tracker.tryIt(project.path)
+    expect(tried).toMatchObject({ ok: true, login: true })
+    expect(tried.ok && tried.note).toContain("Use a page that doesn't need a login")
+  })
+
+  it('only shows a problem for the address the project has now', async () => {
+    const projects = [{ ...project }]
+    const { tracker } = await setup({ projects, page: refused })
+    await tracker.tryIt(project.path)
+    expect(tracker.problems()).toHaveLength(1)
+    projects[0].url = 'http://localhost:4000'
+    expect(tracker.problems()).toEqual([])
+  })
+
+  it('does not count Steward being busy as a problem with the app', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
+    dirs.push(dir)
+    const log: string[] = []
+    const tracker = new ReviewTracker({
+      projects: () => [project],
+      capture: () => new Promise<Shot>(() => {}), // a capture that never finishes holds the queue
+      compare: () => diff(true),
+      card: (png) => png,
+      store: new ReviewStore(dir),
+      onChange: () => {},
+      log: (m) => log.push(m),
+    })
+    for (let i = 0; i < 6; i++) tracker.turnStarted(start({ prompt_id: `p${i}` }))
+    await tick()
+    expect(log.filter((m) => m.includes('busy'))).toHaveLength(2) // two more than the queue holds
+    expect(tracker.problems()).toEqual([])
   })
 })
 

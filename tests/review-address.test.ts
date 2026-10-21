@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addressLabel, isLoopbackUrl, parseAppAddress, reviewNote } from '../src/shared/review'
+import { addressLabel, isLoopbackUrl, landingNote, parseAppAddress, reviewNote } from '../src/shared/review'
 
 const ok = (input: string) => {
   const r = parseAppAddress(input)
@@ -72,5 +72,34 @@ describe('the note "Send it back" copies', () => {
     const note = reviewNote({ project: 'p', address: 'http://localhost:3000/a', note: '  ', afterFile: '/x/after.png', beforeFile: null })
     expect(note).toBe(['Visual Review of p (localhost:3000/a): please change this.', '(no note)', 'What I saw: /x/after.png'].join('\n'))
     expect(addressLabel('https://localhost:5173')).toBe('https://localhost:5173')
+  })
+})
+
+describe('landingNote: where the page ended up', () => {
+  it('says nothing when the page is the address, give or take a slash', () => {
+    expect(landingNote('http://localhost:3000', 'http://localhost:3000/')).toBeNull()
+    expect(landingNote('http://localhost:3000/pricing', 'http://localhost:3000/pricing')).toBeNull()
+    expect(landingNote('http://localhost:3000', undefined)).toBeNull()
+  })
+
+  it('spots a redirect to a login page, and says what to do', () => {
+    const note = landingNote('http://localhost:3000', 'http://localhost:3000/login')
+    expect(note).toEqual({
+      login: true,
+      text: "localhost:3000 sends you to /login, so Visual Review would only see the login page. Use a page that doesn't need a login, like http://localhost:3000/some-page.",
+    })
+    for (const landed of ['/sign-in', '/signin?next=%2F', '/auth/callback', '/api/auth/signin', '/users/sign_in', '/#/login', '/sso', '/oauth/authorize', '/Log-In']) {
+      expect(landingNote('http://localhost:3000', `http://localhost:3000${landed}`)?.login, landed).toBe(true)
+    }
+  })
+
+  it('says where a page that moves on went, without calling it a login', () => {
+    expect(landingNote('http://localhost:3000', 'http://localhost:3000/dashboard')).toEqual({
+      login: false,
+      text: 'localhost:3000 goes on to /dashboard. Visual Review looks at the page it ends up on.',
+    })
+    for (const landed of ['/authors', '/blog/logo-in-header', '/en']) {
+      expect(landingNote('http://localhost:3000', `http://localhost:3000${landed}`)?.login, landed).toBe(false)
+    }
   })
 })

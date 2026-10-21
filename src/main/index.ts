@@ -1151,6 +1151,12 @@ function sendReviews(): void {
   void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
 }
 
+/** Why a project's page can't be seen goes to the panel (a quiet line) and to Settings (under the address). */
+function sendReviewProblems(): void {
+  const list = reviews.problems()
+  for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('review:problems', list)
+}
+
 const stewardHookCommand = () => hookCommand(app.getPath('userData'))
 
 async function claudeStatus(): Promise<ClaudeHookStatus> {
@@ -1242,6 +1248,8 @@ function registerIpc(): void {
   ipcMain.handle('settings:setProjectUrl', async (_e, projectPath: unknown, address: unknown) => {
     if (typeof projectPath !== 'string' || typeof address !== 'string') throw new Error('Bad request')
     await settings.setProjectUrl(projectPath, address)
+    // A problem with the old address is no longer news.
+    sendReviewProblems()
     return settings.view()
   })
   ipcMain.handle('settings:setApiKey', async (_e, key: string) => {
@@ -1341,6 +1349,7 @@ function registerIpc(): void {
 
   // Visual Review. The address always comes from Settings (the project's own), never from the window or a hook.
   ipcMain.handle('review:list', () => reviews.pending())
+  ipcMain.handle('review:problems', () => reviews.problems())
   ipcMain.handle('review:tryIt', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.tryIt(projectPath) : { ok: false, error: 'Bad request' }))
   ipcMain.handle('review:markGood', (_e, id: unknown) => (isReviewId(id) ? reviews.markGood(id) : undefined))
   ipcMain.handle('review:sendBack', async (_e, id: unknown, note: unknown) => {
@@ -2457,6 +2466,7 @@ app.whenReady().then(async () => {
     card: cardPicture,
     store: reviewStore,
     onChange: sendReviews,
+    onProblems: sendReviewProblems,
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })
   alerts = new AlertQueue({ show: showAlerts })
