@@ -2297,11 +2297,17 @@ async function checkNotch(out: string): Promise<void> {
       if (entrance !== (reducedNow ? 'fadein' : 'panel-drop')) throw new Error(`the panel from the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the drop from the notch'}`)
       await sleep(500)
       await fs.writeFile(out.replace(/\.png$/, '-notch-panel.png'), (await win!.webContents.capturePage()).toPNG())
+      const closed = Date.now()
       setDock('collapsed')
       await settings.update({ keepPanelOpen: keptOpen })
-      await sleep(400)
-      if (!notch.visible || win!.isVisible()) throw new Error('closing the panel did not bring Steward back to the notch')
-      console.log(`smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back`)
+      // The way back up takes the page's 0.2 s; where the page isn't drawn (a runner, Reduce Motion) it takes the page's own
+      // 400 ms safety timer instead, so wait for it rather than sleep a flat 400 ms (up to 1.5 s).
+      while ((win!.isVisible() || !notch.visible) && Date.now() - closed < 1500) await sleep(20)
+      const backIn = Date.now() - closed
+      if (!notch.visible || win!.isVisible()) throw new Error(`closing the panel did not bring Steward back to the notch (after ${backIn} ms)`)
+      console.log(
+        `smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back in ${backIn} ms${backIn >= 380 ? ' (on its safety timer, not a drawn frame)' : ''}`,
+      )
 
       // Every way of closing goes back up into the notch: while the panel goes, the window stays where it is (it never
       // takes the edge's bounds, not even for a frame), the exit plays, and then the window goes and the notch is back,
