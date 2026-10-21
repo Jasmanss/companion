@@ -411,13 +411,18 @@ export function StewardSection(props: SectionProps) {
             onChange={(v) => set(v === 'notch' ? { notch: true } : { edge: v, notch: false })}
           />
         </Row>
-        {where !== 'notch' && (
-          <Row label="Height" note="Drag the tab up or down to move it.">
-            <button className="btn small" onClick={() => run(api().dock.resetPlace().then(() => api().settings.get()))}>
-              Reset
-            </button>
-          </Row>
-        )}
+        <Row
+          label={where === 'notch' ? 'Panel' : 'Place'}
+          note={
+            where === 'notch'
+              ? 'Drag the panel by its top bar to move it. Reset puts it back under the notch.'
+              : 'Drag the tab up or down, or the panel by its top bar. Reset puts both back.'
+          }
+        >
+          <button className="btn small" onClick={() => run(api().dock.resetPlace().then(() => api().settings.get()))}>
+            Reset
+          </button>
+        </Row>
         {where === 'notch' && (
           <Row label="In the notch" note={look.notchStyle === 'wings' ? 'One eye on each side of the notch, in the menu bar.' : 'A chin below the notch, with the eyes in it.'}>
             <Segmented label="In the notch" value={look.notchStyle} options={[['chin', 'Chin'], ['wings', 'Wings']]} onChange={(notchStyle) => set({ notchStyle })} />

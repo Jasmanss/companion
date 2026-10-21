@@ -20,6 +20,7 @@ import { glintFor, workingMood } from './pill/glint'
 import { palette } from './pill/render'
 import { SessionStrip } from './SessionStrip'
 import { useTabDrag } from './tab-drag'
+import { usePanelDrag } from './panel-drag'
 import { useDimmed } from './dim'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
@@ -223,28 +224,47 @@ export function App() {
     document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
   }, [look.notch, notchGeo])
 
+  // Dragged somewhere, the panel pops in and out where it is (styles.css). Main says so just before it opens or closes,
+  // and the attribute is set right away, so the panel's first frame already has the right entrance.
+  const [placed, setPlaced] = useState(false)
+  useEffect(
+    () =>
+      api.dock.onPlaced((on) => {
+        document.documentElement.toggleAttribute('data-placed', on)
+        setPlaced(on)
+      }),
+    [],
+  )
+  const panelDrag = usePanelDrag()
+
   // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out (the panel, the viewer or a
-  // nudge) stays, goes back up into the notch (styles.css), and then tells main the window can go. Worked out while
-  // rendering, so the tab never shows for a frame in between.
+  // nudge) stays, goes back up into the notch (styles.css), and then tells main the window can go. A moved panel does
+  // the same where it is, at the edge too. What's next is drawn once main says the window has gone or moved (onLeft),
+  // so the tab never shows for a frame in the panel's window. Worked out while rendering, for the same reason.
   const [leaving, setLeaving] = useState<DockState | null>(null)
   const [shownDock, setShownDock] = useState(dock)
   if (dock !== shownDock) {
     setShownDock(dock)
-    const wasOut = shownDock === 'expanded' || shownDock === 'viewing' || shownDock === 'nudge'
-    setLeaving(wasOut && (dock === 'collapsed' || dock === 'hidden') && look.notch && notchGeo !== null ? shownDock : null)
+    const wasOpen = shownDock === 'expanded' || shownDock === 'viewing'
+    const wasOut = wasOpen || shownDock === 'nudge'
+    const closing = dock === 'collapsed' || dock === 'hidden'
+    setLeaving(closing && ((wasOut && look.notch && notchGeo !== null) || (wasOpen && placed)) ? shownDock : null)
   }
+  useEffect(() => api.dock.onLeft(() => setLeaving(null)), [])
+  const leavingInPlace = leaving !== null && leaving !== 'nudge' && placed
   useEffect(() => {
     if (!leaving) return
     const root = document.documentElement
-    root.setAttribute('data-leaving', '')
+    root.setAttribute('data-leaving', leavingInPlace ? 'in-place' : '')
+    let told = false
     const done = () => {
-      root.removeAttribute('data-leaving')
-      setLeaving(null)
+      if (told) return
+      told = true
       api.dock.intoNotchEnded()
     }
     // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
     const ended = (e: AnimationEvent) => {
-      if (e.animationName === 'panel-rise' || e.animationName === 'panel-fade-out' || e.animationName === 'nudge-up') done()
+      if (['panel-rise', 'panel-fade-out', 'nudge-up', 'panel-settle-out'].includes(e.animationName)) done()
     }
     document.addEventListener('animationend', ended)
     const timer = setTimeout(done, 400)
@@ -253,7 +273,7 @@ export function App() {
       clearTimeout(timer)
       root.removeAttribute('data-leaving')
     }
-  }, [leaving])
+  }, [leaving, leavingInPlace])
 
   // The glass's tint and frost, from Settings → Steward.
   useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])
@@ -568,7 +588,7 @@ export function App() {
 
   return (
     <div className={`panel ${dragOver ? 'drag-over' : ''}`} data-app>
-      <header className="panel-head">
+      <header className="panel-head" title="Drag to move. Double-click to put it back." {...panelDrag}>
         <Pill mood={mood} glint={glint} width={64} height={54} cls="header" look={look} />
         <div className="head-text">
           <div className="head-top">
@@ -580,6 +600,7 @@ export function App() {
               <button
                 className={`icon-btn ${pinned ? 'on' : ''}`}
                 aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
+                title={pinned ? 'Unpin panel' : 'Keep panel open'}
                 aria-pressed={pinned}
                 onClick={() => api.settings.update({ keepPanelOpen: !pinned }).then(setSettings, showError)}
               >

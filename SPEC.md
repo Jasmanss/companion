@@ -41,7 +41,12 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   new push counts. With the Dock on the same edge, only the tab's spot counts.
 - **Move the tab:** drag it up or down its edge, as far as the menu bar and
   the Dock. It remembers the height on each display; Settings → Steward →
-  Height → Reset puts it back in the middle. The panel opens centered on it.
+  Place → Reset puts it back in the middle. The panel opens centered on it.
+- **Move the panel:** drag it by its top bar (not the buttons) anywhere inside
+  the screen's work area. From then on it opens where you left it, popping in
+  there, and closes there too; the tab or the notch is back after. Double-click
+  the top bar, or Settings → Steward → Reset, to put it back at its edge or
+  under the notch, with its old way in. The viewer isn't movable.
 - **First launch:** a new install that hides until needed peeks out once, a
   moment after it starts, with a one-line note on how to bring it back.
 - **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
