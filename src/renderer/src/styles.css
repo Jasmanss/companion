@@ -596,12 +596,32 @@ pre {
   pointer-events: none;
 }
 
+/* Dragged somewhere, the panel pops in where it was left, at the edge or in the notch: a fade with a small grow from
+   its middle (design/movable-panel.html). */
+:root[data-placed] .panel {
+  transform-origin: 50% 50%;
+  animation: panel-settle-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* Closing, it shrinks a little and fades where it is, the pop-in in reverse; then the tab or the notch is back. */
+:root[data-leaving='in-place'] #root > * {
+  transform-origin: 50% 50%;
+  animation: panel-settle-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px 8px 6px;
   border-bottom: 1px solid var(--line);
+  /* The bar is the handle to drag the panel by (panel-drag.ts): a double-click on it doesn't select the name. */
+  user-select: none;
+  touch-action: none;
+}
+
+.panel-head.dragging {
+  cursor: grabbing;
 }
 
 .head-text {
@@ -2300,6 +2320,20 @@ a.icon-btn {
   }
 }
 
+@keyframes panel-settle-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes panel-settle-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
 @keyframes panel-fade-out {
   to {
     opacity: 0;
@@ -2573,6 +2607,15 @@ a.icon-btn {
 
   :root[data-leaving] #root > * {
     animation-name: panel-fade-out;
+  }
+
+  /* A moved panel: a 150 ms fade in, and out, where it is. */
+  :root[data-placed] .panel {
+    animation-duration: 0.15s;
+  }
+
+  :root[data-leaving='in-place'] #root > * {
+    animation: panel-fade-out 0.15s linear forwards;
   }
 
   /* The nudge under the notch fades in and out whole, its pieces still. */

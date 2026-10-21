@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url'
 import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, underNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
-import { clampTop, placeFor, TabDrag, topAround, topFor } from '../shared/tab-place'
+import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
+import { PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
 import { Agent } from './agent'
@@ -161,6 +162,13 @@ let asideAlerts: AlertView[] = []
 
 /** Where the tab sits on each display's edge (dragged there; see shared/tab-place), by display id. */
 let tabPlaces: Record<string, number> = {}
+/** Where the panel was dragged to on each display (see shared/panel-place), by display id, and the one it was last left on. */
+let panelPlaces: Record<string, PanelSpot> = {}
+let panelDisplay: string | undefined
+/** The panel being dragged by its top bar, while it is, and the screen it's over. Blurring then isn't clicking away. */
+let panelDrag: { drag: PanelDrag; display: Electron.Display; moved: boolean } | null = null
+/** The closed panel's (or a nudge's) way out is playing: the window stays where it is until it's over. */
+let wayOutPlaying = false
 /**
  * The tab comes to you: a push anywhere along the edge brought it out here, at the cursor's height. Only while it's out
  * (never saved); once it has tucked away and its window has gone, it's back at its saved spot.
@@ -208,9 +216,13 @@ let sentOverhang = -1
 /**
  * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
  * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered. Docked in
- * the notch, the nudge, the panel and the viewer come down from the notch instead, on the notch's own screen.
+ * the notch, the nudge, the panel and the viewer come down from the notch instead, on the notch's own screen. A panel
+ * that was dragged somewhere opens there instead, at the edge or in the notch.
  */
 function boundsFor(state: DockState): Electron.Rectangle {
+  // Dragged somewhere, the panel opens there: on the screen it was left on, inside its work area.
+  const spot = state === 'expanded' ? panelSpot() : null
+  if (spot) return panelRect(spot.display.workArea, panelSize(spot.display.workArea), spot.spot)
   if (state === 'nudge' && inNotch() && notchGeo) return nudgeUnderNotch(notchGeo, notchDisplay().workArea, NUDGE_WIDTH)
   if ((state === 'expanded' || state === 'viewing') && inNotch() && notchGeo) {
     const area = notchDisplay().workArea
@@ -274,6 +286,80 @@ async function resetTabPlace(): Promise<void> {
   if (win && !win.isDestroyed() && win.isVisible() && dock !== 'hidden') win.setBounds(boundsFor(dock), true)
 }
 
+/** The panel's size on a screen: as wide as always, as tall as the work area allows. */
+const panelSize = (area: Rect) => ({ width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
+
+/** The screen the panel opens on when it hasn't been moved: the notch's in the notch, otherwise the main one. */
+const panelHome = (): Electron.Display => (inNotch() ? notchDisplay() : screen.getPrimaryDisplay())
+
+/** Where a moved panel opens: its saved spot and that spot's screen. null: it hasn't been moved (see pickSpot). */
+function panelSpot(): { display: Electron.Display; spot: PanelSpot } | null {
+  const displays = screen.getAllDisplays()
+  const at = pickSpot(panelPlaces, panelDisplay, displays.map((d) => String(d.id)), String(panelHome().id))
+  const display = at && displays.find((d) => String(d.id) === at.display)
+  return at && display ? { display, spot: at.spot } : null
+}
+
+/** The panel has been moved: it opens and closes where it is, not at its edge or the notch. */
+const placed = (): boolean => panelSpot() !== null
+
+/** What the page was last told about the panel being moved (it picks the panel's way in and out by it). */
+let sentPlaced: boolean | null = null
+function sendPlaced(again = false): void {
+  const now = placed()
+  if (!win || win.isDestroyed() || (now === sentPlaced && !again)) return
+  sentPlaced = now
+  win.webContents.send('dock:placed', now)
+}
+
+/**
+ * From the panel's page: a drag by its top bar began, moved (the pointer is at x, y on the screen), or ended. The window
+ * follows the pointer, kept inside the work area of the screen the pointer is over; the end saves where it is, for that
+ * screen. Only the open panel moves: the viewer stays centered.
+ */
+function dragPanel(phase: unknown, x?: unknown, y?: unknown): void {
+  if (!win || win.isDestroyed()) return
+  if (phase === 'end') {
+    if (panelDrag?.moved) savePanelPlace(win.getBounds(), panelDrag.display)
+    panelDrag = null
+    return
+  }
+  const pointer = typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null
+  if (dock !== 'expanded' || !pointer) return
+  if (phase === 'start') panelDrag = { drag: new PanelDrag(win.getBounds(), pointer), display: screen.getDisplayNearestPoint(pointer), moved: false }
+  else if (phase === 'move' && panelDrag) {
+    panelDrag.display = screen.getDisplayNearestPoint(pointer)
+    panelDrag.moved = true
+    const started = performance.now()
+    win.setBounds(panelDrag.drag.move(pointer, panelDrag.display.workArea), false)
+    if (drivenBySmoke) panelMoves.push({ at: started, took: performance.now() - started })
+  }
+}
+
+/** Each move of a drag, for the smoke check: when it came, and how long moving the window took. */
+const panelMoves: { at: number; took: number }[] = []
+
+/** Remember where the panel is now, on that screen, and that it was left there. */
+function savePanelPlace(bounds: Rect, display: Electron.Display): void {
+  const id = String(display.id)
+  panelPlaces = { ...panelPlaces, [id]: spotFor(display.workArea, bounds) }
+  panelDisplay = id
+  void appState.update({ panelPlaces, panelDisplay })
+  sendPlaced()
+}
+
+/**
+ * Double-click on the top bar, or Settings → Steward → Reset: the panel forgets where it was moved, on every screen. An
+ * open one glides home (at its edge, or under the notch), and the old way in and out is back.
+ */
+async function resetPanelPlace(): Promise<void> {
+  panelPlaces = {}
+  panelDisplay = undefined
+  await appState.update({ panelPlaces, panelDisplay })
+  sendPlaced()
+  if (win && !win.isDestroyed() && dock === 'expanded' && win.isVisible()) win.setBounds(boundsFor('expanded'), true)
+}
+
 /**
  * Only when needed: the tab slides in from the screen edge and back out. The page does the sliding, as a transform in the
  * compositor (styles.css), and the window stays at its place on the edge. Moving the window itself can't work: macOS puts a
@@ -290,6 +376,7 @@ function showTab(target: Electron.Rectangle, animateBounds = true): void {
   if (!win || win.isDestroyed()) return
   if (steppedAside) return hideTab()
   clearTimeout(slideTimer)
+  wayOutPlaying = false
   const wasShowing = win.isVisible()
   win.setBounds(target, wasShowing && animateBounds)
   if (!wasShowing) win.showInactive()
@@ -328,23 +415,31 @@ function showNudge(animate: boolean): void {
   showTab(boundsFor('nudge'), false)
 }
 
-/** How long the way back up into the notch may take before the window goes anyway (the page's exit is 0.2 s). */
-const INTO_NOTCH_MS = 450
+/** How long the way out may take before the window goes anyway (the page's exits are 0.2 s). */
+const WAY_OUT_MS = 450
 
 /**
- * Docked in the notch, the panel closed or the nudge went: its page plays it going back up into the notch (styles.css)
- * and says when it's done (intoNotchEnded); the window goes then, where it is. If the page never says, this does.
+ * The panel closed or the nudge went, and its page plays the way out where the window is (styles.css): up into the
+ * notch, or for a moved panel shrinking where it is. It says when it's done (intoNotchEnded), and the window moves on
+ * then. If the page never says, this does.
  */
-function intoNotch(): void {
+function wayOut(): void {
   clearTimeout(slideTimer)
-  slideTimer = setTimeout(intoNotchEnded, INTO_NOTCH_MS)
+  wayOutPlaying = true
+  slideTimer = setTimeout(intoNotchEnded, WAY_OUT_MS)
 }
 
-/** The way back into the notch is over: the window goes, unless the panel was opened (or a nudge came) meanwhile. */
+/**
+ * The way out is over, unless the panel was opened (or a nudge came) meanwhile: at the edge, with Steward out, the
+ * window jumps to the tab's place (no animated resize); otherwise it goes. Then the page draws what's next.
+ */
 function intoNotchEnded(): void {
   clearTimeout(slideTimer)
+  wayOutPlaying = false
   if (!win || win.isDestroyed() || (dock !== 'collapsed' && dock !== 'hidden')) return
-  hideTab()
+  if (dock === 'collapsed' && !inNotch() && out()) showTab(boundsFor('collapsed'), false)
+  else hideTab()
+  win.webContents.send('dock:left')
 }
 
 /**
@@ -354,6 +449,7 @@ function intoNotchEnded(): void {
 function hideTab(why?: string): void {
   if (!win || win.isDestroyed()) return
   clearTimeout(slideTimer)
+  wayOutPlaying = false
   if (why) lastTuck = { ms: Date.now() - tuckStarted, why }
   win.hide()
   revealTop = null
@@ -374,11 +470,12 @@ function placeNotch(): void {
 }
 
 /**
- * A display changed (the Dock or the menu bar moved, another resolution): the window goes where it belongs now. Not in
- * the notch at rest: the window is gone there, or on its way back up into the notch, and is never at the edge.
+ * A display changed (the Dock or the menu bar moved, another resolution): the window goes where it belongs now (a moved
+ * panel stays inside the new work area). Not in the notch at rest: the window is gone there, or on its way back up into
+ * the notch, and is never at the edge. Nor while a way out plays: the window stays put until it's over.
  */
 function placeAfterDisplayChange(): void {
-  if (!win || win.isDestroyed() || (inNotch() && (dock === 'collapsed' || dock === 'hidden'))) return
+  if (!win || win.isDestroyed() || wayOutPlaying || (inNotch() && (dock === 'collapsed' || dock === 'hidden'))) return
   win.setBounds(boundsFor(dock))
 }
 
@@ -429,6 +526,8 @@ function setDock(state: DockState): void {
   const wasHidden = dock === 'hidden'
   const wasOpen = isOpen(dock)
   const wasNudge = dock === 'nudge'
+  // A moved panel closes where it is: it shrinks and fades there, and then the tab or the notch is back.
+  const inPlace = wasOpen && !isOpen(state) && placed()
   dock = state
   // Leaving the nudge ends the first-launch peek, however it ended (clicked, closed, timed out, or the cursor left).
   if (state !== 'nudge') {
@@ -442,20 +541,26 @@ function setDock(state: DockState): void {
   if (!wasOpen && isOpen(state)) onPanelOpened()
   // The material first, so the panel's very first frame is drawn for it (frosted or solid).
   applyMaterial()
+  // Before the state, so the page picks the panel's way in or out by it.
+  sendPlaced()
   win.webContents.send('dock:state', state)
   updateMenuBar()
   placeNotch()
+  if (state !== 'expanded') panelDrag = null
   if (state === 'hidden') {
-    // Docked in the notch, an open panel or a nudge goes back up into it first, as when it's closed.
-    if ((wasOpen || wasNudge) && inNotch() && win.isVisible()) intoNotch()
+    // A moved panel leaves where it is; docked in the notch, an open panel or a nudge goes back up into it first, as
+    // when it's closed.
+    if (inPlace && win.isVisible()) wayOut()
+    else if ((wasOpen || wasNudge) && inNotch() && win.isVisible()) wayOut()
     else hideTab()
     return syncWatch()
   }
   if (state === 'collapsed' || state === 'nudge') {
-    if (state === 'collapsed' && inNotch()) {
+    if (state === 'collapsed' && inPlace && win.isVisible()) wayOut()
+    else if (state === 'collapsed' && inNotch()) {
       // In the notch there's no tab at the edge: the notch window is the character. An open panel or a nudge goes back
       // up into the notch (its page plays that) before the window goes, and the window stays where it is: never at the edge.
-      if ((wasOpen || wasNudge) && win.isVisible()) intoNotch()
+      if ((wasOpen || wasNudge) && win.isVisible()) wayOut()
       else hideTab()
     } else if (state === 'collapsed' && !out()) tuckTab()
     // Peeking never takes keyboard focus, so it can't interrupt typing. Out of hiding, it comes in from the edge.
@@ -464,9 +569,11 @@ function setDock(state: DockState): void {
   } else {
     // Hotkey or menu bar, with Steward out of sight: the panel is just there, and its own entrance plays.
     clearTimeout(slideTimer)
+    wayOutPlaying = false
     setSlide(false, false)
     // From a nudge in the notch, the panel comes down from the notch as it always does there, not grown out of the nudge.
-    win.setBounds(boundsFor(state), win.isVisible() && !wasHidden && !(wasNudge && inNotch()))
+    // A moved panel pops in at its spot: the window is just there.
+    win.setBounds(boundsFor(state), win.isVisible() && !wasHidden && !(wasNudge && inNotch()) && !placed())
     if (!win.isVisible()) win.show()
     win.focus()
     // Opening the panel shows what waited for it, and any batched alerts now rather than later.
@@ -782,6 +889,8 @@ function createWindow(): BrowserWindow {
   }
   w.once('ready-to-show', reveal)
   w.webContents.once('did-finish-load', reveal)
+  // The page starts out not knowing whether the panel was moved.
+  w.webContents.on('did-finish-load', () => sendPlaced(true))
 
   // Collapse when you click away, unless something still needs the panel open.
   w.on('blur', tuckIfAway)
@@ -820,7 +929,7 @@ function tuckIfAway(): void {
   setTimeout(() => {
     // Quitting closes the windows; by now they may be gone.
     if (!win || win.isDestroyed() || !isOpen(dock)) return
-    if (settings.keepPanelOpen() || modalOpen || draggingOut || agent.waitingForApproval) return
+    if (settings.keepPanelOpen() || modalOpen || draggingOut || panelDrag || agent.waitingForApproval) return
     if (win.isFocused() || (settingsWin && !settingsWin.isDestroyed() && settingsWin.isFocused())) return
     setDock('collapsed')
   }, 50)
@@ -1155,7 +1264,12 @@ function registerIpc(): void {
   ipcMain.on('dock:drag', (_e, phase: unknown, dy: unknown) => dragTab(phase, dy))
   ipcMain.on('presence:slideEnded', (_e, by: unknown) => slideEnded(by === 'clock' ? 'clock' : 'drawn'))
   ipcMain.handle('dock:overhang', () => edgeOverhang())
-  ipcMain.handle('dock:resetPlace', () => resetTabPlace())
+  ipcMain.handle('dock:resetPlace', async () => {
+    await resetTabPlace()
+    await resetPanelPlace()
+  })
+  ipcMain.on('dock:dragPanel', (_e, phase: unknown, x: unknown, y: unknown) => dragPanel(phase, x, y))
+  ipcMain.handle('dock:resetPanel', () => resetPanelPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
   ipcMain.handle('notch:state', () => notch.state())
   ipcMain.on('notch:click', () => setDock('expanded'))
@@ -2279,6 +2393,8 @@ app.whenReady().then(async () => {
   appState = new AppState(path.join(userData, 'state.json'))
   await appState.load()
   tabPlaces = appState.tabPlaces
+  panelPlaces = appState.panelPlaces
+  panelDisplay = appState.panelDisplay
   tray = new TrayStore(path.join(userData, 'tray'), (items) => win?.webContents.send('tray:changed', items))
   await tray.load()
   sessions = new SessionTracker({ projects: () => settings.projects() })
