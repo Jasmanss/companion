@@ -34,6 +34,11 @@ export const HookPayload = z.discriminatedUnion('hook_event_name', [
     last_assistant_message: text(4000).optional(),
     stop_hook_active: z.boolean().optional(),
   }),
+  // A turn starts. Its `prompt` (what the user typed) is not listed, so it is dropped here and never reaches the app.
+  z.object({
+    ...common,
+    hook_event_name: z.literal('UserPromptSubmit'),
+  }),
 ])
 export type HookPayload = z.infer<typeof HookPayload>
 
