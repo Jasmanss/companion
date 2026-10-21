@@ -131,8 +131,8 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
         <p>Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.</p>
       </li>
       <li>
-        <div class="row"><span class="name">OK the merges of #26 and #27</span><time datetime="2026-10-20">Oct 20</time></div>
-        <p>#26 is Visual Review Phase 1 (fixes in, smoke and CI pass). #27 is the movable panel Phase 1 (CI running). They conflict in renderer files, so whichever merges second brings main in. #25 (notch 3b) is already merged.</p>
+        <div class="row"><span class="name">OK the merges of #27, #28 and #29 once CI is green</span><time datetime="2026-10-20">Oct 20</time></div>
+        <p>#27 is the movable panel Phase 1 (main merged in, CI running). #28 is auto mode. #29 is hidden smoke, and its CI run is the first on a GitHub runner. #26 (Visual Review) is already merged.</p>
       </li>
       <li>
         <div class="row"><span class="name">Tell us your vision for the website</span><time datetime="2026-10-19">Oct 19</time></div>
@@ -153,33 +153,33 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="progress" class="card progress">
-    <h2><span class="dot"></span>In progress <span class="count">5</span></h2>
+    <h2><span class="dot"></span>In progress <span class="count">4</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Testing is paused</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Your instruction: no smoke runs or app launches by any chat until hidden smoke lands. <span class="tag">your rule</span></p>
+        <p>Your instruction: no smoke runs or app launches on your Mac by any chat until hidden smoke (#29) is merged. After that, chats merge main in and smoke runs hidden. <span class="tag">your rule</span></p>
       </li>
       <li>
         <div class="row"><span class="name">Movable panel, Phase 1: draft PR #27</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Built by Main building on claude/movable-panel-1: drag by the top bar, reopen in place, close in place, double-click or Settings to put it back. 319 tests pass, CI running.</p>
+        <p>Drag by the top bar, reopen in place, close in place, double-click or Settings to put it back. Main merged in, 319 tests passed, CI running.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Build: auto mode</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Running commands: Ask each time | Auto, for Steward's own chat. Auto skips the Run click except for risky commands (deletes, git push, deploys, installs, anything outside the project). Brief: docs/briefs/auto-mode.md.</p>
+        <div class="row"><span class="name">Auto mode: draft PR #28</span><time datetime="2026-10-21">Oct 21</time></div>
+        <p>Running commands: Ask each time | Auto. Auto skips the Run card only for known-safe commands; anything unknown or unreadable still asks. Default stays Ask each time. 423 tests pass. Brief: docs/briefs/auto-mode.md.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Build: hidden smoke</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>The smoke check runs off screen with no focus, a lock keeps it to one run at a time, and CI gets a pretend notch. Brief: docs/briefs/hidden-smoke.md.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Visual Review, Phase 1: built, draft PR #26</span><time datetime="2026-10-20">Oct 20</time></div>
-        <p>Built by Feature building: the address field, capture before and after, the change gate, and the card in the panel. Fixes are in (problems show in the panel and Settings, login redirects warn). Smoke and CI pass. You decided it stays Claude Code only.</p>
+        <div class="row"><span class="name">Hidden smoke: draft PR #29</span><time datetime="2026-10-21">Oct 21</time></div>
+        <p>Smoke runs with the windows at 1% opacity, click-through and never focused, one run at a time, with a pretend notch on CI. 4 of 5 hidden runs passed; the first GitHub runner run is this PR's CI. Brief: docs/briefs/hidden-smoke.md.</p>
       </li>
     </ul>
   </section>
   <section id="next" class="card next">
-    <h2><span class="dot"></span>Up next <span class="count">5</span></h2>
+    <h2><span class="dot"></span>Up next <span class="count">6</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Visual Review, Phase 2: the alert</span><time datetime="2026-10-21">Oct 21</time></div>
+        <p>Tell me: an alert when a Claude turn changed what the page looks like. Waits for your go in Feature building.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Movable panel, Phase 2: screens and edges</span><time datetime="2026-10-21">Oct 21</time></div>
         <p>A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Waits for you to try Phase 1, then your go in Main building.</p>
@@ -300,8 +300,12 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">21</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">22</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Visual Review, Phase 1</span><time datetime="2026-10-21">Oct 21</time></div>
+        <p>Merged into main (PR #26, 00e2cb1): the address field, capture before and after, the change gate and the card in the panel. Claude Code only. Phase 2 (the alert) waits for your go in Feature building.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Notch dock, Phase 3b</span><time datetime="2026-10-21">Oct 21</time></div>
         <p>Merged into main (PR #25, 73bd0fb): alerts come out under the notch, below the menu bar.</p>

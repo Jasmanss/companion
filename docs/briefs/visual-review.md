@@ -141,3 +141,7 @@ Status stays `ready`: Phases 2 to 5 are not built. Built by Feature building.
 - **Fixes in** (`9b48db4` on PR #26): problems now show in the panel and in Settings, a login redirect gets a warning, and the hook notice sits under the App address. Smoke and CI pass.
 - **Decided by the user:** Visual Review stays **Claude Code only**. There are no reviews for Steward's own chat.
 - **Still to do:** the user tries it by hand, then OKs the merge of #26. #27 (movable panel) conflicts with it in renderer files; whichever merges second brings main in.
+
+### Phase 1 merged (recorded 2026-10-21, from the front door)
+- PR #26 was merged into main by the user: merge commit `00e2cb1`. It includes the fixes above.
+- Status stays `ready`: Phases 2 to 5 are not built. **Next:** Phase 2 (Tell me, the alert), after the user's go typed into Feature building.

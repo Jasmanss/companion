@@ -18,6 +18,18 @@ This brief was written after the build started, from the front door's message. T
 - **How to test:** the usual three checks, then a smoke run while the user works in another app (focus stays put), and two runs at once (the second waits or refuses). Until this lands, nobody runs one.
 
 ## Result (Build: hidden smoke)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Built (recorded 2026-10-21, from the front door)
+Built by Build: hidden smoke.
+- **Branch / PR:** `claude/hidden-smoke`, commits `7562d73`, `e95b4ea`, `43d5684`, `f36be9d`, `9c3118a`, merge `9fa5f56`. Draft PR #29.
+- **How it hides:** the windows are at 1% opacity, click-through and never focused, with a focus watcher that complains if anything takes focus. `--visible` shows them again to watch.
+- **Also added:**
+  - `STEWARD_SMOKE_NOTCH=1` on CI, a pretend notch for the runner.
+  - A one-run lock that waits up to 6 minutes for another run.
+  - A stay-awake hold during runs.
+- **Deliberate breaks:** two were tried, and hidden mode caught both.
+- **Not checked:**
+  - 4 of 5 hidden runs passed. One notch-nudge check missed and has no explanation yet.
+  - It has never run on a GitHub runner; the CI run on this PR is the first.
+  - `release.yml` does not set the notch flag.
+- **Waiting on the user:** OK the merge once CI is green. Until it merges, testing on the user's Mac stays paused. After that, chats merge main in and smoke runs hidden.

@@ -14,6 +14,12 @@ This brief was written after the build started, from the front door's message. T
 - **How to test:** by the build chat's checks. Nothing may run unasked in "Ask each time". In Auto, a safe command runs and each risky kind above still asks. Testing is paused (see the status page), so no app launches until hidden smoke lands.
 
 ## Result (Build: auto mode)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Built (recorded 2026-10-21, from the front door)
+Built by Build: auto mode.
+- **Branch / PR:** `claude/auto-mode`, with main merged in (`fb10a04`). Draft PR #28.
+- **How it decides:** `isRisky` treats anything it can't read, and any command it doesn't know, as risky. So Auto only skips the Run card for commands it knows are safe. Risky ones still ask.
+- **Default:** the setting is "Ask each time", as before.
+- **Checks:** lint, typecheck and 423 tests pass. Its own smoke run passed before testing was paused.
+- **Not checked:** by hand in the app (testing is paused until hidden smoke lands).
+- **Waiting on the user:** OK the merge once CI is green. Try it by hand after hidden smoke is in.
