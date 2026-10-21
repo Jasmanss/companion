@@ -15,6 +15,7 @@ import {
   nextLookMs,
   peeksOut,
   presenceNote,
+  firstPeekNote,
   presenceNoteParts,
   pushAlongEdge,
   screenBeside,
@@ -333,5 +334,12 @@ describe('the first-launch peek', () => {
   it('says the note in two parts: what is happening, and how to bring Steward out', () => {
     expect(presenceNoteParts({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Hides until you need it.', how: 'Push anywhere on the right edge or press ⌥\u00a0Space.' })
     expect(presenceNoteParts({ where: 'notch', hotkey: '', besideScreen: false }).how).toBe('Rest the cursor on the notch or use the menu bar icon.')
+  })
+
+  it('under the notch, the first-launch peek leads with how to bring Steward out, short enough for its one line', () => {
+    expect(firstPeekNote({ where: 'notch', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Rest the cursor on the notch', detail: 'or press ⌥\u00a0Space.' })
+    expect(firstPeekNote({ where: 'notch', hotkey: '', besideScreen: false }).detail).toBe('or use the menu bar icon.')
+    // At the edge it's the whole note, as it was.
+    expect(firstPeekNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Hides until you need it.', detail: 'Push anywhere on the right edge or press ⌥\u00a0Space.' })
   })
 })

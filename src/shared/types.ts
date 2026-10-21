@@ -53,6 +53,8 @@ export interface NotchState {
   awake: boolean
   /** The cursor is on the black (Always visible): it grows a little. */
   hover?: boolean
+  /** An alert is out under the notch, joined to the chin (Wings grows its chin for it). */
+  nudge?: boolean
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */

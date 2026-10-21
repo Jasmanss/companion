@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findNotch, parseProbe, probeScreens, type ScreenProbe } from '../src/main/notch'
-import { HOVER_IN_MS, HOVER_OUT_MS, inBoxes, noHover, notchBoxes, notchShape, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, stepHover, underNotch } from '../src/shared/notch'
+import { HOVER_IN_MS, HOVER_OUT_MS, inBoxes, noHover, notchBoxes, notchShape, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_NUDGE_BELOW, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, stepHover, underNotch } from '../src/shared/notch'
 
 /** What macOS reports for the 14-inch MacBook Pro at its default 1512 x 982, measured on the user's Mac (Mac16,1). */
 const MBP14: ScreenProbe = { id: 1, frame: [0, 0, 1512, 982], safeTop: 32, left: [0, 950, 663.5, 32], right: [848.5, 950, 663.5, 32] }
@@ -160,5 +160,41 @@ describe('the panel from the notch', () => {
     expect(at.y).toBe(213)
     expect(at.x).toBeGreaterThanOrEqual(-1512)
     expect(at.x + at.width / 2).toBeCloseTo(-848.5 + 92.5, 0)
+  })
+})
+
+describe('a nudge under the notch', () => {
+  const NOTCH = { displayId: 1, x: 663.5, y: 0, width: 185, height: 32 }
+  const AREA = { x: 0, y: 33, width: 1512, height: 949 }
+  /** Where its one line of text starts: 8 points up from its bottom, 16 tall (styles.css, .nn-line). */
+  const lineTop = (at: { y: number; height: number }) => at.y + at.height - 24
+
+  it('is centered under the notch, starts at the menu bar line, and reaches 30 points below the chin', () => {
+    const at = nudgeUnderNotch(NOTCH, AREA, 340)
+    expect(at).toEqual({ x: 756 - 170, y: 33, width: 340, height: 32 + NOTCH_LIP + NOTCH_NUDGE_BELOW - 33 })
+    expect(at.x + at.width / 2).toBeCloseTo(663.5 + 185 / 2, 0)
+  })
+
+  it('never covers the menu bar, and its text is below the chin, even the taller talking one', () => {
+    for (const menuBar of [33, 37, 40]) {
+      const at = nudgeUnderNotch(NOTCH, { ...AREA, y: menuBar }, 340)
+      expect(at.y, `menu bar ${menuBar}`).toBe(menuBar)
+      expect(lineTop(at), `menu bar ${menuBar}`).toBeGreaterThanOrEqual(32 + NOTCH_LIP + 5)
+    }
+  })
+
+  it("goes to the notch's own screen when that isn't the main one", () => {
+    // The MacBook to the left of a main external display, a little lower: its top at 180, its menu bar line at 213.
+    const at = nudgeUnderNotch({ ...NOTCH, x: -848.5, y: 180 }, { x: -1512, y: 213, width: 1512, height: 949 }, 340)
+    expect(at.y).toBe(213)
+    expect(at.height).toBe(32 + NOTCH_LIP + NOTCH_NUDGE_BELOW - 33)
+    expect(at.x + at.width / 2).toBeCloseTo(-848.5 + 92.5, 0)
+  })
+
+  it('joins the chin: Wings grows its chin for it, and asleep is still just the notch', () => {
+    const notch = { width: 185, height: 32 }
+    expect(notchShape('wings', 'needs-you', notch, true, false, true)).toEqual({ lip: 32 + NOTCH_LIP, wings: 185 + 2 * NOTCH_WING })
+    expect(notchShape('chin', 'needs-you', notch, true, false, true)).toEqual(notchShape('chin', 'needs-you', notch))
+    for (const style of ['chin', 'wings'] as const) expect(notchShape(style, 'idle', notch, false, false, true)).toEqual({ lip: 32, wings: 0 })
   })
 })

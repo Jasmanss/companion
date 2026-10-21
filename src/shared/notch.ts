@@ -4,8 +4,9 @@
 // The notch is pure black, so the character's body becomes a black shape with the real notch, and its color becomes
 // the light of its eyes. Chin: the notch grows a lip below it, as wide as the notch, with the eyes in it. Wings: one
 // eye on each side of the notch, in the menu bar; the thinking dots and the talking mouth need the middle, so for
-// those it grows the chin too. Asleep, it's only the notch's own black. With the cursor on it, it grows a little.
-import type { Mood, NotchLayout, NotchStyle } from './types'
+// those it grows the chin too. Asleep, it's only the notch's own black. With the cursor on it, it grows a little. An
+// alert comes out under it, below the menu bar, joined to the chin (Wings grows its chin for that too).
+import type { Mood, NotchGeometry, NotchLayout, NotchStyle } from './types'
 
 /** How tall the eyes are, in points; the lip and the wings are sized from it. */
 export const NOTCH_EYE = 14
@@ -30,14 +31,17 @@ export interface NotchShape {
   lip: number
   wings: number
 }
-/** hover: the cursor is on it, so it grows a little (the chin taller, or the wings wider). Only while awake. */
-export function notchShape(style: NotchStyle, mood: Mood, notch: { width: number; height: number }, awake = true, hover = false): NotchShape {
+/**
+ * hover: the cursor is on it, so it grows a little (the chin taller, or the wings wider). Only while awake. nudge: an
+ * alert is out under it, joined to the chin, so Wings shows its chin too.
+ */
+export function notchShape(style: NotchStyle, mood: Mood, notch: { width: number; height: number }, awake = true, hover = false, nudge = false): NotchShape {
   // Asleep (Only when needed, at rest): exactly the notch, no chin and no wings, so nothing under it is covered.
   if (!awake) return { lip: notch.height, wings: 0 }
   const middle = needsMiddle(mood)
   // Talking's mouth sits under the eyes, so the lip grows a little to make room.
   const chin = notch.height + NOTCH_LIP + (mood === 'talking' ? 5 : 0)
-  if (style === 'wings') return { lip: middle ? chin : notch.height, wings: notch.width + 2 * NOTCH_WING + (hover ? NOTCH_HOVER_WINGS : 0) }
+  if (style === 'wings') return { lip: middle || nudge ? chin : notch.height, wings: notch.width + 2 * NOTCH_WING + (hover ? NOTCH_HOVER_WINGS : 0) }
   return { lip: chin + (hover ? NOTCH_HOVER_LIP : 0), wings: 0 }
 }
 
@@ -60,7 +64,7 @@ export function stepHover(s: HoverState, over: boolean, now: number): HoverState
 }
 
 /**
- * Where something that comes out of the notch goes (the panel now; a nudge later): centered under the notch on the
+ * Where something that comes out of the notch goes (the panel, a nudge): centered under the notch on the
  * notch's own screen, its top at the top of that screen's work area (just under the menu bar), kept inside the work
  * area with margin points to spare at the sides.
  */
@@ -70,6 +74,20 @@ export function underNotch(notch: { x: number; width: number }, area: Box, size:
   const centered = notch.x + notch.width / 2 - width / 2
   const x = Math.round(Math.min(area.x + area.width - margin - width, Math.max(area.x + margin, centered)))
   return { x, y: area.y, width, height }
+}
+
+/** A nudge under the notch: its black reaches this far below the chin, room for one line of text. */
+export const NOTCH_NUDGE_BELOW = 30
+/** Where its black starts: this far under the menu bar line, joined to the chin by concave corners this size. */
+export const NOTCH_NUDGE_FILLET = 8
+
+/**
+ * Where a nudge goes in the notch: centered under it, its top at the menu bar line (it never covers the menu bar), and
+ * tall enough to reach NOTCH_NUDGE_BELOW under the chin, where its one line of text sits.
+ */
+export function nudgeUnderNotch(notch: NotchGeometry, area: Box, width: number): Box {
+  const bottom = notch.y + notch.height + NOTCH_LIP + NOTCH_NUDGE_BELOW
+  return underNotch(notch, area, { width, height: Math.max(NOTCH_NUDGE_FILLET + NOTCH_NUDGE_BELOW, bottom - area.y) })
 }
 
 export interface Box {
