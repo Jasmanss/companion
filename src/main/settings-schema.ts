@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
 import { parseAppAddress } from '../shared/review'
 import { cleanFrost, cleanName, DEFAULT_STEWARD, isBundleId, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
-import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StepAsideApp, StewardPrefs } from '../shared/types'
+import type { CommandMode, NotificationPrefs, Project, SettingsPatch, ShortcutId, StepAsideApp, StewardPrefs } from '../shared/types'
 import { MAX_APPS, withApp } from './step-aside'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
@@ -26,6 +26,8 @@ export interface StoredSettings {
   /** Encrypted with the macOS keychain via safeStorage, base64. */
   secrets: Partial<Record<SecretKind, string>>
   keepPanelOpen: boolean
+  /** Whether the chat asks before each command, or runs the safe ones itself. Ask each time unless it's been switched. */
+  commandMode: CommandMode
   notifications: NotificationPrefs
   /** Only the ones you changed: an accelerator, or '' for off. The rest use Steward's defaults. */
   shortcuts: Partial<Record<ShortcutId, string>>
@@ -39,6 +41,7 @@ export const defaultSettings = (): StoredSettings => ({
   allowlist: [...DEFAULT_ALLOWLIST],
   secrets: {},
   keepPanelOpen: false,
+  commandMode: 'ask',
   notifications: { ...DEFAULT_NOTIFICATIONS },
   shortcuts: {},
   steward: { ...DEFAULT_STEWARD },
@@ -152,6 +155,8 @@ export function migrateSettings(raw: unknown): StoredSettings {
     allowlist: Array.isArray(r.allowlist) ? r.allowlist.filter((c): c is string => typeof c === 'string') : d.allowlist,
     secrets,
     keepPanelOpen: typeof r.keepPanelOpen === 'boolean' ? r.keepPanelOpen : d.keepPanelOpen,
+    // Anything but a plain "auto" asks: a file with a value Steward doesn't know never turns Auto on.
+    commandMode: r.commandMode === 'auto' ? 'auto' : 'ask',
     notifications,
     shortcuts,
     steward: migrateSteward(r.steward),
@@ -160,6 +165,7 @@ export function migrateSettings(raw: unknown): StoredSettings {
 
 const Patch = z.strictObject({
   keepPanelOpen: z.boolean().optional(),
+  commandMode: z.enum(['ask', 'auto']).optional(),
   openAtLogin: z.boolean().optional(),
   notifications: z
     .strictObject({
