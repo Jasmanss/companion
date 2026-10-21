@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs'
+import { spotsFrom, type PanelSpot } from '../shared/panel-place'
 
 interface State {
   /** When the panel was last open (closed, really): the start of "away". */
@@ -11,6 +12,10 @@ interface State {
   firstPeekShown?: boolean
   /** Where the tab sits on each display's edge, by display id: its center as a fraction of the work area's height. */
   tabPlaces?: Record<string, number>
+  /** Where the panel was dragged to on each display, by display id (see shared/panel-place). None: it was never moved. */
+  panelPlaces?: Record<string, PanelSpot>
+  /** The display the panel was last left on. */
+  panelDisplay?: string
 }
 
 /** Small bits of state that should survive restarts. */
@@ -49,6 +54,14 @@ export class AppState {
   get tabPlaces(): Record<string, number> {
     const places = this.data.tabPlaces
     return places && typeof places === 'object' ? Object.fromEntries(Object.entries(places).filter(([, v]) => typeof v === 'number')) : {}
+  }
+
+  get panelPlaces(): Record<string, PanelSpot> {
+    return spotsFrom(this.data.panelPlaces)
+  }
+
+  get panelDisplay(): string | undefined {
+    return typeof this.data.panelDisplay === 'string' ? this.data.panelDisplay : undefined
   }
 
   async update(patch: Partial<State>): Promise<void> {

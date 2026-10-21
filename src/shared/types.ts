@@ -393,13 +393,21 @@ export interface StewardAPI {
     onState(cb: (state: DockState) => void): Unsubscribe
     /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
     drag(phase: 'start' | 'move' | 'end', dy?: number): void
-    /** Back to the middle of the edge (Settings → Steward). */
+    /** The tab back to the middle of the edge, and the panel back to where it opens (Settings → Steward). */
     resetPlace(): Promise<void>
     /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
     overhang(): Promise<number>
     onOverhang(cb: (points: number) => void): Unsubscribe
     /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
     intoNotchEnded(): void
+    /** The panel being dragged by its top bar: began, or moved, with the pointer here (screen points), or ended. */
+    dragPanel(phase: 'start' | 'move' | 'end', x?: number, y?: number): void
+    /** The panel back where it opens: at its edge, or under the notch (double-click on the top bar). */
+    resetPanel(): Promise<void>
+    /** Whether the panel has been moved, so it opens and closes where it is. */
+    onPlaced(cb: (placed: boolean) => void): () => void
+    /** The window has gone, or gone to the tab, after the closed panel's way out: the page can draw what's next. */
+    onLeft(cb: () => void): () => void
   }
   tray: {
     list(): Promise<TrayItem[]>
