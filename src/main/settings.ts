@@ -4,7 +4,7 @@ import path from 'node:path'
 import { safeStorage } from 'electron'
 import { resolveShortcuts, type GlobalShortcutId } from '../shared/shortcuts'
 import { cleanName } from '../shared/steward'
-import type { NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../shared/types'
+import type { CommandMode, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../shared/types'
 import { decryptLegacySecret } from './migrate'
 import { defaultSettings, migrateSettings, type SecretKind, type StoredSettings } from './settings-schema'
 
@@ -42,6 +42,7 @@ export class SettingsStore {
       hasUnsplashKey: Boolean(this.unsplashKey()),
       hasVercelToken: Boolean(this.vercelToken()),
       keepPanelOpen: this.data.keepPanelOpen,
+      commandMode: this.data.commandMode,
       notifications: this.data.notifications,
       shortcuts: resolveShortcuts(this.data.shortcuts, registered),
       steward: this.data.steward,
@@ -84,6 +85,10 @@ export class SettingsStore {
     return this.data.keepPanelOpen
   }
 
+  commandMode(): CommandMode {
+    return this.data.commandMode
+  }
+
   notifications(): NotificationPrefs {
     return this.data.notifications
   }
@@ -107,6 +112,7 @@ export class SettingsStore {
   /** The switches in Settings. Open at login lives in macOS, so the caller handles that one. */
   async update(patch: Omit<SettingsPatch, 'openAtLogin'>): Promise<void> {
     if (patch.keepPanelOpen !== undefined) this.data.keepPanelOpen = patch.keepPanelOpen
+    if (patch.commandMode !== undefined) this.data.commandMode = patch.commandMode
     if (patch.notifications) this.data.notifications = { ...this.data.notifications, ...patch.notifications }
     if (patch.steward) {
       const { name, ...rest } = patch.steward

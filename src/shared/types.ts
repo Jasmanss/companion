@@ -149,10 +149,14 @@ export interface ShortcutView {
 /** The sections of the Settings window, in sidebar order. */
 export type SettingsSection = 'general' | 'steward' | 'projects' | 'shortcuts' | 'connections' | 'notifications'
 
+/** How Steward's chat runs commands: it asks each time, or runs the safe ones and asks only for risky ones. */
+export type CommandMode = 'ask' | 'auto'
+
 /** What Settings can change in one go. Keys, projects and the allowlist have their own calls. */
 export interface SettingsPatch {
   /** The panel stays open when you click elsewhere (the pin in its header). */
   keepPanelOpen?: boolean
+  commandMode?: CommandMode
   notifications?: Partial<NotificationPrefs>
   openAtLogin?: boolean
   steward?: Partial<StewardPrefs>
@@ -167,6 +171,7 @@ export interface SettingsView {
   hasUnsplashKey: boolean
   hasVercelToken: boolean
   keepPanelOpen: boolean
+  commandMode: CommandMode
   notifications: NotificationPrefs
   /** Lives in macOS, not in the settings file. Unavailable while developing (it would register Electron itself). */
   openAtLogin: { available: boolean; enabled: boolean; needsApproval: boolean }

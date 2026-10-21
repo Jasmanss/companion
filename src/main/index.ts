@@ -1281,7 +1281,7 @@ function registerIpc(): void {
     if (openAtLogin !== undefined && loginItem().available) app.setLoginItemSettings({ openAtLogin })
     const before = settings.steward()
     // Saving broadcasts; open at login isn't saved here, so it's broadcast on its own.
-    if (patch.keepPanelOpen !== undefined || patch.notifications || patch.steward) await settings.update(patch)
+    if (patch.keepPanelOpen !== undefined || patch.commandMode !== undefined || patch.notifications || patch.steward) await settings.update(patch)
     else broadcastSettings()
     // The other screen edge, or another size: the window moves there now.
     const after = settings.steward()
@@ -2291,6 +2291,7 @@ app.whenReady().then(async () => {
     currentProject: () => settings.currentProject(),
     setCurrentProject: (p) => switchProject(p),
     allowlist: () => settings.allowlist(),
+    commandMode: () => settings.commandMode(),
     tray,
     capturePage,
     deployLogs,

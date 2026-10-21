@@ -166,7 +166,7 @@ class Splitter {
       const c = t.charAt(i)
       const n = t.charAt(i + 1)
       if (c === '"') return i
-      if (c === '`' || (c === '$' && /[A-Za-z0-9_{(\[?!@*#$-]/.test(n))) unparseable()
+      if (c === '`' || (c === '$' && /[A-Za-z0-9_{([?!@*#$-]/.test(n))) unparseable()
       if (c === '\\' && n !== '' && '$`"\\\n'.includes(n)) {
         i++
         if (n !== '\n') this.add(n, true)

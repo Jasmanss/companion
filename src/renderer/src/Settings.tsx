@@ -520,6 +520,12 @@ export function ProjectsSection(props: SectionProps) {
         </Group>
       )}
 
+      <Group>
+        <Row label="Running commands" note="Auto runs commands without asking, except risky ones.">
+          <Segmented label="Running commands" value={settings.commandMode} options={[['ask', 'Ask each time'], ['auto', 'Auto']]} onChange={(commandMode) => run(api().settings.update({ commandMode }))} />
+        </Row>
+      </Group>
+
       <Group title="Commands that skip approval" note="Exact commands only, one per line. Everything else asks first, and deploys, rollbacks and git push always do.">
         <div className="set-field">
           <textarea rows={6} value={allowlist} spellCheck={false} onChange={(e) => setAllowlist(e.target.value)} aria-label="Commands that skip approval" />
