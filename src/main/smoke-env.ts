@@ -1,7 +1,7 @@
 // How the smoke check stays off the user's screen, and the notch it pretends to have on a Mac without one. Only the
 // smoke check (STEWARD_SMOKE_OUT set) uses any of this; the app itself never does. The decisions are pure and tested;
 // keepOffTheUsersScreen takes Electron's app and BrowserWindow as arguments so it can be tested with stand-ins.
-import type { App, BrowserWindow, Display, PowerSaveBlocker } from 'electron'
+import type { App, BrowserWindow, Display, PowerSaveBlocker, Screen } from 'electron'
 import type { NotchGeometry } from '../shared/types'
 
 type Env = Record<string, string | undefined>
@@ -35,6 +35,27 @@ export function withNotchedMenuBar(env: Env, display: Display): Display {
   const { x, y, width, height } = display.workArea
   if (y >= top) return display
   return { ...display, workArea: { x, y: top, width, height: y + height - top } }
+}
+
+/**
+ * The pretend notch's menu bar for everything that asks the screen module for a display: the app and the checks both
+ * see the main display with the notched Mac's menu bar, so a panel placed from one display's work area and put back
+ * from another's can't differ (they did, by the 2 points between a runner's 31 pt menu bar and the pretend 33). Only the
+ * display with the pretend notch, the main one, changes, and only its work area. A no-op outside a pretend-notch run.
+ */
+export function pretendNotchScreen(env: Env, screen: Screen): void {
+  if (!smokeRuns(env) || !on(env.STEWARD_SMOKE_NOTCH)) return
+  const real = {
+    all: screen.getAllDisplays.bind(screen),
+    primary: screen.getPrimaryDisplay.bind(screen),
+    nearest: screen.getDisplayNearestPoint.bind(screen),
+    matching: screen.getDisplayMatching.bind(screen),
+  }
+  const notched = (d: Display): Display => (d.id === real.primary().id ? withNotchedMenuBar(env, d) : d)
+  screen.getAllDisplays = () => real.all().map(notched)
+  screen.getPrimaryDisplay = () => notched(real.primary())
+  screen.getDisplayNearestPoint = (point) => notched(real.nearest(point))
+  screen.getDisplayMatching = (rect) => notched(real.matching(rect))
 }
 
 /**

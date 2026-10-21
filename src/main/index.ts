@@ -65,7 +65,7 @@ import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample } from './smoke-motion'
-import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, smokeHidden, withNotchedMenuBar, type Unseen } from './smoke-env'
+import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, smokeHidden, type Unseen } from './smoke-env'
 import { deadPort, startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
@@ -142,8 +142,7 @@ let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
 /** The screen with the notch: the built-in one, which isn't always the main screen (an external one can be). */
-const notchDisplay = (): Electron.Display =>
-  withNotchedMenuBar(process.env, screen.getAllDisplays().find((d) => d.id === notchGeo?.displayId) ?? screen.getPrimaryDisplay())
+const notchDisplay = (): Electron.Display => screen.getAllDisplays().find((d) => d.id === notchGeo?.displayId) ?? screen.getPrimaryDisplay()
 
 /** Presence is "Only when needed": Steward is out of sight until a push, an alert, work or the hotkey brings it out. */
 const quiet = (): boolean => settings?.steward().presence === 'quiet'
@@ -2819,7 +2818,10 @@ function demoImage(): Buffer {
 
 app.whenReady().then(async () => {
   // The Mac stays awake for the run (pmset shows the hold once the app is ready).
-  if (SMOKE_OUT) keepMacAwake(powerSaveBlocker)
+  if (SMOKE_OUT) {
+    keepMacAwake(powerSaveBlocker)
+    pretendNotchScreen(process.env, screen)
+  }
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
   // The smoke check starts as a fresh install every time, which is quiet: its throwaway data folder is emptied first.

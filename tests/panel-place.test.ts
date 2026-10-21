@@ -20,6 +20,17 @@ describe('where a moved panel goes', () => {
     }
   })
 
+  it('lands 2 points off when it is saved against one work area and opened against another that starts 2 points higher (the CI notch case)', () => {
+    // The CI runner: the notch window's area (33 pt menu bar) saved the spot, a screen lookup with the runner's 31 pt put it back.
+    const pretend = { x: 0, y: 33, width: 1280, height: 672 }
+    const real = { x: 0, y: 31, width: 1280, height: 674 }
+    const size = (a: { height: number }) => ({ width: 400, height: Math.min(760, a.height - 48) })
+    const dragged = { x: 12, y: 81, ...size(pretend) }
+    const spot = spotFor(pretend, dragged)
+    expect(panelRect(pretend, size(pretend), spot)).toEqual(dragged)
+    expect(panelRect(real, size(real), spot)).toEqual({ x: 12, y: 79, width: 400, height: 626 })
+  })
+
   it('puts 0 and 1 on the edges of the work area', () => {
     expect(panelRect(AREA, SIZE, { x: 0, y: 0 })).toEqual({ x: 0, y: 33, ...SIZE })
     expect(panelRect(AREA, SIZE, { x: 1, y: 1 })).toEqual({ x: 1512 - 400, y: 33 + 867 - 760, ...SIZE })

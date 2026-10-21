@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { App, BrowserWindow, Display } from 'electron'
-import { HIDDEN_OPACITY, keepMacAwake, keepOffTheUsersScreen, pretendNotch, PRETEND_MENU_BAR, smokeHidden, withNotchedMenuBar } from '../src/main/smoke-env'
+import type { App, BrowserWindow, Display, Screen } from 'electron'
+import { HIDDEN_OPACITY, keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, PRETEND_MENU_BAR, smokeHidden, withNotchedMenuBar } from '../src/main/smoke-env'
 
 const SMOKE = { STEWARD_SMOKE_OUT: 'out/smoke.png' }
 /** A CI runner's screen: 1920 x 1080, menu bar 25 pt, Dock at the bottom. */
@@ -111,5 +111,46 @@ describe('keeping the Mac awake for the run', () => {
     const asked: string[] = []
     keepMacAwake({ start: (type) => (asked.push(type), 1) })
     expect(asked).toEqual(['prevent-display-sleep'])
+  })
+})
+
+describe('one pretend screen for the app and the checks', () => {
+  /** A runner with its menu bar at 31 pt (the CI run's work area began at y 31) and a second screen beside it. */
+  const runner = { id: 7, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 31, width: 1920, height: 1000 } } as Display
+  const beside = { id: 8, bounds: { x: 1920, y: 0, width: 1280, height: 800 }, workArea: { x: 1920, y: 25, width: 1280, height: 775 } } as Display
+  const fakeScreen = () =>
+    ({
+      getAllDisplays: () => [runner, beside],
+      getPrimaryDisplay: () => runner,
+      getDisplayNearestPoint: (p: { x: number }) => (p.x >= 1920 ? beside : runner),
+      getDisplayMatching: (r: { x: number }) => (r.x >= 1920 ? beside : runner),
+    }) as unknown as Screen
+  const NOTCHED = { ...SMOKE, STEWARD_SMOKE_NOTCH: '1' }
+
+  it('shows the main display with the notched Mac menu bar however it is asked for, bottom edge unchanged', () => {
+    const screen = fakeScreen()
+    pretendNotchScreen(NOTCHED, screen)
+    const want = { x: 0, y: PRETEND_MENU_BAR, width: 1920, height: 1031 - PRETEND_MENU_BAR }
+    expect(screen.getPrimaryDisplay().workArea).toEqual(want)
+    expect(screen.getAllDisplays()[0].workArea).toEqual(want)
+    expect(screen.getDisplayNearestPoint({ x: 100, y: 100 }).workArea).toEqual(want)
+    expect(screen.getDisplayMatching({ x: 100, y: 100, width: 400, height: 600 }).workArea).toEqual(want)
+  })
+
+  it('leaves the other screens alone', () => {
+    const screen = fakeScreen()
+    pretendNotchScreen(NOTCHED, screen)
+    expect(screen.getAllDisplays()[1]).toBe(beside)
+    expect(screen.getDisplayNearestPoint({ x: 2000, y: 100 })).toBe(beside)
+    expect(screen.getDisplayMatching({ x: 2000, y: 100, width: 400, height: 600 })).toBe(beside)
+  })
+
+  it('does nothing without a pretend notch, or outside a smoke run', () => {
+    for (const env of [SMOKE, { STEWARD_SMOKE_NOTCH: '1' }]) {
+      const screen = fakeScreen()
+      pretendNotchScreen(env, screen)
+      expect(screen.getPrimaryDisplay()).toBe(runner)
+      expect(screen.getAllDisplays()[0]).toBe(runner)
+    }
   })
 })
