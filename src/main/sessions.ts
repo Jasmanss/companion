@@ -92,6 +92,9 @@ export class SessionTracker {
         const level = started !== null && now - started < NOTEWORTHY_TURN_MS ? 'quiet' : 'normal'
         return { key: `finished:${event.session_id}:${event.prompt_id ?? now}`, level, title: `${name} finished`, detail, mood: 'done' }
       }
+      // A turn starting is Visual Review's business (review.ts), not the session strip's.
+      case 'UserPromptSubmit':
+        return null
     }
   }
 
