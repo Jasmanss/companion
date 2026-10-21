@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
+import { parseAppAddress } from '../shared/review'
 import { cleanFrost, cleanName, DEFAULT_STEWARD, isBundleId, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
 import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StepAsideApp, StewardPrefs } from '../shared/types'
 import { MAX_APPS, withApp } from './step-aside'
@@ -44,6 +45,12 @@ export const defaultSettings = (): StoredSettings => ({
 })
 
 const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 'string' && typeof (p as Project)?.path === 'string'
+
+/** A project from a file: its name and path, and Visual Review's address only if it's still one on this Mac (a file can be edited by hand). */
+function cleanProject({ name, path, url }: Project): Project {
+  const address = typeof url === 'string' ? parseAppAddress(url) : null
+  return address?.ok ? { name, path, url: address.url } : { name, path }
+}
 
 /** The choices each of the character's options has (the name is free text, the frost a number). */
 const STEWARD_CHOICES = {
@@ -140,7 +147,7 @@ export function migrateSettings(raw: unknown): StoredSettings {
     }
   }
   return {
-    projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(({ name, path }) => ({ name, path })) : d.projects,
+    projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(cleanProject) : d.projects,
     currentProject: typeof r.currentProject === 'string' ? r.currentProject : null,
     allowlist: Array.isArray(r.allowlist) ? r.allowlist.filter((c): c is string => typeof c === 'string') : d.allowlist,
     secrets,

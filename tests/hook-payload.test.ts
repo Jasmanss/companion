@@ -34,6 +34,29 @@ describe('parseHookPayload', () => {
     expect(parseHookPayload(JSON.stringify({ hook_event_name: 'Stop', session_id: 's', cwd: '/a', stop_hook_active: false }))).toMatchObject({ hook_event_name: 'Stop' })
   })
 
+  it('reads UserPromptSubmit without keeping what the user typed', () => {
+    // The shape captured from Claude Code 2.1.295, in the desktop app's mode and in the terminal.
+    const prompt = {
+      session_id: 'e3e2c621',
+      transcript_path: '/Users/me/.claude/projects/-x/e3e2c621.jsonl',
+      cwd: '/Users/me/portlkit',
+      scratchpad_dir: '/tmp/claude/scratchpad',
+      prompt_id: '92e357b1',
+      permission_mode: 'default',
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'Make the button blue and here is my secret sk-abc123',
+    }
+    const parsed = parseHookPayload(JSON.stringify(prompt))
+    expect(parsed).toEqual({
+      session_id: 'e3e2c621',
+      transcript_path: '/Users/me/.claude/projects/-x/e3e2c621.jsonl',
+      cwd: '/Users/me/portlkit',
+      prompt_id: '92e357b1',
+      hook_event_name: 'UserPromptSubmit',
+    })
+    expect(JSON.stringify(parsed)).not.toContain('secret')
+  })
+
   it('cuts very long text instead of rejecting the event', () => {
     const parsed = parseHookPayload(JSON.stringify({ hook_event_name: 'Stop', session_id: 's', cwd: '/a', last_assistant_message: 'x'.repeat(10_000) }))
     expect(parsed?.hook_event_name === 'Stop' && parsed.last_assistant_message?.length).toBe(4001)
