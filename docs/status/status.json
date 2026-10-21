@@ -26,6 +26,7 @@
       "id": "next",
       "title": "Up next",
       "items": [
+        { "name": "Movable panel", "line": "Drag the panel by its top bar and it opens where you left it. Double-click the bar to put it back. Design page: design/movable-panel.html, brief: docs/briefs/movable-panel.md. Phase 1 is move, remember, put back; Phase 2 is second screens and edges. Waits for your go in Main building.", "date": "2026-10-21" },
         { "name": "Notch 3e: the Wings hand-off", "line": "When an alert comes in on the Wings look, the wing eyes fade out and the chin drops with its eyes growing in, about 0.5 s. Chin stays the resting look (the notch has no pixels, so the Inside look was dropped). Waits for 3b to merge and for your go in Main building.", "date": "2026-10-20" },
         { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
