@@ -18,12 +18,20 @@ export function smokePage(version: 'a' | 'b'): string {
 </style><header>Acme</header><div class="spin"></div><main><h1>${a ? 'Build faster' : 'Build faster, ship calmer'}</h1><p class="fade">A small toolkit for web teams.</p><a>${a ? 'Learn more' : 'Get started'}</a><div class="cards"><div></div><div></div><div></div></div></main>`
 }
 
-/** A server on this Mac that serves the page in whichever version it is set to, and /away, which sends the visitor to another site. */
+/** A login page, for a page that sends you to one. */
+const LOGIN_PAGE = '<!doctype html><meta charset="utf-8"><title>Sign in</title><body style="font:16px system-ui;margin:120px"><h1>Sign in</h1><input placeholder="Email"></body>'
+
+/**
+ * A server on this Mac that serves the page in whichever version it is set to, /away, which sends the visitor to
+ * another site, and /private, which sends them to /login (like an app that needs a login).
+ */
 export async function startPageServer(): Promise<{ port: number; setVersion(version: 'a' | 'b'): void; hits(): number; close(): void }> {
   let version: 'a' | 'b' = 'a'
   let hits = 0
   const server = http.createServer((req, res) => {
     if (req.url === '/away') res.writeHead(302, { location: 'http://example.invalid/' }).end()
+    else if (req.url === '/private') res.writeHead(307, { location: '/login' }).end()
+    else if (req.url === '/login') res.writeHead(200, { 'content-type': 'text/html' }).end(LOGIN_PAGE)
     else {
       hits++
       res.writeHead(200, { 'content-type': 'text/html' }).end(smokePage(version))
@@ -31,4 +39,13 @@ export async function startPageServer(): Promise<{ port: number; setVersion(vers
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   return { port: (server.address() as AddressInfo).port, setVersion: (v) => (version = v), hits: () => hits, close: () => void server.close() }
+}
+
+/** A port on this Mac where nothing is listening (it was free a moment ago), for an app that isn't running. */
+export async function deadPort(): Promise<number> {
+  const server = http.createServer()
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+  await new Promise<void>((resolve) => server.close(() => resolve()))
+  return port
 }

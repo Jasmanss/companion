@@ -64,7 +64,7 @@ import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { judgeMotion, measureMotion, type Motion, type Sample } from './smoke-motion'
-import { startPageServer } from './smoke-review'
+import { deadPort, startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1575,6 +1575,29 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need(reviewStore.get(review!.id)?.status === 'good', 'Looks good was not remembered')
     console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}), the slider moves, Looks good clears it`)
 
+    // A capture that fails says why, quietly, where the card would be. No alert.
+    const dead = await deadPort()
+    await settings.setProjectUrl(projectDir, `localhost:${dead}`)
+    reviews.turnStarted({ ...turn('down'), hook_event_name: 'UserPromptSubmit' })
+    for (const started = Date.now(); !reviews.problems().length; await sleep(100)) if (Date.now() - started > 15_000) throw new Error('a failed capture left no message')
+    await until(
+      wc,
+      `[...document.querySelectorAll('.review-problem')].some((n) => n.textContent.includes('Couldn\\'t photograph') && n.textContent.includes('nothing is answering at localhost:${dead}'))`,
+      'the panel did not say why the page could not be photographed',
+    )
+    await sleep(300)
+    await fs.writeFile(out.replace(/\.png$/, '-review-problem.png'), (await wc.capturePage()).toPNG())
+    need((await reviews.turnStopped({ ...turn('down'), hook_event_name: 'Stop' })) === null, 'a turn with the app down made a review')
+    need(reviews.problems().length === 1, 'the same failure made two messages')
+    console.log(`smoke: with nothing at the address, the panel says "${reviews.problems()[0].reason}"`)
+
+    // A page that sends you to a login says so, in Try it now and in the panel.
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}/private`)
+    const tried = await reviews.tryIt(projectDir)
+    need(tried.ok && tried.login === true && Boolean(tried.note?.includes('sends you to /login')), `Try it now did not spot the login (${JSON.stringify(tried.ok ? tried.note : tried.error)})`)
+    await until(wc, `[...document.querySelectorAll('.review-problem')].some((n) => n.textContent.includes('sends you to /login'))`, 'the panel did not say the page is a login')
+    console.log('smoke: a page that sends you to /login is spotted, in Try it now and the panel')
+
     // Settings: the address, and Try it now.
     openSettings('projects')
     const sw = settingsWin!
@@ -1584,15 +1607,25 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     })
     const field = 'input.set-address'
     await until(sw.webContents, `Boolean(document.querySelector(${JSON.stringify(field)}))`, 'Settings has no App address field')
-    need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}`, 'the field does not show the saved address')
+    need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}/private`, 'the field does not show the saved address')
+    await until(sw.webContents, `[...document.querySelectorAll('.set-problem')].some((n) => n.textContent.includes('sends you to /login'))`, 'Settings does not say the address is a login')
     await sw.webContents.executeJavaScript(`[...document.querySelectorAll('.set-row button')].find((b) => b.textContent === 'Try it now')?.click()`)
     await until(sw.webContents, 'Boolean(document.querySelector(".set-shot img"))', 'Try it now showed no picture', 20_000)
+    await until(sw.webContents, `document.querySelector('.set-shot')?.textContent.includes('sends you to /login')`, 'Try it now did not say the page is a login')
     await sw.webContents.executeJavaScript(`document.querySelector('.set-shot')?.scrollIntoView({ block: 'center' })`)
     await sleep(500)
     await fs.writeFile(out.replace(/\.png$/, '-review-settings.png'), (await sw.webContents.capturePage()).toPNG())
-    console.log('smoke: Settings shows the address, and Try it now shows the page')
+    // The hook notice depends on this Mac's own ~/.claude/settings.json (only read here), so it's logged, not judged.
+    const hookNotice = await sw.webContents.executeJavaScript(`document.body.textContent.includes('Visual Review needs')`)
+    console.log(`smoke: Settings shows the address, the problem under it, and Try it now shows the page and names the login (hook notice ${hookNotice ? 'shown' : 'not needed here'})`)
     sw.close()
     await sleep(300)
+
+    // A capture that works clears the message.
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}`)
+    need((await reviews.tryIt(projectDir)).ok && reviews.problems().length === 0, 'a capture that worked did not clear the message')
+    await until(wc, '!document.querySelector(".review-problem")', 'the panel still shows a message after a capture worked')
+    console.log('smoke: a capture that works clears the message')
   } finally {
     await reviews.clear()
     await settings.removeProject(projectDir)
