@@ -6,8 +6,9 @@
       "title": "Waiting on you",
       "items": [
         { "name": "Try Visual Review by hand", "line": "Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.", "date": "2026-10-20" },
+        { "name": "Try the movable panel by hand", "line": "Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.", "date": "2026-10-21" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
-        { "name": "OK the merge of #25, then #26", "line": "#25 is notch 3b (CI green). #26 is Visual Review Phase 1 and conflicts with #25, so #25 merges first, then Feature building brings main in.", "date": "2026-10-20" },
+        { "name": "OK the merges of #26 and #27", "line": "#26 is Visual Review Phase 1 (fixes in, smoke and CI pass). #27 is the movable panel Phase 1 (CI running). They conflict in renderer files, so whichever merges second brings main in. #25 (notch 3b) is already merged.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -18,15 +19,18 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Visual Review, Phase 1: built, draft PR #26", "line": "Built by Feature building on claude/visual-review-phase-1: the address field, capture before and after, the change gate, and the card in the panel. 351 tests pass, CI running. Merges after #25.", "date": "2026-10-20" },
-        { "name": "Notch 3b: draft PR #25", "line": "Built: alerts come out under the notch, below the menu bar (claude/notch-phase-3b). CI running.", "date": "2026-10-20" }
+        { "name": "Testing is paused", "line": "Your instruction: no smoke runs or app launches by any chat until hidden smoke lands.", "date": "2026-10-21", "tag": "your rule" },
+        { "name": "Movable panel, Phase 1: draft PR #27", "line": "Built by Main building on claude/movable-panel-1: drag by the top bar, reopen in place, close in place, double-click or Settings to put it back. 319 tests pass, CI running.", "date": "2026-10-21" },
+        { "name": "Build: auto mode", "line": "Running commands: Ask each time | Auto, for Steward's own chat. Auto skips the Run click except for risky commands (deletes, git push, deploys, installs, anything outside the project). Brief: docs/briefs/auto-mode.md.", "date": "2026-10-21" },
+        { "name": "Build: hidden smoke", "line": "The smoke check runs off screen with no focus, a lock keeps it to one run at a time, and CI gets a pretend notch. Brief: docs/briefs/hidden-smoke.md.", "date": "2026-10-21" },
+        { "name": "Visual Review, Phase 1: built, draft PR #26", "line": "Built by Feature building: the address field, capture before and after, the change gate, and the card in the panel. Fixes are in (problems show in the panel and Settings, login redirects warn). Smoke and CI pass. You decided it stays Claude Code only.", "date": "2026-10-20" }
       ]
     },
     {
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Movable panel", "line": "Drag the panel by its top bar and it opens where you left it. Double-click the bar to put it back. Design page: design/movable-panel.html, brief: docs/briefs/movable-panel.md. Phase 1 is move, remember, put back; Phase 2 is second screens and edges. Waits for your go in Main building.", "date": "2026-10-21" },
+        { "name": "Movable panel, Phase 2: screens and edges", "line": "A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Waits for you to try Phase 1, then your go in Main building.", "date": "2026-10-21" },
         { "name": "Notch 3e: the Wings hand-off", "line": "When an alert comes in on the Wings look, the wing eyes fade out and the chin drops with its eyes growing in, about 0.5 s. Chin stays the resting look (the notch has no pixels, so the Inside look was dropped). Waits for 3b to merge and for your go in Main building.", "date": "2026-10-20" },
         { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
@@ -66,6 +70,7 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Notch dock, Phase 3b", "line": "Merged into main (PR #25, 73bd0fb): alerts come out under the notch, below the menu bar.", "date": "2026-10-21" },
         { "name": "Notch dock, Phase 3a", "line": "Merged into main (PR #24, 4a30bc9): hover grows the black, the panel opens from the notch and closes back into it. Includes the smoke flake fix.", "date": "2026-10-20" },
         { "name": "Steward showcase site, Phase 1", "line": "Merged into main (PR #23, 6629f38): the page shell and the hero. Phase 2 waits for your vision talk.", "date": "2026-10-20" },
         { "name": "Docs PR #22", "line": "Merged into main (6cc3bf6): the Feature and Site building chats in CLAUDE.md.", "date": "2026-10-20" },
