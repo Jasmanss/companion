@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, screen, shell, systemPreferences, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, shell, systemPreferences, Tray } from 'electron'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -65,7 +65,8 @@ import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
-import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample } from './smoke-motion'
+import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
+import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, smokeHidden, type Unseen } from './smoke-env'
 import { deadPort, startPageServer } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
@@ -93,9 +94,13 @@ const SLIDE_END_UNDRAWN = "its slide's end time, with no frame drawn"
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
+/** Set when the smoke check runs hidden (the default, see smoke-env.ts): its windows are see-through and never take focus. */
+let unseen: Unseen | null = null
+
 // The smoke check runs alongside a normal copy, with its own throwaway data.
 if (SMOKE_OUT) {
   app.setPath('userData', path.join(os.tmpdir(), 'steward-smoke'))
+  if (smokeHidden(process.env)) unseen = keepOffTheUsersScreen(app, BrowserWindow)
   // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
   // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
   for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)
@@ -507,7 +512,7 @@ function restingPresence(afterNudge = false): PresenceState {
 
 /** Ask macOS where the notch is (at launch, and whenever a display changes), and put Steward where it belongs. */
 async function refreshNotch(): Promise<void> {
-  const found = findNotch(await probeScreens(), screen.getAllDisplays())
+  const found = pretendNotch(process.env, screen.getPrimaryDisplay()) ?? findNotch(await probeScreens(), screen.getAllDisplays())
   if (JSON.stringify(found) === JSON.stringify(notchGeo)) return
   notchGeo = found
   notch?.setNotch(found)
@@ -1561,6 +1566,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
   w.webContents.once('did-fail-load', (_e, code, description) => fail(`load failed: ${code} ${description}`))
   w.webContents.once('did-finish-load', async () => {
     try {
+      console.log(unseen ? 'smoke: hidden: the windows are real but nearly see-through (1%), click-through and never focused (--visible shows them)' : 'smoke: visible: the windows are on screen, and take focus')
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
       const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
       await checkPresence(w, out)
@@ -1593,6 +1599,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
+      if (unseen?.focusTaken()) return fail('a window took keyboard focus in a hidden run')
       app.exit(0)
     } catch (err) {
       fail(String(err))
@@ -1773,18 +1780,27 @@ function alphaAt(img: Electron.NativeImage, x: number, y: number, windowWidth: n
 async function watchMotion(wc: Electron.WebContents, look: MotionLook, ms: number, trigger: () => void | Promise<void>): Promise<Motion> {
   const sampling = wc.executeJavaScript(`new Promise((resolve) => {
     const samples = []
+    let appeared = 0, animated = null
     const frame = (t) => {
       const el = document.querySelector(${JSON.stringify(look.selector)})
+      if (el) {
+        appeared++
+        // The element's animation as of the first frame it was in: a page whose animation ran out before it drew anything shows as finished.
+        if (!animated) {
+          const a = el.getAnimations()[0]
+          animated = a ? { name: a.animationName || a.transitionProperty || '', durationMs: Math.round(a.effect?.getComputedTiming().duration ?? 0), finished: a.playState === 'finished' } : { name: '', durationMs: 0, finished: false }
+        }
+      }
       samples.push([t, el ? getComputedStyle(el).${look.property} : ''])
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
-    setTimeout(() => resolve({ samples, visibility: document.visibilityState }), ${ms})
-  })`) as Promise<{ samples: Sample[]; visibility: string }>
+    setTimeout(() => resolve({ samples, visibility: document.visibilityState, appeared, animated }), ${ms})
+  })`) as Promise<{ samples: Sample[]; visibility: string } & Seen>
   await new Promise((resolve) => setTimeout(resolve, 30))
   await trigger()
-  const { samples, visibility } = await sampling
-  return measureMotion(samples, ms, visibility)
+  const { samples, visibility, appeared, animated } = await sampling
+  return measureMotion(samples, ms, visibility, { appeared, animated })
 }
 
 /** What to watch: an element, and whether it moves (its transform) or, with Reduce Motion on, fades (its opacity). */
@@ -2281,11 +2297,17 @@ async function checkNotch(out: string): Promise<void> {
       if (entrance !== (reducedNow ? 'fadein' : 'panel-drop')) throw new Error(`the panel from the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the drop from the notch'}`)
       await sleep(500)
       await fs.writeFile(out.replace(/\.png$/, '-notch-panel.png'), (await win!.webContents.capturePage()).toPNG())
+      const closed = Date.now()
       setDock('collapsed')
       await settings.update({ keepPanelOpen: keptOpen })
-      await sleep(400)
-      if (!notch.visible || win!.isVisible()) throw new Error('closing the panel did not bring Steward back to the notch')
-      console.log(`smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back`)
+      // The way back up takes the page's 0.2 s; where the page isn't drawn (a runner, Reduce Motion) it takes the page's own
+      // 400 ms safety timer instead, so wait for it rather than sleep a flat 400 ms (up to 1.5 s).
+      while ((win!.isVisible() || !notch.visible) && Date.now() - closed < 1500) await sleep(20)
+      const backIn = Date.now() - closed
+      if (!notch.visible || win!.isVisible()) throw new Error(`closing the panel did not bring Steward back to the notch (after ${backIn} ms)`)
+      console.log(
+        `smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back in ${backIn} ms${backIn >= 380 ? ' (on its safety timer, not a drawn frame)' : ''}`,
+      )
 
       // Every way of closing goes back up into the notch: while the panel goes, the window stays where it is (it never
       // takes the edge's bounds, not even for a frame), the exit plays, and then the window goes and the notch is back,
@@ -2847,6 +2869,11 @@ function demoImage(): Buffer {
 }
 
 app.whenReady().then(async () => {
+  // The Mac stays awake for the run (pmset shows the hold once the app is ready).
+  if (SMOKE_OUT) {
+    keepMacAwake(powerSaveBlocker)
+    pretendNotchScreen(process.env, screen)
+  }
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
   // The smoke check starts as a fresh install every time, which is quiet: its throwaway data folder is emptied first.

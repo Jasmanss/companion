@@ -19,6 +19,18 @@ export interface Motion {
   watchedMs: number
   /** document.visibilityState at the end: "hidden" means Chromium thought no one could see the page. */
   visibility: string
+  /** What the page said about the watched element itself (absent when the caller didn't ask). */
+  seen?: Seen
+}
+
+/**
+ * The watched element as the page saw it: in how many of the drawn frames it existed at all, and its animation as of the
+ * first frame it was in (a CSS animation or transition: its name, its length, and whether it was already over by then).
+ * It tells an animation that never ran from one that ran before the page drew anything to measure.
+ */
+export interface Seen {
+  appeared: number
+  animated: { name: string; durationMs: number; finished: boolean } | null
 }
 
 /** One drawn frame: its time, and the watched value (a computed transform or opacity) in it. */
@@ -35,8 +47,8 @@ const longestGap = (s: Sample[]): number | null => (s.length < 2 ? null : Math.m
  * strictly between the furthest points it reached. Holding at a turning point isn't stuck: the notch's fade (with
  * Reduce Motion) goes out, holds while the shape changes, and comes back.
  */
-export function measureMotion(samples: Sample[], watchedMs: number, visibility: string): Motion {
-  const seen = { drawn: samples.length, watchedMs, visibility }
+export function measureMotion(samples: Sample[], watchedMs: number, visibility: string, element?: Seen): Motion {
+  const seen = { drawn: samples.length, watchedMs, visibility, ...(element ? { seen: element } : {}) }
   const changed = samples.map((s, i) => (i > 0 && s[1] !== samples[i - 1][1] ? i : -1)).filter((i) => i >= 0)
   if (!changed.length) {
     const still = longestGap(samples)
@@ -82,7 +94,8 @@ export interface MotionVerdict {
  * On a Mac with a screen: at least MIN_POSITIONS positions and no wait over MAX_GAP_MS between frames. On a CI runner
  * the runner decides when the page gets to draw, so a long wait there says more about the runner than the app. There,
  * every frame the page drew mid-motion has to show a new position, at MIN_POSITIONS positions at least; the waits, while
- * it moved and while it was still, are logged next to each other so a stutter of the app's own still shows.
+ * it moved and while it was still, are logged next to each other so a stutter of the app's own still shows. A fade too
+ * short for the runner to draw MIN_POSITIONS steps in is held to what it could draw (at least 3, and a new one in every frame).
  */
 export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdict {
   const drew = `the page drew ${m.drawn} frames in ${m.watchedMs} ms (${m.visibility})`
@@ -93,11 +106,24 @@ export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdi
   }
   const still = m.stillGapMs === null ? 'no frames while it was still' : `${m.stillGapMs} ms while it was still`
   const line = `motion ${what}: ${m.positions} positions in ${m.frames} frames over ${m.spanMs} ms; longest wait between frames ${m.maxGapMs} ms while it moved (${m.maxGapAtMs} ms in), ${still}`
+  const a = m.seen?.animated
+  // Nothing moved in any frame. What the page said about the element tells why: it never came, or its animation ran out
+  // before the first frame the page drew (a runner is slow to draw a window it has just been shown).
+  if (m.frames === 0 && m.seen) {
+    if (m.seen.appeared === 0) return { result: 'not smooth', line: `${line}; it never appeared in the page; ${drew}` }
+    const animation = a ? `${a.name || 'an animation'} of ${a.durationMs} ms, ${a.finished ? 'already over' : 'still running'} in its first frame` : 'no animation on it'
+    if (onCI && a?.finished) {
+      return { result: 'not measurable', line: `motion ${what}: not measurable here: its animation (${a.name || 'unnamed'}, ${a.durationMs} ms) was already over when the page drew its first frame of it; ${drew}` }
+    }
+    return { result: 'not smooth', line: `${line}; it was in ${m.seen.appeared} of the frames, with ${animation}; ${drew}` }
+  }
   if (!onCI) {
     if (m.positions < MIN_POSITIONS || m.maxGapMs > MAX_GAP_MS) return { result: 'not smooth', line: `${line}; ${drew}` }
     return { result: 'smooth', line }
   }
   if (m.stuck > 0) return { result: 'not smooth', line: `${line}; ${m.stuck} of those frames showed no new position mid-motion; ${drew}` }
-  if (m.positions < MIN_POSITIONS) return { result: 'not smooth', line: `${line}; fewer than ${MIN_POSITIONS} positions; ${drew}` }
+  // A short fade can only show as many steps as the runner drew in it: a 200 ms fade at 40 frames a second is 8 at most.
+  const enough = Math.min(MIN_POSITIONS, Math.max(3, Math.floor((0.6 * m.spanMs * m.drawn) / m.watchedMs)))
+  if (m.positions < enough) return { result: 'not smooth', line: `${line}; fewer than ${enough} positions; ${drew}` }
   return { result: 'smooth', line: `${line}; a new position in every frame the page drew (on CI the waits are logged, not judged); ${drew}` }
 }
