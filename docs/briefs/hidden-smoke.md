@@ -33,3 +33,12 @@ Built by Build: hidden smoke.
   - It has never run on a GitHub runner; the CI run on this PR is the first.
   - `release.yml` does not set the notch flag.
 - **Waiting on the user:** OK the merge once CI is green. Until it merges, testing on the user's Mac stays paused. After that, chats merge main in and smoke runs hidden.
+
+### Merged (recorded 2026-10-22, from the front door)
+- PR #29 was merged into main by the user: merge commit `3f174f9`.
+- **CI fixes made before the merge:**
+  - The pretend notch now reaches every screen lookup (there was a 2 pt mismatch).
+  - The notch nudge check explains a missing motion, and on CI only accepts a fade that ended before the first drawn frame. The root cause was not found.
+  - The 3a close check waits up to 1.5 s instead of a flat 400 ms. That was a real race on the runner.
+- **Testing on the user's Mac is back on.** Smoke runs hidden by default (`--visible` to watch). The pause is over.
+- **Still open:** the unexplained notch-nudge miss (see above), and `release.yml` does not set the notch flag.

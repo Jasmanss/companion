@@ -97,3 +97,7 @@ Status line: the front door sets it (`ready` on the user's go). Phase 2 is not b
 - **Merge order:** #27 conflicts with #26 (Visual Review) in renderer files. Whichever merges second brings main in.
 - **Waiting on the user:** try it by hand (drag, close, reopen, double-click), then OK the merge.
 - **Next:** Phase 2 (screens and edges), after the user tries Phase 1. The user types that go into Main building.
+
+### Phase 1 merged (recorded 2026-10-22, from the front door)
+- PR #27 was merged into main by the user: merge commit `5f55836`.
+- Phase 2 (screens and edges) is not built and waits for the user's go in Main building. The user still has to try Phase 1 by hand.

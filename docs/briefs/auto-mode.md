@@ -23,3 +23,7 @@ Built by Build: auto mode.
 - **Checks:** lint, typecheck and 423 tests pass. Its own smoke run passed before testing was paused.
 - **Not checked:** by hand in the app (testing is paused until hidden smoke lands).
 - **Waiting on the user:** OK the merge once CI is green. Try it by hand after hidden smoke is in.
+
+### Merged (recorded 2026-10-22, from the front door)
+- PR #28 was merged into main by the user: merge commit `193f67f`. Status stays `ready` as written; nothing else is planned for it.
+- **Left to the user:** try Auto by hand now that testing is back on.

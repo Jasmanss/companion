@@ -124,15 +124,15 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       </li>
       <li>
         <div class="row"><span class="name">Try the movable panel by hand</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.</p>
+        <p>Smoke is hidden now, so you can run the app. Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Dependabot #30</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Six minor and patch updates, still open. Merge once CI is green.</p>
       </li>
       <li>
         <div class="row"><span class="name">Try notch 3b by hand</span><time datetime="2026-10-20">Oct 20</time></div>
         <p>Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">OK the merges of #27, #28 and #29 once CI is green</span><time datetime="2026-10-20">Oct 20</time></div>
-        <p>#27 is the movable panel Phase 1 (main merged in, CI running). #28 is auto mode. #29 is hidden smoke, and its CI run is the first on a GitHub runner. #26 (Visual Review) is already merged.</p>
       </li>
       <li>
         <div class="row"><span class="name">Tell us your vision for the website</span><time datetime="2026-10-19">Oct 19</time></div>
@@ -153,23 +153,11 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="progress" class="card progress">
-    <h2><span class="dot"></span>In progress <span class="count">4</span></h2>
+    <h2><span class="dot"></span>In progress <span class="count">1</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Testing is paused</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Your instruction: no smoke runs or app launches on your Mac by any chat until hidden smoke (#29) is merged. After that, chats merge main in and smoke runs hidden. <span class="tag">your rule</span></p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Movable panel, Phase 1: draft PR #27</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Drag by the top bar, reopen in place, close in place, double-click or Settings to put it back. Main merged in, 319 tests passed, CI running.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Auto mode: draft PR #28</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Running commands: Ask each time | Auto. Auto skips the Run card only for known-safe commands; anything unknown or unreadable still asks. Default stays Ask each time. 423 tests pass. Brief: docs/briefs/auto-mode.md.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Hidden smoke: draft PR #29</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Smoke runs with the windows at 1% opacity, click-through and never focused, one run at a time, with a pretend notch on CI. 4 of 5 hidden runs passed; the first GitHub runner run is this PR's CI. Brief: docs/briefs/hidden-smoke.md.</p>
+        <div class="row"><span class="name">Nothing is being built right now</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Every build chat is done. The next ones wait for your go (see Up next).</p>
       </li>
     </ul>
   </section>
@@ -300,8 +288,24 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">22</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">26</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Hidden smoke</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Merged into main (PR #29, 3f174f9): smoke runs hidden by default (windows at 1% opacity, click-through, never focused), one run at a time, with a pretend notch on CI. Testing on your Mac is back on. One notch nudge miss on CI is unexplained.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Auto mode</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Merged into main (PR #28, 193f67f): Running commands, Ask each time | Auto. Auto skips the Run card only for known-safe commands.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Movable panel, Phase 1</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Merged into main (PR #27, 5f55836): drag the panel by its top bar, it opens where you left it, double-click the bar to put it back. Phase 2 waits for your go.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Dependabot: electron-vite 5 to 6</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Merged into main (PR #31, fc925ca), a major version.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Visual Review, Phase 1</span><time datetime="2026-10-21">Oct 21</time></div>
         <p>Merged into main (PR #26, 00e2cb1): the address field, capture before and after, the change gate and the card in the panel. Claude Code only. Phase 2 (the alert) waits for your go in Feature building.</p>

@@ -6,9 +6,9 @@
       "title": "Waiting on you",
       "items": [
         { "name": "Try Visual Review by hand", "line": "Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.", "date": "2026-10-20" },
-        { "name": "Try the movable panel by hand", "line": "Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.", "date": "2026-10-21" },
+        { "name": "Try the movable panel by hand", "line": "Smoke is hidden now, so you can run the app. Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.", "date": "2026-10-21" },
+        { "name": "Dependabot #30", "line": "Six minor and patch updates, still open. Merge once CI is green.", "date": "2026-10-22" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
-        { "name": "OK the merges of #27, #28 and #29 once CI is green", "line": "#27 is the movable panel Phase 1 (main merged in, CI running). #28 is auto mode. #29 is hidden smoke, and its CI run is the first on a GitHub runner. #26 (Visual Review) is already merged.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
@@ -19,10 +19,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Testing is paused", "line": "Your instruction: no smoke runs or app launches on your Mac by any chat until hidden smoke (#29) is merged. After that, chats merge main in and smoke runs hidden.", "date": "2026-10-21", "tag": "your rule" },
-        { "name": "Movable panel, Phase 1: draft PR #27", "line": "Drag by the top bar, reopen in place, close in place, double-click or Settings to put it back. Main merged in, 319 tests passed, CI running.", "date": "2026-10-21" },
-        { "name": "Auto mode: draft PR #28", "line": "Running commands: Ask each time | Auto. Auto skips the Run card only for known-safe commands; anything unknown or unreadable still asks. Default stays Ask each time. 423 tests pass. Brief: docs/briefs/auto-mode.md.", "date": "2026-10-21" },
-        { "name": "Hidden smoke: draft PR #29", "line": "Smoke runs with the windows at 1% opacity, click-through and never focused, one run at a time, with a pretend notch on CI. 4 of 5 hidden runs passed; the first GitHub runner run is this PR's CI. Brief: docs/briefs/hidden-smoke.md.", "date": "2026-10-21" }
+        { "name": "Nothing is being built right now", "line": "Every build chat is done. The next ones wait for your go (see Up next).", "date": "2026-10-22" }
       ]
     },
     {
@@ -70,6 +67,10 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Hidden smoke", "line": "Merged into main (PR #29, 3f174f9): smoke runs hidden by default (windows at 1% opacity, click-through, never focused), one run at a time, with a pretend notch on CI. Testing on your Mac is back on. One notch nudge miss on CI is unexplained.", "date": "2026-10-22" },
+        { "name": "Auto mode", "line": "Merged into main (PR #28, 193f67f): Running commands, Ask each time | Auto. Auto skips the Run card only for known-safe commands.", "date": "2026-10-22" },
+        { "name": "Movable panel, Phase 1", "line": "Merged into main (PR #27, 5f55836): drag the panel by its top bar, it opens where you left it, double-click the bar to put it back. Phase 2 waits for your go.", "date": "2026-10-22" },
+        { "name": "Dependabot: electron-vite 5 to 6", "line": "Merged into main (PR #31, fc925ca), a major version.", "date": "2026-10-22" },
         { "name": "Visual Review, Phase 1", "line": "Merged into main (PR #26, 00e2cb1): the address field, capture before and after, the change gate and the card in the panel. Claude Code only. Phase 2 (the alert) waits for your go in Feature building.", "date": "2026-10-21" },
         { "name": "Notch dock, Phase 3b", "line": "Merged into main (PR #25, 73bd0fb): alerts come out under the notch, below the menu bar.", "date": "2026-10-21" },
         { "name": "Notch dock, Phase 3a", "line": "Merged into main (PR #24, 4a30bc9): hover grows the black, the panel opens from the notch and closes back into it. Includes the smoke flake fix.", "date": "2026-10-20" },
