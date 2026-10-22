@@ -11,8 +11,11 @@ code. Pull it out to collect images, research designs, and run commands.
   just the section you asked about, into the tray and checks each shot), find
   photos, look at your project's code, or run commands in your project. It
   reads files without asking (read-only, inside the project, never `.env`,
-  keys or credentials). Commands always show an approval card first unless
-  you've allowlisted them.
+  keys or credentials). Commands show an approval card first unless you've
+  allowlisted them. Settings → Projects → Running commands can switch to
+  Auto, which runs safe commands without asking and still asks for risky ones
+  (deleting or overwriting files, git push, installs, deploys, network writes,
+  anything outside the project). The default is Ask each time.
 - **Context pill:** the header shows the project and what Steward is on, like
   `haven › src/app/page.tsx`, with a live dot while it works. Click it or press
   ⌘K to switch projects (type to search, arrows and Enter) or add one.
@@ -72,7 +75,7 @@ shortcuts, and which alerts peek out from the edge.
 | `npm run dev` | Run with hot reload |
 | `npm run lint` / `typecheck` / `test` | The checks CI runs |
 | `npm run design` | Serve `design/` at http://127.0.0.1:4321 (or the next free port) and reload open pages when files change (including after a `git pull`). `npm run design -- <folder>` serves any other folder the same way |
-| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png` and the Settings window to `out/smoke-settings.png`, exit. `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds; `STEWARD_SMOKE_SECTIONS=1` screenshots every Settings section; it also checks Presence (Only when needed: the tab hidden at rest, the first-launch peek, a push and the tuck, quiet alerts, dim when idle (it waits 20 s), the tab drag, the notch asleep and awake, and that the slides and the notch's wake and sleep are drawn frame by frame, not in steps) and saves `smoke-settings-presence.png` and `smoke-notch-*-asleep.png`; `STEWARD_SMOKE_IDLE=5` logs idle CPU for the edge and the notch |
+| `npm run smoke` | Build, launch the app, screenshot the panel to `out/smoke.png` and the Settings window to `out/smoke-settings.png`, exit. It runs hidden: the windows are real, but see-through, click-through and never given focus, so nothing shows on your screen (`-- --visible` or `STEWARD_SMOKE_VISIBLE=1` puts them on screen again, for watching or to see the frost). One run at a time: a second one waits up to 6 minutes for the first. `STEWARD_SMOKE_NOTCH=1` pretends the main display has a notch (185 x 32 pt, a 33 pt menu bar), so the notch checks run on a Mac without one (CI sets it). `STEWARD_SMOKE_THEME=light` (or `dark`) forces the theme; `STEWARD_SMOKE_DEMO=1,4,9` also plays the demo request and screenshots it at those seconds; `STEWARD_SMOKE_SECTIONS=1` screenshots every Settings section; it also checks Presence (Only when needed: the tab hidden at rest, the first-launch peek, a push and the tuck, quiet alerts, dim when idle (it waits 20 s), the tab drag, dragging the panel by its top bar (it opens and closes where it's left, a double-click puts it back), the notch asleep and awake, the notch growing on hover, the panel opening under it and alerts coming out under it, and that the slides and the notch's wake, sleep and hover are drawn frame by frame, not in steps) and saves `smoke-settings-presence.png`, `smoke-notch-*-asleep.png`, `smoke-notch-*-hover.png`, `smoke-notch-panel.png` and `smoke-notch-nudge-*.png`; `STEWARD_SMOKE_IDLE=5` logs idle CPU for the edge and the notch |
 | `npm run pack` | Build an unsigned `.app` in `dist/` |
 | `npm run dist` | Build the DMG and zip in `dist/` |
 

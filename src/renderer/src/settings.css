@@ -305,6 +305,43 @@
   user-select: text;
 }
 
+.set-window input.set-address {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 8px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: 500 12px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  user-select: text;
+}
+
+.set-shot {
+  margin: 0;
+}
+
+.set-shot img {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.set-problem {
+  color: var(--t1);
+}
+
+.set-shot .set-note {
+  margin-top: 6px;
+}
+
+.set-shot figcaption {
+  margin-top: 4px;
+  color: var(--t2);
+  font-size: 12px;
+}
+
 .set-window textarea {
   display: block;
   resize: vertical;

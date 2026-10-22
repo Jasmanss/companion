@@ -6,8 +6,11 @@
 //
 // With Presence "Only when needed" it rests asleep: just the notch's own black, no eyes. The same check tells the
 // presence rules (main/presence) whether the cursor is on the notch, and they say when to wake and when to sleep.
+//
+// While an alert is out under it (the nudge, in the main window just below), the black is joined to it: the chin shows
+// (in Wings too) and it doesn't grow with the cursor on it.
 import { BrowserWindow, screen } from 'electron'
-import { inBoxes, notchBoxes, notchShape, NOTCH_WINDOW } from '../shared/notch'
+import { inBoxes, noHover, notchBoxes, notchShape, NOTCH_WINDOW, stepHover } from '../shared/notch'
 import type { Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
 import { inRect } from './presence'
 
@@ -19,6 +22,11 @@ interface Options {
   onCursor?(over: boolean): void
   /** Where the cursor is; null to leave the real one out (the smoke check, which feeds what it needs itself). */
   cursor?(): Electron.Point | null
+  /**
+   * Whether the black grows a little with the cursor on it. Always visible, it does. Only when needed, waking up is the
+   * grow, so it doesn't grow again on top of that.
+   */
+  hoverable?(): boolean
 }
 
 /** The cursor counts as on the shape this far outside it, so the edge of the black isn't a flicker. */
@@ -36,6 +44,8 @@ export class NotchDock {
   private glint: PillGlint = 'sweep'
   private wanted = false
   private awake = true
+  private nudge = false
+  private hovering = noHover()
   private ignoring = true
   private timer: ReturnType<typeof setTimeout> | undefined
   private sentCursor = ''
@@ -58,6 +68,7 @@ export class NotchDock {
     this.wanted = on
     if (!on || !this.notch) {
       this.stopWatching()
+      this.hovering = noHover()
       if (this.win && !this.win.isDestroyed() && this.win.isVisible()) {
         this.win.hide()
         this.win.setIgnoreMouseEvents(true)
@@ -95,11 +106,21 @@ export class NotchDock {
   setAwake(awake: boolean): void {
     if (awake === this.awake) return
     this.awake = awake
+    // Hover only exists while awake.
+    this.hovering = noHover()
+    this.send()
+  }
+
+  /** An alert is out under the notch, or not. */
+  setNudge(nudge: boolean): void {
+    if (nudge === this.nudge) return
+    this.nudge = nudge
+    this.hovering = noHover()
     this.send()
   }
 
   state(): NotchState {
-    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake }
+    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.hovering.hover, nudge: this.nudge }
   }
 
   /** The notch window's own contents, for the smoke check. */
@@ -190,12 +211,16 @@ export class NotchDock {
       // Left out, the cursor counts as far away: not near, and not on the shape.
       const b = w.getBounds(), c = (this.o.cursor ? this.o.cursor() : screen.getCursorScreenPoint()) ?? { x: -1e6, y: -1e6 }
       const p = { x: c.x - b.x, y: c.y - b.y }
-      const boxes = notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake), layout)
-      const inside = inBoxes(p, boxes)
-      if (this.o.onCursor) {
-        const over = boxes.some((b) => inRect(p, b, SLACK))
-        this.o.onCursor(over)
-      }
+      const shaped = () => notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake, this.hovering.hover, this.nudge), layout)
+      const over = shaped().some((b) => inRect(p, b, SLACK))
+      this.o.onCursor?.(over)
+      // On the black for a moment, it grows a little; off it for a moment, it shrinks back. Grown, the cursor is over
+      // more of it, so it doesn't flicker at the edge.
+      const hovering = this.awake && !this.nudge && this.o.hoverable?.() ? stepHover(this.hovering, over, Date.now()) : noHover()
+      const changed = hovering.hover !== this.hovering.hover
+      this.hovering = hovering
+      if (changed) this.send()
+      const inside = inBoxes(p, shaped())
       if (inside === this.ignoring) {
         this.ignoring = !inside
         w.setIgnoreMouseEvents(!inside)

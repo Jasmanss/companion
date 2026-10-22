@@ -3,8 +3,23 @@ import { DEFAULT_ALLOWLIST, DEFAULT_NOTIFICATIONS, defaultSettings, migrateSetti
 import { DEFAULT_STEWARD } from '../src/shared/steward'
 
 /** The character's options for a settings file from before quiet mode: today's behavior, not a fresh install's. */
-const AS_BEFORE = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false } as const
+const AS_BEFORE = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false, hideInFullScreen: false, hideInApps: [] } as const
 const OLD_FILE_STEWARD = { ...DEFAULT_STEWARD, ...AS_BEFORE }
+
+describe('project addresses (Visual Review)', () => {
+  const project = (url: unknown) => migrateSettings({ projects: [{ name: 'haven', path: '/Users/me/haven', url }] }).projects[0]
+
+  it('keeps an address on this Mac, tidied', () => {
+    expect(project('localhost:3000')).toEqual({ name: 'haven', path: '/Users/me/haven', url: 'http://localhost:3000' })
+    expect(project('http://127.0.0.1:5173/pricing')).toMatchObject({ url: 'http://127.0.0.1:5173/pricing' })
+  })
+
+  it('drops one that was edited into another host, or is not an address', () => {
+    for (const url of ['https://example.com', 'http://localhost.evil.com', 'file:///etc/passwd', 'javascript:alert(1)', 7, null, '']) {
+      expect(project(url)).toEqual({ name: 'haven', path: '/Users/me/haven' })
+    }
+  })
+})
 
 describe('migrateSettings', () => {
   it('brings a file from before the Settings window across, adding the new switches with their defaults', () => {
@@ -14,7 +29,23 @@ describe('migrateSettings', () => {
       allowlist: ['npm test'],
       secrets: { anthropic: 'djEwYWJj' },
     }
-    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, notifications: DEFAULT_NOTIFICATIONS, shortcuts: {}, steward: OLD_FILE_STEWARD })
+    expect(migrateSettings(old)).toEqual({ ...old, keepPanelOpen: false, commandMode: 'ask', notifications: DEFAULT_NOTIFICATIONS, shortcuts: {}, steward: OLD_FILE_STEWARD })
+  })
+
+  it('asks before each command, for a new install and for any file that has not chosen Auto', () => {
+    expect(defaultSettings().commandMode).toBe('ask')
+    expect(migrateSettings({}).commandMode).toBe('ask')
+    expect(migrateSettings(null).commandMode).toBe('ask')
+    expect(migrateSettings({ projects: [], allowlist: ['npm test'], keepPanelOpen: true }).commandMode).toBe('ask')
+    // A value Steward doesn't know never turns Auto on.
+    for (const junk of ['Auto', 'yes', true, 1, null, [], {}, 'always']) expect(migrateSettings({ commandMode: junk }).commandMode).toBe('ask')
+  })
+
+  it('keeps Auto once it has been chosen, and Ask each time when that was chosen', () => {
+    expect(migrateSettings({ commandMode: 'auto' }).commandMode).toBe('auto')
+    expect(migrateSettings({ commandMode: 'ask' }).commandMode).toBe('ask')
+    // It survives a round trip through the file.
+    expect(migrateSettings(JSON.parse(JSON.stringify({ ...defaultSettings(), commandMode: 'auto' }))).commandMode).toBe('auto')
   })
 
   it('keeps the switches a file has, and fills in the ones it lacks one at a time', () => {
@@ -38,6 +69,7 @@ describe('migrateSettings', () => {
       allowlist: ['git status'],
       secrets: { vercel: 'dG9r' },
       keepPanelOpen: false,
+      commandMode: 'ask',
       notifications: { ...DEFAULT_NOTIFICATIONS, buildFailed: false },
       shortcuts: {},
       steward: OLD_FILE_STEWARD,
@@ -96,6 +128,20 @@ describe('migrateSettings', () => {
     expect(migrateSettings({ steward: { presence: 'hidden', alertPeek: 'some', dimWhenIdle: 'yes', hideFromScreenShare: 1 } }).steward).toMatchObject(AS_BEFORE)
   })
 
+  it('steps aside in full-screen apps on a fresh install, not for a file that already exists, and starts both with no apps', () => {
+    expect(DEFAULT_STEWARD).toMatchObject({ hideInFullScreen: true, hideInApps: [] })
+    expect(migrateSettings({ steward: {} }).steward).toMatchObject({ hideInFullScreen: false, hideInApps: [] })
+    expect(migrateSettings({ steward: { hideInFullScreen: true } }).steward.hideInFullScreen).toBe(true)
+  })
+
+  it("keeps the apps to step aside for that have a real bundle id and a name, each once, and drops the rest", () => {
+    const keynote = { id: 'com.apple.iWork.Keynote', name: 'Keynote' }
+    const zoom = { id: 'us.zoom.xos', name: 'Zoom' }
+    const raw = [keynote, zoom, { ...keynote, name: 'Keynote again' }, { id: 'not a bundle id', name: 'X' }, { id: 'com.example.noname' }, 'com.apple.FaceTime', null]
+    expect(migrateSettings({ steward: { hideInApps: raw } }).steward.hideInApps).toEqual([keynote, zoom])
+    expect(migrateSettings({ steward: { hideInApps: 'Keynote' } }).steward.hideInApps).toEqual([])
+  })
+
   it('keeps the shortcuts you changed, tidied up, and drops ones it can’t use', () => {
     const migrated = migrateSettings({
       shortcuts: { togglePanel: 'option+space', hideFromEdge: '', switchProject: 'Hyper+K', openSettings: 7, somethingElse: 'Command+J' },
@@ -126,6 +172,8 @@ describe('parseSettingsPatch', () => {
   it('lets through the switches Settings can change', () => {
     expect(parseSettingsPatch({ keepPanelOpen: true })).toEqual({ keepPanelOpen: true })
     expect(parseSettingsPatch({ openAtLogin: false })).toEqual({ openAtLogin: false })
+    expect(parseSettingsPatch({ commandMode: 'auto' })).toEqual({ commandMode: 'auto' })
+    expect(parseSettingsPatch({ commandMode: 'ask' })).toEqual({ commandMode: 'ask' })
     expect(parseSettingsPatch({ notifications: { morningBrief: false, leftOff: true } })).toEqual({ notifications: { morningBrief: false, leftOff: true } })
     expect(parseSettingsPatch({ steward: { color: 'graphite', version: 'flat' } })).toEqual({ steward: { color: 'graphite', version: 'flat' } })
     expect(parseSettingsPatch({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })).toEqual({ steward: { name: 'Pip', edge: 'left', size: 'medium', mouth: false } })
@@ -134,11 +182,17 @@ describe('parseSettingsPatch', () => {
     expect(parseSettingsPatch({ steward: { notch: true, notchStyle: 'wings' } })).toEqual({ steward: { notch: true, notchStyle: 'wings' } })
     expect(parseSettingsPatch({ steward: { presence: 'quiet', alertPeek: 'none' } })).toEqual({ steward: { presence: 'quiet', alertPeek: 'none' } })
     expect(parseSettingsPatch({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })).toEqual({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })
+    const apps = [{ id: 'com.apple.iWork.Keynote', name: 'Keynote' }]
+    expect(parseSettingsPatch({ steward: { hideInFullScreen: false, hideInApps: apps } })).toEqual({ steward: { hideInFullScreen: false, hideInApps: apps } })
+    expect(parseSettingsPatch({ steward: { hideInApps: [] } })).toEqual({ steward: { hideInApps: [] } })
   })
 
   it('refuses anything else, so the window can only change what it shows', () => {
     for (const bad of [
       { keepPanelOpen: 'true' },
+      { commandMode: 'always' },
+      { commandMode: true },
+      { commandMode: 'AUTO' },
       { allowlist: ['rm -rf /'] },
       { secrets: { anthropic: 'x' } },
       { notifications: { somethingNew: true } },
@@ -153,6 +207,12 @@ describe('parseSettingsPatch', () => {
       { steward: { presence: 'hidden' } },
       { steward: { alertPeek: 'some' } },
       { steward: { dimWhenIdle: 'yes' } },
+      { steward: { hideInFullScreen: 'yes' } },
+      { steward: { hideInApps: 'com.apple.iWork.Keynote' } },
+      { steward: { hideInApps: [{ id: 'not a bundle id', name: 'X' }] } },
+      { steward: { hideInApps: [{ id: 'com.apple.iWork.Keynote', name: '' }] } },
+      { steward: { hideInApps: [{ id: 'us.zoom.xos', name: 'Zoom' }, { id: 'us.zoom.xos', name: 'Zoom' }] } },
+      { steward: { hideInApps: Array.from({ length: 41 }, (_, i) => ({ id: `com.example.app${i}`, name: `App ${i}` })) } },
       { steward: { frost: 101 } },
       { steward: { frost: -1 } },
       { steward: { frost: 42.5 } },

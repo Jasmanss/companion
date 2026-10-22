@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
-import { cleanFrost, cleanName, DEFAULT_STEWARD, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
-import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StewardPrefs } from '../shared/types'
+import { parseAppAddress } from '../shared/review'
+import { cleanFrost, cleanName, DEFAULT_STEWARD, isBundleId, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
+import type { CommandMode, NotificationPrefs, Project, SettingsPatch, ShortcutId, StepAsideApp, StewardPrefs } from '../shared/types'
+import { MAX_APPS, withApp } from './step-aside'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
@@ -24,6 +26,8 @@ export interface StoredSettings {
   /** Encrypted with the macOS keychain via safeStorage, base64. */
   secrets: Partial<Record<SecretKind, string>>
   keepPanelOpen: boolean
+  /** Whether the chat asks before each command, or runs the safe ones itself. Ask each time unless it's been switched. */
+  commandMode: CommandMode
   notifications: NotificationPrefs
   /** Only the ones you changed: an accelerator, or '' for off. The rest use Steward's defaults. */
   shortcuts: Partial<Record<ShortcutId, string>>
@@ -37,12 +41,19 @@ export const defaultSettings = (): StoredSettings => ({
   allowlist: [...DEFAULT_ALLOWLIST],
   secrets: {},
   keepPanelOpen: false,
+  commandMode: 'ask',
   notifications: { ...DEFAULT_NOTIFICATIONS },
   shortcuts: {},
   steward: { ...DEFAULT_STEWARD },
 })
 
 const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 'string' && typeof (p as Project)?.path === 'string'
+
+/** A project from a file: its name and path, and Visual Review's address only if it's still one on this Mac (a file can be edited by hand). */
+function cleanProject({ name, path, url }: Project): Project {
+  const address = typeof url === 'string' ? parseAppAddress(url) : null
+  return address?.ok ? { name, path, url: address.url } : { name, path }
+}
 
 /** The choices each of the character's options has (the name is free text, the frost a number). */
 const STEWARD_CHOICES = {
@@ -62,7 +73,10 @@ const STEWARD_CHOICES = {
  * What a settings file from before quiet mode gets for the options it doesn't have: today's behavior, not the fresh
  * install's (DEFAULT_STEWARD is quiet, with the eyes dimming), so the settings someone already has stay exactly as they are.
  */
-const OLD_FILE_STEWARD = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false } as const satisfies Pick<StewardPrefs, 'presence' | 'alertPeek' | 'dimWhenIdle' | 'hideFromScreenShare'>
+const OLD_FILE_STEWARD = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false, hideInFullScreen: false } as const satisfies Pick<
+  StewardPrefs,
+  'presence' | 'alertPeek' | 'dimWhenIdle' | 'hideFromScreenShare' | 'hideInFullScreen'
+>
 
 const pick = <T extends string>(value: unknown, choices: readonly T[], fallback: T): T => ((choices as readonly unknown[]).includes(value) ? (value as T) : fallback)
 
@@ -91,7 +105,17 @@ function migrateSteward(raw: unknown): StewardPrefs {
     alertPeek: pick(r.alertPeek, STEWARD_CHOICES.alertPeek, OLD_FILE_STEWARD.alertPeek),
     dimWhenIdle: typeof r.dimWhenIdle === 'boolean' ? r.dimWhenIdle : OLD_FILE_STEWARD.dimWhenIdle,
     hideFromScreenShare: typeof r.hideFromScreenShare === 'boolean' ? r.hideFromScreenShare : OLD_FILE_STEWARD.hideFromScreenShare,
+    hideInFullScreen: typeof r.hideInFullScreen === 'boolean' ? r.hideInFullScreen : OLD_FILE_STEWARD.hideInFullScreen,
+    hideInApps: cleanApps(r.hideInApps),
   }
+}
+
+/** Step aside's list from a file: apps with a real bundle id and a name, each once, at most MAX_APPS. */
+function cleanApps(raw: unknown): StepAsideApp[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((a): a is StepAsideApp => !!a && typeof a === 'object' && isBundleId(a.id) && typeof a.name === 'string')
+    .reduce((list: StepAsideApp[], a) => withApp(list, { id: a.id, name: a.name.slice(0, 80) }), [])
 }
 
 /**
@@ -126,11 +150,13 @@ export function migrateSettings(raw: unknown): StoredSettings {
     }
   }
   return {
-    projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(({ name, path }) => ({ name, path })) : d.projects,
+    projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(cleanProject) : d.projects,
     currentProject: typeof r.currentProject === 'string' ? r.currentProject : null,
     allowlist: Array.isArray(r.allowlist) ? r.allowlist.filter((c): c is string => typeof c === 'string') : d.allowlist,
     secrets,
     keepPanelOpen: typeof r.keepPanelOpen === 'boolean' ? r.keepPanelOpen : d.keepPanelOpen,
+    // Anything but a plain "auto" asks: a file with a value Steward doesn't know never turns Auto on.
+    commandMode: r.commandMode === 'auto' ? 'auto' : 'ask',
     notifications,
     shortcuts,
     steward: migrateSteward(r.steward),
@@ -139,6 +165,7 @@ export function migrateSettings(raw: unknown): StoredSettings {
 
 const Patch = z.strictObject({
   keepPanelOpen: z.boolean().optional(),
+  commandMode: z.enum(['ask', 'auto']).optional(),
   openAtLogin: z.boolean().optional(),
   notifications: z
     .strictObject({
@@ -170,6 +197,11 @@ const Patch = z.strictObject({
       alertPeek: z.enum(STEWARD_CHOICES.alertPeek),
       dimWhenIdle: z.boolean(),
       hideFromScreenShare: z.boolean(),
+      hideInFullScreen: z.boolean(),
+      hideInApps: z
+        .array(z.object({ id: z.string().refine(isBundleId), name: z.string().min(1).max(80) }))
+        .max(MAX_APPS)
+        .refine((list) => new Set(list.map((a) => a.id)).size === list.length),
     })
     .partial()
     .optional(),

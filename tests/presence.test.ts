@@ -3,15 +3,21 @@ import {
   asleep,
   EDGE_BAND,
   EDGE_DWELL_MS,
+  EDGE_FAR_DWELL_MS,
+  EDGE_REARM,
+  EDGE_STILL,
   FIRST_PEEK_HOLD_MS,
   firstPeekOver,
+  freshPush,
   inEdgeZone,
   menuBarTitle,
   NOTCH_DWELL_MS,
   nextLookMs,
   peeksOut,
   presenceNote,
+  firstPeekNote,
   presenceNoteParts,
+  pushAlongEdge,
   screenBeside,
   showFirstPeek,
   splitAlerts,
@@ -19,32 +25,46 @@ import {
   TUCK_MS,
   WATCH_MS,
   WATCH_ZONE_MS,
+  type EdgeAt,
+  type Point,
   type PresenceInput,
   type PresenceState,
 } from '../src/main/presence'
 import type { AlertPeek, AlertView } from '../src/shared/types'
 
 const SCREEN = { x: 0, y: 0, width: 1512, height: 982 }
+/** The 14-inch MacBook Pro's work area: under the 33-point menu bar, with the Dock hidden. */
+const AREA = { x: 0, y: 33, width: 1512, height: 949 }
+/** The middle of the tab's saved spot. */
 const CENTER = 500
+const AT: EdgeAt = { screen: SCREEN, area: AREA, edge: 'right', savedCenterY: CENTER, dockOnEdge: false }
 
 describe('the push zone at the screen edge', () => {
-  it('is within 2 points of the edge Steward is on, inside the band around the tab', () => {
-    expect(inEdgeZone({ x: 1511, y: CENTER }, SCREEN, 'right', CENTER)).toBe(true)
-    expect(inEdgeZone({ x: 1510, y: CENTER + EDGE_BAND }, SCREEN, 'right', CENTER)).toBe(true)
-    expect(inEdgeZone({ x: 1511, y: CENTER - EDGE_BAND }, SCREEN, 'right', CENTER)).toBe(true)
-    expect(inEdgeZone({ x: 1, y: CENTER }, SCREEN, 'left', CENTER)).toBe(true)
+  it('is within 2 points of the edge Steward is on, anywhere along the work area', () => {
+    expect(inEdgeZone({ x: 1511, y: CENTER }, AT)).toBe(true)
+    expect(inEdgeZone({ x: 1510, y: 33 }, AT)).toBe(true)
+    expect(inEdgeZone({ x: 1511, y: 120 }, AT)).toBe(true)
+    expect(inEdgeZone({ x: 1511, y: 981 }, AT)).toBe(true)
+    expect(inEdgeZone({ x: 1, y: 700 }, { ...AT, edge: 'left' })).toBe(true)
   })
 
-  it('does nothing anywhere else on the edge, so scrollbars and side panels are left alone', () => {
-    expect(inEdgeZone({ x: 1511, y: CENTER + EDGE_BAND + 1 }, SCREEN, 'right', CENTER)).toBe(false)
-    expect(inEdgeZone({ x: 1511, y: 40 }, SCREEN, 'right', CENTER)).toBe(false)
-    expect(inEdgeZone({ x: 1508, y: CENTER }, SCREEN, 'right', CENTER)).toBe(false)
+  it('never in the menu bar band, or beside a Dock at the bottom, or further than 2 points from the edge', () => {
+    expect(inEdgeZone({ x: 1511, y: 20 }, AT)).toBe(false)
+    expect(inEdgeZone({ x: 1511, y: 950 }, { ...AT, area: { ...AREA, height: 949 - 70 } })).toBe(false)
+    expect(inEdgeZone({ x: 1508, y: CENTER }, AT)).toBe(false)
   })
 
   it('is on the edge Steward is on, and on its screen', () => {
-    expect(inEdgeZone({ x: 1, y: CENTER }, SCREEN, 'right', CENTER)).toBe(false)
-    expect(inEdgeZone({ x: 1511, y: CENTER }, SCREEN, 'left', CENTER)).toBe(false)
-    expect(inEdgeZone({ x: 1600, y: CENTER }, SCREEN, 'right', CENTER)).toBe(false)
+    expect(inEdgeZone({ x: 1, y: CENTER }, AT)).toBe(false)
+    expect(inEdgeZone({ x: 1511, y: CENTER }, { ...AT, edge: 'left' })).toBe(false)
+    expect(inEdgeZone({ x: 1600, y: CENTER }, AT)).toBe(false)
+  })
+
+  it('with the Dock on the same edge, is only the band around the saved spot, as before the tab came to you', () => {
+    const dock = { ...AT, area: { ...AREA, width: 1440 }, dockOnEdge: true }
+    expect(inEdgeZone({ x: 1511, y: CENTER + EDGE_BAND }, dock)).toBe(true)
+    expect(inEdgeZone({ x: 1511, y: CENTER + EDGE_BAND + 1 }, dock)).toBe(false)
+    expect(inEdgeZone({ x: 1511, y: 120 }, dock)).toBe(false)
   })
 
   it("knows when another screen touches that edge, so the cursor passes through instead of pushing", () => {
@@ -118,6 +138,55 @@ describe('coming out', () => {
 
   it('never when Presence is Always visible: there is nothing to come out of', () => {
     expect(run([[0, { inZone: true }], [1000, { inZone: true }]], asleep(), { quiet: false }).every((s) => s.change === null && !s.revealed)).toBe(true)
+  })
+})
+
+/** Runs looks at the cursor along the edge through pushAlongEdge and then the rules, as the edge's watcher does. */
+function pushes(looks: [number, Point][], start: PresenceState = asleep(), at: EdgeAt = AT) {
+  let state = start
+  let push = freshPush()
+  return looks.map(([now, cursor]) => {
+    const look = pushAlongEdge(push, cursor, at, state.revealed)
+    push = look.push
+    const step = stepPresence(state, { now, quiet: true, hidden: false, rest: true, inZone: look.inZone, onIt: false, dwellMs: look.dwellMs, restart: look.restart })
+    state = step.state
+    return step.change
+  })
+}
+const edge = (y: number): Point => ({ x: 1511, y })
+
+describe('the tab comes to you', () => {
+  it('after a push held for 300 ms near its saved spot, as before', () => {
+    expect(pushes([[0, edge(520)], [150, edge(520)], [299, edge(520)], [300, edge(520)]])).toEqual([null, null, null, 'reveal'])
+  })
+
+  it(`after ${EDGE_FAR_DWELL_MS} ms anywhere else along the edge, high or low`, () => {
+    expect(EDGE_FAR_DWELL_MS).toBe(500)
+    for (const y of [40, 300, 960]) expect(pushes([[0, edge(y)], [300, edge(y)], [499, edge(y)], [500, edge(y)]])).toEqual([null, null, null, 'reveal'])
+  })
+
+  it(`only while the cursor is held still: a wobble of up to ${EDGE_STILL} points is fine, more starts the push over`, () => {
+    expect(pushes([[0, edge(100)], [250, { x: 1510, y: 104 }], [500, { x: 1511, y: 103 }]])).toEqual([null, null, 'reveal'])
+    expect(pushes([[0, edge(100)], [250, edge(107)], [500, edge(107)], [750, edge(107)]])).toEqual([null, null, null, 'reveal'])
+  })
+
+  it('never for a cursor sliding along the edge, like a scrollbar being dragged', () => {
+    const slide = Array.from({ length: 60 }, (_, n): [number, Point] => [n * 50, edge(60 + n * 10)])
+    expect(pushes(slide).every((change) => change === null)).toBe(true)
+  })
+
+  it(`once it has been out, only after the cursor has left the edge by more than ${EDGE_REARM} points`, () => {
+    const out: PresenceState = { revealed: true, since: null }
+    // Out, the cursor resting further down the edge: it tucks away and stays away; leaving by 4 points isn't leaving.
+    expect(pushes([[0, edge(100)], [TUCK_MS, edge(100)], [2500, edge(100)], [3000, { x: 1508, y: 100 }], [3100, edge(100)], [4000, edge(100)]], out)).toEqual([null, 'tuck', null, null, null, null])
+    // Leaving by 12 points and coming back counts.
+    expect(pushes([[0, edge(100)], [TUCK_MS, edge(100)], [2000, { x: 1500, y: 100 }], [2100, edge(100)], [2600, edge(100)]], out)).toEqual([null, 'tuck', null, null, 'reveal'])
+  })
+
+  it('with the Dock on the same edge, only near the saved spot', () => {
+    const dock = { ...AT, area: { ...AREA, width: 1440 }, dockOnEdge: true }
+    expect(pushes([[0, edge(100)], [1000, edge(100)]], asleep(), dock)).toEqual([null, null])
+    expect(pushes([[0, edge(CENTER)], [300, edge(CENTER)]], asleep(), dock)).toEqual([null, 'reveal'])
   })
 })
 
@@ -219,9 +288,13 @@ describe('the menu bar', () => {
 
 describe('the first-time note', () => {
   it('is one short line: where to push, or the shortcut', () => {
-    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Push the right edge or press ⌥\u00a0Space.')
-    expect(presenceNote({ where: 'left', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Push the left edge or press ⌥\u00a0Space.')
+    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Push anywhere on the right edge or press ⌥\u00a0Space.')
+    expect(presenceNote({ where: 'left', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Push anywhere on the left edge or press ⌥\u00a0Space.')
     expect(presenceNote({ where: 'notch', hotkey: 'Alt+Space', besideScreen: false })).toBe('Hides until you need it. Rest the cursor on the notch or press ⌥\u00a0Space.')
+  })
+
+  it("doesn't say anywhere when the Dock is on that edge, since only the tab's spot counts there", () => {
+    expect(presenceNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false, dockOnEdge: true })).toBe('Hides until you need it. Push the right edge or press ⌥\u00a0Space.')
   })
 
   it('leaves out the edge when another screen touches it, since the cursor passes through', () => {
@@ -231,7 +304,7 @@ describe('the first-time note', () => {
   })
 
   it('points at the menu bar icon when the shortcut is off', () => {
-    expect(presenceNote({ where: 'right', hotkey: '', besideScreen: false })).toBe('Hides until you need it. Push the right edge or use the menu bar icon.')
+    expect(presenceNote({ where: 'right', hotkey: '', besideScreen: false })).toBe('Hides until you need it. Push anywhere on the right edge or use the menu bar icon.')
     expect(presenceNote({ where: 'right', hotkey: '', besideScreen: true })).toBe('Hides until you need it. Use the menu bar icon.')
   })
 })
@@ -259,7 +332,14 @@ describe('the first-launch peek', () => {
   })
 
   it('says the note in two parts: what is happening, and how to bring Steward out', () => {
-    expect(presenceNoteParts({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Hides until you need it.', how: 'Push the right edge or press ⌥\u00a0Space.' })
+    expect(presenceNoteParts({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Hides until you need it.', how: 'Push anywhere on the right edge or press ⌥\u00a0Space.' })
     expect(presenceNoteParts({ where: 'notch', hotkey: '', besideScreen: false }).how).toBe('Rest the cursor on the notch or use the menu bar icon.')
+  })
+
+  it('under the notch, the first-launch peek leads with how to bring Steward out, short enough for its one line', () => {
+    expect(firstPeekNote({ where: 'notch', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Rest the cursor on the notch', detail: 'or press ⌥\u00a0Space.' })
+    expect(firstPeekNote({ where: 'notch', hotkey: '', besideScreen: false }).detail).toBe('or use the menu bar icon.')
+    // At the edge it's the whole note, as it was.
+    expect(firstPeekNote({ where: 'right', hotkey: 'Alt+Space', besideScreen: false })).toEqual({ title: 'Hides until you need it.', detail: 'Push anywhere on the right edge or press ⌥\u00a0Space.' })
   })
 })

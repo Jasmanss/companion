@@ -406,6 +406,170 @@ pre {
   height: 12px;
 }
 
+/* ---------- the nudge under the notch ----------
+   Docked in the notch, the nudge is black, like the notch, and joins its chin (design/notch.html, "A nudge"). The
+   window's top is the menu bar line: concave corners join the chin's sides just under it, and the body starts 8 points
+   down, wide, with one line of text under the chin. The chin itself is the notch window's, drawn over this one.
+   Coming out, the body grows from narrow (hidden behind the chin) to full width while it drops 30 points into place:
+   its middle scales sideways and its two rounded ends slide out, so the corners never squash. Only transform and
+   opacity move. No overshoot: the window's edges would clip it. Going back is the same in reverse, quicker. */
+.notch-nudge {
+  position: relative;
+  height: 100%;
+  cursor: pointer;
+}
+
+.notch-nudge > i {
+  position: absolute;
+  background: #000;
+}
+
+.nn-mid,
+.nn-side,
+.notch-nudge > .nn-fil {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation-fill-mode: both;
+}
+
+.nn-mid,
+.nn-side {
+  top: 8px;
+  bottom: 0;
+}
+
+.nn-mid {
+  left: 16px;
+  right: 16px;
+  animation-name: nudge-mid-in;
+}
+
+/* A point wider than the corners, so the middle overlaps them: black on black, no seam. */
+.nn-side {
+  width: 17px;
+}
+
+.nn-side.l {
+  left: 0;
+  border-radius: 14px 0 0 16px;
+  animation-name: nudge-l-in;
+}
+
+.nn-side.r {
+  right: 0;
+  border-radius: 0 14px 16px 0;
+  animation-name: nudge-r-in;
+}
+
+/* The concave corners between the chin's sides and the body's top: black, minus a circle. */
+.notch-nudge > .nn-fil {
+  top: 0;
+  width: 8px;
+  height: 9px;
+  background: transparent;
+  animation-name: nudge-fil-in;
+}
+
+.nn-fil.l {
+  left: calc(50% - var(--neck) / 2 - 8px);
+  background: radial-gradient(circle at 0 0, transparent 7.5px, #000 8px);
+  transform-origin: 100% 100%;
+}
+
+.nn-fil.r {
+  left: calc(50% + var(--neck) / 2);
+  background: radial-gradient(circle at 100% 0, transparent 7.5px, #000 8px);
+  transform-origin: 0 100%;
+}
+
+.nn-line {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  color: #f2f3f5;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  animation: nudge-text-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.14s both;
+}
+
+.nn-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nn-text b {
+  color: var(--lit);
+}
+
+.nn-more {
+  flex: none;
+  color: rgba(242, 243, 245, 0.6);
+}
+
+/* Shown while the cursor is on the nudge, over the line's end (black, so the text under it doesn't show through). */
+.nn-close {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #000;
+  color: rgba(242, 243, 245, 0.7);
+  opacity: 0;
+  transition: opacity 0.15s linear;
+}
+
+.notch-nudge:hover .nn-close {
+  opacity: 1;
+}
+
+.nn-close:hover {
+  background: #2a2a2c;
+  color: #f2f3f5;
+}
+
+.nn-close svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Going back up into the notch: the pieces, not the whole (App.tsx waits for the middle's end). */
+:root[data-leaving] #root > .notch-nudge {
+  animation: none;
+}
+
+:root[data-leaving] .nn-mid {
+  animation: nudge-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-side.l {
+  animation: nudge-l-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-side.r {
+  animation: nudge-r-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .notch-nudge > .nn-fil {
+  animation: nudge-fil-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-line {
+  animation: nudge-text-out 0.1s linear forwards;
+}
+
 /* ---------- panel ---------- */
 .panel {
   position: relative;
@@ -419,12 +583,45 @@ pre {
   animation: panel-in 0.35s var(--spring) backwards;
 }
 
+/* Docked in the notch, the panel comes down from it: it grows from its top center instead of sliding in from the side. */
+:root[data-notch] .panel {
+  transform-origin: 50% 0;
+  animation-name: panel-drop;
+}
+
+/* Closing goes back up into the notch, the entrance in reverse, and then the window goes (App.tsx says when). */
+:root[data-leaving] #root > * {
+  transform-origin: 50% 0;
+  animation: panel-rise 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+/* Dragged somewhere, the panel pops in where it was left, at the edge or in the notch: a fade with a small grow from
+   its middle (design/movable-panel.html). */
+:root[data-placed] .panel {
+  transform-origin: 50% 50%;
+  animation: panel-settle-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* Closing, it shrinks a little and fades where it is, the pop-in in reverse; then the tab or the notch is back. */
+:root[data-leaving='in-place'] #root > * {
+  transform-origin: 50% 50%;
+  animation: panel-settle-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px 8px 6px;
   border-bottom: 1px solid var(--line);
+  /* The bar is the handle to drag the panel by (panel-drag.ts): a double-click on it doesn't select the name. */
+  user-select: none;
+  touch-action: none;
+}
+
+.panel-head.dragging {
+  cursor: grabbing;
 }
 
 .head-text {
@@ -1004,6 +1201,203 @@ pre {
 .saved-actions {
   display: flex;
   gap: 6px;
+}
+
+/* ---------- Visual Review: what changed on the running page ---------- */
+.card.review {
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card.review .card-head {
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+.rv-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rv-actions .chip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rv-ba {
+  position: relative;
+  flex: none;
+  aspect-ratio: 1440 / 900;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--inset2);
+  box-shadow: 0 0 0 1px var(--line);
+  --x: 55%;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.rv-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.rv-layer.rv-after {
+  clip-path: inset(0 0 0 var(--x));
+}
+
+.rv-layer img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: top left;
+}
+
+.rv-tag {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rv-tag.b {
+  left: 8px;
+}
+
+.rv-tag.a {
+  right: 8px;
+}
+
+.rv-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x);
+  z-index: 3;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.rv-bar::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* The real control is a range input over the whole picture, so dragging anywhere and the arrow keys both work. */
+.rv-ba input[type='range'] {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+}
+
+.rv-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px rgb(var(--live));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rv-ba input[type='range']:focus-visible + .rv-ring {
+  opacity: 1;
+}
+
+.card.review .rv-facts {
+  margin: 0;
+}
+
+.rv-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgb(var(--live));
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rv-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Why a project's page can't be seen: quiet, where the card would be. */
+.notice.review-problem {
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--t2);
+}
+
+.notice.review-problem strong {
+  color: var(--t1);
+}
+
+.notice.review-problem .rv-actions {
+  flex: none;
+}
+
+.rv-buttons .btn {
+  flex: 1;
+}
+
+.rv-send {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rv-send textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t1);
+  font: inherit;
+  resize: vertical;
+}
+
+.rv-out {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t3);
+  font: 500 11px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 /* ---------- chat ---------- */
@@ -2109,6 +2503,105 @@ a.icon-btn {
   }
 }
 
+@keyframes panel-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+@keyframes panel-rise {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+@keyframes panel-settle-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes panel-settle-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes panel-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The nudge under the notch, from narrow (140 points of its 340) and 30 points up, behind the chin. */
+@keyframes nudge-mid-in {
+  from {
+    transform: translateY(-30px) scaleX(0.35);
+  }
+}
+
+@keyframes nudge-l-in {
+  from {
+    transform: translate(100px, -30px);
+  }
+}
+
+@keyframes nudge-r-in {
+  from {
+    transform: translate(-100px, -30px);
+  }
+}
+
+@keyframes nudge-fil-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+@keyframes nudge-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes nudge-up {
+  to {
+    transform: translateY(-30px) scaleX(0.35);
+  }
+}
+
+@keyframes nudge-l-up {
+  to {
+    transform: translate(100px, -30px);
+  }
+}
+
+@keyframes nudge-r-up {
+  to {
+    transform: translate(-100px, -30px);
+  }
+}
+
+/* Its own name: App.tsx takes panel-fade-out's end as the end of the whole way back. */
+@keyframes nudge-text-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes nudge-fil-up {
+  to {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
 @keyframes nudge-in {
   from {
     opacity: 0;
@@ -2304,6 +2797,42 @@ a.icon-btn {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
+  /* From the notch, the panel only fades in, and out. */
+  :root[data-notch] .panel {
+    animation-name: fadein;
+  }
+
+  :root[data-leaving] #root > * {
+    animation-name: panel-fade-out;
+  }
+
+  /* A moved panel: a 150 ms fade in, and out, where it is. */
+  :root[data-placed] .panel {
+    animation-duration: 0.15s;
+  }
+
+  :root[data-leaving='in-place'] #root > * {
+    animation: panel-fade-out 0.15s linear forwards;
+  }
+
+  /* The nudge under the notch fades in and out whole, its pieces still. */
+  .notch-nudge > i,
+  .notch-nudge > .nn-fil,
+  .nn-line,
+  :root[data-leaving] .notch-nudge > i,
+  :root[data-leaving] .notch-nudge > .nn-fil,
+  :root[data-leaving] .nn-line {
+    animation: none;
+  }
+
+  .notch-nudge {
+    animation: fadein 0.2s linear both;
+  }
+
+  :root[data-leaving] #root > .notch-nudge {
+    animation: panel-fade-out 0.2s linear forwards;
+  }
+
   :root[data-slide='out'] #root {
     transform: none;
     opacity: 0;

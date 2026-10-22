@@ -27,20 +27,48 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
 - **Presence (Settings → Steward):** "Always visible" is the above. "Only when
   needed" (the default for a new install) keeps Steward out of sight at rest,
   on the edge and in the notch. It comes out when you push the cursor against
-  its edge (within 2 pt, beside the tab, for 0.3 s) or rest it on the notch
-  (0.25 s), when a session needs you, while the agent is working, or on the
-  hotkey and the menu bar icon, which always open the panel. It tucks away
-  1.5 s after the cursor leaves. In the notch it sleeps as the notch's own black,
-  with no chin and no eyes. It slides in and out as a transform in the page, so
-  every frame is the display's. Manual Hide stays separate: nothing brings it
-  back but you.
+  its edge or rest it on the notch (0.25 s), when a session needs you, while
+  the agent is working, or on the hotkey and the menu bar icon, which always
+  open the panel. It tucks away 1.5 s after the cursor leaves. In the notch it
+  sleeps as the notch's own black, with no chin and no eyes. It slides in and
+  out as a transform in the page, so every frame is the display's. Manual Hide
+  stays separate: nothing brings it back but you.
+- **The tab comes to you:** push the cursor against the edge (within 2 pt)
+  anywhere along it and hold still: 0.3 s near the tab's spot, 0.5 s anywhere
+  else. The tab comes out right at the cursor's height, and goes back to its
+  spot once it has tucked away. Sliding along the edge (a scrollbar) never
+  counts, and once it has been out, the cursor has to leave the edge before a
+  new push counts. With the Dock on the same edge, only the tab's spot counts.
 - **Move the tab:** drag it up or down its edge, as far as the menu bar and
   the Dock. It remembers the height on each display; Settings → Steward →
-  Height → Reset puts it back in the middle. The panel opens centered on it.
+  Place → Reset puts it back in the middle. The panel opens centered on it.
+- **Move the panel:** drag it by its top bar (not the buttons) anywhere inside
+  the screen's work area. From then on it opens where you left it, popping in
+  there, and closes there too; the tab or the notch is back after. Double-click
+  the top bar, or Settings → Steward → Reset, to put it back at its edge or
+  under the notch, with its old way in. The viewer isn't movable.
 - **First launch:** a new install that hides until needed peeks out once, a
   moment after it starts, with a one-line note on how to bring it back.
 - **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
   eyes fade and stop moving, until something happens or the cursor comes near.
+- **In the notch (Settings → Steward → Screen edge → Notch, on a MacBook that
+  has one):** Steward becomes a black shape around the notch with its eyes lit
+  in it (a chin below it, or wings beside it). With the cursor on it, the black
+  grows a little and the eyes follow the cursor (in "Only when needed", waking
+  up is that grow). A click opens the panel centered under the notch, coming
+  down from it, on the notch's own screen; closing it puts Steward back in the
+  notch. An alert that peeks out comes out under the notch instead of from the
+  side: a black shape below the menu bar line, joined to the chin (Wings grows
+  one for it), with one line of text. A click opens the panel (an alert's
+  action is on its banner there), and it goes back up into the notch when it
+  tucks away. It never covers the menu bar.
+- **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
+  open panel) while an app fills the screen it's on (on for a new install), or
+  while an app on your list is in front ("Add app…", or one click for Keynote,
+  Zoom or FaceTime). Alerts wait in the menu bar and peek out once you're
+  back; the hotkey and the menu bar icon still open the panel. It listens to
+  macOS's own app-switch and Space notifications, and asks macOS only when the
+  Space changes, so nothing runs in between.
 - **Alerts that peek out (Settings → Steward → Presence):** only when a session
   needs me (the default in "Only when needed"), everything switched on in
   Notifications (the default in "Always visible"), or nothing. What doesn't peek
@@ -165,6 +193,9 @@ only change the fields it shows.
 
 - **Every command and file edit shows an approval card** with the exact command
   or diff, unless it's on an allowlist I set (e.g. `npm test`, `git status`).
+  **Auto** (Settings → Running commands, off by default) also skips the card for
+  commands that aren't risky; risky ones, deploys, rollbacks and `git push`
+  still ask.
 - Only works inside project folders I've added.
 - **Reading files is read-only and stays in the current project.** `read_file` and
   `list_files` need no approval, but every read shows as a step. Paths are resolved to
@@ -319,4 +350,4 @@ the panel.
 
 ## Open questions
 
-- The notch: a third spot to sit, under the MacBook notch (planned after the character)
+- The notch, still to come: dropping images on the notch, and the black growing into the panel (docs/briefs/notch-dock-phase-3.md)

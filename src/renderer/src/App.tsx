@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
-import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
@@ -11,13 +11,16 @@ import { ContextPill, ProjectSwitcher } from './ContextPill'
 import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
-import { Nudge } from './Nudge'
+import { ReviewCard, ReviewProblems } from './ReviewCard'
+import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
+import { palette } from './pill/render'
 import { SessionStrip } from './SessionStrip'
 import { useTabDrag } from './tab-drag'
+import { usePanelDrag } from './panel-drag'
 import { useDimmed } from './dim'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
@@ -65,6 +68,10 @@ export function App() {
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
+  /** Visual Review: what changed on a running page, waiting for a decision. "Later" hides one until the panel opens again. */
+  const [reviews, setReviews] = useState<ReviewView[]>([])
+  const [laterReviews, setLaterReviews] = useState<ReadonlySet<string>>(new Set())
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const [switcher, setSwitcher] = useState(false)
   const switcherShown = usePresence(switcher)
@@ -87,9 +94,14 @@ export function App() {
     api.tray.list().then(setItems, showError)
     api.settings.get().then(setSettings, showError)
     api.sessions.list().then(setSessions, showError)
+    api.review.list().then(setReviews, showError)
     // The agent can switch projects too.
     const offSettings = api.settings.onChanged(setSettings)
-    const offDock = api.dock.onState(setDock)
+    const offDock = api.dock.onState((state) => {
+      setDock(state)
+      if (state === 'expanded') setLaterReviews(new Set())
+    })
+    const offReview = api.review.onChanged(setReviews)
     const offTray = api.tray.onChanged(setItems)
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
@@ -113,6 +125,7 @@ export function App() {
       offMood()
       offLeftOff()
       offBrief()
+      offReview()
       clearInterval(clock)
       offDock()
       offTray()
@@ -200,6 +213,67 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
   }, [look.edge])
+
+  // Docked in the notch, the panel comes down from it instead of in from the side (styles.css).
+  const [notchGeo, setNotchGeo] = useState<NotchGeometry | null>(null)
+  useEffect(() => {
+    void api.notch.geometry().then(setNotchGeo)
+    return api.notch.onGeometry(setNotchGeo)
+  }, [])
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
+  }, [look.notch, notchGeo])
+
+  // Dragged somewhere, the panel pops in and out where it is (styles.css). Main says so just before it opens or closes,
+  // and the attribute is set right away, so the panel's first frame already has the right entrance.
+  const [placed, setPlaced] = useState(false)
+  useEffect(
+    () =>
+      api.dock.onPlaced((on) => {
+        document.documentElement.toggleAttribute('data-placed', on)
+        setPlaced(on)
+      }),
+    [],
+  )
+  const panelDrag = usePanelDrag()
+
+  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out (the panel, the viewer or a
+  // nudge) stays, goes back up into the notch (styles.css), and then tells main the window can go. A moved panel does
+  // the same where it is, at the edge too. What's next is drawn once main says the window has gone or moved (onLeft),
+  // so the tab never shows for a frame in the panel's window. Worked out while rendering, for the same reason.
+  const [leaving, setLeaving] = useState<DockState | null>(null)
+  const [shownDock, setShownDock] = useState(dock)
+  if (dock !== shownDock) {
+    setShownDock(dock)
+    const wasOpen = shownDock === 'expanded' || shownDock === 'viewing'
+    const wasOut = wasOpen || shownDock === 'nudge'
+    const closing = dock === 'collapsed' || dock === 'hidden'
+    setLeaving(closing && ((wasOut && look.notch && notchGeo !== null) || (wasOpen && placed)) ? shownDock : null)
+  }
+  useEffect(() => api.dock.onLeft(() => setLeaving(null)), [])
+  const leavingInPlace = leaving !== null && leaving !== 'nudge' && placed
+  useEffect(() => {
+    if (!leaving) return
+    const root = document.documentElement
+    root.setAttribute('data-leaving', leavingInPlace ? 'in-place' : '')
+    let told = false
+    const done = () => {
+      if (told) return
+      told = true
+      api.dock.intoNotchEnded()
+    }
+    // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
+    const ended = (e: AnimationEvent) => {
+      if (['panel-rise', 'panel-fade-out', 'nudge-up', 'panel-settle-out'].includes(e.animationName)) done()
+    }
+    document.addEventListener('animationend', ended)
+    const timer = setTimeout(done, 400)
+    return () => {
+      document.removeEventListener('animationend', ended)
+      clearTimeout(timer)
+      root.removeAttribute('data-leaving')
+    }
+  }, [leaving, leavingInPlace])
 
   // The glass's tint and frost, from Settings → Steward.
   useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])
@@ -456,6 +530,7 @@ export function App() {
   useEffect(() => api.presence.onNear(setNear), [])
   const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
+  const shownReviews = reviews.filter((r) => !laterReviews.has(r.id))
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
   const runAction = (alert: AlertView) => {
@@ -472,7 +547,10 @@ export function App() {
   // Working: what it's on right now. Idle: the last file it read here.
   const pillTouch: Touch | null = (busy && touch) || (lastFile ? { kind: 'file', text: lastFile } : null)
 
-  if (dock === 'viewing' && items.length > 0) {
+  // Going back into the notch, what was open stays on screen until it's gone (see leaving, above).
+  const view = leaving ?? dock
+
+  if (view === 'viewing' && items.length > 0) {
     return (
       <Viewer
         items={items}
@@ -485,7 +563,12 @@ export function App() {
     )
   }
 
-  if (dock === 'nudge') {
+  if (view === 'nudge' && look.notch && notchGeo) {
+    const lit = palette(look.version, { color: colorHex(look.color), tinted: true, light: false, mouth: look.mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
+    return <NotchNudge alerts={nudgeAlerts} notchWidth={notchGeo.width} lit={lit} onOpen={() => api.dock.expand()} onDismiss={tuckAway} />
+  }
+
+  if (view === 'nudge') {
     return (
       <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
         <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
@@ -493,7 +576,7 @@ export function App() {
     )
   }
 
-  if (dock === 'collapsed' || dock === 'hidden') {
+  if (view === 'collapsed' || view === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
       <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
@@ -505,7 +588,7 @@ export function App() {
 
   return (
     <div className={`panel ${dragOver ? 'drag-over' : ''}`} data-app>
-      <header className="panel-head">
+      <header className="panel-head" title="Drag to move. Double-click to put it back." {...panelDrag}>
         <Pill mood={mood} glint={glint} width={64} height={54} cls="header" look={look} />
         <div className="head-text">
           <div className="head-top">
@@ -517,6 +600,7 @@ export function App() {
               <button
                 className={`icon-btn ${pinned ? 'on' : ''}`}
                 aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
+                title={pinned ? 'Unpin panel' : 'Keep panel open'}
                 aria-pressed={pinned}
                 onClick={() => api.settings.update({ keepPanelOpen: !pinned }).then(setSettings, showError)}
               >
@@ -594,6 +678,25 @@ export function App() {
               Got it
             </button>
           </div>
+        )}
+        <ReviewProblems />
+        {reviewNotice && (
+          <div className="notice" role="status">
+            {reviewNotice}
+            <button className="chip" onClick={() => setReviewNotice(null)}>
+              Got it
+            </button>
+          </div>
+        )}
+        {shownReviews[0] && (
+          <ReviewCard
+            key={shownReviews[0].id}
+            review={shownReviews[0]}
+            more={shownReviews.length - 1}
+            onLater={() => setLaterReviews(new Set(laterReviews).add(shownReviews[0].id))}
+            onDone={setReviewNotice}
+            onError={setToast}
+          />
         )}
         {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
         {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}

@@ -6,10 +6,12 @@
 // when needed, at rest), the shape shrinks to the notch's own black and the eyes are off.
 //
 // The cursor comes from the main process (the window ignores the mouse except over the shape), and a click on the
-// shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden.
+// shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden. With
+// the cursor on it (Always visible), the black grows a little: the chin taller, or the wings wider. With an alert out
+// under it (the main window's nudge), the chin shows in Wings too, so the two blacks join.
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
-import { NOTCH_EYE, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
+import { NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
 import type { Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
@@ -37,14 +39,14 @@ export function NotchWindow() {
     return () => window.removeEventListener('click', click)
   }, [])
   if (!state?.layout) return null
-  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} prefs={prefs} />
+  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} prefs={prefs} />
 }
 
-function NotchFace({ layout, mood, glint, awake, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; prefs: StewardPrefs }) {
+function NotchFace({ layout, mood, glint, awake, hover, nudge, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; prefs: StewardPrefs }) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), performance.now() / 1000))
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
-  const reshape = useRef<((mood: Mood, awake: boolean) => void) | null>(null)
+  const reshape = useRef<((mood: Mood, awake: boolean, hover: boolean, nudge: boolean) => void) | null>(null)
   // The eyes only draw while awake; the shape and the eyes follow it without the face being built again.
   const awakeNow = useRef(awake)
   useEffect(() => {
@@ -64,13 +66,19 @@ function NotchFace({ layout, mood, glint, awake, prefs }: { layout: NotchLayout;
   useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
   useEffect(() => {
     setMood(st, mood, glint)
-    reshape.current?.(mood, awake)
-  }, [st, mood, glint, awake])
+    reshape.current?.(mood, awake, hover, nudge)
+  }, [st, mood, glint, awake, hover, nudge])
+  const hoverNow = useRef(hover)
+  const nudgeNow = useRef(nudge)
+  useEffect(() => {
+    hoverNow.current = hover
+    nudgeNow.current = nudge
+  }, [hover, nudge])
 
   useEffect(() => {
     const el = host.current
     if (!el) return
-    const face = build(el, st, { layout: { cx, width, height }, style: notchStyle, kind: version, color: colorHex(color), mouth, reduced, awake: awakeNow.current })
+    const face = build(el, st, { layout: { cx, width, height }, style: notchStyle, kind: version, color: colorHex(color), mouth, reduced, awake: awakeNow.current, hover: hoverNow.current, nudge: nudgeNow.current })
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
@@ -124,10 +132,17 @@ interface FaceOptions {
   reduced: boolean
   /** Awake at first: the shape and the eyes, or asleep, only the notch's own black. */
   awake: boolean
+  /** The cursor on it at first: grown a little. */
+  hover: boolean
+  /** An alert out under it at first. */
+  nudge: boolean
 }
 
-/** Draws the black shape and the lit eyes. reshape(mood, awake) changes the shape for a mood (Wings' chin comes and goes) and wakes or sleeps it. */
-function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillView[]; center: HTMLElement; reshape(mood: Mood, awake: boolean): void } {
+/**
+ * Draws the black shape and the lit eyes. reshape(mood, awake, hover, nudge) changes the shape for a mood (Wings' chin
+ * comes and goes), wakes or sleeps it, grows it a little while the cursor is on it, and joins it to an alert under it.
+ */
+function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillView[]; center: HTMLElement; reshape(mood: Mood, awake: boolean, hover: boolean, nudge: boolean): void } {
   const { cx, width: nw, height: nh } = o.layout
   const E = NOTCH_EYE, k = E / 18, W = Math.round(92 * k), H = Math.round(60 * k)
   const eyeY = nh + NOTCH_LIP / 2
@@ -161,8 +176,11 @@ function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillV
   } else eyes('main', 0, eyeY, [Math.min(68, HW - 24), 0])
 
   let sig = ''
-  const apply = (mood: Mood, awake: boolean) => {
-    const shape = notchShape(o.style, mood, { width: nw, height: nh }, awake)
+  // With Reduce Motion on, hovering doesn't grow the black (it would only fade out and back in).
+  const grows = (hover: boolean) => hover && !o.reduced
+  const signature = (mood: Mood, awake: boolean, hover: boolean, nudge: boolean) => JSON.stringify([notchShape(o.style, mood, { width: nw, height: nh }, awake, grows(hover), nudge), needsMiddle(mood), awake])
+  const apply = (mood: Mood, awake: boolean, hover: boolean, nudge: boolean) => {
+    const shape = notchShape(o.style, mood, { width: nw, height: nh }, awake, grows(hover), nudge)
     lip.size(nw, shape.lip)
     wings?.size(shape.wings, nh)
     const middle = needsMiddle(mood)
@@ -170,31 +188,37 @@ function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillV
     spots.chin?.classList.toggle('on', awake && middle)
     spots.wl?.classList.toggle('on', awake && !middle)
     spots.wr?.classList.toggle('on', awake && !middle)
-    return JSON.stringify([shape, middle, awake])
+    // The eyes stay in the middle of the chin as it grows.
+    if (spots.main) spots.main.style.transform = `translate(0px,${px(eyeY + (o.style === 'chin' && awake && grows(hover) ? NOTCH_HOVER_LIP / 2 : 0))})`
+    return signature(mood, awake, hover, nudge)
   }
-  const snap = (mood: Mood, awake: boolean) => {
+  const snap = (mood: Mood, awake: boolean, hover: boolean, nudge: boolean) => {
     root.classList.add('snap')
-    sig = apply(mood, awake)
+    sig = apply(mood, awake, hover, nudge)
     void root.offsetWidth
     root.classList.remove('snap')
   }
-  snap(st.mood, o.awake)
+  snap(st.mood, o.awake, o.hover, o.nudge)
   let fade: ReturnType<typeof setTimeout> | undefined
+  let last = { mood: st.mood, awake: o.awake, nudge: o.nudge }
   return {
     views,
     center: (spots.main ?? spots.chin)!,
-    reshape(mood, awake) {
-      const next = JSON.stringify([notchShape(o.style, mood, { width: nw, height: nh }, awake), needsMiddle(mood), awake])
+    reshape(mood, awake, hover, nudge) {
+      const next = signature(mood, awake, hover, nudge)
       if (next === sig) return
+      // Only the hover changed: a quicker, softer move than a change of mood or waking (design/notch.html: 220 ms, out).
+      root.classList.toggle('quick', mood === last.mood && awake === last.awake && nudge === last.nudge)
+      last = { mood, awake, nudge }
       if (!o.reduced) {
-        sig = apply(mood, awake)
+        sig = apply(mood, awake, hover, nudge)
         return
       }
       // Reduced motion: fade out, change, fade back in, instead of flowing.
       root.classList.add('rm-out')
       clearTimeout(fade)
       fade = setTimeout(() => {
-        snap(mood, awake)
+        snap(mood, awake, hover, nudge)
         root.classList.remove('rm-out')
       }, 150)
     },

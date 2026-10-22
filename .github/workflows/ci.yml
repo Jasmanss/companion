@@ -43,6 +43,9 @@ jobs:
       - run: npm ci
       - name: Launch the app and screenshot its panel and Settings
         run: npm run smoke
+        env:
+          # The runner's screen has no notch: pretend it does (185 x 32 pt, a 33 pt menu bar) so the notch checks run.
+          STEWARD_SMOKE_NOTCH: '1'
       - uses: actions/upload-artifact@v7
         if: always()
         with:

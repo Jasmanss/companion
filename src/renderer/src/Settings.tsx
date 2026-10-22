@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
-import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, TAB_SIZES, panelTint } from '../../shared/steward'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
+import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, SUGGESTED_STEP_ASIDE_APPS, TAB_SIZES, panelTint } from '../../shared/steward'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewProblem, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
 import type { Glint } from './pill/eyes'
@@ -304,6 +304,44 @@ const ALERT_PEEK_NOTES: Record<StewardPrefs['alertPeek'], string> = {
   none: 'Nothing. They wait in the menu bar.',
 }
 
+/** Step aside: Steward hides while an app fills its screen, or while an app on the list is in front. Alerts wait meanwhile. */
+function StepAsideGroup({ look, run, set }: { look: StewardPrefs; run: ReturnType<typeof runner>; set: (patch: Partial<StewardPrefs>) => void }) {
+  const apps = look.hideInApps
+  const suggested = SUGGESTED_STEP_ASIDE_APPS.filter((s) => !apps.some((a) => a.id === s.id))
+  return (
+    <Group title="Step aside" note="Steward hides, and alerts wait in the menu bar until you’re back.">
+      <SwitchRow label="In full-screen apps" note="While an app fills the screen Steward is on." checked={look.hideInFullScreen} onChange={(hideInFullScreen) => set({ hideInFullScreen })} />
+      {apps.map((a) => (
+        <div className="set-row" key={a.id}>
+          <div className="set-label">
+            <span>{a.name}</span>
+            <small>While it’s in front</small>
+          </div>
+          <div className="set-ctl">
+            <button className="btn small quiet" onClick={() => set({ hideInApps: apps.filter((x) => x.id !== a.id) })} aria-label={`Remove ${a.name}`}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+      <div className="set-row">
+        <button className="btn" onClick={() => run(api().settings.addStepAsideApp())}>
+          Add app…
+        </button>
+        {suggested.length > 0 && (
+          <div className="set-chips">
+            {suggested.map((s) => (
+              <button key={s.id} className="chip" onClick={() => set({ hideInApps: [...apps, s] })}>
+                + {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Group>
+  )
+}
+
 /** The character: a live preview, then how it looks, how it behaves, its name, and where it sits. */
 export function StewardSection(props: SectionProps) {
   // (A main process from before the character, or before the panel's tint, sends less: the defaults fill in.)
@@ -373,13 +411,18 @@ export function StewardSection(props: SectionProps) {
             onChange={(v) => set(v === 'notch' ? { notch: true } : { edge: v, notch: false })}
           />
         </Row>
-        {where !== 'notch' && (
-          <Row label="Height" note="Drag the tab up or down to move it.">
-            <button className="btn small" onClick={() => run(api().dock.resetPlace().then(() => api().settings.get()))}>
-              Reset
-            </button>
-          </Row>
-        )}
+        <Row
+          label={where === 'notch' ? 'Panel' : 'Place'}
+          note={
+            where === 'notch'
+              ? 'Drag the panel by its top bar to move it. Reset puts it back under the notch.'
+              : 'Drag the tab up or down, or the panel by its top bar. Reset puts both back.'
+          }
+        >
+          <button className="btn small" onClick={() => run(api().dock.resetPlace().then(() => api().settings.get()))}>
+            Reset
+          </button>
+        </Row>
         {where === 'notch' && (
           <Row label="In the notch" note={look.notchStyle === 'wings' ? 'One eye on each side of the notch, in the menu bar.' : 'A chin below the notch, with the eyes in it.'}>
             <Segmented label="In the notch" value={look.notchStyle} options={[['chin', 'Chin'], ['wings', 'Wings']]} onChange={(notchStyle) => set({ notchStyle })} />
@@ -399,6 +442,8 @@ export function StewardSection(props: SectionProps) {
         </Row>
         <SwitchRow label="Dim when idle" note="The eyes fade after 20 seconds at rest." checked={look.dimWhenIdle} onChange={(dimWhenIdle) => set({ dimWhenIdle })} />
       </Group>
+
+      <StepAsideGroup look={look} run={run} set={set} />
 
       <Group title="The panel">
         <Row label="Tint" note={panelTint(look.tint).name}>
@@ -479,6 +524,14 @@ export function ProjectsSection(props: SectionProps) {
           </div>
         </Group>
       )}
+
+      {settings.projects.length > 0 && <ReviewGroup projects={settings.projects} run={run} onError={props.onError} />}
+
+      <Group>
+        <Row label="Running commands" note="Auto runs commands without asking, except risky ones.">
+          <Segmented label="Running commands" value={settings.commandMode} options={[['ask', 'Ask each time'], ['auto', 'Auto']]} onChange={(commandMode) => run(api().settings.update({ commandMode }))} />
+        </Row>
+      </Group>
 
       <Group title="Commands that skip approval" note="Exact commands only, one per line. Everything else asks first, and deploys, rollbacks and git push always do.">
         <div className="set-field">
@@ -602,8 +655,183 @@ function SecretField({
   )
 }
 
+/** One project's Visual Review address: where its app runs on this Mac, and a button to see that Steward can capture it. */
+function ReviewAddressRow({ project, problem, run }: { project: Project; problem?: ReviewProblem; run: (p: Promise<SettingsView>) => Promise<boolean> }) {
+  const saved = project.url ?? ''
+  const [text, setText] = useState(saved)
+  const [trying, setTrying] = useState(false)
+  const [result, setResult] = useState<ReviewTryResult | null>(null)
+  const dirty = text.trim() !== saved
+
+  // Once saved (tidied up), or changed elsewhere, the field shows the address as it is.
+  useEffect(() => setText(saved), [saved])
+
+  const save = () => run(api().settings.setProjectUrl(project.path, text))
+  const tryIt = async () => {
+    setResult(null)
+    setTrying(true)
+    // "Try it now" looks at the saved address, so a changed one is saved (and checked) first.
+    if (!dirty || (await save())) setResult(await api().review.tryIt(project.path))
+    setTrying(false)
+  }
+
+  return (
+    <div className="set-row column">
+      <div className="set-label">
+        <span>{project.name}</span>
+        <small>{saved ? 'Visual Review is on' : 'Off. Paste the address your app runs at.'}</small>
+      </div>
+      <div className="set-inline">
+        <input
+          type="text"
+          className="set-address"
+          value={text}
+          placeholder="localhost:3000"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && dirty && save()}
+          aria-label={`App address for ${project.name}`}
+        />
+        <button className="btn" disabled={!dirty} onClick={save}>
+          Save
+        </button>
+        <button className="btn" disabled={trying || !text.trim()} onClick={tryIt}>
+          {trying ? 'Looking…' : 'Try it now'}
+        </button>
+      </div>
+      {result && (result.ok ? (
+        <figure className="set-shot">
+          <img src={result.image} alt={`${project.name} as Steward sees it`} />
+          <figcaption>
+            Captured {result.width} × {result.height} px in {(result.ms / 1000).toFixed(1)} s.
+          </figcaption>
+          {result.note && (
+            <p className={`set-note flush${result.login ? ' set-problem' : ''}`} role={result.login ? 'alert' : undefined}>
+              {result.note}
+            </p>
+          )}
+        </figure>
+      ) : (
+        <p className="set-note flush set-problem" role="alert">
+          {result.error}
+        </p>
+      ))}
+      {/* The last capture's trouble (from a session, or an earlier try), until one works. Try it now's own answer says it already. */}
+      {!result && problem && (
+        <p className="set-note flush set-problem" role="status">
+          {problem.reason}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Visual Review needs the prompt hook. Said right under the addresses (not only in Connections), with the same
+ * "show the exact change, then add it" as the Connect switch.
+ */
+function ReviewHookNotice({ onError }: { onError: (message: string) => void }) {
+  const [status, setStatus] = useState<ClaudeHookStatus | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const fail = (err: unknown) => onError(message(err))
+
+  useEffect(() => {
+    api().claude.status().then(setStatus, () => setStatus(null))
+  }, [])
+
+  if (!status || (status.connected && status.reviewHook)) return null
+  const update = status.connected || status.outdated
+  if (preview === null)
+    return (
+      <div className="set-row">
+        <div className="set-label">
+          <span>{update ? 'Visual Review needs one more hook' : "Visual Review needs Steward's Claude Code hooks"}</span>
+          <small>They tell Steward when a prompt is sent and when a session stops, so it can photograph your app before and after. What you type is dropped as it arrives and never kept.</small>
+        </div>
+        <div className="set-ctl">
+          <button className="btn" onClick={() => api().claude.preview().then(setPreview, fail)}>
+            {update ? 'Update hooks' : 'Add hooks'}
+          </button>
+        </div>
+      </div>
+    )
+  return (
+    <div className="set-row column">
+      <p className="set-note flush">
+        This is merged into <code>{status.settingsFile}</code>. Everything else in it stays as is, the original is backed up to <code>{status.backupFile}</code>,
+        and turning Connect to Claude Code off removes only these entries.
+      </p>
+      <pre className="set-code">{preview}</pre>
+      <div className="set-actions">
+        <button className="btn" onClick={() => setPreview(null)}>
+          Cancel
+        </button>
+        <button
+          className="btn primary"
+          onClick={() =>
+            api()
+              .claude.connect()
+              .then((next) => {
+                setStatus(next)
+                setPreview(null)
+              }, fail)
+          }
+        >
+          {update ? 'Update these hooks' : 'Add these hooks'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Visual Review: when a session stops and the running page looks different, Steward shows the before and after. */
+function ReviewGroup({ projects, run, onError }: { projects: Project[]; run: (p: Promise<SettingsView>) => Promise<boolean>; onError: (message: string) => void }) {
+  const [usage, setUsage] = useState<{ count: number; bytes: number } | null>(null)
+  const [problems, setProblems] = useState<ReviewProblem[]>([])
+  useEffect(() => {
+    api().review.usage().then(setUsage, () => setUsage(null))
+    api().review.problems().then(setProblems, () => setProblems([]))
+    return api().review.onProblems(setProblems)
+  }, [])
+  const size = usage ? (usage.bytes < 1_000_000 ? `${Math.max(1, Math.round(usage.bytes / 1000))} KB` : `${Math.round(usage.bytes / 1_000_000)} MB`) : ''
+
+  return (
+    <Group
+      title="Visual Review"
+      note="When a Claude Code session in a project stops and the page at its address looks different, Steward shows what changed, before and after. Only addresses on this Mac work (localhost, 127.0.0.1). The pictures stay on this Mac, and Steward never signs in, so for a page behind a login it only sees the login page: use one that doesn't need it."
+    >
+      {projects.map((p) => (
+        <ReviewAddressRow key={p.path} project={p} problem={problems.find((x) => x.projectPath === p.path)} run={run} />
+      ))}
+      {projects.some((p) => p.url) && <ReviewHookNotice onError={onError} />}
+      <div className="set-row">
+        <div className="set-label">
+          <span>Review pictures</span>
+          <small>{usage ? (usage.count ? `${usage.count} kept, ${size}.` : 'None kept.') : ''} Up to 10 per project, 14 days, about 300 MB.</small>
+        </div>
+        <div className="set-ctl">
+          <button
+            className="btn"
+            disabled={!usage?.count}
+            onClick={() =>
+              api()
+                .review.clear()
+                .then(() => api().review.usage())
+                .then(setUsage)
+            }
+          >
+            Clear review pictures
+          </button>
+        </div>
+      </div>
+    </Group>
+  )
+}
+
 /** The "Connect to Claude Code" switch. Connecting always shows the exact change first. */
-function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
+function ClaudeConnect({ onError, reviewAddress }: { onError: (message: string) => void; reviewAddress: boolean }) {
   const [status, setStatus] = useState<ClaudeHookStatus | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const fail = (err: unknown) => onError(message(err))
@@ -615,6 +843,8 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
   }, [])
 
   if (!status) return null
+  // Visual Review needs the prompt hook. A connection from before it is still fine for everything else.
+  const needsReviewHook = reviewAddress && status.connected && !status.reviewHook
   return (
     <Group
       title="Claude Code"
@@ -625,6 +855,7 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
             : status.outdated
               ? 'Your hooks were set up before the rename and still read from the old data folder. They work for now; update them so they point at Steward.'
               : 'See every Claude Code session in the panel, and get a nudge when one needs you or finishes.'}
+          {reviewAddress && !status.connected && ' Visual Review needs this connection to know when a prompt is sent.'}
           {!status.serverRunning && ' The listener isn’t running, so events won’t arrive until Steward restarts.'}
           {status.error && ` ${status.error}`}
         </>
@@ -654,6 +885,19 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
           </button>
         </div>
       )}
+      {needsReviewHook && !status.outdated && preview === null && (
+        <div className="set-row">
+          <div className="set-label">
+            <span>Visual Review needs one more hook</span>
+            <small>It tells Steward a prompt was sent, so it can photograph your app before Claude changes it.</small>
+          </div>
+          <div className="set-ctl">
+            <button className="btn" onClick={() => api().claude.preview().then(setPreview, fail)}>
+              Update hooks
+            </button>
+          </div>
+        </div>
+      )}
       {preview !== null && (
         <div className="set-row column">
           <p className="set-note flush">
@@ -661,6 +905,11 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
             {status.outdated ? ', replacing the old entries in place' : ''}. Everything else in it stays as is, the original is backed up to{' '}
             <code>{status.backupFile}</code>, and turning this off removes only these entries.
           </p>
+          {!status.reviewHook && (
+            <p className="set-note flush">
+              This includes <code>UserPromptSubmit</code>, for Visual Review: it tells Steward a prompt was sent. What you type is dropped as it arrives and never kept.
+            </p>
+          )}
           <pre className="set-code">{preview}</pre>
           <div className="set-actions">
             <button className="btn" onClick={() => setPreview(null)}>
@@ -677,7 +926,7 @@ function ClaudeConnect({ onError }: { onError: (message: string) => void }) {
                   }, fail)
               }
             >
-              {status.outdated ? 'Update these hooks' : 'Add these hooks'}
+              {status.outdated || status.connected ? 'Update these hooks' : 'Add these hooks'}
             </button>
           </div>
         </div>
@@ -729,7 +978,7 @@ export function ConnectionsSection(props: SectionProps) {
           onSave={(token) => run(api().settings.setVercelToken(token))}
         />
       </Group>
-      <ClaudeConnect onError={onError} />
+      <ClaudeConnect onError={onError} reviewAddress={settings.projects.some((p) => p.url)} />
     </>
   )
 }

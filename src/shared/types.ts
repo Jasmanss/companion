@@ -51,6 +51,10 @@ export interface NotchState {
   glint: PillGlint
   /** Asleep (Only when needed, at rest): just the notch's own black, no eyes. */
   awake: boolean
+  /** The cursor is on the black (Always visible): it grows a little. */
+  hover?: boolean
+  /** An alert is out under the notch, joined to the chin (Wings grows its chin for it). */
+  nudge?: boolean
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
@@ -84,6 +88,16 @@ export interface StewardPrefs {
   dimWhenIdle: boolean
   /** Viewers and recordings don't see Steward. Saved now; it does something from a later build. */
   hideFromScreenShare: boolean
+  /** Step aside: hidden while an app is full screen on Steward's screen. */
+  hideInFullScreen: boolean
+  /** Step aside: hidden while one of these apps is in front. */
+  hideInApps: StepAsideApp[]
+}
+
+/** An app Steward steps aside for: its bundle id, and its name to show in Settings. */
+export interface StepAsideApp {
+  id: string
+  name: string
 }
 
 export interface TrayItem {
@@ -103,6 +117,8 @@ export interface TrayItem {
 export interface Project {
   name: string
   path: string
+  /** Where the project's app runs on this Mac (Visual Review). Empty means Visual Review is off for the project. */
+  url?: string
 }
 
 /** Which alerts peek out from the screen edge, and which cards the panel shows. All on by default. */
@@ -135,10 +151,14 @@ export interface ShortcutView {
 /** The sections of the Settings window, in sidebar order. */
 export type SettingsSection = 'general' | 'steward' | 'projects' | 'shortcuts' | 'connections' | 'notifications'
 
+/** How Steward's chat runs commands: it asks each time, or runs the safe ones and asks only for risky ones. */
+export type CommandMode = 'ask' | 'auto'
+
 /** What Settings can change in one go. Keys, projects and the allowlist have their own calls. */
 export interface SettingsPatch {
   /** The panel stays open when you click elsewhere (the pin in its header). */
   keepPanelOpen?: boolean
+  commandMode?: CommandMode
   notifications?: Partial<NotificationPrefs>
   openAtLogin?: boolean
   steward?: Partial<StewardPrefs>
@@ -153,6 +173,7 @@ export interface SettingsView {
   hasUnsplashKey: boolean
   hasVercelToken: boolean
   keepPanelOpen: boolean
+  commandMode: CommandMode
   notifications: NotificationPrefs
   /** Lives in macOS, not in the settings file. Unavailable while developing (it would register Electron itself). */
   openAtLogin: { available: boolean; enabled: boolean; needsApproval: boolean }
@@ -225,11 +246,53 @@ export interface ClaudeHookStatus {
   connected: boolean
   /** Some are there but need updating, e.g. still pointing at the data folder from before the rename. */
   outdated: boolean
+  /** The prompt hook Visual Review needs (UserPromptSubmit) is in ~/.claude/settings.json with the current command. */
+  reviewHook: boolean
   /** The backup kept from before Steward first changed the settings (file name). */
   backupFile: string
   serverRunning: boolean
   settingsFile: string
   error?: string
+}
+
+/** Visual Review: one finished turn whose page looks different, waiting for a decision. */
+export interface ReviewView {
+  id: string
+  project: string
+  projectPath: string
+  /** The address that was captured, as typed in Settings. */
+  address: string
+  createdAt: number
+  /** The top of each page, small, as data URLs for the slider. `before` is null when there is no earlier picture. */
+  before: string | null
+  after: string
+  /** When the before picture was taken: as the prompt was sent, the last time Steward looked, or never. */
+  beforeFrom: 'turn-start' | 'last-look' | 'none'
+  /** Page heights in pixels, so the card can say the page is taller now. */
+  heightBefore: number | null
+  heightAfter: number
+  /** The full-page pictures on disk (the note for the session points at them). */
+  files: { before: string | null; after: string }
+}
+
+/**
+ * What "Try it now" in Settings found: the page as Steward sees it, or why it couldn't. `note` says where the page ended up
+ * when it isn't the address (a redirect), and `login` that it looks like a login page.
+ */
+export type ReviewTryResult =
+  | { ok: true; image: string; width: number; height: number; ms: number; note?: string; login?: boolean }
+  | { ok: false; error: string }
+
+/** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
+export interface ReviewProblem {
+  projectPath: string
+  project: string
+  /** The address it tried. */
+  address: string
+  /** In plain words, such as "Nothing is answering at localhost:3000. Start the app, then try again." */
+  reason: string
+  login: boolean
+  at: number
 }
 
 /** The "where you left off" card for a project. */
@@ -335,11 +398,21 @@ export interface StewardAPI {
     onState(cb: (state: DockState) => void): Unsubscribe
     /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
     drag(phase: 'start' | 'move' | 'end', dy?: number): void
-    /** Back to the middle of the edge (Settings → Steward). */
+    /** The tab back to the middle of the edge, and the panel back to where it opens (Settings → Steward). */
     resetPlace(): Promise<void>
     /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
     overhang(): Promise<number>
     onOverhang(cb: (points: number) => void): Unsubscribe
+    /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
+    intoNotchEnded(): void
+    /** The panel being dragged by its top bar: began, or moved, with the pointer here (screen points), or ended. */
+    dragPanel(phase: 'start' | 'move' | 'end', x?: number, y?: number): void
+    /** The panel back where it opens: at its edge, or under the notch (double-click on the top bar). */
+    resetPanel(): Promise<void>
+    /** Whether the panel has been moved, so it opens and closes where it is. */
+    onPlaced(cb: (placed: boolean) => void): () => void
+    /** The window has gone, or gone to the tab, after the closed panel's way out: the page can draw what's next. */
+    onLeft(cb: () => void): () => void
   }
   tray: {
     list(): Promise<TrayItem[]>
@@ -370,8 +443,12 @@ export interface StewardAPI {
     addProject(): Promise<SettingsView>
     /** Pick a folder, add it as a project if it's new, and switch to it. */
     addProjectAndSwitch(): Promise<SettingsView>
+    /** Pick an app in Finder and add it to Step aside's list. */
+    addStepAsideApp(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
+    /** Visual Review's address for a project: an address on this Mac, or '' to turn it off. Throws when it isn't one. */
+    setProjectUrl(path: string, url: string): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
@@ -401,6 +478,26 @@ export interface StewardAPI {
   }
   deploys: {
     status(): Promise<DeployStatus>
+  }
+  /** Visual Review: what Claude changed on the running page. */
+  review: {
+    /** Reviews waiting for a decision, newest first. */
+    list(): Promise<ReviewView[]>
+    onChanged(cb: (reviews: ReviewView[]) => void): Unsubscribe
+    /** Projects whose page Visual Review can't see right now, and why. */
+    problems(): Promise<ReviewProblem[]>
+    onProblems(cb: (problems: ReviewProblem[]) => void): Unsubscribe
+    /** Capture a project's page once, so Settings can show it works. */
+    tryIt(path: string): Promise<ReviewTryResult>
+    markGood(id: string): Promise<void>
+    /** Marks it sent back and copies the note for the session; resolves to what was copied. */
+    sendBack(id: string, note: string): Promise<string>
+    /** Open the full-page picture. */
+    openFull(id: string, which: 'before' | 'after'): Promise<void>
+    /** How many reviews are kept and how much space they take. */
+    usage(): Promise<{ count: number; bytes: number }>
+    /** Delete every review picture. */
+    clear(): Promise<void>
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */

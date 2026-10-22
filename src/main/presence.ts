@@ -5,13 +5,19 @@ import { formatAccelerator } from '../shared/shortcuts'
 import type { AlertPeek, AlertView } from '../shared/types'
 import { alertSwitch } from './alerts'
 
-/** The cursor within this many points of the screen edge, inside the tab's band, is pushing against Steward. */
+/** The cursor within this many points of the screen edge Steward is on is pushing against it. */
 export const EDGE_ZONE = 2
-/** How far above and below the tab's center the push counts. Anywhere else on the edge (a scrollbar, a side panel) does nothing. */
+/** Around the tab's saved spot (this far above and below its center) a push comes out sooner. */
 export const EDGE_BAND = 40
 /** How long the push (or, in the notch, the cursor resting on it) lasts before Steward comes out. */
 export const EDGE_DWELL_MS = 300
 export const NOTCH_DWELL_MS = 250
+/** A push anywhere else along the edge lasts longer: the price of the bigger zone. */
+export const EDGE_FAR_DWELL_MS = 500
+/** A push is the cursor held still: moving more than this starts it over, so dragging a scrollbar or sliding along the edge never counts. */
+export const EDGE_STILL = 6
+/** Once the tab is out, a new push counts only after the cursor has been this far from the edge. */
+export const EDGE_REARM = 8
 /** How long after the cursor leaves that Steward goes back. */
 export const TUCK_MS = 1500
 /** How often the cursor is checked while Steward is hidden, and while it's at the push zone. */
@@ -31,11 +37,60 @@ export interface Rect {
 
 export const inRect = (p: Point, r: Rect, margin = 0): boolean => p.x >= r.x - margin && p.x <= r.x + r.width + margin && p.y >= r.y - margin && p.y <= r.y + r.height + margin
 
-/** The push zone on a screen: against the edge Steward is on, within the band around the tab's center (centerY, in screen coordinates). */
-export function inEdgeZone(cursor: Point, screen: Rect, edge: 'left' | 'right', centerY: number): boolean {
-  if (!inRect(cursor, screen)) return false
-  const gap = edge === 'right' ? screen.x + screen.width - cursor.x : cursor.x - screen.x
-  return gap <= EDGE_ZONE && Math.abs(cursor.y - centerY) <= EDGE_BAND
+/** How far the cursor is from the edge Steward is on. */
+const edgeGap = (cursor: Point, screen: Rect, edge: 'left' | 'right'): number => (edge === 'right' ? screen.x + screen.width - cursor.x : cursor.x - screen.x)
+
+/** Where the push counts: the edge Steward is on, on its screen and work area, and where the tab's saved spot is. */
+export interface EdgeAt {
+  screen: Rect
+  /** The screen's work area: no menu bar band, no Dock. */
+  area: Rect
+  edge: 'left' | 'right'
+  /** The middle of the tab's saved spot (where it was dragged to), in screen coordinates. */
+  savedCenterY: number
+  /** The Dock sits on Steward's edge, which is then the Dock's: only the band around the saved spot counts, as before. */
+  dockOnEdge: boolean
+}
+
+/**
+ * The push zone: against the edge Steward is on, anywhere along the work area's height, so never in the menu bar band
+ * and never beside a Dock at the bottom. With the Dock on the same edge, only the band around the tab's saved spot.
+ */
+export function inEdgeZone(cursor: Point, at: EdgeAt): boolean {
+  if (!inRect(cursor, at.screen) || edgeGap(cursor, at.screen, at.edge) > EDGE_ZONE) return false
+  if (at.dockOnEdge) return Math.abs(cursor.y - at.savedCenterY) <= EDGE_BAND
+  return cursor.y >= at.area.y && cursor.y <= at.area.y + at.area.height
+}
+
+/** A push along the edge: where the cursor is being held (null: it isn't), and whether a push counts yet. */
+export interface EdgePush {
+  from: Point | null
+  armed: boolean
+}
+export const freshPush = (): EdgePush => ({ from: null, armed: true })
+
+/** What one look along the edge says, for stepPresence: pushing or not, how long the push has to last, and whether it starts over. */
+export interface EdgeLook {
+  push: EdgePush
+  inZone: boolean
+  dwellMs: number
+  restart: boolean
+}
+
+/**
+ * One look at the cursor along the edge. It's pushing when it's in the zone, held still (within EDGE_STILL), and armed:
+ * while the tab is out a push can't count, and once it tucks away the cursor has to leave the edge (EDGE_REARM) before
+ * one does, so a cursor resting on a scrollbar doesn't bring the tab back every couple of seconds. Near the saved spot
+ * the push lasts EDGE_DWELL_MS, anywhere else EDGE_FAR_DWELL_MS.
+ */
+export function pushAlongEdge(p: EdgePush, cursor: Point, at: EdgeAt, revealed: boolean): EdgeLook {
+  const away = !inRect(cursor, at.screen) || edgeGap(cursor, at.screen, at.edge) > EDGE_REARM
+  const armed = away || (p.armed && !revealed)
+  if (!armed || !inEdgeZone(cursor, at)) return { push: { from: null, armed }, inZone: false, dwellMs: EDGE_DWELL_MS, restart: false }
+  const restart = !p.from || Math.hypot(cursor.x - p.from.x, cursor.y - p.from.y) > EDGE_STILL
+  const from = restart || !p.from ? cursor : p.from
+  const dwellMs = Math.abs(from.y - at.savedCenterY) <= EDGE_BAND ? EDGE_DWELL_MS : EDGE_FAR_DWELL_MS
+  return { push: { from, armed }, inZone: true, dwellMs, restart }
 }
 
 /** Another screen touches the edge Steward is on, so the cursor passes through it instead of pushing (the Dock has the same limit). */
@@ -65,8 +120,10 @@ export interface PresenceInput {
   inZone: boolean
   /** Showing: the cursor is on the tab, or on the notch's shape. */
   onIt: boolean
-  /** How long the push has to last: EDGE_DWELL_MS, or NOTCH_DWELL_MS in the notch. */
+  /** How long the push has to last: EDGE_DWELL_MS or EDGE_FAR_DWELL_MS on the edge, NOTCH_DWELL_MS in the notch. */
   dwellMs: number
+  /** Hiding: the push moved, so it starts over (pushAlongEdge). */
+  restart?: boolean
 }
 export interface PresenceStep {
   state: PresenceState
@@ -74,8 +131,9 @@ export interface PresenceStep {
 }
 
 /**
- * One look at the cursor. Hiding, a push that lasts dwellMs comes out; leaving cancels it. Showing, the tuck timer runs
- * while the cursor is away and everything is at rest, and the panel, a nudge or the agent working all hold it off.
+ * One look at the cursor. Hiding, a push that lasts dwellMs comes out; leaving cancels it, and moving starts it over.
+ * Showing, the tuck timer runs while the cursor is away and everything is at rest, and the panel, a nudge or the agent
+ * working all hold it off.
  * Something happening that isn't a push (the agent starts working) brings it out too.
  */
 export function stepPresence(s: PresenceState, i: PresenceInput): PresenceStep {
@@ -84,7 +142,7 @@ export function stepPresence(s: PresenceState, i: PresenceInput): PresenceStep {
   if (!s.revealed) {
     if (!i.rest) return { state: { revealed: true, since: null }, change: 'reveal' }
     if (!i.inZone) return stay(asleep())
-    const since = s.since ?? i.now
+    const since = i.restart ? i.now : (s.since ?? i.now)
     return i.now - since >= i.dwellMs ? { state: { revealed: true, since: null }, change: 'reveal' } : stay({ revealed: false, since })
   }
   if (!i.rest || i.onIt) return stay({ revealed: true, since: null })
@@ -137,16 +195,30 @@ export function presenceNote(o: NoteFor): string {
   return `${title} ${how}`
 }
 
-type NoteFor = { where: 'left' | 'right' | 'notch'; hotkey: string; besideScreen: boolean }
+/** dockOnEdge: the Dock sits on that edge, so a push counts only at the tab's spot, not anywhere along it. */
+type NoteFor = { where: 'left' | 'right' | 'notch'; hotkey: string; besideScreen: boolean; dockOnEdge?: boolean }
 
 /** The note in two parts, for the first-launch peek: what's happening, and how to bring Steward out. */
 export function presenceNoteParts(o: NoteFor): { title: string; how: string } {
   // A no-break space inside the shortcut, so it never wraps between the symbol and the key.
   const hotkey = o.hotkey ? formatAccelerator(o.hotkey).replace(' ', '\u00a0') : ''
   const key = hotkey ? `press ${hotkey}` : 'use the menu bar icon'
-  const push = o.where === 'notch' ? 'Rest the cursor on the notch' : `Push the ${o.where} edge`
+  const push = o.where === 'notch' ? 'Rest the cursor on the notch' : o.dockOnEdge ? `Push the ${o.where} edge` : `Push anywhere on the ${o.where} edge`
   const how = o.besideScreen && o.where !== 'notch' ? `${hotkey ? `Press ${hotkey}` : 'Use the menu bar icon'}.` : `${push} or ${key}.`
   return { title: 'Hides until you need it.', how }
+}
+
+/**
+ * The first-launch peek's note. Under the notch it has one short line, so it leads with how to bring Steward out (the
+ * whole note doesn't fit); at the edge it's the note in its two parts.
+ */
+export function firstPeekNote(o: NoteFor): { title: string; detail: string } {
+  if (o.where !== 'notch') {
+    const { title, how } = presenceNoteParts(o)
+    return { title, detail: how }
+  }
+  const hotkey = o.hotkey ? formatAccelerator(o.hotkey).replace(' ', '\u00a0') : ''
+  return { title: 'Rest the cursor on the notch', detail: hotkey ? `or press ${hotkey}.` : 'or use the menu bar icon.' }
 }
 
 /* ---------- The first-launch peek ---------- */

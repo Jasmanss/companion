@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
 export default defineConfig([
-  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'design/**', 'archive/**', '.claude/**'] },
+  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'design/**', 'archive/**', '.claude/**', 'site/dist/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -18,7 +18,7 @@ export default defineConfig([
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'tests/**/*.ts', 'scripts/**/*.mjs', '*.config.*'],
+    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'tests/**/*.ts', 'scripts/**/*.mjs', 'site/**/*.mjs', '*.config.*'],
     languageOptions: { globals: globals.node },
   },
 ])

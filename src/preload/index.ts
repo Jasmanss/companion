@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -18,6 +18,11 @@ const api: StewardAPI = {
     resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),
     overhang: () => ipcRenderer.invoke('dock:overhang'),
     onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
+    intoNotchEnded: () => ipcRenderer.send('dock:intoNotchEnded'),
+    dragPanel: (phase, x, y) => ipcRenderer.send('dock:dragPanel', phase, x, y),
+    resetPanel: () => ipcRenderer.invoke('dock:resetPanel'),
+    onPlaced: (cb) => subscribe<boolean>('dock:placed', cb),
+    onLeft: (cb) => subscribe<void>('dock:left', cb),
   },
   tray: {
     list: () => ipcRenderer.invoke('tray:list'),
@@ -47,8 +52,10 @@ const api: StewardAPI = {
     setVercelToken: (token) => ipcRenderer.invoke('settings:setVercelToken', token),
     addProject: () => ipcRenderer.invoke('settings:addProject'),
     addProjectAndSwitch: () => ipcRenderer.invoke('settings:addProjectAndSwitch'),
+    addStepAsideApp: () => ipcRenderer.invoke('settings:addStepAsideApp'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
+    setProjectUrl: (path, url) => ipcRenderer.invoke('settings:setProjectUrl', path, url),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
@@ -71,6 +78,18 @@ const api: StewardAPI = {
   },
   deploys: {
     status: () => ipcRenderer.invoke('deploys:status'),
+  },
+  review: {
+    list: () => ipcRenderer.invoke('review:list'),
+    onChanged: (cb) => subscribe<ReviewView[]>('review:changed', cb),
+    problems: () => ipcRenderer.invoke('review:problems'),
+    onProblems: (cb) => subscribe<ReviewProblem[]>('review:problems', cb),
+    tryIt: (path) => ipcRenderer.invoke('review:tryIt', path),
+    markGood: (id) => ipcRenderer.invoke('review:markGood', id),
+    sendBack: (id, note) => ipcRenderer.invoke('review:sendBack', id, note),
+    openFull: (id, which) => ipcRenderer.invoke('review:openFull', id, which),
+    usage: () => ipcRenderer.invoke('review:usage'),
+    clear: () => ipcRenderer.invoke('review:clear'),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
