@@ -2,10 +2,22 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 /** Two versions of a small page, for the smoke check: B has a longer heading and a different button. A spinner and a fade run in both. */
-export function smokePage(version: 'a' | 'b'): string {
-  const a = version === 'a'
+export type SmokeVersion = 'a' | 'b' | 'fade' | 'reshaped'
+
+/** haven's soft fade, from its autumn wash to its surface: 'fade' reaches the surface at the bottom, 'reshaped' at 45%. */
+const FADES: Partial<Record<SmokeVersion, string>> = {
+  fade: 'linear-gradient(180deg,#F4E6E1,#FBFBF8)',
+  reshaped: 'linear-gradient(180deg,#F4E6E1 0%,#FBFBF8 45%)',
+}
+
+/**
+ * Versions of a small page, for the smoke check: B has a longer heading and a different button. 'fade' and 'reshaped' are A
+ * with a soft gradient behind it that only changes shape (no colour moves by more than 23). A spinner and a fade run in all.
+ */
+export function smokePage(version: SmokeVersion): string {
+  const a = version !== 'b'
   return `<!doctype html><meta charset="utf-8"><title>Acme</title><style>
-  body{margin:0;font:16px -apple-system,system-ui,sans-serif;background:#f7f8fa;color:#1c2330}
+  body{margin:0;font:16px -apple-system,system-ui,sans-serif;background:${FADES[version] ?? '#f7f8fa'};min-height:100vh;color:#1c2330}
   header{position:fixed;top:0;left:0;right:0;height:56px;background:#fff;border-bottom:1px solid #e3e6ec;display:flex;align-items:center;padding:0 32px;font-weight:700}
   main{padding:120px 64px 64px}
   h1{font-size:56px;letter-spacing:-.03em;margin:0 0 12px}
@@ -25,8 +37,8 @@ const LOGIN_PAGE = '<!doctype html><meta charset="utf-8"><title>Sign in</title><
  * A server on this Mac that serves the page in whichever version it is set to, /away, which sends the visitor to
  * another site, and /private, which sends them to /login (like an app that needs a login).
  */
-export async function startPageServer(): Promise<{ port: number; setVersion(version: 'a' | 'b'): void; hits(): number; close(): void }> {
-  let version: 'a' | 'b' = 'a'
+export async function startPageServer(): Promise<{ port: number; setVersion(version: SmokeVersion): void; hits(): number; close(): void }> {
+  let version: SmokeVersion = 'a'
   let hits = 0
   const server = http.createServer((req, res) => {
     if (req.url === '/away') res.writeHead(302, { location: 'http://example.invalid/' }).end()

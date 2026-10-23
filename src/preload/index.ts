@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -84,6 +84,8 @@ const api: StewardAPI = {
     onChanged: (cb) => subscribe<ReviewView[]>('review:changed', cb),
     problems: () => ipcRenderer.invoke('review:problems'),
     onProblems: (cb) => subscribe<ReviewProblem[]>('review:problems', cb),
+    checks: () => ipcRenderer.invoke('review:checks'),
+    onChecks: (cb) => subscribe<ReviewCheck[]>('review:checks', cb),
     tryIt: (path) => ipcRenderer.invoke('review:tryIt', path),
     markGood: (id) => ipcRenderer.invoke('review:markGood', id),
     sendBack: (id, note) => ipcRenderer.invoke('review:sendBack', id, note),

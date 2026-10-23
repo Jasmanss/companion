@@ -1,4 +1,4 @@
-import type { Project, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
+import type { Project, ReviewCheck, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
 import { addressLabel, landingNote, reviewNote } from '../shared/review'
 import type { HookPayload } from './hook-payload'
 import type { Diff } from './review-diff'
@@ -29,6 +29,8 @@ export interface ReviewDeps {
   onChange(): void
   /** The list of projects whose page can't be seen changed. */
   onProblems?(): void
+  /** The list of projects checked with no visible change changed. */
+  onChecks?(): void
   now?(): number
   log?(message: string): void
 }
@@ -86,6 +88,8 @@ export class ReviewTracker {
   private queued = 0
   /** Per project, why its page can't be seen right now. One at a time; the next capture that works clears it. */
   private troubles = new Map<string, ReviewProblem>()
+  /** Per project, its newest check that found no visible change. Its next check or card replaces it. */
+  private sameChecks = new Map<string, ReviewCheck>()
 
   constructor(private readonly deps: ReviewDeps) {}
 
@@ -115,13 +119,15 @@ export class ReviewTracker {
    * same, isn't running, or the project has no address. Never throws.
    */
   async turnStopped(event: TurnStop): Promise<ReviewRecord | null> {
+    const project = this.projectFor(event.cwd)
+    // Every way this ends without a card says why in the log, so a quiet turn can be explained.
     // Claude was asked to keep going by a Stop hook: this isn't the real end.
-    if (event.stop_hook_active) return null
+    if (event.stop_hook_active) return this.skip(`${project?.name ?? event.cwd}: Claude is carrying on (a Stop hook asked it to), so the turn hasn't ended`)
     const key = turnKey(event)
     const turn = this.turns.get(key)
     this.turns.delete(key)
-    const project = this.projectFor(event.cwd)
-    if (!project?.url) return null
+    if (!project) return this.skip(`${event.cwd} isn't in any of your projects`)
+    if (!project.url) return this.skip(`${project.name} has no App address`)
     const address = project.url
     try {
       let before = turn ? await withTimeout(turn.before, BEFORE_WAIT_MS) : null
@@ -139,10 +145,14 @@ export class ReviewTracker {
       }
       this.remember(project.path, after)
       // A login page is all Steward would ever see there: say so, and make no card of it.
-      if (this.looked(project, address, after)?.login) return null
+      const landing = this.looked(project, address, after)
+      if (landing?.login) return this.skip(`${project.name}: ${landing.text}`)
       const diff = before ? await this.deps.compare(before.png, after.png) : null
-      // Nothing to compare with shows the page as it is; a page that looks the same makes no card.
-      if (diff && !diff.changed) return null
+      // Nothing to compare with shows the page as it is. A page that looks the same makes no card, but a quiet note.
+      if (diff && !diff.changed) {
+        this.checkedSame(project, address)
+        return this.skip(`${project.name}: the page looks the same (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})`)
+      }
       const record = await this.deps.store.save(
         {
           project: project.name,
@@ -161,6 +171,8 @@ export class ReviewTracker {
           afterCard: this.deps.card(after.png),
         },
       )
+      this.log(`a review of ${project.name}: ${diff ? `the page changed (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})` : 'no earlier picture, so only how it looks now'}`)
+      this.clearCheck(project.path)
       this.deps.onChange()
       return record
     } catch (err) {
@@ -196,6 +208,12 @@ export class ReviewTracker {
   problems(): ReviewProblem[] {
     const projects = this.deps.projects()
     return [...this.troubles.values()].filter((p) => projects.some((q) => q.path === p.projectPath && q.url === p.address)).sort((a, b) => b.at - a.at)
+  }
+
+  /** Projects checked after a turn with no visible change, newest first. Only for the address each has now. */
+  checks(): ReviewCheck[] {
+    const projects = this.deps.projects()
+    return [...this.sameChecks.values()].filter((c) => projects.some((q) => q.path === c.projectPath && q.url === c.address)).sort((a, b) => b.at - a.at)
   }
 
   /** The reviews waiting for a decision, newest first, with their pictures for the card. */
@@ -273,7 +291,25 @@ export class ReviewTracker {
     if (!(err instanceof Error && err.message === BUSY)) this.trouble(project, address, reason, false)
   }
 
+  /** No card this time: say why in the log. */
+  private skip(why: string): null {
+    this.log(`no review: ${why}`)
+    return null
+  }
+
+  /** The turn's check found no visible change: that's the project's note now. */
+  private checkedSame(project: Project, address: string): void {
+    this.sameChecks.set(project.path, { projectPath: project.path, project: project.name, address, at: this.now() })
+    this.deps.onChecks?.()
+  }
+
+  private clearCheck(projectPath: string): void {
+    if (this.sameChecks.delete(projectPath)) this.deps.onChecks?.()
+  }
+
   private trouble(project: Project, address: string, reason: string, login: boolean): void {
+    // The check didn't work this time: the problem replaces any "no visible change" note.
+    this.clearCheck(project.path)
     const was = this.troubles.get(project.path)
     this.troubles.set(project.path, { projectPath: project.path, project: project.name, address, reason, login, at: this.now() })
     if (was?.reason !== reason || was.address !== address) this.deps.onProblems?.()

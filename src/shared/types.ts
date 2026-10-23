@@ -283,6 +283,15 @@ export type ReviewTryResult =
   | { ok: true; image: string; width: number; height: number; ms: number; note?: string; login?: boolean }
   | { ok: false; error: string }
 
+/** Visual Review looked when a turn ended and the page looks the same: a quiet line, so a check is never silent. */
+export interface ReviewCheck {
+  projectPath: string
+  project: string
+  /** The address it looked at. */
+  address: string
+  at: number
+}
+
 /** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
 export interface ReviewProblem {
   projectPath: string
@@ -487,6 +496,9 @@ export interface StewardAPI {
     /** Projects whose page Visual Review can't see right now, and why. */
     problems(): Promise<ReviewProblem[]>
     onProblems(cb: (problems: ReviewProblem[]) => void): Unsubscribe
+    /** Projects whose page Visual Review checked after a turn and found unchanged (the newest check of each). */
+    checks(): Promise<ReviewCheck[]>
+    onChecks(cb: (checks: ReviewCheck[]) => void): Unsubscribe
     /** Capture a project's page once, so Settings can show it works. */
     tryIt(path: string): Promise<ReviewTryResult>
     markGood(id: string): Promise<void>

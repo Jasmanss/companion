@@ -9,10 +9,14 @@ export const GATE_WIDTH = 360
 /** A screen of the page at that width is this tall. */
 const GATE_SCREEN_ROWS = Math.round((GATE_WIDTH * CARD_SHOT.height) / CARD_SHOT.width)
 /**
- * A pixel counts as changed when any colour is off by more than this (out of 255): the rendering of the same page twice
- * can differ a hair on the edges of text, and that is not a change.
+ * A pixel counts as changed when any colour is off by more than this (out of 255). Low, so a pale tint or a reshaped
+ * gradient counts: haven's fade from #F4E6E1 to #FBFBF8 differs by at most 23 on any colour, and a reshaped fade by
+ * about half that. A gate pixel is already the average of a 4 by 4 block, which smooths away the speckle of text edges
+ * and gradient dithering. Measured by the smoke check (2026-10-22): the same text page and the same soft fade, each
+ * captured twice, differ in 0 pixels at every cutoff from 0 to 24; that fade reshaped differs in 29,025 at 6, 16,190 at
+ * 8, 252 at 12 and 0 at 24, against 243 needed.
  */
-const CHANNEL_TOLERANCE = 24
+export const CHANNEL_TOLERANCE = 6
 /**
  * The page "looks different" when about 0.3% of a screen's pixels changed (a 128 by 32 pixel button, about). It is a share of
  * one screen, not of the whole page, so a button that changed on a long page still counts. Tuned on real pages later.
@@ -41,7 +45,7 @@ export interface Diff {
  * Compare two bitmaps of the same width. Rows that only one of them has (the page got taller or shorter) are all changed.
  * Different widths can't be lined up, so they count as changed outright.
  */
-export function diffBitmaps(before: Bitmap, after: Bitmap, minPixels = GATE_MIN_PIXELS): Diff {
+export function diffBitmaps(before: Bitmap, after: Bitmap, minPixels = GATE_MIN_PIXELS, tolerance = CHANNEL_TOLERANCE): Diff {
   const heights: [number, number] = [before.height, after.height]
   if (before.width !== after.width) {
     const changedPixels = Math.max(before.width * before.height, after.width * after.height)
@@ -53,9 +57,9 @@ export function diffBitmaps(before: Bitmap, after: Bitmap, minPixels = GATE_MIN_
   const end = shared * width * 4
   for (let i = 0; i < end; i += 4) {
     if (
-      Math.abs(before.data[i] - after.data[i]) > CHANNEL_TOLERANCE ||
-      Math.abs(before.data[i + 1] - after.data[i + 1]) > CHANNEL_TOLERANCE ||
-      Math.abs(before.data[i + 2] - after.data[i + 2]) > CHANNEL_TOLERANCE
+      Math.abs(before.data[i] - after.data[i]) > tolerance ||
+      Math.abs(before.data[i + 1] - after.data[i + 1]) > tolerance ||
+      Math.abs(before.data[i + 2] - after.data[i + 2]) > tolerance
     )
       changedPixels++
   }
@@ -73,6 +77,12 @@ function small(png: Buffer): Bitmap {
 /** Does the page look different between two full-page pictures (PNG)? */
 export function comparePictures(before: Buffer, after: Buffer): Diff {
   return diffBitmaps(small(before), small(after))
+}
+
+/** How many small pixels differ at each of these cutoffs: for the smoke check to log where the noise is. */
+export function changedAt(before: Buffer, after: Buffer, tolerances: number[]): number[] {
+  const [a, b] = [small(before), small(after)]
+  return tolerances.map((tolerance) => diffBitmaps(a, b, GATE_MIN_PIXELS, tolerance).changedPixels)
 }
 
 /** How big a card picture is: the top of the page, this wide. The card is 16:10, so it is this tall at most. */
