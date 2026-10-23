@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { addressLabel, reviewNote } from '../../shared/review'
-import type { ReviewProblem, ReviewView } from '../../shared/types'
+import type { ReviewCheck, ReviewProblem, ReviewView } from '../../shared/types'
 import { CloseIcon } from './icons'
 
 const api = () => window.steward
@@ -125,18 +125,30 @@ export function ReviewCard({
 /** "Nothing is answering…" reads on after a colon as "nothing is answering…". */
 const afterColon = (text: string) => (/^[A-Z][a-z]/.test(text) ? text[0].toLowerCase() + text.slice(1) : text)
 
+/** "2:41 PM": when a check happened, today. */
+const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
 /**
- * Visual Review couldn't see a project's page: a quiet line where the card would be, one per project, gone once a capture
- * works. Hiding one hides that message until it changes. It never peeks out.
+ * Visual Review's quiet lines, where the cards go: a project whose page couldn't be seen (gone once a capture works), and
+ * a project checked after a turn with no visible change (replaced by its next check or card), so a check is never silent.
+ * One line per project of each kind. Hiding one hides that line until it changes. They never peek out.
  */
 export function ReviewProblems() {
   const [problems, setProblems] = useState<ReviewProblem[]>([])
+  const [checks, setChecks] = useState<ReviewCheck[]>([])
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => {
     api().review.problems().then(setProblems, () => {})
-    return api().review.onProblems(setProblems)
+    api().review.checks().then(setChecks, () => {})
+    const offProblems = api().review.onProblems(setProblems)
+    const offChecks = api().review.onChecks(setChecks)
+    return () => {
+      offProblems()
+      offChecks()
+    }
   }, [])
   const keyOf = (p: ReviewProblem) => `${p.projectPath}\n${p.address}\n${p.reason}`
+  const checkKey = (c: ReviewCheck) => `check\n${c.projectPath}\n${c.at}`
 
   return (
     <>
@@ -163,6 +175,18 @@ export function ReviewProblems() {
                 <CloseIcon />
               </button>
             </span>
+          </div>
+        ))}
+      {checks
+        .filter((c) => !hidden.has(checkKey(c)))
+        .map((c) => (
+          <div className="notice review-problem review-check" role="status" key={`check:${c.projectPath}`}>
+            <span>
+              Checked <strong>{c.project}</strong> after Claude finished: no visible change · {clock(c.at)}
+            </span>
+            <button className="icon-btn" aria-label="Hide this line" onClick={() => setHidden(new Set(hidden).add(checkKey(c)))}>
+              <CloseIcon />
+            </button>
           </div>
         ))}
     </>

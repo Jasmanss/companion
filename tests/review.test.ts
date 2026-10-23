@@ -34,6 +34,7 @@ async function setup(opts: { projects?: typeof project[]; page?: () => string | 
   const log: string[] = []
   const onChange = vi.fn()
   const onProblems = vi.fn()
+  const onChecks = vi.fn()
   const tracker = new ReviewTracker({
     projects: () => opts.projects ?? [project],
     capture: async (url) => {
@@ -47,9 +48,10 @@ async function setup(opts: { projects?: typeof project[]; page?: () => string | 
     store,
     onChange,
     onProblems,
+    onChecks,
     log: (m) => log.push(m),
   })
-  return { tracker, store, state, captured, log, onChange, onProblems }
+  return { tracker, store, state, captured, log, onChange, onProblems, onChecks }
 }
 
 describe('ReviewTracker, a turn that changed the page', () => {
@@ -164,6 +166,76 @@ describe('ReviewTracker, turns that make no card', () => {
     const [view] = await tracker.pending()
     expect(view.before).toBeNull()
     expect(view.files.before).toBeNull()
+  })
+})
+
+describe('ReviewTracker, a check is never silent', () => {
+  it('leaves a quiet note when the page looks the same, and says why in the log', async () => {
+    const { tracker, onChecks, log } = await setup({ changed: false })
+    tracker.turnStarted(start())
+    await tick()
+    expect(await tracker.turnStopped(stop())).toBeNull()
+    expect(tracker.checks()).toEqual([{ projectPath: project.path, project: 'site', address: 'http://localhost:3000', at: expect.any(Number) }])
+    expect(onChecks).toHaveBeenCalledTimes(1)
+    expect(log).toContain('no review: site: the page looks the same (0 small pixels changed, it takes 243)')
+  })
+
+  it('keeps one note per project: the next check replaces it, and a card takes it away', async () => {
+    const { tracker, state } = await setup()
+    tracker.turnStarted(start({ prompt_id: 'a' }))
+    await tick()
+    await tracker.turnStopped(stop({ prompt_id: 'a' })) // same page
+    const first = tracker.checks()[0].at
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    tracker.turnStarted(start({ prompt_id: 'b' }))
+    await tick()
+    await tracker.turnStopped(stop({ prompt_id: 'b' })) // same again
+    expect(tracker.checks()).toHaveLength(1)
+    expect(tracker.checks()[0].at).toBeGreaterThan(first)
+
+    tracker.turnStarted(start({ prompt_id: 'c' }))
+    await tick()
+    state.page = 'new page'
+    expect(await tracker.turnStopped(stop({ prompt_id: 'c' }))).not.toBeNull()
+    expect(tracker.checks()).toEqual([])
+  })
+
+  it('lets a problem replace the note', async () => {
+    let down = false
+    const { tracker } = await setup({ page: () => (down ? new Error('ERR_CONNECTION_REFUSED') : 'page') })
+    tracker.turnStarted(start({ prompt_id: 'a' }))
+    await tick()
+    await tracker.turnStopped(stop({ prompt_id: 'a' }))
+    expect(tracker.checks()).toHaveLength(1)
+    down = true
+    await tracker.turnStopped(stop({ prompt_id: 'b' }))
+    expect(tracker.checks()).toEqual([])
+    expect(tracker.problems()).toHaveLength(1)
+  })
+
+  it('logs every other way a turn ends without a card', async () => {
+    const { tracker, log } = await setup({ projects: [project, { name: 'notes', path: '/Users/me/notes' }] })
+    await tracker.turnStopped(stop({ cwd: '/Users/me/elsewhere' }))
+    await tracker.turnStopped(stop({ cwd: '/Users/me/notes' }))
+    await tracker.turnStopped(stop({ stop_hook_active: true }))
+    expect(log).toEqual([
+      "no review: /Users/me/elsewhere isn't in any of your projects",
+      'no review: notes has no App address',
+      "no review: site: Claude is carrying on (a Stop hook asked it to), so the turn hasn't ended",
+    ])
+
+    const login = await setup({ page: () => ({ ...shot('login'), landedOn: 'http://localhost:3000/login' }) })
+    await login.tracker.turnStopped(stop())
+    expect(login.log.some((m) => m.startsWith('no review: site: localhost:3000 sends you to /login'))).toBe(true)
+  })
+
+  it('logs the card it makes, with the numbers', async () => {
+    const { tracker, state, log } = await setup()
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'new page'
+    await tracker.turnStopped(stop())
+    expect(log).toContain('a review of site: the page changed (900 small pixels changed, it takes 243)')
   })
 })
 

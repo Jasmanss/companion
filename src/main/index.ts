@@ -1266,6 +1266,11 @@ function sendReviews(): void {
   void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
 }
 
+/** A check that found no visible change goes to the panel as a quiet line, so it's never silent. */
+function sendReviewChecks(): void {
+  win?.webContents.send('review:checks', reviews.checks())
+}
+
 /** Why a project's page can't be seen goes to the panel (a quiet line) and to Settings (under the address). */
 function sendReviewProblems(): void {
   const list = reviews.problems()
@@ -1471,6 +1476,7 @@ function registerIpc(): void {
   // Visual Review. The address always comes from Settings (the project's own), never from the window or a hook.
   ipcMain.handle('review:list', () => reviews.pending())
   ipcMain.handle('review:problems', () => reviews.problems())
+  ipcMain.handle('review:checks', () => reviews.checks())
   ipcMain.handle('review:tryIt', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.tryIt(projectPath) : { ok: false, error: 'Bad request' }))
   ipcMain.handle('review:markGood', (_e, id: unknown) => (isReviewId(id) ? reviews.markGood(id) : undefined))
   ipcMain.handle('review:sendBack', async (_e, id: unknown, note: unknown) => {
@@ -2907,6 +2913,7 @@ app.whenReady().then(async () => {
     store: reviewStore,
     onChange: sendReviews,
     onProblems: sendReviewProblems,
+    onChecks: sendReviewChecks,
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })
   alerts = new AlertQueue({ show: showAlerts })
