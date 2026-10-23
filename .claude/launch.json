@@ -8,6 +8,12 @@
       "port": 4321
     },
     {
+      "name": "design-roadmap",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd \"$HOME/Documents/companion\" && NO_OPEN=1 PORT=4322 exec node scripts/design-server.mjs \"$HOME/Documents/companion/.claude/worktrees/roadmap-design-7ca12a/design\""],
+      "port": 4322
+    },
+    {
       "name": "avatar-lab",
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": ["-c", "cd \"$HOME/Documents/bible-strong-avatar-lab\" && node scripts/generate-standalone-engine.mjs && exec node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5180 --strictPort"],
