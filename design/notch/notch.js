@@ -42,7 +42,7 @@ const px = (v) => `${+v.toFixed(2)}px`
  * A black rounded box built from pieces: anchored at its top center, base size w0 x h0, top corners rt, bottom
  * corners rb. size(w, h) moves the pieces; with a transition on them they grow together, corners staying round.
  */
-function blob(parent, { w0, h0, rt = 0, rb, cls = '', top = 0 }) {
+export function blob(parent, { w0, h0, rt = 0, rb, cls = '', top = 0 }) {
   const el = div(`blob ${cls}`, `top:${px(top)}`)
   const parts = []
   const add = (css, origin, fn) => { const p = div('bp', `${css};transform-origin:${origin}`); el.append(p); parts.push([p, fn]) }

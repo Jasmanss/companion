@@ -17,8 +17,8 @@ export function render(host) {
       desc: 'Tucked away, Steward is a small tab at the screen edge, resting. It slides out into the panel and tucks back in, always moving away from the edge it sits on. Settings picks the edge.',
       tools: '<button class="btn" id="d-edge-replay">↻ Replay</button>',
       body: `<div class="edges">${edgeDesk('right')}${edgeDesk('left')}</div>` })}
-    ${card({ id: 'd-notch', section: 6, title: 'The notch dock', status: 'planned', from: 'notch.html', cls: 'wide',
-      desc: 'A third place to dock on MacBooks with a notch. Steward lives in the notch as one black shape with the real notch: the Pill\'s body becomes the black and its color becomes the light of its eyes. Three layouts are being compared on notch.html, with every mood, the states, the move in from the screen edge and the panel opening out of the notch. Here they are at rest, at real size, over the measured 185 × 32 point notch.',
+    ${card({ id: 'd-notch', section: 6, title: 'The notch dock', status: 'app', from: 'notch.html', cls: 'wide',
+      desc: 'A third place to dock on MacBooks with a notch. Steward lives in the notch as one black shape with the real notch: the Pill\'s body becomes the black and its color becomes the light of its eyes. Chin and Wings are built (Settings picks), with hover, the panel from the notch and alerts under it. Here the layouts are at rest, at real size, over the measured 185 × 32 point notch. A Dynamic Island style redesign is in section 7.',
       tools: '<a class="btn" href="notch.html">Open notch.html</a>',
       body: `<div class="nlayouts">${LAYOUTS.map((l) => `<figure data-l="${l.id}"><div class="ncrop"></div><figcaption>${l.key} · ${l.name}</figcaption></figure>`).join('')}</div>` })}
   </div>`)

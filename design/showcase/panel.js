@@ -56,9 +56,10 @@ export function render(host) {
     ${card({ id: 'p-settings', section: 5, title: 'The Settings window', status: 'app', from: ['glass-lab.html', 'src/renderer/src/SettingsWindow.tsx', 'src/renderer/src/Settings.tsx'], cls: 'wide',
       desc: 'Its own window, with a sidebar of sections. Every change applies right away. In this mock, Version, Color and the mouth drive the whole page, like the controls at the top.',
       body: desk('<div class="setwin" id="p-setwin"></div>', 560, 'setdesk') })}
-    ${card({ id: 'p-review', section: 5, title: 'Visual Review', status: 'planned', from: null,
-      desc: 'When a Claude Code session finishes, Steward slides out with a before and after of the running app, changed areas marked, a tests badge and a one-line risk note, with Looks good and Send it back.',
-      body: '<div class="placeholder">Not designed yet</div>' })}
+    ${card({ id: 'p-review', section: 5, title: 'Visual Review', status: 'app', from: ['visual-review.html', 'src/renderer/src/ReviewCard.tsx'],
+      desc: 'When a Claude Code turn ends and the running page looks different, a card shows it before and after with a slider, Looks good and Send it back. Changed areas marked and the alert are the next phases (see section 8 for the card and the big viewer).',
+      tools: '<a class="btn" href="visual-review.html">Open visual-review.html</a>',
+      body: '<div class="placeholder">Drawn on visual-review.html and in section 8</div>' })}
     ${card({ id: 'p-watch', section: 5, title: 'Overnight Watch', status: 'planned', from: null,
       desc: 'A goodnight card, then Steward watches sessions, deploys and CI while you sleep, calls or texts only when something is urgent, and turns the morning brief into a night report.',
       body: '<div class="placeholder">Not designed yet</div>' })}
