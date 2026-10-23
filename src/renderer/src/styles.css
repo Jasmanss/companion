@@ -1366,6 +1366,17 @@ pre {
   flex: none;
 }
 
+/* A check that found nothing changed: quieter still, one line. */
+.notice.review-check {
+  align-items: center;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.notice.review-check strong {
+  font-weight: 600;
+}
+
 .rv-buttons .btn {
   flex: 1;
 }

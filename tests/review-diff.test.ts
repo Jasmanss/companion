@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diffBitmaps, GATE_MIN_PIXELS, GATE_WIDTH, type Bitmap } from '../src/main/review-diff'
+import { CHANNEL_TOLERANCE, diffBitmaps, GATE_MIN_PIXELS, GATE_WIDTH, type Bitmap } from '../src/main/review-diff'
 
 /** A page at the gate's width: this many rows, one colour (blue, green, red), alpha opaque. */
 function page(rows: number, [b, g, r]: [number, number, number] = [250, 250, 250]): Bitmap {
@@ -22,8 +22,14 @@ describe('diffBitmaps, the change gate', () => {
     expect(d).toMatchObject({ changed: false, changedPixels: 0 })
   })
 
-  it('ignores a hair of difference in colour, like the edge of text drawn twice', () => {
-    expect(diffBitmaps(page(225), page(225, [240, 245, 250])).changed).toBe(false)
+  it('ignores a hair of difference in colour, within the cutoff', () => {
+    expect(CHANNEL_TOLERANCE).toBe(6)
+    expect(diffBitmaps(page(225), page(225, [244, 246, 250])).changed).toBe(false)
+  })
+
+  it('counts a pale tint over the whole page, which the old cutoff of 24 missed', () => {
+    expect(diffBitmaps(page(225), page(225, [240, 245, 250])).changed).toBe(true)
+    expect(diffBitmaps(page(225), page(225, [240, 245, 250]), GATE_MIN_PIXELS, 24).changed).toBe(false)
   })
 
   it('ignores a few stray pixels', () => {
@@ -60,5 +66,43 @@ describe('diffBitmaps, the change gate', () => {
 
   it('does not line up pictures of different widths: that is a change', () => {
     expect(diffBitmaps(page(225), { ...page(225), width: 300, data: Buffer.alloc(300 * 225 * 4) }).changed).toBe(true)
+  })
+})
+
+/** haven's colours, as bitmap bytes (blue, green, red): its autumn wash #F4E6E1 and its surface #FBFBF8. */
+const WASH: [number, number, number] = [0xe1, 0xe6, 0xf4]
+const SURFACE: [number, number, number] = [0xf8, 0xfb, 0xfb]
+
+/** A vertical fade from `from` to `to` over `rows` rows, reaching `to` at `end` (0 to 1) of the way down. */
+function fade(rows: number, from: [number, number, number], to: [number, number, number], end = 1): Bitmap {
+  const data = Buffer.alloc(GATE_WIDTH * rows * 4)
+  for (let y = 0; y < rows; y++) {
+    const t = Math.min(1, y / ((rows - 1) * end))
+    const px = from.map((c, k) => Math.round(c + (to[k] - c) * t))
+    for (let x = 0; x < GATE_WIDTH; x++) data.set([px[0], px[1], px[2], 255], (y * GATE_WIDTH + x) * 4)
+  }
+  return { width: GATE_WIDTH, height: rows, data }
+}
+
+describe('soft colour changes (the haven gradient)', () => {
+  it('counts #F4E6E1 becoming #FBFBF8 over a button-sized area', () => {
+    // 32 by 8 gate pixels: a 128 by 32 button of the real page. No colour moves by more than 23.
+    const before = paint(page(225), 40, 120, 32, 8, WASH)
+    const after = paint(page(225), 40, 120, 32, 8, SURFACE)
+    expect(diffBitmaps(before, after)).toMatchObject({ changed: true, changedPixels: 256 })
+    // The old cutoff could never see it.
+    expect(diffBitmaps(before, after, GATE_MIN_PIXELS, 24)).toMatchObject({ changed: false, changedPixels: 0 })
+  })
+
+  it('counts the same fade reshaped (it reaches the surface at 45% instead of the bottom) across a hero', () => {
+    // 100 gate rows: a 400 px tall hero. The biggest change is about 12 on one colour.
+    const d = diffBitmaps(fade(100, WASH, SURFACE), fade(100, WASH, SURFACE, 0.45))
+    expect(d.changed).toBe(true)
+    expect(d.changedPixels).toBeGreaterThan(GATE_MIN_PIXELS * 10)
+    expect(diffBitmaps(fade(100, WASH, SURFACE), fade(100, WASH, SURFACE, 0.45), GATE_MIN_PIXELS, 24).changed).toBe(false)
+  })
+
+  it('says the same fade drawn twice is the same', () => {
+    expect(diffBitmaps(fade(100, WASH, SURFACE), fade(100, WASH, SURFACE))).toMatchObject({ changed: false, changedPixels: 0 })
   })
 })
