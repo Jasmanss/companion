@@ -12,58 +12,9 @@ import { crop, blob, NOTCH, MENU, CX, SIZE } from '../notch/notch.js'
 import { wait, demo, esc } from '../shared/activity.js'
 import { S, onChange, stage, card } from './state.js'
 
-const LIP = NOTCH.h + 22 // the chin: the notch's height plus a lip for the eyes
-const BODY_TOP = MENU + 8 // anything wider than the notch starts under the menu bar line, with a fillet between
-const HW = NOTCH.w / 2
-const R = 10
-const EYE = 14
-const px = (v) => `${+v.toFixed(2)}px`
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
-const div = (cls, css = '') => { const d = document.createElement('div'); d.className = cls; if (css) d.style.cssText = css; return d }
+import { LIP, BODY_TOP, HW, R, EYE, px, clamp, div, Spring, soft, STATES, MOODS, CT, SIZES } from './island-kit.js'
+import { createIsland2, NEW_DIRS } from './island2.js'
 
-/* ---------------- the springs ---------------- */
-class Spring {
-  constructor(v = 0, k = 190, c = 17) { this.v = v; this.t = v; this.x = 0; this.k = k; this.c = c }
-  set(t) { this.t = t }
-  snap(t) { this.v = this.t = t; this.x = 0 }
-  get done() { return Math.abs(this.v - this.t) < 0.02 && Math.abs(this.x) < 0.02 }
-  step(dt) {
-    // fixed small steps keep the spring stable whatever the frame time
-    for (let n = Math.ceil(dt / (1 / 240)); n > 0; n--) {
-      const h = dt / Math.ceil(dt / (1 / 240))
-      this.x += (-this.k * (this.v - this.t) - this.c * this.x) * h
-      this.v += this.x * h
-    }
-  }
-}
-const soft = (v) => new Spring(v, 150, 20) // eyes and fades: less bounce
-
-/* ---------------- what each state shows ---------------- */
-export const STATES = [
-  ['rest', 'At rest', 'Compact. Steward is there, quietly.'],
-  ['hover', 'Hover', 'The cursor is on it: it swells a little and the eyes light up.'],
-  ['working', 'Working', 'Claude is editing a file in haven. A live status, a few words.'],
-  ['finished', 'Finished', 'haven is done: three files changed.'],
-  ['needs', 'Needs you', 'An approval: run npm install? Allow or Deny, right there.'],
-  ['review', 'Review ready', 'Visual Review: the page changed, with a before and after and a line on what changed.'],
-  ['two', 'Two projects', 'haven and api at once: the island splits into a main shape and a small second one.'],
-  ['quiet', 'Quiet mode', 'Only when needed: asleep, it is just the notch. Only "needs you" comes out.'],
-]
-const MOODS = { rest: ['resting'], hover: ['idle'], working: ['thinking', 'sweep'], finished: ['celebrating'], needs: ['needs-you'], review: ['idle'], two: ['thinking', 'sweep'], quiet: ['resting'], open: ['idle'] }
-
-const DOT = '<span class="ic-dot"></span>'
-const CHECK = '<span class="ic-check"></span>'
-const row = (icon, a, b) => `<div class="ic-row">${icon}<span><b>${a}</b> <span class="mut">${b}</span></span></div>`
-const CT = {
-  working: row('', 'haven', 'Editing page.tsx'),
-  workingDot: row(DOT, 'haven', 'Editing page.tsx'),
-  done: row('', 'haven', 'finished · 3 files changed'),
-  doneCheck: row(CHECK, 'haven', 'finished · 3 files changed'),
-  second: row(DOT, 'api', 'Running tests'),
-  needs: `<div class="col"><div class="head"><b>haven needs you</b></div><div class="row2"><span class="mut">Run</span><code>npm install</code><span class="mut">in haven?</span></div><div class="acts"><span class="pillbtn pri">Allow</span><span class="pillbtn">Deny</span></div></div>`,
-  review: `<div class="col"><div class="head"><b>haven changed</b><span class="mut">localhost:3000/pricing</span></div><div class="row2"><span class="thumbs"><i class="tb"></i><i class="ta"></i></span><span class="say"><b>Claude says:</b> I made the Start button blue and added a row of logos.</span></div><div class="acts"><span class="pillbtn pri">Open big</span><span class="pillbtn">Looks good</span></div></div>`,
-}
-const SIZES = { row: [270, 34], needs: [340, 104], review: [352, 156] }
 
 /** The wing's eye pair sits so one eye of the pair is in the middle of the wing; the other falls under the notch. */
 const K = EYE / 18, VW = Math.round(92 * K), VH = Math.round(60 * K)
@@ -355,38 +306,44 @@ export function createIsland(screen, o) {
 
 /* ---------------- the section ---------------- */
 export const DIRS = [
-  { id: 'A', name: 'Chin island', short: 'Rests as the chin. Grows out of it, under the menu bar line only, into a compact status, a card, a second small shape. Nothing ever covers a menu bar item.' },
-  { id: 'B', name: 'Side island', short: 'Rests as black wings with one eye each side, status shown beside the notch like the phone\'s compact island. Grows down into the same cards. The wings cover menu bar items while they are out.' },
-  { id: 'C', name: 'Bubbles', short: 'The chin stays as Steward. Things come out as separate floating black bubbles under it, stacking for two projects. No seams to match, but it is less one shape.' },
+  { id: 'A', name: 'Chin island', short: 'Rests as the chin. Grows out of it, under the menu bar line only, into a compact status, a card, a second small shape. Nothing ever covers a menu bar item.', covers: 'Nothing' },
+  { id: 'B', name: 'Side island', short: 'Rests as black wings with one eye each side, status shown beside the notch like the phone\'s compact island. Grows down into the same cards. The wings cover menu bar items while they are out.', covers: 'Both sides, 28 to 58 pt each' },
+  { id: 'C', name: 'Bubbles', short: 'The chin stays as Steward. Things come out as separate floating black bubbles under it, stacking for two projects. No seams to match, but it is less one shape.', covers: 'Nothing' },
 ]
+export const ALL = [...DIRS, ...NEW_DIRS]
+const make = (dir, screen, o) => ('DEFGH'.includes(dir) ? createIsland2 : createIsland)(screen, { ...o, dir })
 const STORY = [['rest', 1800], ['hover', 1300], ['working', 2400], ['two', 2600], ['working', 1200], ['finished', 2200], ['needs', 3000], ['review', 3600], ['rest', 1400], ['quiet', 2400]]
 
 export function render(host) {
   host.insertAdjacentHTML('beforeend', `<div class="grid">
-    ${card({ id: 'i-compare', section: 7, title: 'Three islands, side by side', status: 'planned', from: ['notch.html', 'notch-styles.html'], cls: 'wide',
-      desc: 'Steward in the notch as one black island that changes size and shape with spring motion, drawn three ways with the same states. Pick a state to see all three at once, or play the story. The notch has no pixels, so everything lives beside it or below it. The menu bar here is a busy one, so you can see what each direction covers.',
+    ${card({ id: 'i-compare', section: 7, title: 'Eight islands, side by side', status: 'planned', from: ['notch.html', 'notch-styles.html'], cls: 'wide',
+      desc: 'Steward in the notch like the Dynamic Island, drawn eight ways with the same eight states. A to C are the first round, D to H the second. Pick a state to see all eight at once, or play the story. The notch has no pixels, so everything lives beside it or below it. The menu bar here is a busy one, so you can see what each direction covers.',
       tools: '<button class="btn" id="i-play">▶ Play the story</button>',
       body: `<div class="istates" id="i-states">${STATES.map(([id, l]) => `<button data-st="${id}" aria-pressed="false">${l}</button>`).join('')}</div>
         <p class="istate" id="i-state"></p>
-        <div class="idirs">${DIRS.map((d) => `<figure data-dir="${d.id}"><div class="icrop"></div><figcaption><b>${d.id} · ${d.name}</b> ${esc(d.short)}</figcaption></figure>`).join('')}</div>` })}
+        <div class="idirs">${ALL.map((d) => `<figure data-dir="${d.id}"><div class="icrop"></div><figcaption><b>${d.id} · ${d.name}</b> ${esc(d.short)} <i class="cov">Covers: ${esc(d.covers)}</i></figcaption></figure>`).join('')}</div>` })}
     ${card({ id: 'i-open', section: 7, title: 'Opening and closing', status: 'planned', from: 'notch.html', cls: 'wide',
       desc: 'The island grows into the panel and shrinks back into the notch. For a panel you have dragged somewhere else (the movable panel is built), the island does not grow into it: it squashes once, and the panel pops in where you left it. The app draws the island in one window and the panel in another, so the grow is a crossfade between the two.',
       tools: '<button class="btn" id="i-openbtn">Open</button> <button class="btn" id="i-closebtn">Close</button>',
-      body: `<div class="ibar"><span class="lbl">Direction</span><span class="iseg" id="i-odir">${DIRS.map((d, i) => `<button data-v="${d.id}" aria-pressed="${i === 0}">${d.id} · ${d.name}</button>`).join('')}</span>
+      body: `<div class="ibar"><span class="lbl">Direction</span><span class="iseg" id="i-odir">${ALL.map((d, i) => `<button data-v="${d.id}" title="${d.name}" aria-pressed="${i === 0}">${d.id} · ${d.name}</button>`).join('')}</span>
         <span class="lbl">Panel</span><span class="iseg" id="i-opos"><button data-v="under" aria-pressed="true">Under the notch</button><button data-v="moved" aria-pressed="false">Dragged elsewhere</button></span></div>
         <div class="icrop" id="i-ocrop"></div>` })}
-    ${card({ id: 'i-choose', section: 7, title: 'What it replaces, and what I would pick', status: 'planned', from: null, cls: 'wide',
-      desc: 'The same eight states, the trade-offs, and what happens to the pieces already built or designed.',
-      body: `<table class="itable"><thead><tr><th></th><th>A · Chin island</th><th>B · Side island</th><th>C · Bubbles</th></tr></thead><tbody>
-        <tr><td>Covers menu bar items</td><td>Never</td><td>Yes, 28 to 58 points each side while it is out</td><td>Never</td></tr>
-        <tr><td>One shape?</td><td>Yes, joined to the notch with curved fillets</td><td>Yes while compact; cards drop out of it</td><td>No: the chin and the bubbles are separate</td></tr>
-        <tr><td>Matches what is built</td><td>Chin plus the alert shape under the notch (3b): nearly the same pieces</td><td>Wings plus the alert shape</td><td>Chin; the alert becomes a detached bubble</td></tr>
-        <tr><td>Hard parts</td><td>Springs and fillets that match the notch's real corner radius</td><td>The same, plus clipping the eye under the notch and the menu bar overlap</td><td>The least: no seams to match</td></tr>
-        <tr><td>Replaces</td><td>Chin and Wings and notch 3e</td><td>Wings and 3e; Chin stays as the setting for people who dislike the wings</td><td>Chin's alerts only; Wings and 3e</td></tr>
+    ${card({ id: 'i-choose', section: 7, title: 'Ranking, what combines, and what it replaces', status: 'planned', from: null, cls: 'wide',
+      desc: 'All eight, best first, with what each covers in the menu bar and why.',
+      body: `<table class="itable"><thead><tr><th>#</th><th>Direction</th><th>Covers menu bar items</th><th>Why</th></tr></thead><tbody>
+        <tr><td>1</td><td>A · Chin island</td><td>Nothing</td><td>Keeps the chin you like, is the safest to build, and gets the island feel from motion and cards. Nearly the pieces already built (the chin and the alert under the notch).</td></tr>
+        <tr><td>2</td><td>F · Drip</td><td>Nothing</td><td>The most Dynamic Island thing here: shapes merge, split and drip back the way the phone's do, and the join to the notch is organic, so no corner radius to match. The risk is the goo filter staying smooth in the real notch window; it needs a hand test.</td></tr>
+        <tr><td>3</td><td>H · Shelf</td><td>Nothing</td><td>Less a look than a feature: projects, the tray and reviews one hover away. It is the best idea to take from the Mac notch apps, and it pairs well with A.</td></tr>
+        <tr><td>4</td><td>E · Peek</td><td>Nothing</td><td>Charming and tiny, good for quiet mode. It is weak at status (a small tag) and the hanging sign is more whimsical than useful.</td></tr>
+        <tr><td>5</td><td>D · Halo</td><td>A 3 pt strip</td><td>The lowest footprint, and the ring's color is a good state signal. It cannot stand alone: there is no face at rest.</td></tr>
+        <tr><td>6</td><td>C · Bubbles</td><td>Nothing</td><td>Easy to build, but it loses "one island".</td></tr>
+        <tr><td>7</td><td>G · One-sided</td><td>The right side, 40 to 260 pt</td><td>Close to the phone's compact view, but it covers real menu extras (the clock, Wi-Fi, battery sit there), and the left side is where people look for app menus.</td></tr>
+        <tr><td>8</td><td>B · Side island</td><td>Both sides, 28 to 58 pt each</td><td>The closest to the phone and the most costly: it covers the most.</td></tr>
       </tbody></table>
-      <p class="inote"><b>My pick: A, the Chin island.</b> You said the chin's eyes look fine and the wings do not. A keeps the chin and gets the Dynamic Island feel from how it grows: spring motion, a compact status next to the eyes, a card for approvals and reviews, and a second small shape for a second project. It never covers a menu bar item, which matters because a Mac's menu bar is not empty the way the iPhone's top is. B is the closest to the phone but pays for it with the menu bar. C is the safest to build but loses "one island".</p>
-      <p class="inote"><b>What it replaces:</b> the Wings look and notch 3e (the Wings hand-off). Chin becomes the island's resting shape, so the setting would go from "Chin | Wings" to the island alone, or the island plus Wings kept for anyone who likes it. <b>3e should wait:</b> if A is picked it is not needed, and if the user keeps Wings as a setting, 3e is a small job to do afterwards.</p>
-      <p class="inote"><b>How it would be built:</b> the notch window grows from 360 by 96 to about 420 by 200 to draw the card states itself (today the main window draws the nudge under the notch). The spring motion is drawn by the notch page with transforms only. The panel opening stays a crossfade between two windows (notch 3d); a moved panel skips it.</p>` })}
+      <p class="inote"><b>What combines well.</b> <b>A with H:</b> A's chin and compact status for working and finished, and H's shelf when you rest the cursor on it, with approvals and reviews opening the shelf on their tab. This is the strongest pair. <b>A with F's motion:</b> draw A's shapes with Drip's liquid growth if it holds a steady frame rate on the real window, otherwise keep A's springs. <b>A with D:</b> use the Halo's ring only as a signal when the chin is asleep in quiet mode (an amber hairline for "needs you"). The progress line idea is not drawn: a hairline that fills while Claude works fits as the Working state of A or H, not as a direction.</p>
+      <p class="inote"><b>My recommendation:</b> build A first, then add H's shelf as a second step, then try F's liquid motion as polish. Wings (B and G) and notch 3e are dropped.</p>
+      <p class="inote"><b>What it replaces:</b> the Wings look and notch 3e (the Wings hand-off). Chin becomes the island's resting shape. <b>3e stays on hold</b>: if A is picked it is not needed.</p>
+      <p class="inote"><b>How it would be built:</b> the notch window grows from 360 by 96 to about 460 by 240 to draw the compact and card states itself (today the main window draws the nudge under the notch). The motion is drawn by the notch page with transforms and opacity (Drip adds an SVG filter). The panel opening stays a crossfade between two windows (notch 3d); a moved panel skips it.</p>` })}
   </div>`)
   const cardEl = host.querySelector('#f-i-compare')
   const STATE_INFO = Object.fromEntries(STATES.map(([id, l, d]) => [id, [l, d]]))
@@ -401,9 +358,9 @@ export function render(host) {
     host.querySelectorAll('#f-i-compare .idirs figure').forEach((fig, n) => {
       const c = fig.querySelector('.icrop')
       c.replaceChildren()
-      const { screen, el } = crop(c, { cw: 440, ch: 232, wall: S.dark ? 'dark' : 'light', busy: true })
+      const { screen, el } = crop(c, { cw: 500, ch: 232, wall: S.dark ? 'dark' : 'light', busy: true })
       void el
-      islands.push(createIsland(screen, { dir: fig.dataset.dir, kind: S.version, color: S.color, owner: 'i', seed: 71 + n, anchor: fig, mouth: S.mouth, think: S.think, rm: () => S.rm, dark: S.dark, state: cur }))
+      islands.push(make(fig.dataset.dir, screen, { kind: S.version, color: S.color, owner: 'i', seed: 71 + n, anchor: fig, mouth: S.mouth, think: S.think, rm: () => S.rm, dark: S.dark, state: cur }))
     })
     label(cur)
     buildOpen()
@@ -416,7 +373,7 @@ export function render(host) {
     const c = host.querySelector('#i-ocrop')
     c.replaceChildren()
     const { screen } = crop(c, { cw: 1000, ch: 560, zoom: 0.78, wall: S.dark ? 'dark' : 'light', busy: true })
-    oisl = createIsland(screen, { dir: odir, kind: S.version, color: S.color, owner: 'io', seed: 91, anchor: c, mouth: S.mouth, think: S.think, rm: () => S.rm, dark: S.dark, panel: true, moved: opos === 'moved', state: 'rest' })
+    oisl = make(odir, screen, { kind: S.version, color: S.color, owner: 'io', seed: 91, anchor: c, mouth: S.mouth, think: S.think, rm: () => S.rm, dark: S.dark, panel: true, moved: opos === 'moved', state: 'rest' })
   }
   host.querySelector('#i-openbtn').onclick = () => { openRun.cancel(); oisl.go('open') }
   host.querySelector('#i-closebtn').onclick = () => { openRun.cancel(); oisl.go('rest') }
