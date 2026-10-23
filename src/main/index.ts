@@ -60,14 +60,14 @@ import {
   type PresenceState,
 } from './presence'
 import { ReviewTracker } from './review'
-import { cardPicture, comparePictures } from './review-diff'
+import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
 import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, smokeHidden, type Unseen } from './smoke-env'
-import { deadPort, startPageServer } from './smoke-review'
+import { deadPort, startPageServer, type SmokeVersion } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1682,11 +1682,19 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
       images: [...document.querySelectorAll('.card.review .rv-layer img')].map((i) => i.naturalWidth),
       buttons: [...document.querySelectorAll('.card.review button')].map((b) => b.textContent),
       slider: Boolean(document.querySelector('.card.review input[type=range]')),
-      first: document.querySelector('.body')?.firstElementChild?.classList.contains('review'),
+      // At the top of the panel: only Visual Review's own quiet lines may come before it.
+      first: (() => {
+        const kids = [...(document.querySelector('.body')?.children ?? [])]
+        const at = kids.findIndex((k) => k.classList.contains('review'))
+        return at >= 0 && kids.slice(0, at).every((k) => k.classList.contains('review-problem'))
+      })(),
+      checked: document.querySelector('.review-check')?.textContent ?? '',
     })`)
     need(shown.images.length === 2 && shown.images.every((n: number) => n > 0), 'the card does not show both pictures')
     need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
     need(shown.first, 'the card is not at the top of the panel')
+    // The last turn left the page as it was: the panel says it checked.
+    need(/Checked steward-smoke-review-project after Claude finished: no visible change/.test(shown.checked), `the panel did not say the check found no change ("${shown.checked}")`)
     const card = await wc.executeJavaScript(`(() => { const r = document.querySelector('.card.review').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
     // Drag the slider most of the way left, so the picture shows mostly the page as it is now, and keep that.
     const x = await wc.executeJavaScript(`(() => {
@@ -1709,6 +1717,34 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good did not clear the card')
     need(reviewStore.get(review!.id)?.status === 'good', 'Looks good was not remembered')
     console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}), the slider moves, Looks good clears it`)
+
+    // A soft colour change counts: haven's fade from #F4E6E1 to #FBFBF8, reshaped. First the numbers behind the cutoff:
+    // the same page captured twice (text, and the fade), and the reshaped fade, at several cutoffs. Logged, then judged at ours.
+    const cutoffs = [0, 2, 4, 6, 8, 12, 24]
+    const shoot = async (version: SmokeVersion) => {
+      server.setVersion(version)
+      return (await capturePage(`http://localhost:${server.port}`, { review: { settleMs: 10_000 } })).png
+    }
+    const [textA, textB] = [await shoot('b'), await shoot('b')]
+    const [fadeA, fadeB] = [await shoot('fade'), await shoot('fade')]
+    const reshapedShot = await shoot('reshaped')
+    const sameText = changedAt(textA, textB, cutoffs)
+    const sameFade = changedAt(fadeA, fadeB, cutoffs)
+    const soft = changedAt(fadeB, reshapedShot, cutoffs)
+    const row = (counts: number[]) => cutoffs.map((c, i) => `${c}: ${counts[i]}`).join(', ')
+    console.log(`smoke: changed small pixels at cutoffs (it takes ${GATE_MIN_PIXELS}). Same text page twice: ${row(sameText)}. Same fade twice: ${row(sameFade)}. Fade reshaped: ${row(soft)}`)
+    const at = cutoffs.indexOf(CHANNEL_TOLERANCE)
+    need(at >= 0 && sameText[at] < GATE_MIN_PIXELS && sameFade[at] < GATE_MIN_PIXELS, `the same page twice counts as changed at the cutoff of ${CHANNEL_TOLERANCE}`)
+    need(soft[at] >= GATE_MIN_PIXELS, `the reshaped fade does not count at the cutoff of ${CHANNEL_TOLERANCE}`)
+    // And end to end: a turn that only reshapes the fade makes a review.
+    server.setVersion('fade')
+    await prompt('soft')
+    server.setVersion('reshaped')
+    const softReview = await reviews.turnStopped({ ...turn('soft'), hook_event_name: 'Stop' })
+    need(softReview !== null, 'a soft colour change made no review')
+    await reviews.markGood(softReview!.id)
+    server.setVersion('b')
+    console.log(`smoke: a reshaped soft fade makes a review (${softReview!.changedPixels} small pixels changed at a cutoff of ${CHANNEL_TOLERANCE})`)
 
     // A capture that fails says why, quietly, where the card would be. No alert.
     const dead = await deadPort()
