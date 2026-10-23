@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: Visual Review viewer</title>
+<style>
+/* Design page for the big Visual Review viewer and the "what changed" note (docs/briefs/visual-review.md, Phase 1b).
+   Plain HTML, CSS and a little JS, no libraries, no web fonts. The pages being compared are drawn in CSS at 1440 points wide,
+   the width Steward photographs, and scaled to fit, so "100%" here means what it will mean in the app. */
+:root{--tint:200,228,255;--glow:96,190,255;--t1:#0d1015;--t3:rgba(18,70,120,.78);--fill:255,255,255;--edge:rgba(255,255,255,.85);--inset:rgba(18,70,120,.07);
+  --inset2:rgba(18,70,120,.14);--line:rgba(18,70,120,.12);--ok:31,138,76;--warm:176,100,0;--page:#e9f0fa;--shadow:rgba(20,30,60,.2);--live:26,140,255;
+  --btn:rgb(18,70,120);--btnt:#fff;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--t1:#f5f7fa;--t3:rgba(178,220,255,.78);--fill:24,27,34;--edge:rgba(255,255,255,.26);--inset:rgba(255,255,255,.07);--inset2:rgba(255,255,255,.12);
+  --line:rgba(255,255,255,.1);--ok:95,214,142;--warm:255,196,107;--page:#0c1017;--shadow:rgba(0,0,0,.5);--live:96,190,255;--btn:rgb(96,190,255);--btnt:#0b0d12;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(60rem 30rem at 85% -10%,rgba(var(--glow),.25),transparent 70%),var(--page);color:var(--t1);font:500 14px/1.45 var(--font);-webkit-font-smoothing:antialiased;padding:32px 16px 80px}
+main{max-width:64rem;margin:0 auto}
+h1{font-size:2rem;letter-spacing:-.03em;margin:0 0 6px}h2{font-size:1.15rem;margin:40px 0 6px}
+p{margin:0 0 10px;color:var(--t3);max-width:70ch}
+.glass{border-radius:14px;background:linear-gradient(180deg,rgba(var(--tint),.22),rgba(var(--tint),.08)),rgba(var(--fill),.9);box-shadow:inset 0 1px 0 var(--edge),0 18px 44px var(--shadow);border:1px solid var(--line)}
+.btn{font:700 .86rem var(--font);border:0;border-radius:999px;padding:8px 16px;cursor:pointer;background:var(--btn);color:var(--btnt)}.btn.ghost{background:var(--inset);color:var(--t1)}.btn[disabled]{opacity:.5;cursor:default}
+.btn:focus-visible,.seg button:focus-visible,.ib:focus-visible,input:focus-visible,textarea:focus-visible,.pic:focus-visible,.viewer:focus-visible{outline:2px solid rgb(var(--live));outline-offset:2px}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--inset);color:var(--t3)}
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin-top:14px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin-top:12px}.controls label{display:flex;gap:7px;align-items:center;font-weight:600}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}legend{float:left;margin-right:12px;font-weight:700;padding:0}
+
+/* the Pill, the panel and the card as they are today, plus the note */
+.pill{display:block;position:relative;flex:none;width:36px;height:20px;border-radius:999px;background:linear-gradient(180deg,#e9eef5,#8d99ab);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 3px rgba(0,0,0,.14)}
+.pill i{position:absolute;top:6px;width:4px;height:8px;border-radius:99px;background:rgb(var(--glow));box-shadow:0 0 5px 1px rgba(var(--glow),.7)}.pill i:first-child{left:11px}.pill i:last-child{right:11px}
+.panel{width:400px;max-width:100%;padding:14px;display:flex;flex-direction:column;gap:12px}
+.panel .hd{display:flex;align-items:center;gap:10px;font-weight:800}
+.rcard{background:var(--inset);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.rcard .top{display:flex;align-items:center;gap:8px}.rcard .top b{margin-right:auto;font-size:.92rem}
+.cardpic{position:relative;aspect-ratio:1440/900;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--line);cursor:zoom-in;background:#f7f8fa;padding:0;border:0;width:100%;display:block}
+.cardpic .hint{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.62);color:#fff;font-size:.7rem;font-weight:800;padding:3px 9px;border-radius:99px;opacity:0;transition:opacity .15s}
+.cardpic:hover .hint,.cardpic:focus-visible .hint{opacity:1}
+.cardpic .pg{position:absolute;left:0;top:0;transform-origin:0 0}
+.note{font-size:.85rem;line-height:1.4;color:var(--t1);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.note.full{display:block;-webkit-line-clamp:unset}
+.note b{color:var(--t3);font-weight:800}.note .src{display:inline-block;margin-left:6px;font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--t3)}
+.facts{font-size:.78rem;color:var(--t3)}.link{background:none;border:0;padding:0;font:inherit;color:rgb(var(--live));font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.acts{display:flex;gap:8px}.acts .btn{flex:1}
+.ask{display:none;margin-top:6px;padding:10px 12px;border-radius:10px;background:var(--inset);font-size:.82rem}.ask.on{display:block}.ask .btn{padding:5px 12px;margin:6px 6px 0 0;font-size:.8rem}
+.said{display:none;color:rgb(var(--ok));font-weight:700;font-size:.86rem}
+
+/* the viewer */
+.veil{position:fixed;inset:0;background:rgba(10,14,24,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);display:none;z-index:20}
+.veil.on{display:block}
+.viewer{position:absolute;inset:3vh 3vw;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.vh{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.vh .ttl{font-weight:800;margin-right:4px}.vh .sp{flex:1}
+.seg{display:inline-flex;background:var(--inset);border-radius:999px;padding:3px}.seg button{border:0;background:transparent;color:var(--t3);font:700 .8rem var(--font);padding:5px 12px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed=true]{background:rgb(var(--fill));color:var(--t1);box-shadow:0 1px 3px var(--shadow)}
+.ib{height:30px;min-width:30px;padding:0 10px;border-radius:9px;border:0;background:var(--inset);color:var(--t1);font:700 .8rem var(--font);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}.ib[disabled]{opacity:.45;cursor:default}
+.vnote{padding:8px 16px;border-bottom:1px solid var(--line);font-size:.92rem;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.vnote .note{display:block;-webkit-line-clamp:unset;flex:1 1 20rem}
+.stagebox{position:relative;flex:1;min-height:0;background:rgba(18,30,60,.08)}
+.scroller{position:absolute;inset:0;overflow:auto;padding:14px}
+.pic{position:relative;margin:0 auto;outline-offset:-2px;touch-action:pan-y}
+.pic.slide{cursor:ew-resize}.pic.flip{cursor:pointer}
+.box{position:relative;overflow:hidden;box-shadow:0 0 0 1px var(--line),0 6px 20px var(--shadow);background:#fff;flex:none}
+.pg{width:1440px;transform-origin:0 0;position:absolute;left:0;top:0}
+.layer{position:absolute;inset:0}
+.after-l{clip-path:inset(0 0 0 var(--x))}
+.bar{position:absolute;top:0;bottom:0;left:var(--x);width:3px;margin-left:-1.5px;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.5);z-index:3;pointer-events:none}
+.knob{position:sticky;top:38%;margin:0 0 0 -10px;width:23px;height:23px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.tag{position:absolute;top:10px;z-index:4;font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:rgba(0,0,0,.66);color:#fff;padding:3px 10px;border-radius:99px;pointer-events:none}
+.tag.b{left:10px}.tag.a{right:10px}
+.sbs{display:flex;gap:14px;justify-content:center;align-items:flex-start}.sbs .cap{font-size:.74rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.vf{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+.vf .sp{flex:1}.vf textarea{width:100%;min-height:54px;border-radius:10px;border:1px solid var(--line);background:rgba(var(--fill),.6);color:var(--t1);font:500 .88rem var(--font);padding:8px 10px;resize:vertical}
+.vf .sendbox{display:none;flex:1 1 100%;flex-direction:column;gap:8px}.vf.sending .sendbox{display:flex}.vf.sending .main{display:none}
+.keys{font-size:.74rem;color:var(--t3);padding:6px 14px 8px;border-top:1px solid var(--line)}
+kbd{font:700 .72rem ui-monospace,Menlo,monospace;background:var(--inset2);border-radius:5px;padding:1px 6px}
+
+/* a small site, drawn in CSS at 1440 wide: the thing being reviewed */
+.site{width:1440px;background:#f7f8fa;color:#1c2330;font:600 20px/1.35 var(--font);overflow:hidden}
+.site nav{display:flex;gap:30px;align-items:center;padding:22px 80px;background:#fff;border-bottom:1px solid #e3e6ec;font-size:20px}.site nav b{margin-right:auto;font-size:26px}.site nav span{color:#6b7385}
+.site .hero{padding:90px 80px 70px;height:520px}.site h4{margin:0 0 20px;font-size:68px;line-height:1.05;letter-spacing:-.03em;max-width:900px}
+.site .hero p{margin:0 0 36px;color:#6b7385;font-weight:500;font-size:26px;max-width:760px}
+.site .cta{display:inline-block;padding:18px 36px;border-radius:14px;background:#cfd4de;color:#3a4250;font-size:24px}.after .cta{background:#2f6feb;color:#fff}
+.site .logos{display:flex;gap:40px;padding:34px 80px;background:#fff;border-top:1px solid #e3e6ec;border-bottom:1px solid #e3e6ec;height:130px}.site .logos i{flex:1;border-radius:12px;background:#e6e9f0}
+.site h5{margin:0;font-size:40px;padding:70px 80px 22px;letter-spacing:-.02em}
+.site .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;padding:0 80px}.site .grid div{height:260px;border-radius:18px;background:#fff;border:1px solid #e3e6ec;padding:26px;color:#6b7385;font-size:22px}
+.site .price{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;padding:0 80px 80px}.site .price div{height:520px;border-radius:18px;background:#fff;border:1px solid #e3e6ec;padding:30px;font-size:24px}
+.after .price div{border-color:#c9d6f6}.site .price em{display:block;font-style:normal;font-size:52px;letter-spacing:-.02em;margin:10px 0}
+.site footer{padding:50px 80px;background:#1c2330;color:#aab2c3;height:240px}
+
+/* the options */
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:10px}
+.opt{padding:14px 16px;border-radius:14px;background:var(--inset)}.opt b{display:block;margin-bottom:4px}.opt span{display:block;color:var(--t3);font-size:13px;margin-top:3px}
+.opt.rec{box-shadow:inset 0 0 0 2px rgba(var(--live),.55)}.opt .tagrec{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:rgb(var(--live));margin-left:6px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--t3);font-weight:700}
+</style>
+</head>
+<body>
+<main>
+<h1>Look closely: a big before and after, and a note on what changed</h1>
+<p>Today the card is small (about 460 by 290 points on your screen) and "Full image" only opens the after picture in Preview. This page shows a bigger viewer and a one-line note. Click the picture on the card to open it. Everything works: modes, zoom, keys, the note, and the two buttons.</p>
+
+<div class="controls">
+  <fieldset><legend>The note comes from</legend>
+    <label><input type="radio" name="src" value="a"> (a) Claude's own words</label>
+    <label><input type="radio" name="src" value="b"> (b) Steward looks at the pictures</label>
+    <label><input type="radio" name="src" value="c" checked> (c) (a) first, (b) on a button (recommended)</label>
+  </fieldset>
+</div>
+
+<div class="row">
+  <div class="glass panel" aria-label="Steward's panel">
+    <div class="hd"><span class="pill"><i></i><i></i></span>Steward</div>
+    <section class="rcard" id="card" aria-label="What changed in haven">
+      <div class="top"><b>What changed in haven</b><span class="chip">localhost:3000/pricing</span></div>
+      <button class="cardpic" id="cardpic" aria-label="Open the before and after big"><span class="hint">Open big</span></button>
+      <div class="note" id="cardnote"></div>
+      <p class="facts" style="margin:0">The page is taller now (2,520 px, was 2,400 px): this shows the top. <button class="link" id="open2">Open big</button> · 1 more to look at</p>
+      <div class="acts"><button class="btn" data-say="Marked as reviewed.">Looks good</button><button class="btn ghost" data-say="Send it back opens a note box.">Send it back</button></div>
+      <div class="said" id="said" role="status"></div>
+    </section>
+  </div>
+  <div style="flex:1 1 300px;min-width:260px">
+    <p><b>On the card:</b> the picture is now a button (a magnifier shows on hover), "Full image" becomes "Open big", and the note sits under the picture in at most two lines. Nothing else on the card changes.</p>
+    <p><b>The note says whose words they are.</b> "Claude says" is what Claude reported about its own work. "Steward sees" is what a model made of the two pictures. Neither is a check that the page is right.</p>
+    <p><b>Open big</b> is the same window the tray viewer uses (the panel grows to nearly the whole screen, centered), not a new window and not a macOS full-screen Space. Esc goes back to the panel.</p>
+  </div>
+</div>
+
+<div class="veil" id="veil"><div class="glass viewer" id="viewer" role="dialog" aria-label="Before and after, big" tabindex="-1">
+  <div class="vh">
+    <span class="ttl">haven</span><span class="chip">localhost:3000/pricing</span>
+    <span class="chip" id="count">Review 1 of 2</span>
+    <button class="ib" id="prev" aria-label="Previous review" title="Previous review ([)">‹</button><button class="ib" id="next" aria-label="Next review" title="Next review (])">›</button>
+    <span class="sp"></span>
+    <span class="seg" role="group" aria-label="How to compare">
+      <button data-mode="slide" aria-pressed="true">Slide</button><button data-mode="side" aria-pressed="false">Side by side</button><button data-mode="flip" aria-pressed="false">Flip</button>
+    </span>
+    <span class="seg" role="group" aria-label="Size"><button data-zoom="fit" aria-pressed="true">Fit</button><button data-zoom="100" aria-pressed="false">100%</button></span>
+    <button class="ib" id="hl" disabled title="Phase 3: outline what changed, and jump to the next change">Show changes</button>
+    <button class="ib" id="close" aria-label="Back to the panel" title="Back to the panel (Esc)">✕</button>
+  </div>
+  <div class="vnote" id="vnote"></div>
+  <div class="stagebox"><div class="scroller" id="scroller"><div class="pic" id="pic" tabindex="0" aria-label="The page before and after"></div></div></div>
+  <div class="vf" id="vf">
+    <div class="main" style="display:contents">
+      <button class="btn" id="good">Looks good</button><button class="btn ghost" id="back">Send it back</button>
+      <button class="ib" id="preview" title="Open the after picture in Preview">Open in Preview</button>
+      <span class="sp"></span><span class="facts" id="zoomnote" style="font-size:.78rem;color:var(--t3)"></span>
+    </div>
+    <div class="sendbox"><textarea id="ta" placeholder="What should change?" aria-label="What should change?"></textarea>
+      <div style="display:flex;gap:8px"><button class="btn" id="copy">Copy note for the session</button><button class="btn ghost" id="cancel">Cancel</button></div></div>
+  </div>
+  <div class="keys"><kbd>Esc</kbd> back · <kbd>←</kbd> <kbd>→</kbd> move the slider (<kbd>Shift</kbd> for more) · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Slide, Side by side, Flip · <kbd>Space</kbd> flip · <kbd>Z</kbd> Fit or 100% · <kbd>[</kbd> <kbd>]</kbd> other reviews · wheel and <kbd>↑</kbd> <kbd>↓</kbd> scroll a tall page</div>
+</div></div>
+
+<h2>The note: where the words come from</h2>
+<div class="opts">
+  <div class="opt"><b>(a) Claude's own words</b>The first one or two sentences of Claude's final reply. It is already in the Stop hook Steward receives (<code>last_assistant_message</code>, up to 4,000 characters), so nothing new is read and nothing leaves the Mac.<span><b>Cost:</b> none. <b>Privacy:</b> nothing sent. <b>Weak spot:</b> it says what Claude meant to do, so it can be wrong, vague, or a question ("Want me to...?"). Shown as "Claude says".</span></div>
+  <div class="opt"><b>(b) Steward looks at the pictures</b>The two photos go to the Claude API and a model writes the line.<span><b>Cost:</b> a few thousand input tokens per review (two 1440 by 900 pictures), a fraction of a cent on the smallest model; not measured. <b>Privacy:</b> the page leaves the Mac, which breaks Visual Review's promise today that it only talks to this Mac. <b>Needs:</b> an API key in Steward (the chat has one if set; a Claude Code login alone does not). Says what actually shows. Shown as "Steward sees".</span></div>
+  <div class="opt rec"><b>(c) (a) by default, (b) on a button<span class="tagrec">Recommended</span></b>Every card has the note from (a), free and local. A "Describe what changed" button asks for (b) for that one review, with one sentence first: "This sends the two pictures to Anthropic with your API key." The answer is kept with the review.<span>The promise stays true by default. The picture-based note is a choice you make per review. If there is no API key, the button is not shown.</span></div>
+</div>
+
+<h2>Where it fits</h2>
+<table>
+<tr><th>Case</th><th>What happens</th></tr>
+<tr><td>The panel</td><td>Click the card's picture, or "Open big". The same window grows into the big viewer, centered on the screen, up to about the work area minus 24 points all round (about 1,460 by 930 on a MacBook Pro 14: the page's 1,440 pixels at 100%). Esc or the X goes back to the panel.</td></tr>
+<tr><td>In the notch</td><td>The same. The viewer is centered, so the notch only matters for how the panel comes back (it drops from the notch again).</td></tr>
+<tr><td>A moved panel</td><td>The viewer is centered, ignoring where the panel was. When it closes, the panel goes back to its saved spot. Main building checks that this return does not look like a long slide; if it does, it fades and then places the panel.</td></tr>
+<tr><td>An alert (Phase 2)</td><td>A click opens the panel at the card, as planned. The viewer is one more click. A click on the alert could open the viewer directly later; not now.</td></tr>
+<tr><td>Quiet mode, pin, step aside</td><td>Same as the tray viewer today: it counts as the panel being open.</td></tr>
+<tr><td>Why not a real full screen</td><td>macOS full screen is a separate Space with a slow slide, it hides the app you are reviewing, and Steward's windows do not belong in it. A big centered window gets the same pixels without leaving your desktop.</td></tr>
+</table>
+</main>
+
+<script>
+(function(){
+  'use strict';
+  var PW=1440, H_BEFORE=2400, H_AFTER=2520;
+  var $=function(id){return document.getElementById(id)};
+  function site(after){
+    return '<div class="site'+(after?' after':'')+'"><nav><b>haven</b><span>Features</span><span>Pricing</span><span>Docs</span><span>Sign in</span></nav>'+
+      '<div class="hero"><h4>'+(after?'Rest easier, plan faster':'Plan your week without the busywork')+'</h4><p>Haven keeps your tasks, notes and calendar in one calm place.</p><span class="cta">'+(after?'Start free':'Get started')+'</span></div>'+
+      (after?'<div class="logos"><i></i><i></i><i></i><i></i><i></i></div>':'')+
+      '<h5>What you get</h5><div class="grid"><div>Tasks that sort themselves</div><div>Notes that link up</div><div>A calendar that listens</div></div>'+
+      '<h5>Pricing</h5><div class="price"><div>Free<em>$0</em></div><div>Pro<em>$9</em></div><div>Team<em>$19</em></div></div>'+
+      '<footer>© haven</footer></div>';
+  }
+  var BEFORE=site(false), AFTER=site(true);
+  var SAY_A='Claude says: I changed the headline, made the Start button blue and added a row of logos under it.';
+  var SAY_B='I moved the pricing table above the fold and made the Start button blue.';
+  var state={mode:'slide',zoom:'fit',x:55,flip:'after',src:'c',got:false,asking:false,idx:1};
+
+  // the card's small picture: the top of the after page, 16:10
+  var cp=$('cardpic'); var inner=document.createElement('div'); inner.className='pg'; inner.innerHTML=AFTER; cp.insertBefore(inner,cp.firstChild);
+  function sizeCard(){inner.style.transform='scale('+(cp.clientWidth/PW)+')'}
+
+  // the note
+  function noteHtml(){
+    var s=state.src;
+    if(s==='a'||(s==='c'&&!state.got)) return '<b>Claude says:</b> '+SAY_A.replace('Claude says: ','')+'<span class="src">from Claude’s reply</span>';
+    return '<b>Steward sees:</b> The headline is shorter, the Start button is now blue, and a new row of five logos sits under the hero.<span class="src">from the two pictures</span>';
+  }
+  function renderNote(){
+    var h=noteHtml();
+    var canAsk=(state.src==='c'&&!state.got);
+    $('cardnote').innerHTML=h;
+    $('vnote').innerHTML='<div class="note full">'+h+'</div>'+(canAsk?'<button class="link" id="describe">Describe what changed</button>':'')+'<div class="ask" id="ask"><b>This sends the two pictures to Anthropic with your API key.</b><br><button class="btn" id="askyes">Send them</button><button class="btn ghost" id="askno">Not now</button></div>';
+    if(canAsk){
+      $('describe').onclick=function(){$('ask').classList.add('on'); $('describe').style.display='none'; $('askyes').focus()};
+      $('askno').onclick=function(){$('ask').classList.remove('on'); $('describe').style.display=''};
+      $('askyes').onclick=function(){$('ask').innerHTML='Looking at the two pictures...'; setTimeout(function(){state.got=true; renderNote()},900)};
+    }
+  }
+  document.querySelectorAll('input[name=src]').forEach(function(r){r.addEventListener('change',function(){state.src=r.value; state.got=false; renderNote()})});
+
+  // the viewer picture area
+  var pic=$('pic'), scroller=$('scroller');
+  function box(html,w,h,s){return '<div class="box" style="width:'+Math.round(w*s)+'px;height:'+Math.round(h*s)+'px"><div class="pg" style="transform:scale('+s+')">'+html+'</div></div>'}
+  function render(){
+    var avail=scroller.clientWidth-28, s, w;
+    var sbs=state.mode==='side';
+    s=state.zoom==='100'?1:(sbs?(avail-14)/2/PW:avail/PW);
+    s=Math.min(s,1);
+    pic.className='pic'+(state.mode==='slide'?' slide':state.mode==='flip'?' flip':'');
+    pic.style.setProperty('--x',state.x+'%');
+    if(state.mode==='slide'){
+      pic.style.width=Math.round(PW*s)+'px';
+      pic.innerHTML='<div class="box" style="width:'+Math.round(PW*s)+'px;height:'+Math.round(H_AFTER*s)+'px"><div class="layer"><div class="pg" style="transform:scale('+s+')">'+BEFORE+'</div></div><div class="layer after-l"><div class="pg" style="transform:scale('+s+')">'+AFTER+'</div></div></div><span class="tag b">Before</span><span class="tag a">After</span><div class="bar"><div class="knob"></div></div>';
+    } else if(sbs){
+      pic.style.width='';
+      pic.innerHTML='<div class="sbs"><div><div class="cap">Before</div>'+box(BEFORE,PW,H_BEFORE,s)+'</div><div><div class="cap">After</div>'+box(AFTER,PW,H_AFTER,s)+'</div></div>';
+    } else {
+      pic.style.width=Math.round(PW*s)+'px';
+      var a=state.flip==='after';
+      pic.innerHTML=box(a?AFTER:BEFORE,PW,a?H_AFTER:H_BEFORE,s)+'<span class="tag '+(a?'a':'b')+'">'+(a?'After':'Before')+' · press Space</span>';
+    }
+    $('zoomnote').textContent=Math.round(s*100)+'% of the real page'+(state.mode==='side'&&state.zoom==='fit'?' (each side)':'');
+    document.querySelectorAll('[data-mode]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mode===state.mode))});
+    document.querySelectorAll('[data-zoom]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.zoom===state.zoom))});
+  }
+  function setMode(m){state.mode=m; render()}
+  document.querySelectorAll('[data-mode]').forEach(function(b){b.addEventListener('click',function(){setMode(b.dataset.mode)})});
+  document.querySelectorAll('[data-zoom]').forEach(function(b){b.addEventListener('click',function(){state.zoom=b.dataset.zoom; render()})});
+
+  // slide: press and drag anywhere on the picture; flip: click
+  var drag=false;
+  function slideTo(e){var r=pic.querySelector('.box').getBoundingClientRect(); state.x=Math.max(5,Math.min(95,(e.clientX-r.left)/r.width*100)); pic.style.setProperty('--x',state.x+'%')}
+  pic.addEventListener('pointerdown',function(e){
+    if(state.mode==='slide'){drag=true; pic.setPointerCapture(e.pointerId); slideTo(e)}
+    else if(state.mode==='flip'){state.flip=state.flip==='after'?'before':'after'; render()}
+  });
+  pic.addEventListener('pointermove',function(e){if(drag) slideTo(e)});
+  pic.addEventListener('pointerup',function(){drag=false});
+
+  // open and close
+  var opener=null;
+  function openV(){opener=document.activeElement; $('veil').classList.add('on'); state.asking=false; $('vf').classList.remove('sending'); renderNote(); render(); $('viewer').focus()}
+  function closeV(){$('veil').classList.remove('on'); if(opener&&opener.focus) opener.focus()}
+  $('cardpic').addEventListener('click',openV); $('open2').addEventListener('click',openV); $('close').addEventListener('click',closeV);
+  $('veil').addEventListener('pointerdown',function(e){if(e.target===$('veil')) closeV()});
+  window.addEventListener('resize',function(){sizeCard(); if($('veil').classList.contains('on')) render()});
+
+  // decisions
+  function said(t){var s=$('said'); s.style.display='block'; s.textContent=t}
+  document.querySelectorAll('[data-say]').forEach(function(b){b.addEventListener('click',function(){said(b.dataset.say)})});
+  $('good').addEventListener('click',function(){closeV(); said('Marked as reviewed. (The viewer closes and the panel is back.)')});
+  $('back').addEventListener('click',function(){$('vf').classList.add('sending'); $('ta').focus()});
+  $('cancel').addEventListener('click',function(){$('vf').classList.remove('sending')});
+  $('copy').addEventListener('click',function(){closeV(); said('Copied. Paste it into the session; the pictures are saved at the paths in the note.')});
+  $('preview').addEventListener('click',function(){said('Would open the after picture in Preview.')});
+  $('prev').addEventListener('click',function(){said('Would show the other review.')});$('next').addEventListener('click',function(){said('Would show the other review.')});
+
+  // keys
+  $('viewer').addEventListener('keydown',function(e){
+    if(e.target&&e.target.tagName==='TEXTAREA'){ if(e.key==='Escape'){$('vf').classList.remove('sending'); e.stopPropagation()} return }
+    var k=e.key;
+    if(k==='Escape'){e.preventDefault(); closeV()}
+    else if(k==='ArrowLeft'||k==='ArrowRight'){ if(state.mode==='slide'){e.preventDefault(); state.x=Math.max(5,Math.min(95,state.x+(k==='ArrowLeft'?-1:1)*(e.shiftKey?20:5))); pic.style.setProperty('--x',state.x+'%')} }
+    else if(k==='1') setMode('slide'); else if(k==='2') setMode('side'); else if(k==='3') setMode('flip');
+    else if(k===' '&&e.target.tagName!=='BUTTON'){e.preventDefault(); if(state.mode!=='flip') state.mode='flip'; else state.flip=state.flip==='after'?'before':'after'; render()}
+    else if(k==='z'||k==='Z'){state.zoom=state.zoom==='fit'?'100':'fit'; render()}
+    else if(k==='['||k===']'){said('Would show the other review.')}
+  });
+
+  sizeCard(); renderNote();
+})();
+</script>
+</body>
+</html>
