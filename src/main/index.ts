@@ -1608,6 +1608,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const panelTimer = setTimeout(() => fail('the movable panel timed out'), 60_000)
       await checkMovablePanel()
       clearTimeout(panelTimer)
+      const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
+      await checkSettingsClearOfPanel()
+      clearTimeout(besideTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -2792,6 +2795,103 @@ async function checkMovablePanel(): Promise<void> {
     await sleep(300)
     console.log('smoke: in the notch, the panel drops from it until it is moved, then closes and opens where it is, and putting it back brings it under the notch')
   }
+  await settings.update({ keepPanelOpen: keptOpen })
+  setDock('collapsed')
+  await sleep(500)
+}
+
+/**
+ * Settings and the open panel. Settings opens beside the panel when there's room, wherever the panel is (dragged, or
+ * under the notch), and centered when there isn't. While Settings is the window in use it floats above the panel, and
+ * once it isn't, it's a normal window again, under the panel. The panel stays open throughout, and the pin isn't
+ * touched. A hidden run has no real focus, so the check sends Settings the focus and blur macOS would.
+ */
+async function checkSettingsClearOfPanel(): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const w = win!
+  const overlap = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  const keptOpen = settings.keepPanelOpen()
+  await settings.update({ keepPanelOpen: true })
+  /** Open the panel fresh, and drag it (through the messages the page sends) so its middle is dx points from where it opened. */
+  const panelAt = async (dx: number | null) => {
+    await resetPanelPlace()
+    setDock('collapsed')
+    await sleep(500)
+    setDock('expanded')
+    await sleep(600)
+    if (dx !== null) {
+      const b = w.getBounds()
+      dragPanel('start', b.x + 100, b.y + 20)
+      dragPanel('move', b.x + 100 + dx, b.y + 20)
+      dragPanel('end')
+    }
+    if (dock !== 'expanded' || !w.isVisible()) throw new Error('the panel did not open for the Settings check')
+    return w.getBounds()
+  }
+  const openIt = async () => {
+    openSettings('steward')
+    const s = settingsWin!
+    if (s.webContents.isLoading()) await new Promise<void>((resolve) => s.webContents.once('did-finish-load', () => resolve()))
+    await sleep(300)
+    return s
+  }
+  /** Used, it floats above the panel; not used, it's a normal window, under it. The panel stays open either way. */
+  const onTopWhileUsed = (s: BrowserWindow, where: string) => {
+    s.emit('focus')
+    if (!s.isAlwaysOnTop()) throw new Error(`with the panel ${where}, Settings in use is not above it`)
+    s.emit('blur')
+    if (s.isAlwaysOnTop()) throw new Error(`with the panel ${where}, Settings stays above it after it's no longer in use`)
+    s.emit('focus')
+    if (dock !== 'expanded' || !w.isVisible() || !settings.keepPanelOpen()) throw new Error(`with the panel ${where}, using Settings closed the panel or changed the pin`)
+  }
+  const cases: [string, number | null, boolean][] = [
+    ['dragged to the left', -5000, true],
+    ['dragged to the middle', null, false],
+  ]
+  for (const [where, dx, room] of cases) {
+    let panel = await panelAt(dx)
+    if (dx === null) {
+      // The middle of the screen: no room on either side for Settings on most screens.
+      const area = screen.getDisplayMatching(panel).workArea
+      const b = panel
+      dragPanel('start', b.x + 100, b.y + 20)
+      dragPanel('move', b.x + 100 + Math.round(area.x + area.width / 2 - (b.x + b.width / 2)), b.y + 20)
+      dragPanel('end')
+      panel = w.getBounds()
+    }
+    const s = await openIt()
+    const at = s.getBounds()
+    const area = screen.getDisplayMatching(panel).workArea
+    const fits = area.width - panel.width >= 2 * (SETTINGS_SIZE.width + 40)
+    if ((room || fits) && overlap(at, panel)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}), Settings opened over it at ${JSON.stringify(at)}`)
+    onTopWhileUsed(s, where)
+    console.log(`smoke: with the panel ${where} (x ${panel.x}), Settings opens ${overlap(at, panel) ? 'centered (no room beside it), and' : `beside it (x ${at.x}), and`} floats above it only while in use`)
+    s.close()
+    await sleep(400)
+  }
+  if (notchGeo) {
+    await resetPanelPlace()
+    setDock('collapsed')
+    await settings.update({ steward: { notch: true } })
+    replaceForNotch()
+    await sleep(600)
+    const panel = await panelAt(null)
+    if (JSON.stringify(panel) !== JSON.stringify(boundsFor('expanded'))) throw new Error('the panel did not open under the notch for the Settings check')
+    const s = await openIt()
+    const at = s.getBounds()
+    const area = screen.getDisplayMatching(panel).workArea
+    const room = Math.max(panel.x - area.x, area.x + area.width - (panel.x + panel.width)) >= SETTINGS_SIZE.width + 40
+    if (room && overlap(at, panel)) throw new Error(`with the panel under the notch, Settings opened over it at ${JSON.stringify(at)} though there's room beside it`)
+    onTopWhileUsed(s, 'under the notch')
+    console.log(`smoke: with the panel under the notch (x ${panel.x}), Settings opens ${overlap(at, panel) ? 'centered (no room beside it), and' : `beside it (x ${at.x}), and`} floats above it only while in use`)
+    s.close()
+    await sleep(400)
+    setDock('collapsed')
+    await settings.update({ steward: { notch: false } })
+    replaceForNotch()
+    await sleep(300)
+  }
+  await resetPanelPlace()
   await settings.update({ keepPanelOpen: keptOpen })
   setDock('collapsed')
   await sleep(500)
