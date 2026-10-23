@@ -7,6 +7,7 @@
       "items": [
         { "name": "Try Visual Review by hand", "line": "Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.", "date": "2026-10-20" },
         { "name": "Try the movable panel by hand", "line": "Smoke is hidden now, so you can run the app. Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.", "date": "2026-10-21" },
+        { "name": "Pick an island direction", "line": "Dynamic Island style notch: three live directions in design/showcase.html, section 7 (A Chin island, B Side island, C Bubbles). My pick: A. Also say whether Wings stays as a setting. Brief: docs/briefs/notch-island.md.", "date": "2026-10-22" },
         { "name": "Dependabot #30", "line": "Six minor and patch updates, still open. Merge once CI is green.", "date": "2026-10-22" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
@@ -19,7 +20,7 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Nothing is being built right now", "line": "Every build chat is done. The next ones wait for your go (see Up next).", "date": "2026-10-22" }
+        { "name": "Nothing is being built right now", "line": "Every build chat is done. The next ones wait for your go (see Up next). The showcase now lists every feature, with a new Island section.", "date": "2026-10-22" }
       ]
     },
     {
@@ -29,7 +30,8 @@
         { "name": "Visual Review, Phase 1b: Look closely", "line": "A big before and after viewer (slide, side by side, flip, zoom to the real pixels, keys, the two decisions inside it) and a one-line \"Claude says\" note on what changed. Design page: design/visual-review-viewer.html. Recommended before Phase 2. Waits for your go in Feature building.", "date": "2026-10-22" },
         { "name": "Visual Review, Phase 2: the alert", "line": "Tell me: an alert when a Claude turn changed what the page looks like. Waits for your go in Feature building.", "date": "2026-10-21" },
         { "name": "Movable panel, Phase 2: screens and edges", "line": "A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Waits for you to try Phase 1, then your go in Main building.", "date": "2026-10-21" },
-        { "name": "Notch 3e: the Wings hand-off", "line": "When an alert comes in on the Wings look, the wing eyes fade out and the chin drops with its eyes growing in, about 0.5 s. Chin stays the resting look (the notch has no pixels, so the Inside look was dropped). Waits for 3b to merge and for your go in Main building.", "date": "2026-10-20" },
+        { "name": "Notch Island", "line": "Redesign the notch like the Dynamic Island. Designed, waits for your pick of a direction, then a go in Main building. Five small phases in the brief.", "date": "2026-10-22" },
+        { "name": "Notch 3e: the Wings hand-off (on hold)", "line": "On hold until you decide on the island: if A is picked, 3e is not needed. Designed, not built.", "date": "2026-10-20" },
         { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }

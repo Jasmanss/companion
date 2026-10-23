@@ -58,6 +58,7 @@ All four already exist as animations on `design/notch.html` (the States section:
 - The black shape drops down and becomes the panel, as on the design page. The notch window and the panel are two separate windows, so this is a crossfade of the two with the black growing in the notch window over about 0.3 s, then the panel appearing under it. Only transform and opacity animate. If it flickers or the two windows drift apart, drop it: 3a's simple entrance is the fallback and is already acceptable.
 
 **3e: The Wings hand-off (added 2026-10-20, shrunk the same day).**
+**On hold (2026-10-22):** the user asked for a Dynamic Island style redesign of the notch (`docs/briefs/notch-island.md`, `design/showcase.html` section 7). If its recommended direction (A, the Chin island) is picked, 3e is not needed. Do not build 3e until the user decides.
 On `design/notch-styles.html` the user picked **C, Hand-off** as the way the Wings turn into eyes. Visual source: stage C on that page. Build it after 3b is merged, because it changes the same shape and alert code. It needs its own go from the user. No new look and no new setting value: Chin stays the default and Wings stays an option.
 
 *Dropped: D, Inside.* The user first picked D (eyes lit inside the notch) for the resting look. It was dropped because the notch is hardware with no pixels, so eyes drawn inside it would not show. The user chose to keep Chin as the resting look.
