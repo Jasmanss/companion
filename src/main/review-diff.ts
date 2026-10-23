@@ -12,7 +12,9 @@ const GATE_SCREEN_ROWS = Math.round((GATE_WIDTH * CARD_SHOT.height) / CARD_SHOT.
  * A pixel counts as changed when any colour is off by more than this (out of 255). Low, so a pale tint or a reshaped
  * gradient counts: haven's fade from #F4E6E1 to #FBFBF8 differs by at most 23 on any colour, and a reshaped fade by
  * about half that. A gate pixel is already the average of a 4 by 4 block, which smooths away the speckle of text edges
- * and gradient dithering. The smoke check logs what the same page captured twice measures at several cutoffs.
+ * and gradient dithering. Measured by the smoke check (2026-10-22): the same text page and the same soft fade, each
+ * captured twice, differ in 0 pixels at every cutoff from 0 to 24; that fade reshaped differs in 29,025 at 6, 16,190 at
+ * 8, 252 at 12 and 0 at 24, against 243 needed.
  */
 export const CHANNEL_TOLERANCE = 6
 /**
