@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
+import type { Project } from '../src/shared/types'
 import { describeCaptureError, ReviewTracker, type Shot } from '../src/main/review'
 import type { Diff } from '../src/main/review-diff'
 import { REVIEW_LIMITS, ReviewStore } from '../src/main/review-store'
@@ -25,7 +26,7 @@ afterEach(async () => {
 })
 
 /** A tracker over a real store in a temp folder, with captures it is told to make: a page that is whatever `page` says now. */
-async function setup(opts: { projects?: typeof project[]; page?: () => string | Error | Shot; changed?: boolean } = {}) {
+async function setup(opts: { projects?: Project[]; page?: () => string | Error | Shot; changed?: boolean } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
   dirs.push(dir)
   const store = new ReviewStore(dir, REVIEW_LIMITS)
