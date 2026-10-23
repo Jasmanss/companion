@@ -124,6 +124,9 @@ describe('Settings next to the open panel', () => {
   it('stays centered when there is no room beside the panel (under the notch on a 14-inch screen)', () => {
     const underNotch = { x: 556, y: 33, ...SIZE }
     expect(clearOfPanel(AREA, SETTINGS, underNotch)).toEqual({ x: 396, y: 33 + 154, ...SETTINGS })
+    // A small screen (the CI runner's, about 1024 wide) has no room beside a panel even at its left edge.
+    const small = { x: 0, y: 25, width: 1024, height: 743 }
+    expect(clearOfPanel(small, SETTINGS, { x: 0, y: 57, width: 400, height: 624 })).toEqual({ x: 152, y: 25 + 92, ...SETTINGS })
     // A wider screen has the room.
     const wide = { x: 0, y: 25, width: 2560, height: 1390 }
     const panel = { x: 1080, y: 25, ...SIZE }

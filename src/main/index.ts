@@ -2844,11 +2844,25 @@ async function checkSettingsClearOfPanel(): Promise<void> {
     s.emit('focus')
     if (dock !== 'expanded' || !w.isVisible() || !settings.keepPanelOpen()) throw new Error(`with the panel ${where}, using Settings closed the panel or changed the pin`)
   }
-  const cases: [string, number | null, boolean][] = [
-    ['dragged to the left', -5000, true],
-    ['dragged to the middle', null, false],
+  /**
+   * Beside the panel when there's room on either side of it (16 points from it and 24 inside the work area, as
+   * clearOfPanel has it), exactly centered on the work area when there isn't: a small screen (the CI runner's is about
+   * 1024 points wide) has no room beside a 400-point panel anywhere. Says which, for the log.
+   */
+  const besideOrCentered = (where: string, panel: Rect, at: Rect): string => {
+    const area = screen.getDisplayMatching(panel).workArea
+    const need = SETTINGS_SIZE.width + 16 + 24
+    const room = panel.x - area.x >= need || area.x + area.width - (panel.x + panel.width) >= need
+    const centered = clearOfPanel(area, SETTINGS_SIZE, null)
+    if (room && overlap(at, panel)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}), Settings opened over it at ${JSON.stringify(at)} though there's room beside it`)
+    if (!room && JSON.stringify(at) !== JSON.stringify(centered)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}) and no room beside it, Settings opened at ${JSON.stringify(at)}, not centered at ${JSON.stringify(centered)}`)
+    return room ? `beside it (x ${at.x}; there's room on a ${area.width}-point work area)` : `centered (x ${at.x}; no room beside it on a ${area.width}-point work area)`
+  }
+  const cases: [string, number | null][] = [
+    ['dragged to the left', -5000],
+    ['dragged to the middle', null],
   ]
-  for (const [where, dx, room] of cases) {
+  for (const [where, dx] of cases) {
     let panel = await panelAt(dx)
     if (dx === null) {
       // The middle of the screen: no room on either side for Settings on most screens.
@@ -2860,12 +2874,9 @@ async function checkSettingsClearOfPanel(): Promise<void> {
       panel = w.getBounds()
     }
     const s = await openIt()
-    const at = s.getBounds()
-    const area = screen.getDisplayMatching(panel).workArea
-    const fits = area.width - panel.width >= 2 * (SETTINGS_SIZE.width + 40)
-    if ((room || fits) && overlap(at, panel)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}), Settings opened over it at ${JSON.stringify(at)}`)
+    const opened = besideOrCentered(where, panel, s.getBounds())
     onTopWhileUsed(s, where)
-    console.log(`smoke: with the panel ${where} (x ${panel.x}), Settings opens ${overlap(at, panel) ? 'centered (no room beside it), and' : `beside it (x ${at.x}), and`} floats above it only while in use`)
+    console.log(`smoke: with the panel ${where} (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
     s.close()
     await sleep(400)
   }
@@ -2878,12 +2889,9 @@ async function checkSettingsClearOfPanel(): Promise<void> {
     const panel = await panelAt(null)
     if (JSON.stringify(panel) !== JSON.stringify(boundsFor('expanded'))) throw new Error('the panel did not open under the notch for the Settings check')
     const s = await openIt()
-    const at = s.getBounds()
-    const area = screen.getDisplayMatching(panel).workArea
-    const room = Math.max(panel.x - area.x, area.x + area.width - (panel.x + panel.width)) >= SETTINGS_SIZE.width + 40
-    if (room && overlap(at, panel)) throw new Error(`with the panel under the notch, Settings opened over it at ${JSON.stringify(at)} though there's room beside it`)
+    const opened = besideOrCentered('under the notch', panel, s.getBounds())
     onTopWhileUsed(s, 'under the notch')
-    console.log(`smoke: with the panel under the notch (x ${panel.x}), Settings opens ${overlap(at, panel) ? 'centered (no room beside it), and' : `beside it (x ${at.x}), and`} floats above it only while in use`)
+    console.log(`smoke: with the panel under the notch (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
     s.close()
     await sleep(400)
     setDock('collapsed')
