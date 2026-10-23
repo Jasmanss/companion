@@ -7,7 +7,7 @@ import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
-import { clampPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
+import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
 import { Agent } from './agent'
@@ -962,21 +962,14 @@ function openSettings(section?: SettingsSection): void {
     settingsWin.focus()
     return
   }
-  const area = screen.getPrimaryDisplay().workArea
-  const { width, height } = SETTINGS_SIZE
-  // Centered, unless the open panel would cover part of it; then just clear of the panel.
-  let x = area.x + Math.round((area.width - width) / 2)
-  if (isOpen(dock)) {
-    const panel = PANEL_WIDTH + 8 + 24
-    x = settings.steward().edge === 'left' ? Math.max(x, area.x + panel) : Math.min(x, area.x + area.width - panel - width)
-  }
-  x = Math.max(area.x + 24, Math.min(x, area.x + area.width - width - 24))
+  // Centered on the open panel's screen, unless the panel would cover part of it; then beside the panel, wherever it is
+  // (at its edge, under the notch, or dragged somewhere), when there's room.
+  const panel = win && !win.isDestroyed() && isOpen(dock) && win.isVisible() ? win.getBounds() : null
+  const area = (panel ? screen.getDisplayMatching(panel) : screen.getPrimaryDisplay()).workArea
+  const at = clearOfPanel(area, SETTINGS_SIZE, panel)
   const { vibrant } = settingsAppearance()
   const w = new BrowserWindow({
-    x,
-    y: area.y + Math.round((area.height - height) / 2),
-    width,
-    height,
+    ...at,
     minWidth: 640,
     minHeight: 420,
     title: 'Steward Settings',
@@ -1001,6 +994,10 @@ function openSettings(section?: SettingsSection): void {
     w.show()
     w.focus()
   })
+  // The window in use is on top: the panel floats above normal windows, so while Settings has the keyboard it floats
+  // too, above the panel. Once it hasn't, it's a normal window again, and clicking the panel puts the panel on top.
+  w.on('focus', () => settingsOnTop(w, true))
+  w.on('blur', () => settingsOnTop(w, false))
   w.on('blur', tuckIfAway)
   w.on('closed', () => {
     settingsWin = null
@@ -1020,6 +1017,15 @@ function openSettings(section?: SettingsSection): void {
     })
   }
   loadPage(w, 'settings.html', section)
+}
+
+/** Settings above the panel (at the panel's level, and in front), or a normal window again. */
+function settingsOnTop(w: BrowserWindow, on: boolean): void {
+  if (w.isDestroyed()) return
+  if (on) {
+    w.setAlwaysOnTop(true, 'floating')
+    w.moveTop()
+  } else w.setAlwaysOnTop(false)
 }
 
 /** Open at login lives in macOS. While developing it's off limits: it would register Electron itself. */

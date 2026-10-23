@@ -72,3 +72,23 @@ export class PanelDrag {
     return clampPanel(area, { ...this.start, x: this.start.x + to.x - this.pointer.x, y: this.start.y + to.y - this.pointer.y })
   }
 }
+
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+/**
+ * Where a window of this size (Settings) opens so the open panel doesn't cover it, wherever the panel is (at its edge,
+ * under the notch, or dragged somewhere): centered on the work area, unless that overlaps the panel; then beside the
+ * panel, gap points from it and margin points inside the work area, on whichever side is nearer the middle. With no
+ * room on either side it stays centered (the window in use is put above the panel, so it isn't covered while used).
+ */
+export function clearOfPanel(area: Rect, size: { width: number; height: number }, panel: Rect | null, margin = 24, gap = 16): Rect {
+  const centered = { x: area.x + Math.round((area.width - size.width) / 2), y: area.y + Math.round((area.height - size.height) / 2), ...size }
+  if (!panel || !overlaps(centered, panel)) return centered
+  const lo = area.x + margin
+  const hi = area.x + area.width - margin - size.width
+  const sides = [Math.max(lo, panel.x + panel.width + gap), Math.min(hi, panel.x - gap - size.width)].filter((x) => x >= lo && x <= hi)
+  const fits = sides.filter((x) => !overlaps({ ...centered, x }, panel))
+  if (!fits.length) return centered
+  const nearest = fits.reduce((a, b) => (Math.abs(b - centered.x) < Math.abs(a - centered.x) ? b : a))
+  return { ...centered, x: nearest }
+}

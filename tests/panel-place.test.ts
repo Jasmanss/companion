@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampPanel, isDrag, PanelDrag, panelRect, pickSpot, spotFor, spotsFrom } from '../src/shared/panel-place'
+import { clampPanel, clearOfPanel, isDrag, PanelDrag, panelRect, pickSpot, spotFor, spotsFrom } from '../src/shared/panel-place'
 
 /** The 14-inch MacBook Pro's work area under its 33-point menu bar, with the Dock at the bottom. */
 const AREA = { x: 0, y: 33, width: 1512, height: 867 }
@@ -91,5 +91,42 @@ describe('dragging the panel', () => {
     expect(drag.move({ x: 1100, y: 130 }, AREA)).toEqual({ x: 1004, y: 110, ...SIZE })
     expect(drag.move({ x: 5000, y: 5000 }, AREA)).toEqual({ x: 1112, y: 140, ...SIZE })
     expect(drag.move({ x: -5000, y: -5000 }, AREA)).toEqual({ x: 0, y: 33, ...SIZE })
+  })
+})
+
+describe('Settings next to the open panel', () => {
+  const SETTINGS = { width: 720, height: 560 }
+  const overlap = (a: { x: number; width: number }, b: { x: number; width: number }) => a.x < b.x + b.width && b.x < a.x + a.width
+
+  it('opens centered with no panel open, or when the panel is out of its way', () => {
+    const centered = { x: 396, y: 33 + 154, ...SETTINGS }
+    expect(clearOfPanel(AREA, SETTINGS, null)).toEqual(centered)
+    expect(clearOfPanel(AREA, SETTINGS, { x: 1600, y: 0, ...SIZE })).toEqual(centered)
+  })
+
+  it('opens beside a panel at the right or left edge, clear of it', () => {
+    const right = { x: 1104, y: 81, ...SIZE }
+    const at = clearOfPanel(AREA, SETTINGS, right)
+    expect(overlap(at, right)).toBe(false)
+    expect(at.x + at.width).toBe(1104 - 16)
+    const left = { x: 8, y: 81, ...SIZE }
+    expect(clearOfPanel(AREA, SETTINGS, left).x).toBe(8 + 400 + 16)
+  })
+
+  it('opens beside a panel dragged anywhere, when there is room, on the side nearer the middle', () => {
+    const moved = { x: 200, y: 60, ...SIZE }
+    const at = clearOfPanel(AREA, SETTINGS, moved)
+    expect(overlap(at, moved)).toBe(false)
+    expect(at.x).toBe(200 + 400 + 16)
+    expect(at.x + at.width).toBeLessThanOrEqual(1512 - 24)
+  })
+
+  it('stays centered when there is no room beside the panel (under the notch on a 14-inch screen)', () => {
+    const underNotch = { x: 556, y: 33, ...SIZE }
+    expect(clearOfPanel(AREA, SETTINGS, underNotch)).toEqual({ x: 396, y: 33 + 154, ...SETTINGS })
+    // A wider screen has the room.
+    const wide = { x: 0, y: 25, width: 2560, height: 1390 }
+    const panel = { x: 1080, y: 25, ...SIZE }
+    expect(overlap(clearOfPanel(wide, SETTINGS, panel), panel)).toBe(false)
   })
 })
