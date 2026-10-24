@@ -289,6 +289,8 @@ export interface ReviewView {
   heightAfter: number
   /** The full-page pictures on disk (the note for the session points at them). */
   files: { before: string | null; after: string }
+  /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
+  said: string | null
 }
 
 /**

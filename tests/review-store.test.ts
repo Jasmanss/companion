@@ -101,6 +101,51 @@ describe('ReviewStore', () => {
       expect(again.get(id)?.note).toHaveLength(2000)
     }))
 
+  it('keeps what Claude said with the review, and a review.json with a bad one is not loaded', () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const { id } = await store.save({ ...draft(), said: 'I made the button blue.' }, files)
+      const again = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await again.load()
+      expect(again.get(id)?.said).toBe('I made the button blue.')
+
+      const json = path.join(path.dirname(store.file(id, 'after')!), 'review.json')
+      await fs.writeFile(json, JSON.stringify({ ...JSON.parse(await fs.readFile(json, 'utf8')), said: 42 }))
+      const third = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await third.load()
+      expect(third.get(id)).toBeNull()
+    }))
+
+  it('serves review://<id>/before and /after for the viewer, and nothing else', () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const { id } = await store.save(draft(), files)
+      const only = await store.save({ ...draft('/Users/me/other'), before: 'none', heightBefore: null }, { after: files.after, afterCard: files.afterCard })
+      expect(store.pictureFor(`review://${id}/before`)).toBe(store.file(id, 'before'))
+      expect(store.pictureFor(`review://${id}/after`)).toBe(store.file(id, 'after'))
+      expect(store.pictureFor(`review://${only.id}/after`)).toBe(store.file(only.id, 'after'))
+      // A review with no before picture has none to serve.
+      expect(store.pictureFor(`review://${only.id}/before`)).toBeNull()
+      for (const url of [
+        `review://${id}/review.json`,
+        `review://${id}/before-card`,
+        `review://${id}/after.png`,
+        `review://${id}/`,
+        `review://${id}/../${only.id}/after`,
+        `review://${id}/after/../../review.json`,
+        `review://${id}/%2e%2e/after`,
+        `review://${id}/after?x=1`,
+        `review://${id}/after#top`,
+        'review://20261020-120000-deadbeef/after',
+        'review://../after',
+        'review://not-an-id/after',
+        `tray://${id}/after`,
+        `file:///${store.file(id, 'after')}`,
+        'nonsense',
+      ])
+        expect([url, store.pictureFor(url)]).toEqual([url, null])
+    }))
+
   it('prunes on save, oldest first, and the project folder goes with its last review', () =>
     inTemp(async (dir) => {
       let now = NOW
