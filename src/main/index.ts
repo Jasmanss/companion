@@ -2597,6 +2597,17 @@ async function checkIsland(out: string): Promise<void> {
   if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
   console.log('smoke: island: wider with the cursor on it, a count for two projects, a check when Claude stops, then back into the notch')
 
+  // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
+  raise({ key: 'approval:smoke-island', level: 'urgent', title: 'A session needs you', detail: 'under the island' })
+  alerts.flush()
+  await sleep(900)
+  img = await shot()
+  if (dock !== 'nudge' || !notch.state().nudge || !black(img, layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('with an alert under the notch, the island is not the chin the alert joins')
+  setDock('collapsed')
+  await sleep(700)
+  if (!clear(await shot(), layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('after the alert, the island did not go back into the notch')
+  console.log('smoke: island: an alert under the notch joins the island, grown into a chin, and it goes back after')
+
   // Asleep: Steward tucked fully behind the notch.
   await settings.update({ steward: { presence: 'quiet' } })
   presenceChanged()
