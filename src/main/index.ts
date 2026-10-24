@@ -59,11 +59,11 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { islandStatus, nextChange, noteTurn, type Turns } from './island-status'
+import { hookNote, IslandNotes, islandStatus, nextChange, noteTurn, type Turns } from './island-status'
 import { ReviewTracker } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
-import { SessionTracker } from './sessions'
+import { matchProject, SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
@@ -1072,7 +1072,8 @@ function showAlerts(list: AlertView[]): void {
     asideAlerts = [...asideAlerts, ...list].slice(-MAX_HELD)
     return updateMenuBar()
   }
-  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek)
+  const island = inNotch() && settings.steward().notchStyle === 'island'
+  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
     win?.webContents.send('alerts:show', peek)
@@ -1261,6 +1262,8 @@ let islandTurns: Turns = {}
 let agentSince: number | undefined
 let pendingReviews = 0
 let islandTimer: ReturnType<typeof setTimeout> | undefined
+/** Its note, one line under the notch for a few seconds: a session finished, or a second project started. */
+const islandNotes = new IslandNotes({ changed: () => updateIsland() })
 
 /**
  * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
@@ -1271,14 +1274,29 @@ function updateIsland(): void {
   const now = Date.now()
   if (!agent.busy) agentSince = undefined
   else agentSince ??= now
-  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, now }
+  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
   notch.setIsland(islandStatus(input))
   clearTimeout(islandTimer)
   const next = nextChange(input)
   if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
 }
 
+/**
+ * News for the island's note, from a hook event (turns: the turns going on before it). Settings → Steward → "Alerts
+ * that peek out: Nothing" means no note either, and a finished turn only gets one while Notifications says so.
+ */
+function islandNote(event: HookPayload, turns: Turns): void {
+  // A new turn in any session: the island is about the work now, not what finished before.
+  if (event.hook_event_name === 'UserPromptSubmit') islandNotes.drop('finished')
+  const session = sessions.list().find((s) => s.id === event.session_id)
+  const name = session?.name ?? matchProject(event.cwd, settings.projects())?.name ?? path.basename(event.cwd)
+  const note = hookNote(event, { turns, agentBusy: agent.busy, name, detail: session?.detail, now: Date.now() })
+  if (!note || settings.steward().alertPeek === 'none' || (note.kind === 'finished' && !settings.notifications().sessionFinished)) return
+  islandNotes.show(note)
+}
+
 async function onHookEvent(event: HookPayload): Promise<void> {
+  const turns = islandTurns
   islandTurns = noteTurn(islandTurns, event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
@@ -1286,6 +1304,8 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   // A prompt was sent: photograph the page now (in the background), before Claude changes it.
   if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
   const alert = await sessions.apply(event)
+  // After the session strip has it, so a finished note has the session's name and what Claude said.
+  islandNote(event, turns)
   sendSessions()
   if (alert) raise(alert)
   // The turn ended: photograph it again, and keep a review if the page looks different.
@@ -3252,6 +3272,7 @@ app.whenReady().then(async () => {
     load: (w) => loadPage(w, 'notch.html'),
     style: () => settings.steward().notchStyle,
     onCursor: lookAtNotch,
+    onHover: (hover) => islandNotes.hover(hover),
     cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
     // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
     hoverable: () => !quiet(),
