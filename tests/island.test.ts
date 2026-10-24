@@ -92,6 +92,8 @@ describe('the island shape', () => {
     // Asleep, or nothing going on, there's no note to show.
     expect(islandLevel({ awake: false, nudge: false, right: 'working', note: true })).toBe('asleep')
     expect(islandLevel({ awake: true, nudge: false, right: null, note: true })).toBe('rest')
+    // The panel open at the side shows what's going on: the island steps back to Steward peeking, looking at it.
+    expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true, open: true })).toBe('rest')
   })
 
   it('takes clicks on the black and on Steward, not on the menu bar beside them', () => {

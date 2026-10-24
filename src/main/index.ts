@@ -239,14 +239,17 @@ function boundsFor(state: DockState): Electron.Rectangle {
   const spot = state === 'expanded' ? panelSpot() : null
   if (spot) return panelRect(spot.display.workArea, panelSize(spot.display.workArea), spot.spot)
   if (state === 'nudge' && inNotch() && notchGeo) return nudgeUnderNotch(notchGeo, notchDisplay().workArea, NUDGE_WIDTH)
+  const { edge, size } = settings.steward()
+  // Docked in the notch, the panel opens at the side Settings says, on the notch's screen, near its top: never under
+  // the notch, which keeps Steward.
   if ((state === 'expanded' || state === 'viewing') && inNotch() && notchGeo) {
     const area = notchDisplay().workArea
-    if (state === 'expanded') return underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
-    const size = { width: Math.min(VIEWER_MAX_WIDTH, area.width - 120), height: area.height - 48 }
-    return { ...underNotch(notchGeo, area, size), y: area.y + Math.round((area.height - size.height) / 2) }
+    const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
+    const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
+    const y = state === 'viewing' ? area.y + Math.round((area.height - height) / 2) : area.y + 8
+    return { x: edge === 'left' ? area.x + 8 : area.x + area.width - width - 8, y, width, height }
   }
   const area = screen.getPrimaryDisplay().workArea
-  const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab
   /** Left of a window this wide that sits gap points from the edge. */
   const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
@@ -337,6 +340,8 @@ function dragPanel(phase: unknown, x?: unknown, y?: unknown): void {
   if (phase === 'end') {
     if (panelDrag?.moved) savePanelPlace(win.getBounds(), panelDrag.display)
     panelDrag = null
+    // Steward in the notch looks where the panel is now.
+    placeNotch()
     return
   }
   const pointer = typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null
@@ -365,7 +370,7 @@ function savePanelPlace(bounds: Rect, display: Electron.Display): void {
 
 /**
  * Double-click on the top bar, or Settings → Steward → Reset: the panel forgets where it was moved, on every screen. An
- * open one glides home (at its edge, or under the notch), and the old way in and out is back.
+ * open one glides home (at its edge, the notch's screen in the notch), and the old way in and out is back.
  */
 async function resetPanelPlace(): Promise<void> {
   panelPlaces = {}
@@ -373,6 +378,7 @@ async function resetPanelPlace(): Promise<void> {
   await appState.update({ panelPlaces, panelDisplay })
   sendPlaced()
   if (win && !win.isDestroyed() && dock === 'expanded' && win.isVisible()) win.setBounds(boundsFor('expanded'), true)
+  placeNotch()
 }
 
 /**
@@ -476,12 +482,21 @@ const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
 /**
- * Steward shows in the notch while it's tucked away, and while a nudge is out under it, joined to its chin. The panel
- * opens under the notch and takes over from it. Not in the notch: the tab is back at the edge.
+ * Steward shows in the notch unless it was hidden by hand: tucked away, with a nudge out under it (joined to its chin),
+ * and while the panel is open at the side, looking toward it. Not in the notch: the tab is back at the edge.
  */
 function placeNotch(): void {
   notch?.setNudge(inNotch() && dock === 'nudge')
-  notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge') && !steppedAside)
+  notch?.setPanel(inNotch() ? panelLook() : null)
+  notch?.show(inNotch() && dock !== 'hidden' && !steppedAside)
+}
+
+/** Which way the open panel is from the notch, for Steward to look at; null while it isn't open. */
+function panelLook(): { x: number; y: number } | null {
+  if (!isOpen(dock) || !notchGeo) return null
+  const b = boundsFor(dock)
+  const dx = b.x + b.width / 2 - (notchGeo.x + notchGeo.width / 2)
+  return { x: Math.round(Math.max(-1, Math.min(1, dx / 300)) * 80) / 100, y: 0.35 }
 }
 
 /**
@@ -964,7 +979,7 @@ function openSettings(section?: SettingsSection): void {
     return
   }
   // Centered on the open panel's screen, unless the panel would cover part of it; then beside the panel, wherever it is
-  // (at its edge, under the notch, or dragged somewhere), when there's room.
+  // (at its edge, at its side in the notch, or dragged somewhere), when there's room.
   const panel = win && !win.isDestroyed() && isOpen(dock) && win.isVisible() ? win.getBounds() : null
   const area = (panel ? screen.getDisplayMatching(panel) : screen.getPrimaryDisplay()).workArea
   const at = clearOfPanel(area, SETTINGS_SIZE, panel)

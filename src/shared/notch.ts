@@ -72,7 +72,7 @@ export function stepHover(s: HoverState, over: boolean, now: number): HoverState
 }
 
 /**
- * Where something that comes out of the notch goes (the panel, a nudge): centered under the notch on the
+ * Where something that comes out of the notch goes (a nudge): centered under the notch on the
  * notch's own screen, its top at the top of that screen's work area (just under the menu bar), kept inside the work
  * area with margin points to spare at the sides.
  */
@@ -126,17 +126,18 @@ export const PEEK_SCALE = 0.8
 export const PEEK_SIZE = { width: 64, height: 54 } as const
 
 /**
- * asleep: Steward tucked behind the notch (Only when needed, at rest). rest: no island, Steward peeks. compact: the island
+ * asleep: Steward tucked behind the notch (Only when needed, at rest). rest: no island, Steward peeks (also while the
+ * panel is open at the side: it shows what's going on, and Steward looks at it). compact: the island
  * is out, Steward in its left side, the status on its right. note: the same, a little wider, with one line under the
  * notch. chin: an alert is out under the notch (the 3b nudge), so the black is the chin it joins, with Steward peeking
  * beside it.
  */
 export type IslandLevel = 'asleep' | 'rest' | 'compact' | 'note' | 'chin'
 
-export function islandLevel(o: { awake: boolean; nudge: boolean; right: IslandRight | null; note?: boolean }): IslandLevel {
+export function islandLevel(o: { awake: boolean; nudge: boolean; right: IslandRight | null; note?: boolean; open?: boolean }): IslandLevel {
   if (o.nudge) return 'chin'
   if (!o.awake) return 'asleep'
-  if (!o.right) return 'rest'
+  if (!o.right || o.open) return 'rest'
   return o.note ? 'note' : 'compact'
 }
 

@@ -214,15 +214,12 @@ export function App() {
     document.documentElement.dataset.edge = look.edge
   }, [look.edge])
 
-  // Docked in the notch, the panel comes down from it instead of in from the side (styles.css).
+  // Docked in the notch: the nudge comes out under it, and closing plays the way out before the window goes (below).
   const [notchGeo, setNotchGeo] = useState<NotchGeometry | null>(null)
   useEffect(() => {
     void api.notch.geometry().then(setNotchGeo)
     return api.notch.onGeometry(setNotchGeo)
   }, [])
-  useEffect(() => {
-    document.documentElement.toggleAttribute('data-notch', look.notch && notchGeo !== null)
-  }, [look.notch, notchGeo])
 
   // Dragged somewhere, the panel pops in and out where it is (styles.css). Main says so just before it opens or closes,
   // and the attribute is set right away, so the panel's first frame already has the right entrance.
@@ -237,8 +234,9 @@ export function App() {
   )
   const panelDrag = usePanelDrag()
 
-  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out (the panel, the viewer or a
-  // nudge) stays, goes back up into the notch (styles.css), and then tells main the window can go. A moved panel does
+  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out stays and plays its way out
+  // (styles.css: the panel or the viewer slides back toward its side, a nudge goes back up into the notch), and then
+  // tells main the window can go. A moved panel does
   // the same where it is, at the edge too. What's next is drawn once main says the window has gone or moved (onLeft),
   // so the tab never shows for a frame in the panel's window. Worked out while rendering, for the same reason.
   const [leaving, setLeaving] = useState<DockState | null>(null)
@@ -264,7 +262,7 @@ export function App() {
     }
     // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
     const ended = (e: AnimationEvent) => {
-      if (['panel-rise', 'panel-fade-out', 'nudge-up', 'panel-settle-out'].includes(e.animationName)) done()
+      if (['panel-out', 'panel-fade-out', 'nudge-up', 'panel-settle-out'].includes(e.animationName)) done()
     }
     document.addEventListener('animationend', ended)
     const timer = setTimeout(done, 400)

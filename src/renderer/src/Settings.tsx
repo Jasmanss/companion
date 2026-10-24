@@ -415,7 +415,7 @@ export function StewardSection(props: SectionProps) {
           label={where === 'notch' ? 'Panel' : 'Place'}
           note={
             where === 'notch'
-              ? 'Drag the panel by its top bar to move it. Reset puts it back under the notch.'
+              ? 'Drag the panel by its top bar to move it. Reset puts it back on its side.'
               : 'Drag the tab up or down, or the panel by its top bar. Reset puts both back.'
           }
         >
@@ -423,6 +423,19 @@ export function StewardSection(props: SectionProps) {
             Reset
           </button>
         </Row>
+        {where === 'notch' && (
+          <Row label="Panel opens on" note="Steward stays in the notch, and the panel opens at this side of the screen.">
+            <Segmented
+              label="Panel opens on"
+              value={look.edge}
+              options={[
+                ['left', 'Left'],
+                ['right', 'Right'],
+              ]}
+              onChange={(edge) => set({ edge })}
+            />
+          </Row>
+        )}
         {where === 'notch' && (
           <Row
             label="In the notch"

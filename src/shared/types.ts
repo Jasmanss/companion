@@ -82,6 +82,8 @@ export interface NotchState {
   nudge?: boolean
   /** The island (Settings → Steward → In the notch → Island): what it shows. */
   island?: IslandStatus
+  /** The panel is open at the side: which way it is from the notch (x and y from -1 to 1), for Steward to look at. */
+  panel?: { x: number; y: number } | null
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
