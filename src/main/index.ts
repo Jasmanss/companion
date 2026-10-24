@@ -59,6 +59,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
+import { islandStatus, nextChange, noteTurn, type Turns } from './island-status'
 import { ReviewTracker } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
@@ -1206,6 +1207,7 @@ function sendMood(): void {
 
 function sendSessions(): void {
   win?.webContents.send('sessions:changed', sessions.list())
+  updateIsland()
   updateMenuBar()
 }
 
@@ -1254,7 +1256,30 @@ async function deployLogs(projectName: string, deploymentId?: string): Promise<{
   return { deploymentId: id, log: await fetchBuildLog(id, link.orgId, token) }
 }
 
+/** The notch island: the turns going on (a prompt sent, until Claude stops), Steward's own, and the reviews waiting. */
+let islandTurns: Turns = {}
+let agentSince: number | undefined
+let pendingReviews = 0
+let islandTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
+ * whenever something it shows from changes; a finished check goes by itself, so the next look is set for then.
+ */
+function updateIsland(): void {
+  if (!notch || !sessions || !agent) return
+  const now = Date.now()
+  if (!agent.busy) agentSince = undefined
+  else agentSince ??= now
+  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, now }
+  notch.setIsland(islandStatus(input))
+  clearTimeout(islandTimer)
+  const next = nextChange(input)
+  if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
+}
+
 async function onHookEvent(event: HookPayload): Promise<void> {
+  islandTurns = noteTurn(islandTurns, event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
@@ -1269,7 +1294,11 @@ async function onHookEvent(event: HookPayload): Promise<void> {
 
 /** The reviews waiting for a decision go to the panel: the card at its top. */
 function sendReviews(): void {
-  void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
+  void reviews.pending().then((list) => {
+    win?.webContents.send('review:changed', list)
+    pendingReviews = list.length
+    updateIsland()
+  })
 }
 
 /** A check that found no visible change goes to the panel as a quiet line, so it's never silent. */
@@ -3085,6 +3114,7 @@ app.whenReady().then(async () => {
     name: () => settings.steward().name,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
+      updateIsland()
       // Peek out when the agent needs a decision; the approval card is in the panel.
       if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Steward needs your OK', detail: event.command, mood: 'needs-you' })
     },
@@ -3113,6 +3143,7 @@ app.whenReady().then(async () => {
   })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
+  updateIsland()
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
   await refreshNotch()
   win = createWindow()
