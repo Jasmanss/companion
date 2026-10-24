@@ -1728,9 +1728,11 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
   const note = await wc.executeJavaScript(`document.querySelector('.rvv-note .rv-said')?.textContent ?? ''`)
   need(note.includes(said), `the viewer does not show what Claude said ("${note}")`)
   // The handler itself, asked from main: the page's own rules (its CSP) stop a fetch from the page before it gets there.
+  // Chromium tidies a ".." away before the handler sees the address, so a ".." can only name another file of this
+  // review (refused) or this review's own pictures.
   const status = async (url: string) => (await net.fetch(url)).status
   need((await status(`review://${id}/after`)) === 200, 'review:// did not serve the after picture')
-  for (const url of [`review://${id}/review.json`, `review://${id}/before-card`, `review://${id}/../after`, 'review://20261020-120000-deadbeef/after'])
+  for (const url of [`review://${id}/review.json`, `review://${id}/before-card`, `review://${id}/after/../review.json`, `review://${id}/../../after.png`, 'review://20261020-120000-deadbeef/after'])
     need((await status(url)) === 404, `review:// served ${url}`)
 
   // The keys: 2 and 3 pick the mode, Space flips, 1 is back to the slider, ← → move it, Z is 100%.
