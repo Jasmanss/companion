@@ -42,7 +42,7 @@ Rules that keep it from being a nuisance or a risk:
 - **Only inside the window.** Calls and texts happen only between Go rest and the wake time (or "I'm up").
 - **One-way in version 1.** The user cannot reply to a text or press a key on the call. Steward has no public address to receive it (see Later). The message says what happened, and the user acts at the Mac.
 
-**What "stuck" can mean, honestly.** Steward only hears three or four kinds of hook event, so a long test run or a big build looks exactly like a stuck session: nothing arrives for a while. A stuck call at 3 AM for a slow build would be a bad night. Recommendation: **text at 45 minutes of silence, call at 90**. The user's one-liner says stuck is urgent and calls; this keeps that, with a text first. Numbers are Settings fields. This is question 2.
+**What "stuck" can mean, honestly.** Steward only hears three or four kinds of hook event, so a long test run or a big build looks exactly like a stuck session: nothing arrives for a while. A stuck call at 3 AM for a slow build would be a bad night. Recommendation: **text at 45 minutes of silence, call at 90**. The user's one-liner says stuck is urgent and calls; this keeps that, with a text first. Numbers are Settings fields.
 
 ### The morning: the night report
 Replaces the morning brief on days after a Watch (`buildBrief` in `src/main/brief.ts` stays for other days; the new `buildNightReport` is a template too, no model). Contents, top to bottom:
@@ -72,7 +72,7 @@ Kept in `<userData>/watch/` for the last 14 nights; "Clear night reports" sits n
 ### Calls and texts
 **Recommendation: Twilio**, over its plain HTTPS API from Steward's main process (the same way `deploys.ts` calls Vercel). Why: the most guides and the clearest error messages, voice and text from one account and one number, and a call can carry its words inline (no web server needed). Other providers (Telnyx, Vonage, Plivo) can do the same and may cost less. If the user wants one of them, only `phone.ts` changes.
 
-**No new dependency.** Twilio publishes an npm package. We do not use it: `fetch` with a Basic auth header is enough for three endpoints, and a package would be a new dependency for a feature that works without. Question 4 asks the user to confirm.
+**No new dependency.** Twilio publishes an npm package. We do not use it: `fetch` with a Basic auth header is enough for three endpoints, and a package would be a new dependency for a feature that works without. Confirmed by the user.
 
 **What it costs** (from Twilio's pages and third-party summaries found 2026-10-24; confirm in the console, prices change):
 - One time: **about $19**. A text brand registration of $4 and a campaign vetting fee of $15 for a sole proprietor, plus whatever credit the user adds first (Twilio's minimum top-up was not confirmed; plan on about $20).
@@ -97,7 +97,7 @@ Kept in `<userData>/watch/` for the last 14 nights; "Clear night reports" sits n
 **How the ladder checks "answered".** After the call is created, Steward asks Twilio for the call's status every few seconds for up to a minute. It counts as answered only if the call was `completed`, picked up by a person (Twilio's `MachineDetection` fills `answered_by`; to confirm in the spike) and lasted long enough to hear the message. Otherwise it texts. If unsure, it texts. A text after a heard call is harmless; a missed one is not.
 
 **What can be built and tested before the account exists.** Everything but the final live check: a fake provider and a small local fake of the three Twilio endpoints for tests; the ladder with a fake clock; the Settings fields and their checks; the Watch, the log, the report, the CI source, stuck detection, the island states. The one thing only the user can do is press "Test call" with real keys. That is why OW 4 comes after OW 1 to 3, and why the account should be started now.
-A text stand-in while registration is pending is possible through the Messages app on the Mac (AppleScript, an Automation permission the user grants, Mac awake only). It is not in the plan; it needs a spike. Question 3.
+A text stand-in while registration is pending is possible through the Messages app on the Mac (AppleScript, an Automation permission the user grants, Mac awake only). The user chose to wait for calls only, so it is dropped.
 
 ### Build phases (small, each a draft PR into main with CI green; the user's go typed into Feature building for each)
 1. **OW 1: Goodnight and Watch.** The goodnight card, the Watch state (start, stop, wake time, "I'm up"), keep-awake with the battery warning, the event log, sleep gaps, held on-screen alerts, the Watching mood, the moon on the menu bar item. No phone, no report yet. First visible: Go rest, and a log file that fills.
@@ -125,13 +125,18 @@ A text stand-in while registration is pending is possible through the Messages a
 7. **Hooks differ between the terminal and the desktop app** (SPEC notes `Notification` differs). Approval and input detection are as good as today's alerts, no better.
 8. **Motion** is hand-tested only.
 
-### Questions for the user (defaults in bold; none blocks starting OW 1)
-1. **Provider:** **Twilio**, or another?
-2. **Stuck:** **text at 45 minutes, call at 90**, or call at 45?
-3. **Texts while registration is pending:** wait, or spike the Messages-app stand-in?
-4. **Dependency:** confirm **no Twilio package**, plain `fetch`.
-5. **Order:** **Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4**, or all of Visual Review first?
-6. **Off-Mac:** is putting a second Twilio key in the repository's GitHub secrets acceptable?
+### Decided by the user (2026-10-24, via the front door)
+The user: "Accept all six Overnight Watch recommendations: Twilio, text at 45 and call at 90 minutes, calls only until texts are approved, plain fetch with no Twilio package, the recommended build order, and decide the GitHub key later."
+1. **Provider: Twilio.**
+2. **Stuck:** a text at 45 minutes of silence, a call at 90.
+3. **While US text registration is pending: calls only.** No Messages-app stand-in, so the spike is dropped.
+4. **No Twilio package:** plain `fetch`, no new dependency.
+5. **Build order:** Visual Review 1b and 2, then Overnight Watch 1 to 3, then Overnight Watch 4, then Visual Review 3 and 4.
+6. **The GitHub secrets key** for the off-Mac part (OW 5): decided when that phase comes.
+
+What "calls only" means for OW 4, so the build is not surprised: until texts are approved the ladder has no text step. Urgent events still call (a second call after 15 minutes if the first was not heard and the user is not back). Everything that is texts-only today does **not reach the phone at all**: waiting on you (approvals and input), and the 45-minute stuck text. They are still shown on screen and written in the night report, which says "would have texted" for each. That is a real gap, stated plainly in Settings → Watch ("Texts: waiting for registration") and in the report; the user can say if approvals should call in that period. When registration is approved, a Settings switch turns texts on and the full ladder applies.
+
+**Status stays `designed`.** The build has not been given its go, and it comes after Visual Review 2.
 
 ### How to test
 - **Unit:** the ladder with a fake clock and fake provider (urgent calls then texts; not answered texts; answered by a person does not; idle under 5 minutes does not call; "I'm here" stops it; the second call after 15 minutes; limits; same-kind events merge; outside the window nothing is sent); stuck detection (45 and 90 minutes, reset by any event); window end (wake time, "I'm up", the 12-hour cap); the CI parser (red, green, in progress, no runs); the night report (empty night, gaps, order, counts, held alerts); messages contain no command, path or URL; phone number checks and masking; the secret is never in a log, a settings read or a report; `phone.ts` against a local fake of `api.twilio.com` (the host guard refuses any other host).

@@ -117,12 +117,8 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </div>
   </header>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">9</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">8</span></h2>
     <ul>
-      <li>
-        <div class="row"><span class="name">Answer the Overnight Watch questions</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Six questions, none blocks the start: provider (Twilio), when a quiet session calls you (text at 45 minutes, call at 90), a stand-in for texts while registration is pending, no Twilio package, the build order, and a second key in GitHub secrets. Design: design/overnight-watch.html.</p>
-      </li>
       <li>
         <div class="row"><span class="name">Answer the Steward's reactions questions</span><time datetime="2026-10-24">Oct 24</time></div>
         <p>Four questions, none blocks the start: frustrated without the new hook (milder version, recommended), keep Proud's small confetti, the idle loop default (Calm), and who builds it (Main building after island Phase 2). Try the page: design/showcase.html, section 9.</p>
@@ -152,8 +148,8 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
         <p>Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Start the Overnight Watch phone account</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Make a Twilio account and a US number, then start US text registration (it takes days, and review runs while the first phases are built). Steps, costs and where the keys go: design/overnight-watch.html, section 6. You type the keys into the app yourself, never into a chat.</p>
+        <div class="row"><span class="name">Start Twilio sign-up and US text registration (takes days)</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Make a Twilio account and a US number, then start US text registration. Steps, costs and where the keys go: design/overnight-watch.html, section 6. You type the keys into the app yourself, never into a chat. Until texts are approved, Overnight Watch will only call.</p>
       </li>
     </ul>
   </section>
@@ -167,7 +163,7 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="next" class="card next">
-    <h2><span class="dot"></span>Up next <span class="count">10</span></h2>
+    <h2><span class="dot"></span>Up next <span class="count">12</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Notch island, Phases 2 to 5</span><time datetime="2026-10-24">Oct 24</time></div>
@@ -186,12 +182,20 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
         <p>Tell me: an alert when a Claude turn changed what the page looks like, plus the review history. Overnight Watch uses that history. Waits for your go in Feature building.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Visual Review, Phases 3 and 4</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Phase 3: highlight what changed, and phone width. Phase 4: a spike on holding the Stop hook, then the opt-in &quot;hold for my review&quot; setting. Recommended after Overnight Watch phase 4 (see below), not before.</p>
+        <div class="row"><span class="name">Overnight Watch, phases 1 to 3 (designed)</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Go rest, I've got the build: the goodnight card and Watch, the night report, and all the sources (CI on main, production deploys, stuck sessions), on screen only, no phone account needed. Decided 2026-10-24: Twilio, plain fetch with no package. Builds after Visual Review 2, in Feature building, on your go. Brief: docs/briefs/overnight-watch.md. Design: design/overnight-watch.html.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Overnight Watch (designed)</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Go rest, I've got the build: a goodnight card, then Steward watches sessions, deploys and CI while the Mac is awake, calls for urgent things, texts for things waiting on you, and shows a night report in the morning. Five small phases; 1 to 3 need no phone account. Brief: docs/briefs/overnight-watch.md. Design: design/overnight-watch.html. Recommended order: Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4. Waits for your answers and your go in Feature building.</p>
+        <div class="row"><span class="name">Overnight Watch, phase 4: calls and texts</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Settings, Watch, the test buttons and the call-then-text ladder. Decided: a text at 45 minutes of silence and a call at 90; calls only until US text registration is approved (approvals and the stuck text then stay on screen and in the report). Needs your Twilio keys for the last live check. Comes after phases 1 to 3.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Visual Review, Phases 3 and 4</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Phase 3: highlight what changed, and phone width. Phase 4: a spike on holding the Stop hook, then the opt-in &quot;hold for my review&quot; setting. Comes after Overnight Watch 4, by your decision.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Overnight Watch, phase 5: off the Mac</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>A GitHub Actions job that calls for CI or deploy failures when the Mac sleeps. Which key goes in GitHub secrets is decided when this phase comes. After Visual Review 3.</p>
       </li>
       <li>
         <div class="row"><span class="name">Steward's main chat, redesigned (design first)</span><time datetime="2026-10-24">Oct 24</time></div>

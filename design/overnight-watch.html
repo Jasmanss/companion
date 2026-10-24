@@ -154,7 +154,7 @@ ol.steps2{margin:8px 0;padding-left:20px;color:var(--t1)}ol.steps2 li{margin:6px
 <p class="t1">Overnight Watch is the second headline feature, next to Visual Review. You say goodnight, Steward watches your Claude Code sessions, deploys and CI, calls you only if something is on fire, and in the morning shows what changed. The brief is <code>docs/briefs/overnight-watch.md</code>.</p>
 <p>Everything on this page is a picture of the plan, built from what the app already has. It works, so click around, but it does not call, text or save anything, and the key fields in section 6 are not real.</p>
 <label class="row" style="margin:6px 0"><input type="checkbox" id="rm"> <span>Reduce Motion (fade and snap instead of grow)</span></label>
-<nav aria-label="Sections"><a href="#night">1 The night</a><a href="#goodnight">2 Goodnight</a><a href="#island">3 The island</a><a href="#ladder">4 Urgent or waiting</a><a href="#report">5 The morning</a><a href="#phone">6 Calls and texts</a><a href="#catch">7 What it catches</a><a href="#phases">8 Phases</a><a href="#ask">9 Questions</a></nav>
+<nav aria-label="Sections"><a href="#night">1 The night</a><a href="#goodnight">2 Goodnight</a><a href="#island">3 The island</a><a href="#ladder">4 Urgent or waiting</a><a href="#report">5 The morning</a><a href="#phone">6 Calls and texts</a><a href="#catch">7 What it catches</a><a href="#phases">8 Phases</a><a href="#ask">9 Decided</a></nav>
 
 <h2 id="night">1. The night in one line</h2>
 <p>Only things that matter reach your phone. Everything else waits for the report.</p>
@@ -268,7 +268,7 @@ ol.steps2{margin:8px 0;padding-left:20px;color:var(--t1)}ol.steps2 li{margin:6px
       <li><b>One way.</b> You can't reply or press a key yet (no public address to receive it).</li>
       <li><b>Never approves anything.</b> No model calls, no commands except the fixed read-only <code>gh</code> and git ones.</li>
     </ul>
-    <div class="note"><b>About "stuck".</b> Steward only hears approvals, notifications, prompts and stops. A slow test run looks exactly like a stuck session. So the recommendation is a <b>text at 45 minutes</b> of silence and a <b>call at 90</b>. Question 2 asks if you want the call sooner.</div>
+    <div class="note"><b>About "stuck".</b> Steward only hears approvals, notifications, prompts and stops. A slow test run looks exactly like a stuck session. So the recommendation is a <b>text at 45 minutes</b> of silence and a <b>call at 90</b>. The user accepted this.</div>
   </div>
 </div>
 
@@ -320,7 +320,7 @@ ol.steps2{margin:8px 0;padding-left:20px;color:var(--t1)}ol.steps2 li{margin:6px
   <div>
     <h3>Recommendation: Twilio</h3>
     <p>Voice and text from one account and one number, plain HTTPS from Steward (the way it already talks to Vercel), and a call can carry its words inline, so no web server is needed. Telnyx, Vonage and Plivo can do the same; only <code>phone.ts</code> would change.</p>
-    <p><span class="pill-tag okt">no new dependency</span> Twilio's npm package is not used. Three endpoints with <code>fetch</code> are enough. Question 4 asks you to confirm.</p>
+    <p><span class="pill-tag okt">no new dependency</span> Twilio's npm package is not used. Three endpoints with <code>fetch</code> are enough. Confirmed.</p>
     <h3>What it costs</h3>
     <div class="tbl"><table>
       <tr><th>When</th><th>What</th><th class="n">About</th></tr>
@@ -386,17 +386,17 @@ ol.steps2{margin:8px 0;padding-left:20px;color:var(--t1)}ol.steps2 li{margin:6px
   <div class="lane"><span>You</span><span class="blk you" style="grid-column:span 4">Start the account now</span><span class="blk you" style="grid-column:span 3">Registration (days)</span><span class="blk you" style="grid-column:span 2">Keys</span><span class="blk nil"></span></div>
   <div class="lane"><span>Feature building</span><span class="blk vr">VR 1b</span><span class="blk vr">VR 2</span><span class="blk ow">OW 1</span><span class="blk ow">OW 2</span><span class="blk ow">OW 3</span><span class="blk ow">OW 4</span><span class="blk vr">VR 3</span><span class="blk ow">OW 5</span><span class="blk vr">VR 4</span><span class="blk nil"></span></div>
 </div>
-<p>Visual Review 1b and 2 first, because the night report needs Phase 2's history. OW 1 to 3 need no account, so they run while registration is in review. Visual Review 3 and 4 (highlights, phone width, holding the Stop hook) are the least urgent, so they go after the phone phase. Your plan said all of Visual Review first; question 5 asks.</p>
+<p>Visual Review 1b and 2 first, because the night report needs Phase 2's history. OW 1 to 3 need no account, so they run while registration is in review. Visual Review 3 and 4 (highlights, phone width, holding the Stop hook) are the least urgent, so they go after the phone phase. The user accepted this order.</p>
 
-<h2 id="ask">9. Questions for you</h2>
-<p>Nothing blocks starting. The first answer to give is the account: start it today.</p>
+<h2 id="ask">9. Decided</h2>
+<p>All six recommendations were accepted on 2026-10-24. Status stays designed: the build waits for its go, after Visual Review 2.</p>
 <ol class="q">
-  <li><b>Provider.</b> Twilio, or a different one?</li>
-  <li><b>Stuck.</b> Text at 45 minutes and call at 90 (recommended), or call at 45?</li>
-  <li><b>Texts while registration is pending.</b> Wait, or try the Messages app on the Mac as a stand-in (a small spike, Mac awake only)?</li>
-  <li><b>Dependency.</b> Confirm no Twilio package, plain <code>fetch</code>?</li>
-  <li><b>Order.</b> Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4 (recommended), or all of Visual Review first?</li>
-  <li><b>Off the Mac.</b> Is a second Twilio key in the repository's GitHub secrets acceptable?</li>
+  <li><b>Provider.</b> Twilio.</li>
+  <li><b>Stuck.</b> A text at 45 minutes of silence, a call at 90.</li>
+  <li><b>While text registration is pending.</b> Calls only. Texts-only events (approvals, the 45-minute stuck text) stay on screen and in the night report, which says "would have texted". Turned on by a Settings switch once registration is approved.</li>
+  <li><b>Dependency.</b> No Twilio package, plain <code>fetch</code>.</li>
+  <li><b>Order.</b> Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4.</li>
+  <li><b>Off the Mac.</b> The GitHub secrets key is decided when that phase comes.</li>
 </ol>
 </main>
 <script>
