@@ -545,6 +545,12 @@ pre {
   height: 11px;
 }
 
+/* Until the page draws its first frame, the way in waits at its start (Nudge.tsx, useDrawn). */
+.notch-nudge.wait,
+.notch-nudge.wait * {
+  animation-play-state: paused;
+}
+
 /* Going back up into the notch: the pieces, not the whole (App.tsx waits for the middle's end). */
 :root[data-leaving] #root > .notch-nudge {
   animation: none;
