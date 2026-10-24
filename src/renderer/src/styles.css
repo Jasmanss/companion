@@ -2504,6 +2504,356 @@ a.icon-btn {
   object-position: top;
 }
 
+/* ---------- Visual Review, big ---------- */
+
+/* On the card: the slider takes drags on the picture, so a corner button opens it big. It shows on hover and focus. */
+.rv-open {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 6;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-open span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rv-open svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* With no before picture there's no slider: all of the picture opens it. */
+.rv-open.all {
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+.rv-ba:hover .rv-open,
+.rv-open:focus-visible {
+  opacity: 1;
+}
+
+.rv-open:focus-visible {
+  outline: none;
+}
+
+.rv-open:focus-visible span {
+  box-shadow: 0 0 0 2px rgb(var(--live));
+}
+
+/* What Claude said it did: two lines at most on the card, all of it in the viewer. */
+.rv-said {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.rv-said b {
+  color: var(--t3);
+  font-weight: 700;
+}
+
+.rv-said-src {
+  margin-left: 4px;
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-viewer .viewer-head {
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.rvv-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rvv-title .chip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvv-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rvv-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--inset);
+}
+
+.rvv-seg button {
+  padding: 4px 11px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rvv-seg button[aria-pressed='true'] {
+  background: rgb(var(--fill));
+  color: var(--t1);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+.rvv-seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.rvv-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rvv-note p {
+  margin: 0;
+}
+
+.rvv-note .rv-said {
+  display: block;
+  font-size: 13.5px;
+}
+
+/* The pictures scroll here: a tall page down, and at 100% sideways too. */
+.rvv-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background: var(--inset);
+  outline: none;
+}
+
+.rvv-box {
+  position: relative;
+  display: block;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 6px 20px var(--shadow);
+}
+
+.rvv-pic {
+  display: block;
+  max-width: none;
+  height: auto;
+  user-select: none;
+}
+
+.rvv-pic[hidden] {
+  display: none;
+}
+
+.rvv-slide {
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.rvv-slide .rvv-pic {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.rvv-slide .rvv-after {
+  clip-path: inset(0 0 0 var(--x));
+}
+
+.rvv-box .rv-tag {
+  top: 10px;
+}
+
+.rvv-box .rv-tag.b {
+  left: 10px;
+}
+
+.rvv-box .rv-tag.a {
+  right: 10px;
+}
+
+.rvv-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x);
+  z-index: 3;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* The knob stays in sight while a tall page scrolls. */
+.rvv-knob {
+  position: sticky;
+  top: 38%;
+  width: 24px;
+  height: 24px;
+  margin-left: -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* The slider as a real control, for the keyboard and screen readers; the picture itself takes the drags. */
+.rvv-range {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rvv-slide:has(.rvv-range:focus-visible) {
+  box-shadow:
+    0 0 0 2px rgb(var(--live)),
+    0 6px 20px var(--shadow);
+}
+
+.rvv-sbs {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: max-content;
+  min-width: 100%;
+}
+
+.rvv-sbs figure {
+  margin: 0;
+}
+
+.rvv-sbs figcaption {
+  margin-bottom: 6px;
+  color: var(--t3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rvv-sbs .rvv-box {
+  height: auto;
+}
+
+.rvv-flip.can-flip {
+  cursor: pointer;
+}
+
+button.rvv-flip-tag {
+  border: none;
+  cursor: pointer;
+}
+
+.rvv-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.rvv-foot.sending {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.rvv-foot textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t1);
+  font: inherit;
+  resize: vertical;
+}
+
+.rvv-foot.sending .rv-buttons .btn {
+  flex: none;
+}
+
+.rvv-zoom {
+  margin-left: auto;
+}
+
+.rvv-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--bad);
+  font-size: 12px;
+}
+
+.rvv-keys {
+  margin: 0;
+  padding: 6px 14px 8px;
+  border-top: 1px solid var(--line);
+  color: var(--t3);
+  font-size: 11.5px;
+}
+
+.rvv-keys kbd {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--inset2);
+  font: 700 11px ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
 /* ==========================================================================
    Motion. Loops are keyframes; only transform and opacity ever animate.
    ========================================================================== */
