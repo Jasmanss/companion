@@ -34,7 +34,7 @@ const SHELF = {
 }
 
 /** The chin, a card that grows out of it under the menu bar line, and the curved joins between them (D and H, like A). */
-function chinBody(ctx) {
+export function chinBody(ctx) {
   const { shape, loop } = ctx
   const neck = blob(shape, { w0: NOTCH.w, h0: LIP, rb: R, cls: 'neck' })
   const body = blob(shape, { w0: 340, h0: 46, rt: 14, rb: 16, top: BODY_TOP, cls: 'body' })

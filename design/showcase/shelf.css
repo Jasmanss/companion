@@ -1,0 +1,80 @@
+/* 7. The Shelf (design): Steward's version of a wide shelf from the notch. The words and widgets on the black shelf. The
+   shelf itself is black pieces (island.css, notch.css); these styles are for what is on it. */
+.sh-hot{position:absolute;z-index:40}
+.isl-ct .a{position:absolute;white-space:normal}
+.isl-ct .sh-tabs{display:flex;gap:2px;align-items:center;white-space:nowrap}
+.isl-ct .sh-tab{display:flex;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;font-weight:700;font-size:11.5px;color:rgba(242,243,245,.6)}
+.isl-ct .sh-tab.on{background:rgba(255,255,255,.15);color:#f2f3f5}
+.isl-ct .sh-tab svg,.isl-ct .sh-gear svg,.isl-ct .sh-expand svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.isl-ct .sh-tab i{font-style:normal;margin-left:-1px;background:rgb(var(--lit));color:#101216;border-radius:99px;padding:0 6px;font-size:10.5px;line-height:15px}
+.isl-ct .sh-gear,.isl-ct .sh-expand{display:grid;place-items:center;color:rgba(242,243,245,.6);border-radius:8px}
+.isl-ct .sh-gear svg{width:16px;height:16px}
+
+/* the session card */
+.isl-ct .sh-card{border-radius:18px;background:rgba(255,255,255,.07)}
+.isl-ct .sh-card.wide{background:rgba(255,255,255,.07)}
+.isl-ct .sh-tile{position:absolute;left:10px;top:10px;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#43567f,#1d2740);display:grid;place-items:center;font-weight:800;font-size:22px;color:#e4ecff}
+.isl-ct .sh-tile::after{content:"";position:absolute;inset:-3px;border-radius:19px;border:2px solid transparent}
+.isl-ct .sh-tile.live::after{border-color:rgba(var(--lit),.9);animation:isl-live 1.4s ease-in-out infinite}
+.isl-ct .sh-tile.done::after{border-color:rgb(95,214,142)}
+.isl-ct .sh-tile.ask::after{border-color:rgb(255,179,64);animation:isl-live 1s ease-in-out infinite}
+.isl-ct .sh-tile.rev::after{border-color:rgb(165,139,255)}
+.isl-ct .sh-txt{position:absolute;top:10px;bottom:10px;display:flex;flex-direction:column;gap:2px;padding-right:8px;margin-left:10px}
+.isl-ct .l1{display:flex;gap:8px;align-items:baseline;font-size:13.5px}
+.isl-ct .l2{color:rgba(242,243,245,.78);font-weight:500;font-size:12.5px;line-height:15px;white-space:normal}
+.isl-ct .sh-acts{display:flex;gap:6px;margin-top:auto;white-space:nowrap}
+.isl-ct .sh-acts .pillbtn{padding:4px 11px;font-size:11.5px}
+.isl-ct .sh-two{display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.isl-ct .sh-two .r{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:12px;background:rgba(255,255,255,.07);white-space:nowrap}
+.isl-ct .sh-two.s{padding:0}.isl-ct .sh-two.s .r{height:36px}
+
+/* the ask box and the round spot */
+.isl-ct .sh-ask{display:flex;flex-direction:column;gap:8px}
+.isl-ct .sh-ask .in,.isl-ct .sh-askbar{display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.1);color:rgba(242,243,245,.6);font-weight:500}
+.isl-ct .sh-askbar b{width:24px;height:24px;border-radius:50%;background:rgb(var(--lit));color:#101216;display:grid;place-items:center;font-size:13px}
+.isl-ct .sh-ask .chips{display:flex;flex-direction:column;gap:6px}
+.isl-ct .sh-ask .chips span{padding:5px 12px;border-radius:12px;background:rgba(255,255,255,.06);color:rgba(242,243,245,.82);font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.isl-ct .sh-spot{border-radius:50%;background:radial-gradient(circle at 50% 35%,#16161b,#08080a);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+
+/* chat-first */
+.isl-ct .sh-reply,.isl-ct .sh-banner{padding:8px 14px;border-radius:16px;background:rgba(255,255,255,.07);font-weight:500;line-height:17px}
+.isl-ct .sh-banner{display:flex;flex-direction:column;gap:3px}
+.isl-ct .sh-banner{background:rgba(255,179,64,.16)}
+.isl-ct .sh-banner b{color:rgb(255,179,64)}
+.isl-ct .sh-reply .sh-acts,.isl-ct .sh-banner .sh-acts{margin-top:4px}
+.isl-ct .sh-mini{padding:2px}
+.isl-ct .sh-mini .sh-two{padding:0}
+.isl-ct .sh-msgs{display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.isl-ct .sh-msgs .m{align-self:flex-start;max-width:80%;padding:8px 12px;border-radius:14px;background:rgba(255,255,255,.08);font-weight:500;line-height:17px}
+.isl-ct .sh-msgs .m.me{align-self:flex-end;background:rgba(var(--lit),.24)}
+
+/* the review widget */
+.isl-ct .sh-rev{display:flex;gap:12px;align-items:flex-start;padding:10px 12px}
+.isl-ct .sh-rev .say{flex:1;line-height:16px;font-weight:500;color:rgba(242,243,245,.9);display:block}
+.isl-ct .sh-rev .say .sh-acts{margin-top:8px}
+.isl-ct .sh-rev .thumbs{width:104px;height:64px;flex:none}
+.isl-ct .thumbs.big{display:block;width:100%;height:70px}
+
+/* the projects board */
+.isl-ct .sh-ptile{border-radius:16px;background:rgba(255,255,255,.07);padding:10px 12px;display:flex;flex-direction:column;gap:4px;white-space:normal}
+.isl-ct .sh-ptile.working,.isl-ct .sh-ptile.needs,.isl-ct .sh-ptile.review,.isl-ct .sh-ptile.finished{box-shadow:inset 0 0 0 1.5px rgba(var(--lit),.5)}
+.isl-ct .sh-ptile.needs{box-shadow:inset 0 0 0 1.5px rgba(255,179,64,.8)}
+.isl-ct .sh-ptile.finished{box-shadow:inset 0 0 0 1.5px rgba(95,214,142,.8)}
+.isl-ct .sh-ptile.review{box-shadow:inset 0 0 0 1.5px rgba(165,139,255,.8)}
+.isl-ct .sh-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);margin-right:8px}
+.isl-ct .sh-dot.working{background:rgb(var(--lit));box-shadow:0 0 8px rgba(var(--lit),.8);animation:isl-live 1.4s ease-in-out infinite}
+.isl-ct .sh-dot.finished{background:rgb(95,214,142)}
+.isl-ct .sh-dot.needs{background:rgb(255,179,64)}
+.isl-ct .sh-dot.review{background:rgb(165,139,255)}
+
+/* small and big */
+.isl-ct .sh-row{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.isl-ct .sh-row .sh-acts{margin:0 0 0 auto}
+.isl-ct .sh-line{display:flex;align-items:center;gap:8px;line-height:18px}
+.isl-ct .sh-r{display:block}
+
+.sh-figs figure{flex:0 1 760px}
+.sh-figs figcaption{max-width:760px}
+
+/* the drawn notch is only a picture: the pointer goes through it to the hover zone */
+.hw{pointer-events:none}

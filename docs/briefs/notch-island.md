@@ -1,23 +1,101 @@
-# The Island: Steward in the notch, like the iPhone's Dynamic Island
+# The notch shelf: Steward's wide shelf that drops from the notch
 
 Status: designed
 
 ## Ask (front door)
-The user's words, 2026-10-22: "Hey I think we should redesign the notch. Make it more like the dynamic island. Create up some mark ups and put them into the file with all of the current steward features." The file with all the features is `design/showcase.html`. Earlier the user said the Wings "is not really good" and picked Chin as the resting look.
-Design only. Nothing is built until the user picks a direction and says go.
+Three requests, in the user's words.
+- 2026-10-22: "Hey I think we should redesign the notch. Make it more like the dynamic island. Create up some mark ups and put them into the file with all of the current steward features." Answered with three directions (A to C), then "Think of more designs" with five more (D to H).
+- 2026-10-24, with a photo of a Mac notch shelf app on a MacBook: "Lets restart, lets do a similar design like this. This is good. But we should a couple of different variations." **This is now the main direction.** The earlier eight are kept, folded under "Earlier tries".
+Design only. Nothing is built until the user picks a variation and says go. Earlier history: Wings was called "not really good" and Chin was picked as the resting look; the Wings hand-off (3e) is designed but not built, and stays on hold.
 
 ## Design (Roadmap & design)
-Where to look: `design/showcase.html`, section 7 "The Island" (eight directions A to H, eight states, opening and closing) and section 8 "Added since" (short cards for the features built after the first showcase). Linked from `design/index.html`. Live, with the page's Reduced motion switch.
+Where to look: `design/showcase.html`, section 7 "The Shelf" (four variations, the eight states, opening and closing, a comparison). The earlier eight directions are in a collapsed "Earlier tries" under it. Section 8 "Added since" lists the features built after the first showcase. Everything is live; the figures react to the real pointer.
 
-### The idea
+### What the photo shows, and what is Steward's own
+The photo: one wide black shelf hangs from the notch, three to four times its width and about 1.5 inches tall, with big rounded bottom corners. It covers the menu bar on both sides while open. Two tabs at the top left, a now-playing card on the left, a middle area with a shortcuts button, a round camera mirror on the right, a gear at the top right.
+Steward's version keeps the idea (a calm, dense shelf that grows from the notch) and none of the other app's names, icons or layout:
+- **Tabs:** Steward, Tray (the tray already exists) and Reviews (Visual Review, built). Drawn icons, not copied ones.
+- **Session card** where the now-playing card sat: the current Claude session. Project, what Claude is doing, how long, and the actions: Open, Allow and Deny when it needs you, Looks good on a review.
+- **Ask box with Try prompts** in the middle. (The app has no Try prompts yet; they would be new. Without them it is just the ask box.)
+- **Round spot** where the camera mirror sat: Steward's eyes and moods.
+- **Gear** at the top right: opens Settings.
+Size: 700 by 168 pt (about 3.8 times the notch and 1.4 inches tall on a MacBook Pro 14), bottom corners 26 pt.
+
+### The four variations
+1. **Dashboard** (closest to the photo). Flush with the top of the screen. Tabs, then a row of three widgets: the session card, the ask box with Try prompts, the round spot with the eyes. Covers the menu bar between its edges (about 255 pt each side of the notch) while open.
+2. **Chat-first.** Flush with the top, 700 by 188. The shelf is the panel: Steward's face on the left, the last reply and the ask box in the middle, the session on the right. In notch mode it **replaces** the side panel: click and it grows downward into a wide dark chat (700 by 470). Covers the same menu bar.
+3. **Projects board.** One tile per project with its Claude status, like several now-playing cards. Tabs for Projects, Tray, Reviews, a small pair of eyes at the left. It hangs **under the menu bar line**, joined to the notch with curved fillets, 440 wide: **covers nothing**.
+4. **Small and big.** A small shelf (400 wide, under the menu bar line, covers nothing): one row with the session and its action, and an ask line. A click grows it into today's panel under the notch. The shelf is the glance, the panel is the chat.
+
+### How it opens and closes (all four)
+- **Resting look:** the chin you have (built today). Working and finished show the compact capsule under the bar (also built-style). Quiet mode: only the notch.
+- **Opens:** rest the cursor on the notch (or the chin) for **0.25 s** and the shelf grows out of the notch with a spring. In quiet mode the same hover wakes it and opens it.
+- **Closes:** **0.5 s** after the cursor leaves the shelf, shrinking back into the notch.
+- **By itself:** "needs you" and a review open it without a hover and put it away **6 s** after the cursor is not on it. (My recommendation: for those two, use variation 4's small under-the-bar shelf instead of the full dashboard, so nothing is covered. See the pick.)
+- **Click:** the shelf becomes the panel (variation 2 grows into its wide chat; 1, 3 and 4 become today's panel under the notch). The panel keeps its entrance rules.
+- **A panel the user dragged elsewhere** (movable panel, built): the shelf does not grow into it. The island squashes once and the panel pops in where it was left, closing in place. In variation 2 the wide chat only applies to a panel that has not been moved.
+- **Reduce Motion:** the shape fades out, changes and fades back in. No springs.
+
+### The eight states
+| State | What shows |
+|---|---|
+| At rest | the chin |
+| Hover | the shelf, idle: session card "haven, 12 min ago", the ask box, the eyes |
+| Working | the compact capsule ("haven Editing page.tsx"); hover opens the shelf on the live session (2:41, Open) |
+| Finished | the capsule ("finished, 3 files changed"); hover opens the shelf with Open and Review |
+| Needs you | the shelf opens: the command, Allow and Deny (amber ring on the session tile) |
+| Review ready | the shelf opens on the Reviews tab: before and after thumbnails, "Claude says: ...", Open big, Looks good |
+| Two projects | both projects listed (variation 3: two tiles, both live) |
+| Quiet mode | just the notch; hover wakes it |
+
+### Relation to today's side panel in notch mode
+| | 1 Dashboard | 2 Chat-first | 3 Projects board | 4 Small and big |
+|---|---|---|---|---|
+| Side panel | stays, for chat | **replaced** by the shelf | stays, for chat | stays, for chat |
+| Covers in the menu bar | about 255 pt each side while open | the same | nothing | nothing |
+| Best at | the photo's calm dashboard | one surface, fewest clicks to ask | several projects at once | the least intrusive; reuses the panel |
+| Weak at | covers menu items | most to build; covers menu items | little room for ask and Tray | two steps to chat |
+
+### Recommendation
+**1, the Dashboard, with 4's small shelf as the alert tier.** It is the closest to the photo the user liked and keeps the panel for chat, so no second chat surface is built. Its cost is the menu bar while open, so the full dashboard opens only on a deliberate hover and closes quickly, while "needs you" and a review come out as 4's small shelf, which covers nothing. 3 is the better choice if covering the menu bar bothers the user on the real Mac (the same content, hanging under the bar). 2 is the boldest and the most work.
+
+### What it replaces
+The earlier eight directions (below). The chin stays as the resting look and the compact capsule as the glance. **Wings and notch 3e are not needed; 3e stays on hold.** Today's panel stays (except in variation 2).
+
+### How it would be built (if picked)
+- The notch window grows from 360 by 96 pt to about 760 by 260 to draw the shelf itself (today the main window draws the alert under the notch). It stays click-through everywhere except the shape; the shape's hit area follows the shelf. The 20-a-second cursor watcher in `notch-window.ts` already knows when the cursor is on the shape: add the 0.25 s dwell to open and the 0.5 s grace to close (phase 3a's hover timings are the model).
+- Motion is a small spring loop on the notch page that sets only transforms, opacity and clip paths (the Showcase's `shelf.js` and `island-kit.js` are the working model, measured at a steady 60 fps in headless Chrome). Reduce Motion fades.
+- Content: the session card is `SessionView` (project name, state, detail, updatedAt) from the session tracker. "How long" needs the turn's start, which Visual Review's `UserPromptSubmit` hook already tracks. Reviews tab: the Visual Review store. Tray tab: the tray store. Ask box: sends to the chat and opens the panel. Settings: the existing `settings.open`.
+- New pure shape function in `src/shared/notch.ts` (like `notchShape`) for the shelf's size per state, with tests for each state staying inside the work area.
+- Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the shelf level and its content), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size).
+- Phases (the user's go between each), for variation 1: 1) the flush shelf shape, spring motion, hover open and close, with static content; 2) the session card and the actions (Open, Allow, Deny) wired to real sessions; 3) Tray and Reviews tabs, the ask box and the gear; 4) alerts as the small shelf, opening into the panel, the moved-panel rule; 5) hardening and docs.
+
+### Risks and open questions
+1. **Covering the menu bar** while open. Mitigations above; the real-Mac hand test decides if it is acceptable (otherwise variation 3).
+2. **The notch window's size.** A bigger transparent window over the menu bar must stay click-through everywhere but the shape, and must not steal focus or block menu clicks when closed. Phase 1 checks this first.
+3. **Hover that is too eager.** A quarter second may open it when the cursor only passes by on its way to the menu bar. The dwell is easy to tune; the hand test decides.
+4. **Try prompts are new**, and "how long" needs a turn start time.
+5. **Motion is hand-tested only on the real Mac.** CI cannot measure it.
+
+**Needs the user:** which variation (1 recommended, with 4's small shelf for alerts), and whether covering the menu bar while open is acceptable. Not blocking: 3e waits.
+
+### How to test (if built)
+Unit: the shelf's size per state and staying inside the work area; the dwell and grace timings; the hit area. Smoke (hidden mode): the notch window captured in each state. By hand on the real notch: hover on and off, the menu bar under it, every state, a light and a dark wallpaper, a busy menu bar, Reduce Motion, a moved panel, two projects.
+
+## Earlier tries (kept for reference)
+The first restart (2026-10-22 and 2026-10-23): one black island that changes size and shape like the iPhone's Dynamic Island, in eight directions, A to H: A Chin island, B Side island, C Bubbles, D Halo, E Peek, F Drip, G One-sided, H Shelf. They are in the Showcase under "Earlier tries". Summary and ranking, best first: A, F, H, E, D, C, G, B. The strongest pair was A with H's shelf, which the shelf direction above grew from. The detail follows.
+
+Still on `design/showcase.html`, section 7, folded under "Earlier tries".
+
+#### The idea
 One black island that merges with the hardware notch and changes size and shape with spring motion, instead of separate Chin or Wings pieces. Steward's lit eyes and moods stay: the eyes are the Pill's, and "thinking" still shows its dots. The notch has no pixels (measured 185 by 32 pt, menu bar 33 pt), so content only goes beside the notch or below it. Anything wider than the notch starts under the menu bar line, joined to the notch by curved fillets, as the built Chin and the alert under the notch (3b) already do.
 
-### The three directions (the same eight states in each)
+#### The three directions (the same eight states in each)
 - **A, Chin island.** Rests as the chin. Grows out of it, below the menu bar line only. Never covers a menu bar item.
 - **B, Side island.** Rests as black wings, one eye each side. Status sits beside the notch like the phone's compact island (a spinner, a check). Cards drop out of it. The wings cover menu bar items while out (28 to 58 pt each side); the page's menu bar is busy on purpose, so it shows.
 - **C, Bubbles.** The chin stays as Steward. Things come out as separate floating black bubbles under it, stacking for two projects. No seams to match, but less "one island".
 
-### Second round: five more directions (D to H), added 2026-10-23
+#### Second round: five more directions (D to H), added 2026-10-23
 The user looked at A to C and said "Think of more designs." Five more, really different, in the same section with the same eight states and buttons. Each says what it covers in the menu bar.
 - **D, Halo.** A thin lit ring hugs the notch (and its lip when awake). The color and motion are the state: a dim steady ring at rest, a light orbiting it while Claude works, green when finished, amber breathing for "needs you", violet and blue for a review, two orbiting lights for two projects, off when quiet. Eyes come out on a small lip only when there is news; the card states grow like A's. Covers a 3 pt strip beside the notch.
 - **E, Peek.** Steward hides behind the notch and only peeks out: a small head, eyes half showing. It leans out for news (swaying while it works), wears a small tag with a few words, and for an approval or a review hangs a sign that swings in like a pendulum. Two projects are two heads peeking at different heights. Covers nothing.
@@ -25,7 +103,7 @@ The user looked at A to C and said "Think of more designs." Five more, really di
 - **G, One-sided.** Only the right of the notch grows, like the phone's compact leading view: eyes and a few words in the menu bar band, a card hanging from it for approvals and reviews, a second pill under it for a second project. The left stays clear. Covers the right-hand menu extras (clock, Wi-Fi, battery sit there): 40 to about 240 pt while out.
 - **H, Shelf.** Rests as the chin. Resting the cursor drops a wide shelf (460 pt) with tabs for Projects, Tray and Reviews, like the Mac notch shelf apps; "needs you" opens a Now tab with the approval, a review opens the Reviews tab, two projects list on the Projects tab. Working and finished stay a compact capsule. Covers nothing.
 
-### Ranking, best first (with why)
+#### Ranking, best first (with why)
 1. **A, Chin island.** Keeps the chin the user likes, nearly the pieces already built, safest to build.
 2. **F, Drip.** The most Dynamic Island thing here; organic join; the risk is the goo filter staying smooth in the real notch window.
 3. **H, Shelf.** Less a look than a feature: projects, tray and reviews one hover away. The best idea from the Mac notch apps.
@@ -39,7 +117,7 @@ The user looked at A to C and said "Think of more designs." Five more, really di
 
 **Recommended build order if A is picked:** A first (the phases below), then H's shelf as its own step (it is mostly new content: projects, tray, reviews), then F's liquid motion as polish if it is smooth.
 
-### The states
+#### The states
 | State | A, Chin island | B, Side island | C, Bubbles |
 |---|---|---|---|
 | At rest | the chin, eyes in it | wings, an eye each side | the chin |
@@ -53,25 +131,25 @@ The user looked at A to C and said "Think of more designs." Five more, really di
 
 Quiet mode keeps its rules: Needs me, Everything or Nothing decides what comes out, and what stays in goes to the menu bar dot.
 
-### Opening and closing
+#### Opening and closing
 - **Under the notch (the default):** the black grows (spring) into the panel's size and the glass takes over, the eyes slide to the header's Pill. Closing is the reverse, the black shrinking back into the notch. The app draws the island in the notch window and the panel in the main window, so the grow is a crossfade between two windows (the optional 3d morph); a flicker means falling back to today's drop.
 - **A panel the user dragged elsewhere (movable panel, built):** the island does not grow into it. It squashes once (7 pt, 150 ms) and the panel pops in where it was left (fade and small grow), closing in place. This keeps the movable panel's rules.
 - Reduce Motion: the island fades out, changes, fades back in. No springs.
 
-### What it replaces, and 3e
+#### What it replaces, and 3e
 - **Recommendation (still): A, the Chin island**, with H's shelf next. Second-round ranking above. The user said the chin's eyes look fine and the wings do not. A keeps the chin and gets the Dynamic Island feel from motion and from what it holds (status next to the eyes, a card for approvals and reviews, a second small shape). It never covers a menu bar item, which matters because a Mac's menu bar is full where the phone's top is empty. B is closest to the phone but pays with the menu bar. C is the easiest to build but loses "one island".
 - **Replaces:** the Wings look and notch 3e (the Wings hand-off). Chin becomes the island's resting shape. The setting "In the notch: Chin | Wings" becomes the island alone, or the island plus Wings kept for anyone who likes it (the user's call).
 - **3e should wait.** If A is picked it is not needed. If the user keeps Wings as a setting, 3e is a small job after the island.
 - The alert under the notch (3b) is the island's card state already, drawn in the main window. It would move into the notch window.
 
-### How it would be built (if picked)
+#### How it would be built (if picked)
 - The notch window grows from 360 by 96 to about 420 by 240 to draw the compact and card states itself. Today the main window draws the nudge under the notch.
 - Motion: a small spring loop in the notch page that sets only transforms and opacity (the Showcase's `island.js` is the working model, measured at a steady 60 fps in headless Chrome with all four islands playing). Reduce Motion skips the springs.
 - New pure shape function (like `notchShape` in `src/shared/notch.ts`) for the state targets, with tests for each state's size and for staying inside the work area.
 - Shared files, small and additive: `src/shared/types.ts` (the island state), `src/shared/notch.ts`, `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`.
 - Phases (the user's go between each): 1) the shape and spring motion for rest, hover and quiet; 2) working, finished and the second shape; 3) needs you and Visual Review as cards, moving 3b's alert in; 4) opening and closing, with the moved-panel rule; 5) hardening and docs.
 
-### Risks and open questions
+#### Risks and open questions
 1. **The curved fillets and the notch's corner radius.** No API reports the radius (10 is a match by eye), so the join needs the hand test on the real Mac. A hides nothing if it is a point off; C has no seams at all.
 2. **Menu bar items under B.** Real menu bars vary; B would need a rule for how far the wings may go.
 3. **The crossfade between two windows** can flicker or drift (notch 3d's risk). The fallback is today's drop.
@@ -80,7 +158,7 @@ Quiet mode keeps its rules: Needs me, Everything or Nothing decides what comes o
 
 **Needs the user:** which direction or combination (A, then H's shelf, recommended), and whether Wings stays as a setting. Not blocking: 3e waits until then.
 
-### How to test (if built)
+#### How to test (if built)
 Unit: the state sizes, the island staying inside the work area, the moved-panel rule. Smoke: the notch window captured in each state (hidden mode). By hand: every state on the real notch, a light and a dark wallpaper, a busy menu bar, Reduce Motion, a moved panel, two projects.
 
 ## Result (Main building)
