@@ -1,17 +1,87 @@
-# The notch shelf: Steward's wide shelf that drops from the notch
+# The notch island: a small island in three sizes, with Steward in it
 
 Status: designed
 
 ## Ask (front door)
-Three requests, in the user's words.
-- 2026-10-22: "Hey I think we should redesign the notch. Make it more like the dynamic island. Create up some mark ups and put them into the file with all of the current steward features." Answered with three directions (A to C), then "Think of more designs" with five more (D to H).
-- 2026-10-24, with a photo of a Mac notch shelf app on a MacBook: "Lets restart, lets do a similar design like this. This is good. But we should a couple of different variations." **This is now the main direction.** The earlier eight are kept, folded under "Earlier tries".
-Design only. Nothing is built until the user picks a variation and says go. Earlier history: Wings was called "not really good" and Chin was picked as the resting look; the Wings hand-off (3e) is designed but not built, and stays on hold.
+The user's requests, in order.
+- 2026-10-22: "Hey I think we should redesign the notch. Make it more like the dynamic island. Create up some mark ups and put them into the file with all of the current steward features." Answered with eight directions (A to H) after "Think of more designs".
+- 2026-10-24, with a photo of a Mac notch shelf app: "Lets restart, lets do a similar design like this. This is good. But we should a couple of different variations." Answered with a wide shelf in four variations.
+- 2026-10-24, after reviewing the shelf: "Couple of things. We need to make it smaller and it doesnt act as the main thing. This is what we do. The bigger island just for the message. Instead of the wings we do eyes on one side and the other side can be something else and when something happens then a smaller island shows up. Also as the main chat it doesnt feel right it being in the middle. We should keep it on the right and left. But I feel as if we are missing the mascot in the notch. How can we do that better?" **This is the current direction.** The shelf and the first eight are kept, folded under "Earlier tries" in the Showcase.
+Design only. Nothing is built until the user picks and says go. Background: Wings was called "not really good" and Chin was the resting look; the Wings hand-off (3e) is designed but not built and stays on hold.
 
 ## Design (Roadmap & design)
-Where to look: `design/showcase.html`, section 7 "The Shelf" (four variations, the eight states, opening and closing, a comparison). The earlier eight directions are in a collapsed "Earlier tries" under it. Section 8 "Added since" lists the features built after the first showcase. Everything is live; the figures react to the real pointer.
+Where to look: `design/showcase.html`, section 7 "The notch island": three sizes, four mascot treatments, the other side's choices, the hand-off to the side panel, and a comparison. The earlier shelf (four variations) and the first eight islands are in a collapsed "Earlier tries" under it. Everything is live; the figures react to the real pointer and work at about 800 px wide.
 
-### What the photo shows, and what is Steward's own
+### The user's direction, in one picture
+The island is **not the main surface**. The main chat stays in the side panel on the left or right edge (or where the user dragged it). The island has three sizes, like the iPhone's compact, small and expanded views, and the open question is how Steward itself lives in the notch.
+
+### The three sizes
+| Size | When | What it is | Covers in the menu bar |
+|---|---|---|---|
+| **Compact** | At rest, and while Claude works | A slim island hugging the notch, only a little wider: Steward on the left, "something else" on the right | about 34 to 52 pt on the left (depends on the mascot), 36 to 62 pt on the right |
+| **Small** | Something happens (finished, a second project starts) | One line under the menu bar line, about 290 by 34 pt, joined to the notch: "haven: Claude finished · 3 files". It settles back after about 4.5 s (hover keeps it) | nothing more (it hangs under the bar) |
+| **Big** | Only for a message: an approval, a review | A card under the menu bar line, 340 by 104 (the command, Allow, Deny) or 352 by 156 (before and after, "Claude says", Looks good). It opens by itself, settles after about 9 s or on a click, to the compact island with an amber mark or a thumbnail. A settled one comes back on a click. It is about the size of the alert under the notch already built (3b) | nothing more |
+The small and big islands never replace the panel. They only deliver a message.
+
+### Eyes on the left, something else on the right
+**Steward goes on the left** (you read who, then what; the eyes glance right toward the status). **The right is "something else"**, because it is for things that come and go, and the menu extras there are less used than the app menus on the left. A setting can mirror it for people whose menus run long. Five choices for the right side (all on the page, switchable): **Status** (project tile at rest, spinner, check, amber mark, violet dot, two spinners), **Timer** (2:41 while working), **Count** (how many things wait), **Thumbnail** (a tiny review picture), and **Smart** (recommended): the tile at rest, a spinner with the time while working, a check when done, an amber mark for an approval, a thumbnail for a review, a spinner with a count for two projects.
+
+### Four ways to keep Steward in the notch (the mascot)
+Steward's lit eyes alone read as "missing". Four treatments on the same three sizes, each with a **reacting** layer shared by all: the eyes glance toward the right-side status (or toward the panel when it is open), look at the cursor on hover, sleep (tuck away) in quiet mode, and a finished turn gets a happy bounce.
+1. **Little Pill.** The whole Pill, shrunk (about 0.7), sits in a black left wing with its moods and blinks. The most Steward at every size, and the most literal. Covers about 52 pt on the left.
+2. **Peeking.** Half of Steward peeks out from behind the notch's left edge, as if the notch is where it lives. It leans out and tilts for news (further for a message) and slides back behind the notch to sleep. Covers about 34 pt on the left at rest, up to about 40 pt more when leaning out. Outside the black the Pill uses its solid (flat) body, because glass needs something to refract.
+3. **Hanging.** Steward hangs from the notch's bottom edge by its hands and sways a little. For news it drops lower, hanging from the small or big island instead. Covers nothing on the left. It may overlap a window's title bar below.
+4. **Carrier.** At rest only the lit eyes show in a small left wing, as today. For a message Steward slides out of the wing and holds the corner of the island, then carries it back. The calmest at rest, but it does not fix "missing mascot": at rest it is still only eyes.
+
+### The states (the same eight)
+| State | Compact | Small or big |
+|---|---|---|
+| At rest | Steward left, project tile right | none |
+| Hover | the sides widen a little, Steward looks at the cursor | none; a click opens the side panel |
+| Working | spinner and time on the right | none |
+| Finished | a check on the right | small: "haven: Claude finished", then settles |
+| Needs you | an amber mark on the right | **big**: the command, Allow and Deny; settles to the amber mark (still waiting) |
+| Review ready | a thumbnail on the right | **big**: before and after, "Claude says", Looks good; settles to the thumbnail |
+| Two projects | two spinners and a count | small: "api started", then settles |
+| Quiet mode | nothing: Steward tucked away, only the notch | resting the cursor wakes it; only "needs you" comes out on its own |
+
+### The hand-off to the side panel and back
+A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. **Never centered under the notch.** The island stays as the notch character while the panel is open, and Steward looks toward the panel. Closing the panel is today's close (shrink and fade in place if moved, otherwise back to the edge). The panel in notch mode no longer drops from the notch; that special case goes away.
+
+### Recommendation
+**2, Peeking, with the reacting behavior from all of them, and 4's carrying for the big island** (when a message needs you, Steward leans out and holds the card). It fixes the missing mascot in a way that belongs to the notch, covers the least of the treatments that show a body at rest, and keeps the right side a clean status. **3, Hanging,** is the most playful and covers nothing on the left; pick it if the user wants more character and does not mind something under the bar. **1, Little Pill,** is the safest and the most literal. **4 alone** does not fix the complaint.
+
+### What it replaces
+The compact island replaces the built Chin and Wings looks (and the "In the notch" setting's two choices), and the big island is the alert under the notch (3b) grown a little. The shelf and the first eight tries are not built. **Notch 3e stays on hold and is not needed.** The panel stays as it is, except that it never opens centered under the notch.
+
+### How it would be built (if picked)
+- The notch window grows from 360 by 96 pt to about 400 by 240 to draw the three sizes (the big island is about the size of the alert under the notch from 3b, so most of that is reused). The wings are black pieces like the Wings look; the small and big islands are the chin-and-card shape with curved fillets.
+- Steward's body is the Pill's existing view (the same one in the panel header), scaled, drawn behind the real notch's edge so it can hide there. The motion is a small spring loop on the notch page that sets only transforms, opacity and clip paths; the Showcase's `mascot.js` and `island-kit.js` are the working model (a steady 60 fps in headless Chrome with all four playing). Reduce Motion fades.
+- Content: the right side is computed from the session tracker (`SessionView`: state, detail), the turn's start (Visual Review's `UserPromptSubmit` hook already tracks it) for the timer, and the Visual Review store for the thumbnail. The big island's content already exists (the approval card and the review card).
+- New pure shape function in `src/shared/notch.ts` (like `notchShape`) for each size and mascot, with tests for staying inside the work area and for the mirror setting.
+- Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the size and the mascot), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size, and the panel no longer opening under the notch).
+- Phases, for the recommended one (the user's go between each): 1) the compact island with Steward peeking and the right side, hover and look; 2) the small island and the settle; 3) the big island for approvals and reviews with the carrying; 4) the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
+
+### Risks and open questions
+1. **Hiding behind the real notch.** Peeking needs the Pill to disappear exactly at the notch's edge (the measured 185 by 32). Phase 1 checks it on the real Mac.
+2. **Covering menu items on the left** (about 34 to 52 pt). If it bothers the user, the mirror setting or Hanging (nothing on the left) are the fixes.
+3. **A glass Pill that small** must stay readable; outside the black it uses the solid body.
+4. **The notch window's size.** A bigger transparent window over the menu bar must stay click-through everywhere but the shapes and must not steal focus.
+5. **Settling an approval** must never lose it: the amber mark stays and a click brings it back.
+6. **Motion is hand-tested only on the real Mac.**
+
+**Needs the user:** which mascot (Peeking recommended, with the carrying from Carrier), whether covering about 34 to 52 pt left of the notch is OK (else Hanging or the mirror), and which right side (Smart recommended). Not blocking: 3e waits.
+
+### How to test (if built)
+Unit: the sizes and mascot positions per state, staying inside the work area, the mirror setting, the settle timers (hover keeps it, an unanswered approval is never lost). Smoke (hidden mode): the notch window in each size. By hand on the real notch: each mascot at rest, leaning out, asleep, the right side in each mode, the settle, the hand-off to the right and left and a dragged panel, a light and a dark wallpaper, a busy menu bar, Reduce Motion.
+
+## Earlier tries (kept for reference)
+Two earlier rounds, both still in the Showcase under "Earlier tries". **The shelf** (2026-10-24, from the user's photo): a wide shelf, 700 pt, that was the main surface, in four variations: Dashboard, Chat-first, Projects board, Small and big. The user said it was too big and should not be the main thing. **The first eight islands** (2026-10-22 and 23): A Chin island, B Side island, C Bubbles, D Halo, E Peek, F Drip, G One-sided, H Shelf; ranked A, F, H, E, D, C, G, B. Round 3 grew from these: Peeking (E) and the wings (B, G), with A's small and big islands under the bar. Their detail follows.
+
+### The shelf (kept for reference)
+Where to look: `design/showcase.html`, section 7, under "Earlier tries" (four variations, the eight states, opening and closing, a comparison). The earlier eight directions are in a collapsed "Earlier tries" under it. Section 8 "Added since" lists the features built after the first showcase. Everything is live; the figures react to the real pointer.
+
+#### What the photo shows, and what is Steward's own
 The photo: one wide black shelf hangs from the notch, three to four times its width and about 1.5 inches tall, with big rounded bottom corners. It covers the menu bar on both sides while open. Two tabs at the top left, a now-playing card on the left, a middle area with a shortcuts button, a round camera mirror on the right, a gear at the top right.
 Steward's version keeps the idea (a calm, dense shelf that grows from the notch) and none of the other app's names, icons or layout:
 - **Tabs:** Steward, Tray (the tray already exists) and Reviews (Visual Review, built). Drawn icons, not copied ones.
@@ -21,13 +91,13 @@ Steward's version keeps the idea (a calm, dense shelf that grows from the notch)
 - **Gear** at the top right: opens Settings.
 Size: 700 by 168 pt (about 3.8 times the notch and 1.4 inches tall on a MacBook Pro 14), bottom corners 26 pt.
 
-### The four variations
+#### The four variations
 1. **Dashboard** (closest to the photo). Flush with the top of the screen. Tabs, then a row of three widgets: the session card, the ask box with Try prompts, the round spot with the eyes. Covers the menu bar between its edges (about 255 pt each side of the notch) while open.
 2. **Chat-first.** Flush with the top, 700 by 188. The shelf is the panel: Steward's face on the left, the last reply and the ask box in the middle, the session on the right. In notch mode it **replaces** the side panel: click and it grows downward into a wide dark chat (700 by 470). Covers the same menu bar.
 3. **Projects board.** One tile per project with its Claude status, like several now-playing cards. Tabs for Projects, Tray, Reviews, a small pair of eyes at the left. It hangs **under the menu bar line**, joined to the notch with curved fillets, 440 wide: **covers nothing**.
 4. **Small and big.** A small shelf (400 wide, under the menu bar line, covers nothing): one row with the session and its action, and an ask line. A click grows it into today's panel under the notch. The shelf is the glance, the panel is the chat.
 
-### How it opens and closes (all four)
+#### How it opens and closes (all four)
 - **Resting look:** the chin you have (built today). Working and finished show the compact capsule under the bar (also built-style). Quiet mode: only the notch.
 - **Opens:** rest the cursor on the notch (or the chin) for **0.25 s** and the shelf grows out of the notch with a spring. In quiet mode the same hover wakes it and opens it.
 - **Closes:** **0.5 s** after the cursor leaves the shelf, shrinking back into the notch.
@@ -36,7 +106,7 @@ Size: 700 by 168 pt (about 3.8 times the notch and 1.4 inches tall on a MacBook 
 - **A panel the user dragged elsewhere** (movable panel, built): the shelf does not grow into it. The island squashes once and the panel pops in where it was left, closing in place. In variation 2 the wide chat only applies to a panel that has not been moved.
 - **Reduce Motion:** the shape fades out, changes and fades back in. No springs.
 
-### The eight states
+#### The eight states
 | State | What shows |
 |---|---|
 | At rest | the chin |
@@ -48,7 +118,7 @@ Size: 700 by 168 pt (about 3.8 times the notch and 1.4 inches tall on a MacBook 
 | Two projects | both projects listed (variation 3: two tiles, both live) |
 | Quiet mode | just the notch; hover wakes it |
 
-### Relation to today's side panel in notch mode
+#### Relation to today's side panel in notch mode
 | | 1 Dashboard | 2 Chat-first | 3 Projects board | 4 Small and big |
 |---|---|---|---|---|
 | Side panel | stays, for chat | **replaced** by the shelf | stays, for chat | stays, for chat |
@@ -56,13 +126,13 @@ Size: 700 by 168 pt (about 3.8 times the notch and 1.4 inches tall on a MacBook 
 | Best at | the photo's calm dashboard | one surface, fewest clicks to ask | several projects at once | the least intrusive; reuses the panel |
 | Weak at | covers menu items | most to build; covers menu items | little room for ask and Tray | two steps to chat |
 
-### Recommendation
+#### Recommendation
 **1, the Dashboard, with 4's small shelf as the alert tier.** It is the closest to the photo the user liked and keeps the panel for chat, so no second chat surface is built. Its cost is the menu bar while open, so the full dashboard opens only on a deliberate hover and closes quickly, while "needs you" and a review come out as 4's small shelf, which covers nothing. 3 is the better choice if covering the menu bar bothers the user on the real Mac (the same content, hanging under the bar). 2 is the boldest and the most work.
 
-### What it replaces
+#### What it replaces
 The earlier eight directions (below). The chin stays as the resting look and the compact capsule as the glance. **Wings and notch 3e are not needed; 3e stays on hold.** Today's panel stays (except in variation 2).
 
-### How it would be built (if picked)
+#### How it would be built (if picked)
 - The notch window grows from 360 by 96 pt to about 760 by 260 to draw the shelf itself (today the main window draws the alert under the notch). It stays click-through everywhere except the shape; the shape's hit area follows the shelf. The 20-a-second cursor watcher in `notch-window.ts` already knows when the cursor is on the shape: add the 0.25 s dwell to open and the 0.5 s grace to close (phase 3a's hover timings are the model).
 - Motion is a small spring loop on the notch page that sets only transforms, opacity and clip paths (the Showcase's `shelf.js` and `island-kit.js` are the working model, measured at a steady 60 fps in headless Chrome). Reduce Motion fades.
 - Content: the session card is `SessionView` (project name, state, detail, updatedAt) from the session tracker. "How long" needs the turn's start, which Visual Review's `UserPromptSubmit` hook already tracks. Reviews tab: the Visual Review store. Tray tab: the tray store. Ask box: sends to the chat and opens the panel. Settings: the existing `settings.open`.
@@ -70,7 +140,7 @@ The earlier eight directions (below). The chin stays as the resting look and the
 - Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the shelf level and its content), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size).
 - Phases (the user's go between each), for variation 1: 1) the flush shelf shape, spring motion, hover open and close, with static content; 2) the session card and the actions (Open, Allow, Deny) wired to real sessions; 3) Tray and Reviews tabs, the ask box and the gear; 4) alerts as the small shelf, opening into the panel, the moved-panel rule; 5) hardening and docs.
 
-### Risks and open questions
+#### Risks and open questions
 1. **Covering the menu bar** while open. Mitigations above; the real-Mac hand test decides if it is acceptable (otherwise variation 3).
 2. **The notch window's size.** A bigger transparent window over the menu bar must stay click-through everywhere but the shape, and must not steal focus or block menu clicks when closed. Phase 1 checks this first.
 3. **Hover that is too eager.** A quarter second may open it when the cursor only passes by on its way to the menu bar. The dwell is easy to tune; the hand test decides.
@@ -79,10 +149,10 @@ The earlier eight directions (below). The chin stays as the resting look and the
 
 **Needs the user:** which variation (1 recommended, with 4's small shelf for alerts), and whether covering the menu bar while open is acceptable. Not blocking: 3e waits.
 
-### How to test (if built)
+#### How to test (if built)
 Unit: the shelf's size per state and staying inside the work area; the dwell and grace timings; the hit area. Smoke (hidden mode): the notch window captured in each state. By hand on the real notch: hover on and off, the menu bar under it, every state, a light and a dark wallpaper, a busy menu bar, Reduce Motion, a moved panel, two projects.
 
-## Earlier tries (kept for reference)
+### The first eight islands (kept for reference)
 The first restart (2026-10-22 and 2026-10-23): one black island that changes size and shape like the iPhone's Dynamic Island, in eight directions, A to H: A Chin island, B Side island, C Bubbles, D Halo, E Peek, F Drip, G One-sided, H Shelf. They are in the Showcase under "Earlier tries". Summary and ranking, best first: A, F, H, E, D, C, G, B. The strongest pair was A with H's shelf, which the shelf direction above grew from. The detail follows.
 
 Still on `design/showcase.html`, section 7, folded under "Earlier tries".
@@ -160,6 +230,7 @@ Quiet mode keeps its rules: Needs me, Everything or Nothing decides what comes o
 
 #### How to test (if built)
 Unit: the state sizes, the island staying inside the work area, the moved-panel rule. Smoke: the notch window captured in each state (hidden mode). By hand: every state on the real notch, a light and a dark wallpaper, a busy menu bar, Reduce Motion, a moved panel, two projects.
+
 
 ## Result (Main building)
 - What was built, files changed, check results
