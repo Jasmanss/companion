@@ -424,8 +424,26 @@ export function StewardSection(props: SectionProps) {
           </button>
         </Row>
         {where === 'notch' && (
-          <Row label="In the notch" note={look.notchStyle === 'wings' ? 'One eye on each side of the notch, in the menu bar.' : 'A chin below the notch, with the eyes in it.'}>
-            <Segmented label="In the notch" value={look.notchStyle} options={[['chin', 'Chin'], ['wings', 'Wings']]} onChange={(notchStyle) => set({ notchStyle })} />
+          <Row
+            label="In the notch"
+            note={
+              look.notchStyle === 'wings'
+                ? 'One eye on each side of the notch, in the menu bar.'
+                : look.notchStyle === 'island'
+                  ? 'Steward peeks out beside the notch, and an island grows out of it while Claude works.'
+                  : 'A chin below the notch, with the eyes in it.'
+            }
+          >
+            <Segmented
+              label="In the notch"
+              value={look.notchStyle}
+              options={[
+                ['chin', 'Chin'],
+                ['wings', 'Wings'],
+                ['island', 'Island'],
+              ]}
+              onChange={(notchStyle) => set({ notchStyle })}
+            />
           </Row>
         )}
         <Row label="Size" note="How big the tab at the screen edge is.">

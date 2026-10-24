@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FINISHED_SHOW_MS, islandStatus, nextChange, noteWorking, type IslandInput } from '../src/main/island-status'
+import type { HookPayload } from '../src/main/hook-payload'
+import { FINISHED_SHOW_MS, islandStatus, nextChange, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
 import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_HOVER, ISLAND_SIDE, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { SessionState, SessionView } from '../src/shared/types'
 
@@ -79,27 +80,28 @@ describe('the island shape', () => {
 
 describe('what the island shows', () => {
   const session = (id: string, state: SessionState, updatedAt = 0): SessionView => ({ id, name: id, projectPath: null, cwd: `/p/${id}`, state, updatedAt })
-  const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], agentBusy: false, agentWaiting: false, reviews: 0, since: {}, now: 100_000, ...o })
+  const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
+  const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, extra = {}) => ({ hook_event_name, session_id, cwd: '/p', ...extra }) as HookPayload
 
   it('shows nothing when nothing is going on', () => {
     expect(islandStatus(input({}))).toEqual({ right: null })
   })
 
   it('shows a spinner and the time while Claude works, from when the turn began', () => {
-    expect(islandStatus(input({ sessions: [session('a', 'working')], since: { a: 40_000 } }))).toEqual({ right: 'working', since: 40_000 })
+    expect(islandStatus(input({ turns: { a: 40_000 } }))).toEqual({ right: 'working', since: 40_000 })
     expect(islandStatus(input({ agentBusy: true, agentSince: 90_000 }))).toEqual({ right: 'working', since: 90_000 })
   })
 
-  it('shows two projects with a count, and the longest-running time', () => {
-    expect(islandStatus(input({ sessions: [session('a', 'working'), session('b', 'working')], since: { a: 40_000, b: 70_000 } }))).toEqual({ right: 'two', count: 2, since: 40_000 })
+  it('shows two at once with a count, and the longest-running time', () => {
+    expect(islandStatus(input({ turns: { a: 40_000, b: 70_000 } }))).toEqual({ right: 'two', count: 2, since: 40_000 })
+    expect(islandStatus(input({ turns: { a: 40_000 }, agentBusy: true, agentSince: 90_000 }))).toEqual({ right: 'two', count: 2, since: 40_000 })
   })
 
   it('puts what needs you first, then a review', () => {
-    const busy = [session('a', 'working'), session('b', 'working')]
-    expect(islandStatus(input({ sessions: [...busy, session('c', 'needs-approval')], reviews: 1 })).right).toBe('needs')
+    expect(islandStatus(input({ turns: { a: 1, b: 2 }, sessions: [session('c', 'needs-approval')], reviews: 1 })).right).toBe('needs')
     expect(islandStatus(input({ agentWaiting: true })).right).toBe('needs')
     expect(islandStatus(input({ sessions: [session('c', 'needs-input')] })).right).toBe('needs')
-    expect(islandStatus(input({ sessions: busy, reviews: 2 })).right).toBe('review')
+    expect(islandStatus(input({ turns: { a: 1, b: 2 }, reviews: 2 })).right).toBe('review')
   })
 
   it('shows a check for a while after a session finished, then nothing', () => {
@@ -110,10 +112,13 @@ describe('what the island shows', () => {
     expect(nextChange(input({ sessions: done, now: 95_000 + FINISHED_SHOW_MS }))).toBeNull()
   })
 
-  it('remembers when each session started working, and forgets one that stopped', () => {
-    let since = noteWorking({}, [session('a', 'working')], 10)
-    since = noteWorking(since, [session('a', 'working'), session('b', 'working')], 20)
-    expect(since).toEqual({ a: 10, b: 20 })
-    expect(noteWorking(since, [session('a', 'finished'), session('b', 'working')], 30)).toEqual({ b: 20 })
+  it('keeps a turn from the prompt until Claude really stops, and gives up on one that never stops', () => {
+    let turns = noteTurn({}, hook('UserPromptSubmit', 'a'), 10)
+    turns = noteTurn(turns, hook('UserPromptSubmit', 'a'), 20)
+    expect(turns).toEqual({ a: 10 })
+    // A Stop hook asked Claude to keep going: still the same turn.
+    expect(noteTurn(turns, hook('Stop', 'a', { stop_hook_active: true }), 30)).toEqual({ a: 10 })
+    expect(noteTurn(turns, hook('Stop', 'a'), 30)).toEqual({})
+    expect(islandStatus(input({ turns: { a: 0 }, now: TURN_GIVE_UP_MS + 1 })).right).toBeNull()
   })
 })
