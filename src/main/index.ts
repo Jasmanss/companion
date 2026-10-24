@@ -1727,8 +1727,11 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
   )
   const note = await wc.executeJavaScript(`document.querySelector('.rvv-note .rv-said')?.textContent ?? ''`)
   need(note.includes(said), `the viewer does not show what Claude said ("${note}")`)
-  const blocked = await wc.executeJavaScript(`fetch('review://${id}/review.json').then((r) => r.status, () => 'refused')`)
-  need(blocked !== 200, 'review:// served a file that is not a picture')
+  // The handler itself, asked from main: the page's own rules (its CSP) stop a fetch from the page before it gets there.
+  const status = async (url: string) => (await net.fetch(url)).status
+  need((await status(`review://${id}/after`)) === 200, 'review:// did not serve the after picture')
+  for (const url of [`review://${id}/review.json`, `review://${id}/before-card`, `review://${id}/../after`, 'review://20261020-120000-deadbeef/after'])
+    need((await status(url)) === 404, `review:// served ${url}`)
 
   // The keys: 2 and 3 pick the mode, Space flips, 1 is back to the slider, ← → move it, Z is 100%.
   let seen = await look()
@@ -1771,7 +1774,7 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
   await sleep(300)
   await fs.writeFile(out.replace(/\.png$/, '-review-viewer-side.png'), (await wc.capturePage()).toPNG())
   await press('1')
-  console.log(`smoke: Open big shows the review at ${big.width}×${big.height} (the work area less ${REVIEW_VIEWER_GAP} all round), both 1440 wide pictures, what Claude said; keys and a drag change it`)
+  console.log(`smoke: Open big shows the review at ${big.width}×${big.height} (the work area less ${REVIEW_VIEWER_GAP} all round), both 1440 wide pictures, what Claude said; review:// serves only the pictures; keys and a drag change it`)
 
   // Esc goes back to the panel, at its spot.
   await press('Escape')
