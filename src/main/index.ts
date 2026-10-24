@@ -7,7 +7,7 @@ import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
-import { clampPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
+import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
 import { Agent } from './agent'
@@ -962,21 +962,14 @@ function openSettings(section?: SettingsSection): void {
     settingsWin.focus()
     return
   }
-  const area = screen.getPrimaryDisplay().workArea
-  const { width, height } = SETTINGS_SIZE
-  // Centered, unless the open panel would cover part of it; then just clear of the panel.
-  let x = area.x + Math.round((area.width - width) / 2)
-  if (isOpen(dock)) {
-    const panel = PANEL_WIDTH + 8 + 24
-    x = settings.steward().edge === 'left' ? Math.max(x, area.x + panel) : Math.min(x, area.x + area.width - panel - width)
-  }
-  x = Math.max(area.x + 24, Math.min(x, area.x + area.width - width - 24))
+  // Centered on the open panel's screen, unless the panel would cover part of it; then beside the panel, wherever it is
+  // (at its edge, under the notch, or dragged somewhere), when there's room.
+  const panel = win && !win.isDestroyed() && isOpen(dock) && win.isVisible() ? win.getBounds() : null
+  const area = (panel ? screen.getDisplayMatching(panel) : screen.getPrimaryDisplay()).workArea
+  const at = clearOfPanel(area, SETTINGS_SIZE, panel)
   const { vibrant } = settingsAppearance()
   const w = new BrowserWindow({
-    x,
-    y: area.y + Math.round((area.height - height) / 2),
-    width,
-    height,
+    ...at,
     minWidth: 640,
     minHeight: 420,
     title: 'Steward Settings',
@@ -1001,6 +994,10 @@ function openSettings(section?: SettingsSection): void {
     w.show()
     w.focus()
   })
+  // The window in use is on top: the panel floats above normal windows, so while Settings has the keyboard it floats
+  // too, above the panel. Once it hasn't, it's a normal window again, and clicking the panel puts the panel on top.
+  w.on('focus', () => settingsOnTop(w, true))
+  w.on('blur', () => settingsOnTop(w, false))
   w.on('blur', tuckIfAway)
   w.on('closed', () => {
     settingsWin = null
@@ -1020,6 +1017,15 @@ function openSettings(section?: SettingsSection): void {
     })
   }
   loadPage(w, 'settings.html', section)
+}
+
+/** Settings above the panel (at the panel's level, and in front), or a normal window again. */
+function settingsOnTop(w: BrowserWindow, on: boolean): void {
+  if (w.isDestroyed()) return
+  if (on) {
+    w.setAlwaysOnTop(true, 'floating')
+    w.moveTop()
+  } else w.setAlwaysOnTop(false)
 }
 
 /** Open at login lives in macOS. While developing it's off limits: it would register Electron itself. */
@@ -1602,6 +1608,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const panelTimer = setTimeout(() => fail('the movable panel timed out'), 60_000)
       await checkMovablePanel()
       clearTimeout(panelTimer)
+      const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
+      await checkSettingsClearOfPanel()
+      clearTimeout(besideTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -2786,6 +2795,111 @@ async function checkMovablePanel(): Promise<void> {
     await sleep(300)
     console.log('smoke: in the notch, the panel drops from it until it is moved, then closes and opens where it is, and putting it back brings it under the notch')
   }
+  await settings.update({ keepPanelOpen: keptOpen })
+  setDock('collapsed')
+  await sleep(500)
+}
+
+/**
+ * Settings and the open panel. Settings opens beside the panel when there's room, wherever the panel is (dragged, or
+ * under the notch), and centered when there isn't. While Settings is the window in use it floats above the panel, and
+ * once it isn't, it's a normal window again, under the panel. The panel stays open throughout, and the pin isn't
+ * touched. A hidden run has no real focus, so the check sends Settings the focus and blur macOS would.
+ */
+async function checkSettingsClearOfPanel(): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const w = win!
+  const overlap = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  const keptOpen = settings.keepPanelOpen()
+  await settings.update({ keepPanelOpen: true })
+  /** Open the panel fresh, and drag it (through the messages the page sends) so its middle is dx points from where it opened. */
+  const panelAt = async (dx: number | null) => {
+    await resetPanelPlace()
+    setDock('collapsed')
+    await sleep(500)
+    setDock('expanded')
+    await sleep(600)
+    if (dx !== null) {
+      const b = w.getBounds()
+      dragPanel('start', b.x + 100, b.y + 20)
+      dragPanel('move', b.x + 100 + dx, b.y + 20)
+      dragPanel('end')
+    }
+    if (dock !== 'expanded' || !w.isVisible()) throw new Error('the panel did not open for the Settings check')
+    return w.getBounds()
+  }
+  const openIt = async () => {
+    openSettings('steward')
+    const s = settingsWin!
+    if (s.webContents.isLoading()) await new Promise<void>((resolve) => s.webContents.once('did-finish-load', () => resolve()))
+    await sleep(300)
+    return s
+  }
+  /** Used, it floats above the panel; not used, it's a normal window, under it. The panel stays open either way. */
+  const onTopWhileUsed = (s: BrowserWindow, where: string) => {
+    s.emit('focus')
+    if (!s.isAlwaysOnTop()) throw new Error(`with the panel ${where}, Settings in use is not above it`)
+    s.emit('blur')
+    if (s.isAlwaysOnTop()) throw new Error(`with the panel ${where}, Settings stays above it after it's no longer in use`)
+    s.emit('focus')
+    if (dock !== 'expanded' || !w.isVisible() || !settings.keepPanelOpen()) throw new Error(`with the panel ${where}, using Settings closed the panel or changed the pin`)
+  }
+  /**
+   * Beside the panel when there's room on either side of it (16 points from it and 24 inside the work area, as
+   * clearOfPanel has it), exactly centered on the work area when there isn't: a small screen (the CI runner's is about
+   * 1024 points wide) has no room beside a 400-point panel anywhere. Says which, for the log.
+   */
+  const besideOrCentered = (where: string, panel: Rect, at: Rect): string => {
+    const area = screen.getDisplayMatching(panel).workArea
+    const need = SETTINGS_SIZE.width + 16 + 24
+    const room = panel.x - area.x >= need || area.x + area.width - (panel.x + panel.width) >= need
+    const centered = clearOfPanel(area, SETTINGS_SIZE, null)
+    if (room && overlap(at, panel)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}), Settings opened over it at ${JSON.stringify(at)} though there's room beside it`)
+    if (!room && JSON.stringify(at) !== JSON.stringify(centered)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}) and no room beside it, Settings opened at ${JSON.stringify(at)}, not centered at ${JSON.stringify(centered)}`)
+    return room ? `beside it (x ${at.x}; there's room on a ${area.width}-point work area)` : `centered (x ${at.x}; no room beside it on a ${area.width}-point work area)`
+  }
+  const cases: [string, number | null][] = [
+    ['dragged to the left', -5000],
+    ['dragged to the middle', null],
+  ]
+  for (const [where, dx] of cases) {
+    let panel = await panelAt(dx)
+    if (dx === null) {
+      // The middle of the screen: no room on either side for Settings on most screens.
+      const area = screen.getDisplayMatching(panel).workArea
+      const b = panel
+      dragPanel('start', b.x + 100, b.y + 20)
+      dragPanel('move', b.x + 100 + Math.round(area.x + area.width / 2 - (b.x + b.width / 2)), b.y + 20)
+      dragPanel('end')
+      panel = w.getBounds()
+    }
+    const s = await openIt()
+    const opened = besideOrCentered(where, panel, s.getBounds())
+    onTopWhileUsed(s, where)
+    console.log(`smoke: with the panel ${where} (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
+    s.close()
+    await sleep(400)
+  }
+  if (notchGeo) {
+    await resetPanelPlace()
+    setDock('collapsed')
+    await settings.update({ steward: { notch: true } })
+    replaceForNotch()
+    await sleep(600)
+    const panel = await panelAt(null)
+    if (JSON.stringify(panel) !== JSON.stringify(boundsFor('expanded'))) throw new Error('the panel did not open under the notch for the Settings check')
+    const s = await openIt()
+    const opened = besideOrCentered('under the notch', panel, s.getBounds())
+    onTopWhileUsed(s, 'under the notch')
+    console.log(`smoke: with the panel under the notch (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
+    s.close()
+    await sleep(400)
+    setDock('collapsed')
+    await settings.update({ steward: { notch: false } })
+    replaceForNotch()
+    await sleep(300)
+  }
+  await resetPanelPlace()
   await settings.update({ keepPanelOpen: keptOpen })
   setDock('collapsed')
   await sleep(500)
