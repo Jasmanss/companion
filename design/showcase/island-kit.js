@@ -62,9 +62,10 @@ export const SIZES = { row: [270, 34], needs: [340, 104], review: [352, 156] }
 export function makeLoop(root, apply) {
   const all = []
   let raf = 0, last = 0
+  const api = { scale: 1 }
   const step = (now) => {
     raf = 0
-    const dt = Math.min(0.05, (now - last) / 1000)
+    const dt = Math.min(0.05, (now - last) / 1000) * api.scale
     last = now
     let moving = false
     for (const s of all) if (!s.done) { s.step(dt); moving = true }
@@ -72,7 +73,7 @@ export function makeLoop(root, apply) {
     if (moving && root.isConnected) kick()
   }
   const kick = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(step) } }
-  return { add: (s) => { all.push(s); return s }, kick, stop: () => cancelAnimationFrame(raf) }
+  return Object.assign(api, { add: (s) => { all.push(s); return s }, kick, stop: () => cancelAnimationFrame(raf) })
 }
 
 /** Lit eyes: one view per spot, sharing a group's state, each centered on its spot. */

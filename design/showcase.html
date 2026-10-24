@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="showcase/island.css">
 <link rel="stylesheet" href="showcase/shelf.css">
 <link rel="stylesheet" href="showcase/mascot.css">
+<link rel="stylesheet" href="showcase/peeking.css">
 <style>
 /* ---------- page ---------- */
 :root{--bg:#F3F4F7;--card:#fff;--line:#E2E4EA;--text:#1C1F25;--muted:#596070;--accent:#2F6FEB;--chip:#fff;--barbg:rgba(243,244,247,.88);--barh:120px;color-scheme:light}
@@ -465,7 +466,7 @@ figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
     <section class="sec" id="glass"><h2>4. Liquid glass</h2><p class="lead">The panel's glass on a busy desktop.</p><div class="content"></div></section>
     <section class="sec" id="panel"><h2>5. The panel</h2><p class="lead">Everything that lives in or around the panel, drawn like the app. Most of these respond to clicks.</p><div class="content"></div></section>
     <section class="sec" id="docking"><h2>6. Docking</h2><p class="lead">Where Steward sits when you aren't using it, and how it gets out.</p><div class="content"></div></section>
-    <section class="sec" id="island"><h2>7. The notch island</h2><p class="lead">A small island in three sizes (compact, small, big) that is not the main surface, and four ways to keep Steward itself in the notch. The main chat stays in the side panel. The earlier shelf and the first eight tries are folded under it.</p><div class="content"></div></section>
+    <section class="sec" id="island"><h2>7. The notch island</h2><p class="lead">Peeking, as one island joined to the notch: Steward peeks from behind the notch, and the island grows out of it in the size the message needs, with Steward joining it when it is big. The main chat stays in the side panel. The earlier tries are folded under it.</p><div class="content"></div></section>
     <section class="sec" id="newer"><h2>8. Added since</h2><p class="lead">What was built after the first showcase, and the next piece of Visual Review.</p><div class="content"></div></section>
     <section class="sec" id="features"><h2>Every feature on this page</h2><p class="lead">Each card above, with its status and the page it came from.</p><div class="content"></div></section>
   </main>
@@ -481,6 +482,7 @@ import * as docking from './showcase/docking.js'
 import * as island from './showcase/island.js'
 import * as shelf from './showcase/shelf.js'
 import * as mascot from './showcase/mascot.js'
+import * as peeking from './showcase/peeking.js'
 import * as newer from './showcase/newer.js'
 import { esc } from './shared/activity.js'
 
@@ -515,15 +517,17 @@ request.render(content('request'))
 liquid.render(content('glass'))
 panel.render(content('panel'))
 docking.render(content('docking'))
-mascot.render(content('island'))
+peeking.render(content('island'))
 {
   const earlier = document.createElement('details')
   earlier.className = 'oldtries'
-  earlier.innerHTML = '<summary>Earlier tries: the four shelves, then the eight islands (A to H)</summary><p class="lead">Kept for reference. The shelf was the last restart: a wide shelf that was the main surface. The user then asked for the island to be smaller and not the main thing, which is the section above.</p><h3 class="oldh">The shelf (four variations)</h3><div class="ebody1"></div><h3 class="oldh">The first eight islands (A to H)</h3><div class="ebody2"></div>'
+  earlier.innerHTML = '<summary>Earlier tries: the other three mascots, the shelf, and the first eight islands</summary><p class="lead">Kept for reference. Round 3 compared four mascots on three sizes (its Peeking is the old version, superseded by the one above); round 2 was a wide shelf in four variations; round 1 was eight Dynamic Island style directions.</p><h3 class="oldh">Round 3: three sizes and four mascots (Little Pill, Peeking, Hanging, Carrier)</h3><div class="ebody0"></div><h3 class="oldh">Round 2: the shelf (four variations)</h3><div class="ebody1"></div><h3 class="oldh">Round 1: the first eight islands (A to H)</h3><div class="ebody2"></div>'
   content('island').append(earlier)
+  mascot.render(earlier.querySelector('.ebody0'))
   shelf.render(earlier.querySelector('.ebody1'))
   island.render(earlier.querySelector('.ebody2'))
 }
+
 
 newer.render(content('newer'))
 // Cards that run no timeline of their own still freeze their CSS loops (resting glows, live dots) off screen.
