@@ -1,6 +1,8 @@
 # The notch island: a small island in three sizes, with Steward in it
 
-Status: designed
+Status: ready
+
+Set by the front door on the user's go, 2026-10-24: "Yes, covering the menu bar while the island is out is fine. Set the notch island brief to ready and give me the Phase 1 line for Main building." Main building builds it, one phase at a time, with the user's go typed into Main building for each phase. Notch 3e (the Wings hand-off) is replaced by this and is not built.
 
 ## Ask (front door)
 The user's requests, in order.
