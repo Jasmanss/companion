@@ -51,6 +51,14 @@ At rest Steward is the solid Pill (glass needs something to refract, so outside 
 | Two projects | a note ("api started"), then compact with two spinners and a count |
 | Quiet mode | asleep: Steward tucked fully behind the notch, no island; resting the cursor wakes it |
 
+### Plan update, 2026-10-24 (from the user, via the front door)
+The user: "no more chat for the notch it goes to the sides no more in the middl" (in the middle). And, asked for in the same round, the names of chats in the note and in alerts. The front door moved both into Phase 2, and Main building is building it now.
+- **Phase 2 now covers:** the note and the settle; **chat names** in the note and in alerts, read from the `custom-title` line in the session's transcript (so an alert says which chat it is, not only the project); and **the panel opening on the side**. In notch mode the chat panel always opens at the left or right edge (or where the user dragged it), never under the notch. A new setting, **Panel opens on: Left | Right**, picks the side.
+- **Phase 4 keeps the rest** of the hand-off: the island looking toward the panel, the moved-panel rule on close, and quiet mode.
+- **What this replaces:** the line below that the panel "no longer drops from the notch" was a Phase 4 item; the drop under the notch goes away in Phase 2 instead.
+- "Friendly names in alerts" (plain words for raw tool names) on the status page is folded into Phase 2.
+- Not designed here: the exact look of a chat name in the note. Main building uses the note's existing layout (name before the message). Say if it needs a design page.
+
 ### The hand-off to the side panel
 A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. The island goes back to Steward peeking, looking toward the panel. Closing is today's close. The panel in notch mode no longer drops from the notch; that special case goes away.
 
@@ -70,7 +78,7 @@ Joining the notch flush with the top means every size wider than the notch sits 
 - A small spring loop on the notch page that sets only transforms, opacity and clip paths; the Showcase's `peeking.js` and `island-kit.js` are the working model (a steady 60 fps in headless Chrome). Reduce Motion fades.
 - Content: the right side from the session tracker (`SessionView` state and detail), the turn start for the timer (Visual Review's `UserPromptSubmit` hook already tracks it), the Visual Review store for the thumbnail. The approval and review contents already exist.
 - Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the size and the mascot position), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size; the panel no longer opening under the notch).
-- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover; 2) the note and the settle; 3) the approval and review sizes with Steward joining; 4) the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
+- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining; 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
 
 ### Risks and open questions
 1. Matching the real notch's corners where the island starts, and hiding Steward exactly behind the notch's edge. Phase 1 checks both on the real Mac.
