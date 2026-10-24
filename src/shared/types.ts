@@ -32,6 +32,17 @@ export interface IslandStatus {
   since?: number
   /** Two projects: how many are working. */
   count?: number
+  /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
+  note?: IslandNote
+}
+/** finished: "haven: Claude finished", and what it said. started: a second project started while one works. */
+export interface IslandNote {
+  kind: 'finished' | 'started'
+  /** The project's name, in bold, then the rest. */
+  name: string
+  text: string
+  /** When it was shown: a new note, even one saying the same, is a new message. */
+  at: number
 }
 
 /** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
