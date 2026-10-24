@@ -17,7 +17,7 @@ The design page is `design/overnight-watch.html` (a working mock: the goodnight 
 1. **Goodnight.** A "Goodnight" button in the panel (and a menu bar item, and later the island's hover) opens the **goodnight card**. It says what Steward will watch tonight, from what already exists: the sessions running now, the projects whose deploys it can see (Vercel linked), the repos whose CI it can see (GitHub through `gh`), and the phone it will call. It checks the Mac (plugged in? it cannot see the lid, so it says "keep the lid open") and offers a **test call** and **test text**. The user sets a **wake time** (default 7:30) and presses **Go rest**.
 2. **The go-rest moment.** Steward says "Goodnight. I've got it.", its eyes get heavy and close, a moon appears on the island (or on the edge tab), and Steward settles. From then on it keeps the Mac awake and watches quietly. The panel shows "Watching since 23:10" with a **Stop watching** button.
 3. **Overnight.** Only a few things reach the user's phone (below). Everything else is written down, not shown. On-screen alerts are held, because nobody is looking at the screen.
-4. **The morning.** When the user is back at the Mac (or at the wake time), the island shows one card, "Good morning. 1 thing needed you, 3 things changed.", and a click opens the **night report**. The morning brief becomes this report on days after a Watch.
+4. **The morning.** When the user is back at the Mac (or at the wake time), the island shows one card, "Good morning. 2 things needed you, 2 things changed.", and a click opens the **night report**. The morning brief becomes this report on days after a Watch.
 
 ### What it watches (all from things that exist; no model calls, so it costs nothing)
 | Source | How | Already in the code |
@@ -30,7 +30,7 @@ The design page is `design/overnight-watch.html` (a working mock: the goodnight 
 ### Urgent versus waiting
 | Kind | What happens | Examples |
 |---|---|---|
-| **Urgent** | Calls the user. If the call was not answered by a person, texts at once. If the user has not come back to the Mac 15 minutes later, calls once more. | a **production** deploy fails; CI goes red on `main`; a session is **stuck** |
+| **Urgent** | Calls the user. If the call was not answered by a person, texts at once. If the first call was not heard and the user has not come back to the Mac 15 minutes later, calls once more. A call a person heard is not repeated. | a **production** deploy fails; CI goes red on `main`; a session is **stuck** |
 | **Waiting on you** | Texts only, once, and after that at most one reminder text per hour. | a session needs an approval; a session is waiting for your input |
 | **Everything else** | Written in the night report only. No phone. | a session finished; a branch deploy failed; a deploy went out |
 | **Never** | Steward never approves anything for the user, never answers a session, never runs a command. The Watch makes no model calls and runs no new commands except the fixed read-only `gh` and git ones. | |
@@ -46,7 +46,7 @@ Rules that keep it from being a nuisance or a risk:
 
 ### The morning: the night report
 Replaces the morning brief on days after a Watch (`buildBrief` in `src/main/brief.ts` stays for other days; the new `buildNightReport` is a template too, no model). Contents, top to bottom:
-1. **One line.** "Quiet night." or "1 thing needed you. 3 things changed." If the Mac slept: "Steward could not see 3:10 to 6:55."
+1. **One line.** "Quiet night." or "2 things needed you. 2 things changed." If the Mac slept: "Steward could not see 3:10 to 6:55."
 2. **Needed you.** Each event with what Steward did ("Called 2:14, rang out. Texted 2:14.") and what came after ("You opened Steward at 6:58").
 3. **What changed.** Per project, the sessions that finished, with the **Visual Review card** (the before and after, Looks good, Send it back, open big) and Claude's own one-line note from Phase 1b. Pulled from the review store for reviews made after Go rest. Without Visual Review's history (Phase 2) the list still shows the sessions, just without pictures.
 4. **Deploys and CI.** A small timeline, green and red.
@@ -57,7 +57,7 @@ Kept in `<userData>/watch/` for the last 14 nights; "Clear night reports" sits n
 ### Quiet mode, step aside and the island
 - **Quiet mode and step aside govern the screen, not the phone.** The phone ladder runs whatever they are set to. While Watching, on-screen peeks are held for the report. If the user is up late and stays at the Mac, they behave as built (stepped aside holds alerts and shows the menu bar dot), and the ladder does not call because the user is active.
 - **At rest the island is just the notch**, as decided. Watching shows as a **moon on the menu bar item** and, on hover, the compact island: Steward half asleep on the left, "Watching · 2 working" on the right. This keeps the menu bar uncovered all night.
-- **Night states of the Peeking island** (sizes from `design/showcase/peeking.js`): goodnight (the note size for 3 seconds, Steward settles, then back into the notch); hover (compact, half-lidded eyes and the count); waiting (the note size, eyes open: "Approval waiting. Texted you 1:05"); urgent (the approval size, Steward alert, a pulse and "Prod deploy failed. Calling you now" that becomes "Texted 2:15. Calling again 2:30" with **I'm here** and **Open**); morning (the review size: "Good morning. 1 needed you, 3 changed" and **Open night report**, Steward awake). On a Mac without a notch the edge tab does the same with its alert card.
+- **Night states of the Peeking island** (sizes from `design/showcase/peeking.js`): goodnight (the note size for 3 seconds, Steward settles, then back into the notch); hover (compact, half-lidded eyes and the count); waiting (the note size, eyes open: "Approval waiting. Texted you 1:05"); urgent (the approval size, Steward alert, a pulse and "Prod deploy failed. Calling you now" that becomes "Texted 2:15. Calling again 2:30" with **I'm here** and **Open**); morning (the review size: "Good morning. 2 needed you, 2 changed" and **Open night report**, Steward awake). On a Mac without a notch the edge tab does the same with its alert card.
 - **Reduce Motion:** fade out, snap, fade in, as the island already does. A new mood, **Watching** (half-lidded eyes, a slow blink every 6 seconds), is added to `src/main/moods.ts` and the Pill.
 - Depends on the island: Phase 1 of the island (draft PR #34) for the compact and hover; the larger sizes arrive with island Phases 2 and 3. Until then the Watch uses today's alert path and the mascot mood, so it does not wait for the island.
 

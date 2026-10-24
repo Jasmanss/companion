@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: Overnight Watch</title>
+<style>
+/* Design page for Overnight Watch (docs/briefs/overnight-watch.md). Plain HTML, CSS and a little JS, no libraries, no web fonts.
+   Everything here is a picture of the plan. Nothing on this page calls, texts, saves or sends anything, and the key fields are not real. */
+:root{--tint:200,228,255;--glow:96,190,255;--t1:#0d1015;--t3:rgba(18,70,120,.78);--fill:255,255,255;--edge:rgba(255,255,255,.85);
+  --inset:rgba(18,70,120,.07);--inset2:rgba(18,70,120,.14);--line:rgba(18,70,120,.12);--ok:31,138,76;--warm:176,100,0;--bad:200,50,50;
+  --page:#e9f0fa;--shadow:rgba(20,30,60,.2);--live:26,140,255;--btn:rgb(18,70,120);--btnt:#fff;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--t1:#f5f7fa;--t3:rgba(178,220,255,.78);--fill:24,27,34;--edge:rgba(255,255,255,.26);--inset:rgba(255,255,255,.07);
+  --inset2:rgba(255,255,255,.12);--line:rgba(255,255,255,.1);--ok:95,214,142;--warm:255,196,107;--bad:255,120,120;--page:#0c1017;--shadow:rgba(0,0,0,.5);
+  --live:96,190,255;--btn:rgb(96,190,255);--btnt:#0b0d12;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(60rem 30rem at 85% -10%,rgba(var(--glow),.25),transparent 70%),var(--page);color:var(--t1);font:500 14px/1.5 var(--font);-webkit-font-smoothing:antialiased;padding:32px 16px 90px}
+main{max-width:62rem;margin:0 auto}
+h1{font-size:2.1rem;letter-spacing:-.03em;margin:0 0 6px}h2{font-size:1.25rem;margin:46px 0 4px;letter-spacing:-.01em}h3{font-size:1rem;margin:22px 0 4px}
+p{margin:0 0 10px;color:var(--t3);max-width:70ch}p.t1{color:var(--t1)}
+a{color:rgb(var(--live))}
+nav{display:flex;flex-wrap:wrap;gap:6px 14px;margin:16px 0 0;font-weight:700;font-size:13px}nav a{text-decoration:none}
+.glass{border-radius:14px;background:linear-gradient(180deg,rgba(var(--tint),.22),rgba(var(--tint),.08)),rgba(var(--fill),.82);box-shadow:inset 0 1px 0 var(--edge),0 18px 40px var(--shadow);border:1px solid var(--line);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.btn{font:700 .86rem var(--font);border:0;border-radius:999px;padding:8px 16px;cursor:pointer;background:var(--btn);color:var(--btnt)}.btn.ghost{background:var(--inset);color:var(--t1)}.btn.big{padding:11px 22px;font-size:.95rem}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid rgb(var(--live));outline-offset:2px}
+.btn[aria-pressed=true]{background:var(--btn);color:var(--btnt)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:760px){.two{grid-template-columns:1fr}h1{font-size:1.7rem}}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td:last-child.n,th.n{white-space:nowrap}td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--t3);font-weight:700}
+.tbl{overflow-x:auto}
+.pill-tag{display:inline-block;font:800 10px var(--font);letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;background:var(--inset2);color:var(--t1);vertical-align:2px}
+.urg{background:rgba(var(--bad),.18);color:rgb(var(--bad))}.wait{background:rgba(var(--warm),.2);color:rgb(var(--warm))}.okt{background:rgba(var(--ok),.18);color:rgb(var(--ok))}
+.note{padding:12px 14px;border-radius:12px;background:var(--inset);font-size:13px;color:var(--t1);margin:12px 0}.note b{font-weight:800}
+
+/* the night in one strip */
+.strip{display:flex;gap:0;margin-top:16px;overflow-x:auto;padding-bottom:4px}
+.strip div{flex:1 0 128px;padding:0 10px 0 0;position:relative}
+.strip div::before{content:"";display:block;height:3px;border-radius:2px;background:var(--inset2);margin-bottom:8px}
+.strip .u::before{background:rgb(var(--bad))}.strip .w::before{background:rgb(var(--warm))}.strip .g::before{background:rgb(var(--ok))}
+.strip b{display:block;font-size:12px;color:var(--t3)}.strip span{font-size:13px;color:var(--t1)}
+
+/* goodnight card (a piece of the panel) */
+.panel{width:400px;max-width:100%;padding:16px;font-size:13.5px}
+.panel h4{margin:0 0 2px;font-size:16px;letter-spacing:-.01em}
+.panel .sub{color:var(--t3);margin:0 0 12px;font-size:13px}
+.list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--inset)}
+.li .ic{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:var(--inset2);flex:none;font-size:12px}
+.li .tx{flex:1;min-width:0}.li .tx small{display:block;color:var(--t3);font-size:12px}
+.li .tg{flex:none}
+.sw{position:relative;width:34px;height:20px;flex:none}.sw input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.sw i{position:absolute;inset:0;border-radius:99px;background:var(--inset2);transition:background .2s}
+.sw i::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.sw input:checked+i{background:rgb(var(--live))}.sw input:checked+i::after{transform:translateX(14px)}.sw input:focus-visible+i{outline:2px solid rgb(var(--live));outline-offset:2px}
+.field{display:flex;align-items:center;gap:8px;margin:8px 0}.field label{flex:1}
+select,.inp{font:600 13px var(--font);padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:var(--inset);color:var(--t1)}
+.goodnight .gn-done{display:none}
+.goodnight.gone .gn-form{display:none}.goodnight.gone .gn-done{display:block}
+.watching-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgb(var(--live));box-shadow:0 0 8px rgb(var(--live));margin-right:6px;animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* the little screen: real points (560 x 200), scaled by script */
+.crop{position:relative;width:100%;max-width:760px;overflow:hidden;border-radius:12px;box-shadow:0 0 0 1px var(--line);background:radial-gradient(90% 80% at 20% 15%,#34457a,transparent 60%),radial-gradient(70% 70% at 85% 90%,#5a3f86,transparent 65%),#1b2340}
+.crop.day{background:radial-gradient(90% 80% at 20% 15%,#7fb6f5,transparent 60%),radial-gradient(70% 70% at 85% 90%,#b99cf2,transparent 65%),#6c8fd6}
+.sc{position:absolute;left:0;top:0;width:560px;height:200px;transform-origin:0 0}
+.mbar{position:absolute;left:0;right:0;top:0;height:33px;background:rgba(10,14,24,.55);border-bottom:1px solid rgba(255,255,255,.12);color:#fff;font:600 12px/33px var(--font)}
+.mbar .l{position:absolute;left:12px;display:flex;gap:14px}.mbar .r{position:absolute;right:12px;display:flex;gap:10px;align-items:center}
+.moon{opacity:0;transition:opacity .4s;color:#ffd978}.watching .moon{opacity:1}
+.isl{position:absolute;left:50%;top:0;width:185px;height:32px;margin-left:-92.5px;background:#000;border-radius:0 0 10px 10px;overflow:hidden;color:#fff;z-index:3;
+  transition:width .5s cubic-bezier(.2,.9,.25,1.08),height .5s cubic-bezier(.2,.9,.25,1.08),margin-left .5s cubic-bezier(.2,.9,.25,1.08),border-radius .5s}
+.isl.compact{width:324px;margin-left:-162px;border-radius:0 0 16px 16px}
+.isl.note{width:380px;height:60px;margin-left:-190px;border-radius:0 0 22px 22px}
+.isl.approval{width:420px;height:124px;margin-left:-210px;border-radius:0 0 26px 26px}
+.isl.review{width:440px;height:172px;margin-left:-220px;border-radius:0 0 26px 26px}
+.av{position:absolute;left:14px;top:4px;width:44px;height:24px;border-radius:99px;background:linear-gradient(180deg,#e9eef5,#8d99ab);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 3px rgba(0,0,0,.14);
+  transition:opacity .35s,transform .5s cubic-bezier(.2,.9,.25,1.08)}
+.isl.rest .av{opacity:0;transform:translateX(70px)}
+.av i{position:absolute;left:12px;top:6px;width:6px;height:12px;border-radius:99px;background:rgb(var(--glow));box-shadow:0 0 7px 1px rgba(var(--glow),.7);transition:height .45s,top .45s,opacity .45s}
+.av i+i{left:auto;right:12px}
+.av.sleep i{height:2px;top:11px;opacity:.7}
+.av.watch i{height:5px;top:9.5px;animation:wblink 6s ease-in-out infinite}
+@keyframes wblink{0%,92%,100%{height:5px;top:9.5px}95%{height:1.5px;top:11px}}
+.av.awake i{animation:blink 4s ease-in-out infinite}
+@keyframes blink{0%,94%,100%{height:12px;top:6px}97%{height:2px;top:11px}}
+.av.alert i{height:14px;top:5px;background:#ffb347;box-shadow:0 0 8px 1px rgba(255,179,71,.8)}
+.av.happy i{height:8px;top:8px;border-radius:99px 99px 2px 2px}
+.rs{position:absolute;right:14px;top:0;height:32px;display:flex;align-items:center;gap:6px;font:700 12px var(--font);transition:opacity .3s}
+.isl.rest .rs{opacity:0}
+.body{position:absolute;left:16px;right:16px;top:38px;transition:opacity .25s}
+.body.off{opacity:0}
+.body b{display:block;font-size:13px}.body small{display:block;color:rgba(255,255,255,.65);font-size:12px;margin-top:1px}
+.body .st{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#ffd1d1}
+.ring{width:10px;height:10px;border-radius:50%;background:#ff7a7a;position:relative;flex:none}
+.ring::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid #ff7a7a;opacity:0;animation:ringp 1.2s ease-out infinite}
+@keyframes ringp{from{transform:scale(.4);opacity:.9}to{transform:scale(1.6);opacity:0}}
+.body .bt{display:flex;gap:8px;margin-top:8px}
+.bt span{font:700 12px var(--font);padding:5px 12px;border-radius:99px;background:rgba(255,255,255,.16)}.bt span.pri{background:#fff;color:#000}
+.gapline{margin-top:8px;font-size:12px;color:#ffd978}
+.rm *,.rm *::before,.rm *::after{transition-duration:.01s!important;animation-duration:.01s!important}
+@media (prefers-reduced-motion:reduce){.isl,.av,.av i{transition-duration:.01s!important}.ring::after,.watching-dot,.av.watch i,.av.awake i{animation:none!important}}
+.caption{font-size:13px;color:var(--t3);margin:10px 0 0;min-height:2.6em}
+
+/* ladder */
+.steps{list-style:none;margin:12px 0 0;padding:0}
+.steps li{display:grid;grid-template-columns:76px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);animation:up .3s both}
+@keyframes up{from{opacity:0;transform:translateY(4px)}}
+.steps time{font:700 12px ui-monospace,Menlo,monospace;color:var(--t3);padding-top:2px}
+.steps b{display:block}.steps span{color:var(--t3);font-size:13px}
+.count{display:flex;gap:18px;margin-top:12px;font-size:13px;color:var(--t3)}.count b{color:var(--t1)}
+
+/* report */
+.rep{font-size:13.5px}
+.rep h4{margin:0;font-size:17px}
+.rep .sec{margin-top:14px}.rep .sec>b{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.ev{display:grid;grid-template-columns:60px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}.ev time{font:700 12px ui-monospace,Menlo,monospace;color:var(--t3)}
+.rc{border-radius:12px;background:var(--inset);padding:10px}
+.rc .hd{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px}.rc .hd small{color:var(--t3)}
+.cmp{position:relative;height:130px;border-radius:8px;overflow:hidden;background:#fff;user-select:none}
+.cmp .pg{position:absolute;inset:0}
+.pg .hero{position:absolute;left:0;right:0;top:0;height:54px;background:#3b6fd6}
+.pg .h1{position:absolute;left:14px;top:14px;width:90px;height:8px;border-radius:4px;background:rgba(255,255,255,.85)}
+.pg .h2{position:absolute;left:14px;top:28px;width:140px;height:6px;border-radius:4px;background:rgba(255,255,255,.5)}
+.pg .cta{position:absolute;right:16px;top:18px;width:54px;height:18px;border-radius:9px;background:#fff}
+.pg .c{position:absolute;top:66px;height:46px;width:30%;border-radius:6px;background:#e3e8f0}
+.after .hero{background:#2f8f5b}.after .cta{background:#ffd978}.after .c.n{background:#cfe9da}
+.cmp .after{clip-path:inset(0 0 0 var(--p,50%))}
+.cmp .bar{position:absolute;top:0;bottom:0;left:var(--p,50%);width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.cmp input{position:absolute;inset:0;opacity:0;width:100%;cursor:ew-resize;margin:0}
+.cmp .tagb,.cmp .taga{position:absolute;bottom:6px;font:800 9px var(--font);background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:99px}.cmp .tagb{left:6px}.cmp .taga{right:6px}
+.says{margin:8px 0 0;font-size:12.5px;color:var(--t3)}
+.gaprow{padding:8px 10px;border-radius:10px;background:rgba(var(--warm),.16);color:var(--t1)}
+.cistrip{display:flex;gap:3px;margin-top:4px}.cistrip i{flex:1;height:10px;border-radius:3px;background:rgb(var(--ok))}.cistrip i.r{background:rgb(var(--bad))}.cistrip i.n{background:var(--inset2)}
+
+/* phases */
+.lanes{display:grid;gap:8px;margin-top:14px;font-size:12.5px}
+.lane{display:grid;grid-template-columns:110px repeat(10,minmax(0,1fr));gap:4px;align-items:center}
+.lane>span:first-child{font-weight:800;color:var(--t3)}
+.blk{padding:6px 6px;border-radius:8px;background:var(--inset2);text-align:center;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.blk.vr{background:rgba(var(--live),.2)}.blk.ow{background:rgba(var(--warm),.24)}.blk.you{background:rgba(var(--ok),.2)}.blk.nil{background:transparent}
+@media (max-width:760px){.lane{grid-template-columns:70px repeat(10,minmax(36px,1fr));overflow-x:auto}}
+.fake{display:grid;gap:8px;margin-top:8px}.fake .fr{display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:center}.fake .fr span{font-weight:700;font-size:12.5px}
+.fake .inp{width:100%;color:var(--t3)}
+ol.steps2{margin:8px 0;padding-left:20px;color:var(--t1)}ol.steps2 li{margin:6px 0}ol.steps2 small{display:block;color:var(--t3)}
+.q{counter-reset:q;padding:0;list-style:none}.q li{counter-increment:q;padding:12px 14px 12px 44px;position:relative;border-radius:12px;background:var(--inset);margin:8px 0}
+.q li::before{content:counter(q);position:absolute;left:14px;top:12px;width:22px;height:22px;border-radius:50%;background:var(--btn);color:var(--btnt);font:800 12px/22px var(--font);text-align:center}
+.q b{font-weight:800}
+</style>
+</head>
+<body>
+<main id="top">
+<h1>Go rest. I've got the build.</h1>
+<p class="t1">Overnight Watch is the second headline feature, next to Visual Review. You say goodnight, Steward watches your Claude Code sessions, deploys and CI, calls you only if something is on fire, and in the morning shows what changed. The brief is <code>docs/briefs/overnight-watch.md</code>.</p>
+<p>Everything on this page is a picture of the plan, built from what the app already has. It works, so click around, but it does not call, text or save anything, and the key fields in section 6 are not real.</p>
+<label class="row" style="margin:6px 0"><input type="checkbox" id="rm"> <span>Reduce Motion (fade and snap instead of grow)</span></label>
+<nav aria-label="Sections"><a href="#night">1 The night</a><a href="#goodnight">2 Goodnight</a><a href="#island">3 The island</a><a href="#ladder">4 Urgent or waiting</a><a href="#report">5 The morning</a><a href="#phone">6 Calls and texts</a><a href="#catch">7 What it catches</a><a href="#phases">8 Phases</a><a href="#ask">9 Questions</a></nav>
+
+<h2 id="night">1. The night in one line</h2>
+<p>Only things that matter reach your phone. Everything else waits for the report.</p>
+<div class="strip" aria-label="An example night">
+  <div class="g"><b>11:10 PM</b><span>Goodnight. Two sessions working.</span></div>
+  <div><b>11:58 PM</b><span>A session finishes. Written down.</span></div>
+  <div class="w"><b>1:05 AM</b><span>An approval waits. Text.</span></div>
+  <div class="u"><b>2:14 AM</b><span>Production deploy fails. Call, then text.</span></div>
+  <div><b>3:10 AM</b><span>The Mac sleeps. Steward is blind.</span></div>
+  <div class="g"><b>7:02 AM</b><span>You're back. One card: the night report.</span></div>
+</div>
+
+<h2 id="goodnight">2. The goodnight card</h2>
+<p>A "Goodnight" button in the panel opens it. It lists only what Steward can really see tonight, so the user knows what is and is not covered. Toggle things, then press Go rest.</p>
+<div class="two">
+  <div class="glass panel goodnight" id="gn">
+    <div class="gn-form">
+      <h4>Goodnight</h4>
+      <p class="sub">Here's what I'll watch tonight.</p>
+      <div class="list">
+        <div class="li"><span class="ic">▶</span><span class="tx">Claude Code sessions<small>2 working now: my-site, steward-app</small></span><span class="sw tg"><input type="checkbox" checked aria-label="Watch sessions"><i></i></span></div>
+        <div class="li"><span class="ic">▲</span><span class="tx">Deploys<small>my-site (Vercel, production)</small></span><span class="sw tg"><input type="checkbox" checked aria-label="Watch deploys"><i></i></span></div>
+        <div class="li"><span class="ic">✓</span><span class="tx">CI on main<small>my-site, steward-app (GitHub)</small></span><span class="sw tg"><input type="checkbox" checked aria-label="Watch CI"><i></i></span></div>
+      </div>
+      <div class="list">
+        <div class="li"><span class="ic">☎</span><span class="tx">Call and text me at<small>+1 (•••) •••-0142 · last test call OK</small></span><button class="btn ghost" type="button" data-testcall>Test call</button></div>
+        <div class="li"><span class="ic">⚡</span><span class="tx">Mac<small id="macline">Plugged in. Keep the lid open: a closed lid sleeps it.</small></span><span class="sw tg"><input type="checkbox" id="battery" aria-label="Pretend the Mac is on battery"><i></i></span></div>
+      </div>
+      <div class="field"><label for="wake">Wake me no later than</label>
+        <select id="wake"><option>6:30 AM</option><option selected>7:30 AM</option><option>8:30 AM</option></select></div>
+      <div class="field"><label for="prac">Practice night (log, don't call)</label><span class="sw"><input type="checkbox" id="prac"><i></i></span></div>
+      <div class="row" style="justify-content:space-between;margin-bottom:0"><span style="font-size:12px;color:var(--t3)">Nothing risky is ever approved for you.</span><button class="btn big" type="button" id="gonight">Go rest</button></div>
+    </div>
+    <div class="gn-done">
+      <h4><span class="watching-dot"></span>Watching since 11:10 PM</h4>
+      <p class="sub" id="gdsub">Wake time 7:30 AM · the Mac stays awake · calls on.</p>
+      <div class="list"><div class="li"><span class="ic">▶</span><span class="tx">2 sessions working<small>Nothing needs you.</small></span></div></div>
+      <div class="row" style="margin-bottom:0"><button class="btn ghost" type="button" id="stopw">Stop watching</button><button class="btn" type="button" id="imup">I'm up</button></div>
+    </div>
+  </div>
+  <div>
+    <h3>What the card does</h3>
+    <p>It never starts by itself. A late-evening nudge ("two sessions are still working, want me to watch?") is an offer, because Go rest is what lets Steward call a phone.</p>
+    <p><b>Mac checks.</b> Plugged in or on battery (<code>powerMonitor</code>). It cannot see the lid, so it says so. Try the battery switch on the card: the line changes and Go rest still works, because the user may know better.</p>
+    <p><b>Keep awake.</b> One <code>powerSaveBlocker</code> from Go rest to the wake time or "I'm up". Released after, so it never holds the Mac awake by accident.</p>
+    <p><b>Practice night.</b> The ladder runs and logs what it would have called and texted, sending nothing. Use it for a week before real calls.</p>
+    <p><b>Ends</b> at the wake time, at "I'm up", when the user is back and active at the Mac for a couple of minutes, or at a 12-hour cap.</p>
+  </div>
+</div>
+
+<h2 id="island">3. The notch island at night</h2>
+<p>The island is the Peeking one: one black shape joined to the notch, in the sizes already designed. At rest it is just the notch, so the menu bar stays clear all night; the only sign is a moon on the menu bar. Pick a moment, or play the night.</p>
+<div class="row" id="isbtns" role="group" aria-label="Island moments">
+  <button class="btn ghost" type="button" data-st="goodnight">Goodnight</button>
+  <button class="btn ghost" type="button" data-st="hover">Hover</button>
+  <button class="btn ghost" type="button" data-st="waiting">Waiting</button>
+  <button class="btn ghost" type="button" data-st="urgent">Urgent</button>
+  <button class="btn ghost" type="button" data-st="morning">Morning</button>
+  <button class="btn" type="button" id="play">Play the night</button>
+</div>
+<div class="crop" id="crop"><div class="sc" id="sc">
+  <div class="mbar"><div class="l"><span>Code</span><span>File</span></div><div class="r"><span class="moon" aria-hidden="true">☾</span><span>🔋</span><span id="clock">11:10 PM</span></div></div>
+  <div class="isl rest" id="isl" aria-live="polite">
+    <div class="av sleep" id="av"><i></i><i></i></div>
+    <div class="rs" id="rs"></div>
+    <div class="body off" id="ibody"></div>
+  </div>
+</div></div>
+<p class="caption" id="iscap">Steward waiting behind the notch. Pick a moment above.</p>
+<div class="tbl"><table>
+  <tr><th>Moment</th><th>Island</th><th>Steward</th></tr>
+  <tr><td>Goodnight</td><td>Note size for 3 seconds, then back into the notch</td><td>Says "Goodnight. I've got it." The eyes get heavy and close.</td></tr>
+  <tr><td>Hover while watching</td><td>Compact. Right side: moon and the number of sessions working</td><td>The new <b>Watching</b> mood: half-lidded, a slow blink every 6 seconds</td></tr>
+  <tr><td>Waiting on you</td><td>Note size: what is waiting and when the text went</td><td>Eyes open</td></tr>
+  <tr><td>Urgent</td><td>Approval size. A pulse while calling, then "Texted 2:15. Calling again 2:30". <b>I'm here</b> stops it</td><td>Alert eyes</td></tr>
+  <tr><td>Morning</td><td>Review size: one card, "Open night report". Held alerts do not replay one by one</td><td>Awake, a little pleased if it was quiet</td></tr>
+</table></div>
+<div class="note"><b>Quiet mode and step aside govern the screen, not the phone.</b> The phone ladder runs whatever they are set to. While Watching, on-screen peeks are held for the report. If you stay up and keep working, they behave as built (stepped-aside Steward holds alerts and shows the menu bar dot) and nothing calls you, because you are at the Mac. On a Mac without a notch the edge tab does the same with its alert card. Reduce Motion fades out, snaps and fades in, like the island already does.</div>
+
+<h2 id="ladder">4. Urgent or waiting</h2>
+<p>Pick what happens and how the phone answers. The steps are the rules in the brief, run on a made-up clock.</p>
+<div class="two">
+  <div class="glass panel" style="width:100%">
+    <div class="field"><label for="evsel">What happened</label>
+      <select id="evsel">
+        <option value="deploy">Production deploy fails (urgent)</option>
+        <option value="ci">CI goes red on main (urgent)</option>
+        <option value="stuck">A session goes quiet (urgent, slowly)</option>
+        <option value="approval">A session needs an approval (waiting)</option>
+        <option value="finished">A session finishes (report only)</option>
+      </select></div>
+    <div class="field"><label for="anssel">If it calls, the phone…</label>
+      <select id="anssel"><option value="person">is answered by a person</option><option value="vm">goes to voicemail</option><option value="none">rings out</option></select></div>
+    <div class="field"><label for="atmac">I'm using the Mac right now</label><span class="sw"><input type="checkbox" id="atmac"><i></i></span></div>
+    <ul class="steps" id="steps"></ul>
+    <div class="count" id="counts"></div>
+  </div>
+  <div>
+    <h3>The rules</h3>
+    <table>
+      <tr><td><span class="pill-tag urg">urgent</span></td><td>Calls. Not heard by a person: texts at once. Still not back 15 minutes later: calls once more. Then stops.</td></tr>
+      <tr><td><span class="pill-tag wait">waiting</span></td><td>One text, then at most one reminder an hour.</td></tr>
+      <tr><td><span class="pill-tag">report</span></td><td>No phone. Written in the night report.</td></tr>
+    </table>
+    <h3>Rules that keep it safe</h3>
+    <ul style="margin:6px 0;padding-left:18px;color:var(--t1)">
+      <li><b>Not when you're there.</b> Mac used in the last 5 minutes: no call, screen only.</li>
+      <li><b>Limits.</b> 3 calls and 8 texts a night (Settings). Same-kind events within 10 minutes become one message.</li>
+      <li><b>Words only.</b> Project name, kind of event, time. Never a command, path, prompt, file name or URL.</li>
+      <li><b>Only in the window.</b> Go rest to the wake time.</li>
+      <li><b>One way.</b> You can't reply or press a key yet (no public address to receive it).</li>
+      <li><b>Never approves anything.</b> No model calls, no commands except the fixed read-only <code>gh</code> and git ones.</li>
+    </ul>
+    <div class="note"><b>About "stuck".</b> Steward only hears approvals, notifications, prompts and stops. A slow test run looks exactly like a stuck session. So the recommendation is a <b>text at 45 minutes</b> of silence and a <b>call at 90</b>. Question 2 asks if you want the call sooner.</div>
+  </div>
+</div>
+
+<h2 id="report">5. The morning: the night report</h2>
+<p>It replaces the morning brief after a Watch. It is a template, so it costs nothing. Visual Review cards sit inside it. Drag the slider, press Looks good.</p>
+<div class="two">
+  <div class="glass panel rep" style="width:100%">
+    <h4>Good morning</h4>
+    <p class="sub" style="margin:2px 0 0">2 things needed you. 2 things changed.</p>
+    <div class="sec"><div class="gaprow">The Mac slept 3:10 to 6:55 AM (battery ran low). Steward could not see that time.</div></div>
+    <div class="sec"><b>Needed you</b>
+      <div class="ev"><time>2:14 AM</time><span>my-site production deploy failed. <span style="color:var(--t3)">Called 2:14, rang out. Texted 2:14. Called again 2:30, rang out. You opened Steward at 7:02.</span></span></div>
+      <div class="ev"><time>1:05 AM</time><span>steward-app waited for an OK. <span style="color:var(--t3)">Texted 1:05.</span></span></div>
+    </div>
+    <div class="sec"><b>What changed</b>
+      <div class="rc">
+        <div class="hd"><span><b style="display:inline">my-site</b> · finished 11:58 PM</span><small id="revstate">Not reviewed</small></div>
+        <div class="cmp" id="cmp" style="--p:50%"><div class="pg"><div class="hero"></div><div class="h1"></div><div class="h2"></div><div class="cta"></div><div class="c" style="left:14px"></div><div class="c" style="left:36%"></div><div class="c" style="left:66%"></div></div>
+          <div class="pg after"><div class="hero"></div><div class="h1"></div><div class="h2"></div><div class="cta"></div><div class="c" style="left:14px"></div><div class="c n" style="left:36%"></div><div class="c" style="left:66%"></div></div>
+          <div class="bar"></div><span class="tagb">Before</span><span class="taga">After</span>
+          <input type="range" min="0" max="100" value="50" id="cmpr" aria-label="Before and after slider"></div>
+        <p class="says">Claude says: "Changed the hero to green and added a new feature card."</p>
+        <div class="row" style="margin:8px 0 0"><button class="btn" type="button" id="good">Looks good</button><button class="btn ghost" type="button">Send it back</button><button class="btn ghost" type="button">Open big</button></div>
+      </div>
+      <div class="ev"><time>11:40 PM</time><span>steward-app: a session finished. <span style="color:var(--t3)">No visible change on the page.</span></span></div>
+    </div>
+    <div class="sec"><b>Deploys and CI</b>
+      <div style="font-size:12.5px;color:var(--t3)">my-site CI on main</div><div class="cistrip"><i></i><i></i><i></i><i class="r"></i><i class="n"></i><i class="n"></i></div>
+      <div style="font-size:12.5px;color:var(--t3);margin-top:6px">my-site production deploys</div><div class="cistrip"><i></i><i class="r"></i><i class="n"></i><i class="n"></i></div>
+    </div>
+    <div class="sec"><b>The phone</b><div style="color:var(--t3)">2 calls, 2 texts. About $0.06.</div></div>
+  </div>
+  <div>
+    <h3>How it works</h3>
+    <ul style="margin:6px 0;padding-left:18px;color:var(--t1)">
+      <li><b>When it shows.</b> One island card when you're back at the Mac (or at the wake time). A click opens this.</li>
+      <li><b>Needed you</b> says what Steward did and what you did next, so a missed call is not a mystery.</li>
+      <li><b>What changed</b> pulls Visual Review's cards for reviews made after Go rest, with Claude's one-line note from Phase 1b. Without Visual Review's history it lists the sessions only.</li>
+      <li><b>Gaps</b> come from the Mac's sleep and wake events and from Steward not running. The report says so plainly, even when it makes the night look worse.</li>
+      <li><b>Counts</b> let you match the Twilio bill (here: 2 calls, 2 texts).</li>
+      <li>Kept for 14 nights in the app's data folder. A Clear button sits next to Visual Review's.</li>
+    </ul>
+    <p>A quiet night reads "Quiet night. Nothing needed you." with only the sessions that finished and the deploys.</p>
+  </div>
+</div>
+
+<h2 id="phone">6. Calls and texts</h2>
+<div class="two">
+  <div>
+    <h3>Recommendation: Twilio</h3>
+    <p>Voice and text from one account and one number, plain HTTPS from Steward (the way it already talks to Vercel), and a call can carry its words inline, so no web server is needed. Telnyx, Vonage and Plivo can do the same; only <code>phone.ts</code> would change.</p>
+    <p><span class="pill-tag okt">no new dependency</span> Twilio's npm package is not used. Three endpoints with <code>fetch</code> are enough. Question 4 asks you to confirm.</p>
+    <h3>What it costs</h3>
+    <div class="tbl"><table>
+      <tr><th>When</th><th>What</th><th class="n">About</th></tr>
+      <tr><td>Once</td><td>Text registration: brand $4 + campaign vetting $15. Plus credit you add first (the minimum was not confirmed; plan on about $20)</td><td class="n">$19</td></tr>
+      <tr><td>Each month</td><td>US number (about $1.15, not confirmed) + $2 text campaign</td><td class="n">$3.15</td></tr>
+      <tr><td>Per text</td><td>$0.0083 + carrier fee $0.003 to $0.005</td><td class="n">about $0.012</td></tr>
+      <tr><td>Per call</td><td>$0.014 a minute, by the minute</td><td class="n">about $0.014</td></tr>
+      <tr><td>A bad night</td><td>3 calls, 8 texts (the limits)</td><td class="n">about $0.15</td></tr>
+    </table></div>
+    <p style="font-size:12.5px">Figures come from Twilio's pages and third-party summaries read on 2026-10-24. Check them in the console; prices change. Set a $5 monthly spend alert there.</p>
+  </div>
+  <div>
+    <h3>What you create yourself</h3>
+    <p>No chat does this for you, and no chat ever sees the keys.</p>
+    <ol class="steps2">
+      <li><b>A Twilio account</b> at twilio.com, with a card and credit. <small>A trial account only reaches verified numbers and adds a "trial" line.</small></li>
+      <li><b>A US phone number</b> with Voice and SMS.</li>
+      <li><b>US text registration</b> (A2P 10DLC, sole proprietor). <small>No company number needed. A US or Canadian mobile gets a one-time code. <b>Review takes days</b>, so start this first. Until it's approved, texts are blocked. Calls are separate: a call to your own phone should work the day the account exists (to confirm on the first test call).</small></li>
+      <li><b>An API key</b> (Console, Account, API keys, Standard). <small>Copy the key SID and the secret; the secret is shown once. A key can be revoked without touching the account.</small></li>
+      <li><b>Your own mobile number</b>, which Steward calls and texts.</li>
+    </ol>
+    <h3>Where the keys go</h3>
+    <p>Settings → Watch, five fields, typed by you in the app. This is only a picture:</p>
+    <div class="glass panel fake" style="width:100%">
+      <div class="fr"><span>Account SID</span><input class="inp" readonly placeholder="starts with AC…" aria-label="Picture only"></div>
+      <div class="fr"><span>API key SID</span><input class="inp" readonly placeholder="starts with SK…" aria-label="Picture only"></div>
+      <div class="fr"><span>API secret</span><input class="inp" readonly placeholder="saved in the keychain · shows 'saved: yes' only" aria-label="Picture only"></div>
+      <div class="fr"><span>Twilio number</span><input class="inp" readonly placeholder="+1 …" aria-label="Picture only"></div>
+      <div class="fr"><span>Your number</span><input class="inp" readonly placeholder="+1 …" aria-label="Picture only"></div>
+      <div class="row" style="margin:4px 0 0"><button class="btn ghost" type="button" disabled>Test call</button><button class="btn ghost" type="button" disabled>Test text</button><button class="btn ghost" type="button" disabled>Remove keys</button></div>
+    </div>
+    <p style="font-size:12.5px;margin-top:8px">The secret is saved the way the Vercel token is (the macOS keychain through <code>safeStorage</code>). The window only ever learns "saved: yes". It's never logged, never in a report or a text. Steward talks only to <code>api.twilio.com</code>.</p>
+  </div>
+</div>
+<h3>What the messages say</h3>
+<div class="tbl"><table>
+  <tr><td><span class="pill-tag urg">call</span></td><td>"Steward here. The production deploy of my-site failed at 2:14 AM. I have also sent you a text."</td></tr>
+  <tr><td><span class="pill-tag urg">text</span></td><td>"Steward: my-site production deploy failed 2:14 AM. Open Steward when you can."</td></tr>
+  <tr><td><span class="pill-tag wait">text</span></td><td>"Steward: Claude in my-site is waiting for your OK. 1:05 AM."</td></tr>
+</table></div>
+<div class="note"><b>What can be built before the account exists:</b> everything except the last live check. A fake provider and a small local fake of the Twilio endpoints for tests, the ladder with a fake clock, the Settings fields, the Watch, the log, the report, the CI source, stuck detection and the island. Only pressing Test call with real keys needs you. That is why the phone phase comes after three phases that need no account.</div>
+
+<h2 id="catch">7. What each part can and can't catch</h2>
+<div class="tbl"><table>
+  <tr><th></th><th>Catches</th><th>Can't catch</th></tr>
+  <tr><td><b>Mac awake</b><br>phases 1 to 4</td><td>Approvals and input waiting. A session quiet for too long. A session finished. A production deploy failing. CI red on main (checked every 2 minutes). Calls and texts for those.</td><td>Anything while the Mac sleeps, the lid is closed, it's off, the internet is down or Steward quit. (On battery the Mac sleeps even with the blocker.) A slow task can't be told from a stuck one. Claude Code on another machine or on the web.</td></tr>
+  <tr><td><b>Off the Mac</b><br>phase 5, a GitHub Actions job</td><td>CI failing on main and a failed production deploy, <b>with the Mac asleep</b>, by calling and texting straight from GitHub.</td><td>Sessions, approvals and stuck sessions: they only exist on the Mac. It can't tell you're up, so it calls once.</td></tr>
+  <tr><td><b>Later, not planned</b></td><td>Answering a text, or approving from the phone.</td><td>Needs a public address to receive the reply, a small service you would host. That is a new service and a safety question, so it is not in the plan.</td></tr>
+</table></div>
+
+<h2 id="phases">8. Build phases, and where they fit</h2>
+<p>Small phases, each a draft PR into main with CI green, and your go typed into Feature building for each.</p>
+<div class="tbl"><table>
+  <tr><th>Phase</th><th>What you can then see</th><th>Account?</th></tr>
+  <tr><td><b>OW 1</b> Goodnight and Watch</td><td>Go rest, the keep-awake, the Watching mood and moon, a log file that fills. No phone, no report yet.</td><td>No</td></tr>
+  <tr><td><b>OW 2</b> The night report</td><td>The morning card and this report, with Visual Review cards.</td><td>No</td></tr>
+  <tr><td><b>OW 3</b> All the sources</td><td>CI on main, production deploy failures, stuck detection. Still on screen only.</td><td>No</td></tr>
+  <tr><td><b>OW 4</b> Calls and texts</td><td>Settings → Watch, test buttons, the ladder, Practice night.</td><td><b>Yes, for the last check</b></td></tr>
+  <tr><td><b>OW 5</b> Off the Mac</td><td>A workflow file for a project, and the setup steps.</td><td>Yes</td></tr>
+</table></div>
+<h3>Where it fits (recommended)</h3>
+<div class="lanes" aria-label="Recommended order">
+  <div class="lane"><span>You</span><span class="blk you" style="grid-column:span 4">Start the account now</span><span class="blk you" style="grid-column:span 3">Registration (days)</span><span class="blk you" style="grid-column:span 2">Keys</span><span class="blk nil"></span></div>
+  <div class="lane"><span>Feature building</span><span class="blk vr">VR 1b</span><span class="blk vr">VR 2</span><span class="blk ow">OW 1</span><span class="blk ow">OW 2</span><span class="blk ow">OW 3</span><span class="blk ow">OW 4</span><span class="blk vr">VR 3</span><span class="blk ow">OW 5</span><span class="blk vr">VR 4</span><span class="blk nil"></span></div>
+</div>
+<p>Visual Review 1b and 2 first, because the night report needs Phase 2's history. OW 1 to 3 need no account, so they run while registration is in review. Visual Review 3 and 4 (highlights, phone width, holding the Stop hook) are the least urgent, so they go after the phone phase. Your plan said all of Visual Review first; question 5 asks.</p>
+
+<h2 id="ask">9. Questions for you</h2>
+<p>Nothing blocks starting. The first answer to give is the account: start it today.</p>
+<ol class="q">
+  <li><b>Provider.</b> Twilio, or a different one?</li>
+  <li><b>Stuck.</b> Text at 45 minutes and call at 90 (recommended), or call at 45?</li>
+  <li><b>Texts while registration is pending.</b> Wait, or try the Messages app on the Mac as a stand-in (a small spike, Mac awake only)?</li>
+  <li><b>Dependency.</b> Confirm no Twilio package, plain <code>fetch</code>?</li>
+  <li><b>Order.</b> Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4 (recommended), or all of Visual Review first?</li>
+  <li><b>Off the Mac.</b> Is a second Twilio key in the repository's GitHub secrets acceptable?</li>
+</ol>
+</main>
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var rmBox=$('#rm');
+  var prefers=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  rmBox.checked=prefers;
+  function applyRM(){document.body.classList.toggle('rm',rmBox.checked)}
+  rmBox.addEventListener('change',applyRM);applyRM();
+
+  /* ---- scale the little screen ---- */
+  var crop=$('#crop'),sc=$('#sc');
+  function fit(){var s=crop.clientWidth/560;sc.style.transform='scale('+s+')';crop.style.height=(200*s)+'px'}
+  fit();window.addEventListener('resize',fit);
+
+  /* ---- the island ---- */
+  var isl=$('#isl'),av=$('#av'),rs=$('#rs'),ibody=$('#ibody'),clock=$('#clock'),cap=$('#iscap'),mbar=$('.mbar');
+  var timers=[],watching=false;
+  function later(fn,ms){timers.push(setTimeout(fn,ms))}
+  function clear(){timers.forEach(clearTimeout);timers=[]}
+  function size(c){isl.className='isl '+c}
+  function mood(m){av.className='av '+m}
+  function body(html){
+    ibody.classList.add('off');
+    later(function(){ibody.innerHTML=html;if(html)ibody.classList.remove('off')},rmBox.checked?10:200);
+  }
+  function setWatch(on){watching=on;crop.classList.toggle('watching',on)}
+  var ST={
+    goodnight:function(){
+      setWatch(true);clock.textContent='11:10 PM';size('note');mood('awake');rs.innerHTML='☾';
+      body('<b>Goodnight. I\'ve got it.</b>');
+      cap.textContent='Goodnight: the island opens to the note size, Steward says it, the eyes get heavy and close, then it settles back into the notch.';
+      later(function(){mood('sleep')},1500);
+      later(function(){size('rest');body('')},3200);
+      later(function(){cap.textContent='At rest it is only the notch. The moon in the menu bar says Steward is watching.'},3700);
+    },
+    hover:function(){
+      setWatch(true);clock.textContent='11:42 PM';size('compact');mood('watch');rs.innerHTML='<span style="color:#ffd978">☾</span> 2';body('');
+      cap.textContent='Hover while watching: the compact island. Half-lidded Steward on the left, the moon and "2 sessions working" on the right.';
+    },
+    waiting:function(){
+      setWatch(true);clock.textContent='1:05 AM';size('note');mood('awake');rs.innerHTML='✉';
+      body('<b>Approval waiting</b><span style="color:rgba(255,255,255,.65);font-size:12px">steward-app · texted you 1:05 AM</span>');
+      cap.textContent='Waiting on you: note size, eyes open. It texts and nothing more. It never presses Allow.';
+    },
+    urgent:function(){
+      setWatch(true);clock.textContent='2:14 AM';size('approval');mood('alert');rs.innerHTML='☎';
+      var h='<b>Production deploy failed <span style="font-weight:600;color:rgba(255,255,255,.6);font-size:12px">· my-site</span></b><div class="st"><span class="ring"></span><span id="ust">Calling you now…</span></div><div class="bt"><span class="pri">I\'m here</span><span>Open</span></div>';
+      body(h);
+      cap.textContent='Urgent: the approval size, alert eyes, a pulse while the call rings.';
+      later(function(){var e=$('#ust');if(e)e.textContent='Rang out. Texted 2:15. Calling again 2:30'},3600);
+      later(function(){cap.textContent='If you are not back by 2:30 it calls once more. "I\'m here" stops it. If you are at the Mac there is no call at all.'},3700);
+    },
+    morning:function(){
+      setWatch(false);clock.textContent='7:02 AM';size('review');mood('happy');rs.innerHTML='☀';
+      body('<b>Good morning</b><span style="color:rgba(255,255,255,.65);font-size:12px">2 things needed you · 2 things changed</span><div class="gapline">The Mac slept 3:10 to 6:55. I couldn\'t see that time.</div><div class="bt"><span class="pri">Open night report</span><span>Later</span></div>');
+      cap.textContent='Morning: one card instead of a pile of held alerts. A click opens the night report.';
+    }
+  };
+  function go(name){clear();ST[name]()}
+  document.querySelectorAll('[data-st]').forEach(function(b){b.addEventListener('click',function(){stopPlay();go(b.dataset.st)})});
+  var playing=false;
+  function stopPlay(){playing=false;$('#play').textContent='Play the night'}
+  $('#play').addEventListener('click',function(){
+    if(playing){stopPlay();return}
+    playing=true;$('#play').textContent='Stop';
+    var seq=['goodnight','hover','waiting','urgent','morning'],i=0;
+    (function next(){
+      if(!playing)return;
+      go(seq[i]);i++;
+      if(i<seq.length){var w=[5200,3800,4200,6500][i-1];setTimeout(function(){if(playing)next()},w)}else{setTimeout(stopPlay,6000)}
+    })();
+  });
+
+  /* ---- goodnight card ---- */
+  var gn=$('#gn');
+  $('#battery').addEventListener('change',function(e){
+    $('#macline').textContent=e.target.checked?'On battery (62%). Plug in, or it may sleep before morning.':'Plugged in. Keep the lid open: a closed lid sleeps it.';
+  });
+  $('#gonight').addEventListener('click',function(){
+    var prac=$('#prac').checked,wake=$('#wake').value;
+    $('#gdsub').textContent='Wake time '+wake+' · the Mac stays awake · '+(prac?'practice night: nothing will be sent.':'calls on.');
+    gn.classList.add('gone');
+    $('#island').scrollIntoView({behavior:rmBox.checked?'auto':'smooth',block:'start'});
+    setTimeout(function(){stopPlay();go('goodnight')},rmBox.checked?100:500);
+  });
+  function back(){gn.classList.remove('gone')}
+  $('#stopw').addEventListener('click',back);$('#imup').addEventListener('click',back);
+  document.querySelectorAll('[data-testcall]').forEach(function(b){b.addEventListener('click',function(){
+    var t=b.textContent;b.textContent='(a picture: no call made)';setTimeout(function(){b.textContent=t},1800)})});
+
+  /* ---- the ladder ---- */
+  function fmt(m){m=((m%1440)+1440)%1440;var h=Math.floor(m/60),mm=m%60,ap=h>=12?'PM':'AM',h12=h%12||12;return h12+':'+(mm<10?'0':'')+mm+' '+ap}
+  var EV={
+    deploy:{base:134,kind:'urgent',what:'my-site production deploy failed'},
+    ci:{base:182,kind:'urgent',what:'CI on main is red in my-site'},
+    stuck:{base:90,kind:'stuck',what:'steward-app has been quiet'},
+    approval:{base:65,kind:'waiting',what:'steward-app is waiting for your OK'},
+    finished:{base:238,kind:'none',what:'my-site finished a session'}
+  };
+  var CALL=0.014,TEXT=0.012;
+  function ladder(ev,ans,atMac){
+    var o=EV[ev],st=[],calls=0,texts=0,b=o.base;
+    function S(t,a,c){st.push({t:fmt(t),a:a,b:c})}
+    if(o.kind==='none'){S(b,'Written in the night report','No call, no text. It shows under What changed.');return {st:st,calls:0,texts:0}}
+    if(atMac){S(b,'Shown on screen only','You used the Mac in the last 5 minutes, so there is no call and no text. Opening Steward counts as "I\'m here".');return {st:st,calls:0,texts:0}}
+    function callOutcome(t){
+      calls++;
+      if(ans==='person'){S(t,'Call: answered by a person','Heard the message. Nothing more is sent for this event.');return true}
+      if(ans==='vm'){S(t+1,'Call: voicemail picked up','Not a person, so it does not count as heard.');return false}
+      S(t+1,'Call: rang out','Nobody answered.');return false;
+    }
+    function textNow(t,label){texts++;S(t,label||'Text sent','"'+o.what.replace(/^./,function(c){return c.toUpperCase()})+'. '+fmt(b)+'."')}
+    if(o.kind==='urgent'){
+      S(b,'Event: '+o.what,'Steward checks that you are not at the Mac, then calls.');
+      var heard=callOutcome(b);
+      if(!heard){
+        textNow(b+1,'Text sent at once');
+        S(b+16,'Still not back at the Mac','You have not opened Steward or used the Mac for 15 minutes.');
+        callOutcome(b+16);
+        S(b+19,'Stops','Two calls and one text is the most for one event. The night report lists all three.');
+        texts+=0;
+      }
+    } else if(o.kind==='stuck'){
+      S(b,'Last sign of life from the session','Nothing has arrived since. A long test run looks the same.');
+      textNow(b+45,'Quiet for 45 minutes: text');
+      S(b+90,'Still quiet at 90 minutes','No session event, no activity at the Mac.');
+      var h2=callOutcome(b+90);
+      if(!h2){textNow(b+92,'Text again (the old one is 45 minutes old)')}
+      S(b+93,'Any new event from the session cancels all of this','Steward does not keep nagging if the session wakes up.');
+    } else if(o.kind==='waiting'){
+      S(b,'Event: '+o.what,'Waiting on you, not urgent.');
+      textNow(b+5,'Text after a 5 minute grace');
+      S(b+65,'Reminder text, only if still waiting','At most one an hour. The night limit of 8 texts still applies.');texts++;
+      S(b+66,'Never approves','Steward does not press Allow. The card waits for you.');
+    }
+    return {st:st,calls:calls,texts:texts}
+  }
+  function runLadder(){
+    var r=ladder($('#evsel').value,$('#anssel').value,$('#atmac').checked);
+    var ul=$('#steps');ul.innerHTML='';
+    r.st.forEach(function(s,i){var li=document.createElement('li');li.style.animationDelay=(rmBox.checked?0:i*60)+'ms';
+      li.innerHTML='<time>'+s.t+'</time><div><b></b><span></span></div>';li.querySelector('b').textContent=s.a;li.querySelector('span').textContent=s.b;ul.appendChild(li)});
+    var cost=r.calls*CALL+r.texts*TEXT;
+    $('#counts').innerHTML='<span>Calls <b>'+r.calls+'</b> of 3</span><span>Texts <b>'+r.texts+'</b> of 8</span><span>About <b>$'+cost.toFixed(2)+'</b></span>';
+  }
+  ['evsel','anssel','atmac'].forEach(function(id){$('#'+id).addEventListener('change',runLadder)});
+  runLadder();
+
+  /* ---- report ---- */
+  var cmp=$('#cmp');
+  $('#cmpr').addEventListener('input',function(e){cmp.style.setProperty('--p',e.target.value+'%')});
+  $('#good').addEventListener('click',function(){
+    this.textContent='Reviewed ✓';this.disabled=true;$('#revstate').textContent='Reviewed 7:04 AM';
+  });
+})();
+</script>
+</body>
+</html>
