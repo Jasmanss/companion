@@ -35,10 +35,10 @@ export interface IslandStatus {
   /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
   note?: IslandNote
 }
-/** finished: "haven: Claude finished", and what it said. started: a second project started while one works. */
+/** finished: "Main building finished", and what Claude said. started: a second project started while one works. */
 export interface IslandNote {
   kind: 'finished' | 'started'
-  /** The project's name, in bold, then the rest. */
+  /** The chat's name (or the project's), in bold, then the rest. */
   name: string
   text: string
   /** When it was shown: a new note, even one saying the same, is a new message. */
@@ -216,8 +216,10 @@ export type SessionState = 'working' | 'needs-approval' | 'needs-input' | 'finis
 
 export interface SessionView {
   id: string
-  /** The matching project's name, or the folder name. */
+  /** The chat's own name in the Claude app, else the matching project's name, or the folder name. */
   name: string
+  /** With a chat name: the project or folder, as a quieter second word. */
+  place?: string
   projectPath: string | null
   cwd: string
   state: SessionState

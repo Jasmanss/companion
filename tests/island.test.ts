@@ -158,8 +158,8 @@ describe('the note', () => {
   const at = { agentBusy: false, name: 'haven', now: 100_000 }
 
   it('says a session finished, with the last thing Claude said', () => {
-    expect(hookNote(hook('Stop', 'a'), { ...at, turns: { a: 1 }, detail: 'I made the button blue.' })).toEqual({ kind: 'finished', name: 'haven', text: 'Claude finished · I made the button blue.', at: 100_000 })
-    expect(hookNote(hook('Stop', 'a'), { ...at, turns: {} })?.text).toBe('Claude finished')
+    expect(hookNote(hook('Stop', 'a'), { ...at, turns: { a: 1 }, detail: 'I made the button blue.' })).toEqual({ kind: 'finished', name: 'haven', text: 'finished · I made the button blue.', at: 100_000 })
+    expect(hookNote(hook('Stop', 'a'), { ...at, turns: {} })?.text).toBe('finished')
     // A Stop hook asked Claude to keep going: not finished yet.
     expect(hookNote(hook('Stop', 'a', { stop_hook_active: true }), { ...at, turns: { a: 1 } })).toBeNull()
   })

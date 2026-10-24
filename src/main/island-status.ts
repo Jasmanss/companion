@@ -76,11 +76,12 @@ export function nextChange(o: IslandInput): number | null {
 }
 
 /**
- * The note a hook event deserves, if any. turns: the turns going on before this event. A real stop is "Claude finished",
- * with the last thing it said. A prompt starting a new turn while another project works is "started".
+ * The note a hook event deserves, if any, under the chat's name (or the project's). turns: the turns going on before
+ * this event. A real stop is "finished", with the last thing Claude said. A prompt starting a new turn while another
+ * project works is "started".
  */
 export function hookNote(event: HookPayload, o: { turns: Turns; agentBusy: boolean; name: string; detail?: string; now: number }): IslandNote | null {
-  if (event.hook_event_name === 'Stop' && !event.stop_hook_active) return { kind: 'finished', name: o.name, text: o.detail ? `Claude finished · ${o.detail}` : 'Claude finished', at: o.now }
+  if (event.hook_event_name === 'Stop' && !event.stop_hook_active) return { kind: 'finished', name: o.name, text: o.detail ? `finished · ${o.detail}` : 'finished', at: o.now }
   if (event.hook_event_name !== 'UserPromptSubmit' || o.turns[event.session_id]) return null
   const others = Object.entries(o.turns).filter(([id, at]) => id !== event.session_id && o.now - at < TURN_GIVE_UP_MS).length + (o.agentBusy ? 1 : 0)
   return others ? { kind: 'started', name: o.name, text: 'started', at: o.now } : null

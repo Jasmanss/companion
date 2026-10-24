@@ -62,6 +62,36 @@ describe('SessionTracker', () => {
     expect((await long.apply(event({ hook_event_name: 'Stop', transcript_path: LOG })))?.level).toBe('normal')
   })
 
+  it("calls a session by its chat's name, with the project as a second word, and keeps the project name without one", async () => {
+    let title: string | null = 'Main building'
+    const reads: string[] = []
+    const tracker = new SessionTracker({ projects: () => projects, now: () => 1000, fileSize: async () => 1, chatTitle: async (file) => (reads.push(file), title) })
+    const alert = await tracker.apply(event({ hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm test' }, transcript_path: LOG }))
+    expect(alert?.title).toBe('Main building is waiting on you')
+    expect(tracker.list()).toMatchObject([{ name: 'Main building', place: 'Portlkit' }])
+    expect(tracker.names({ session_id: 's1', cwd: '/Users/me/Documents/portlkit' })).toEqual({ name: 'Main building', place: 'Portlkit' })
+    // Read once when it shows up, not on every event.
+    await tracker.apply(event({ hook_event_name: 'Notification', message: 'Which file?', transcript_path: LOG }))
+    expect(reads).toEqual([LOG])
+    // Renamed, and stopped: read again, the new name.
+    title = 'Notch island'
+    expect((await tracker.apply(event({ hook_event_name: 'Stop', transcript_path: LOG })))?.title).toBe('Notch island finished')
+    expect(reads).toHaveLength(2)
+    // Not found in the end of the log this time: the name it had stays.
+    title = null
+    await tracker.apply(event({ hook_event_name: 'Stop', prompt_id: 'p2', transcript_path: LOG }))
+    expect(tracker.list()[0].name).toBe('Notch island')
+    // A terminal session, or a chat with no name: the project, and no second word.
+    const plain = new SessionTracker({ projects: () => projects, chatTitle: async () => null })
+    await plain.apply(event({ hook_event_name: 'Stop', transcript_path: LOG }))
+    expect(plain.list()[0]).toMatchObject({ name: 'Portlkit' })
+    expect(plain.list()[0].place).toBeUndefined()
+    // No log named at all: nothing is read.
+    const none = new SessionTracker({ projects: () => projects, chatTitle: async () => 'never' })
+    await none.apply(event({ hook_event_name: 'Stop' }))
+    expect(none.list()[0].name).toBe('Portlkit')
+  })
+
   it('ignores notifications that PermissionRequest already covers, and Stops a hook kept going', async () => {
     const tracker = new SessionTracker({ projects: () => projects })
     expect(await tracker.apply(event({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission' }))).toBeNull()

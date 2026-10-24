@@ -63,7 +63,7 @@ import { hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, noteTurn
 import { ReviewTracker } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
-import { matchProject, SessionTracker } from './sessions'
+import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
@@ -1289,8 +1289,7 @@ function islandNote(event: HookPayload, turns: Turns): void {
   // A new turn in any session: the island is about the work now, not what finished before.
   if (event.hook_event_name === 'UserPromptSubmit') islandNotes.drop('finished')
   const session = sessions.list().find((s) => s.id === event.session_id)
-  const name = session?.name ?? matchProject(event.cwd, settings.projects())?.name ?? path.basename(event.cwd)
-  const note = hookNote(event, { turns, agentBusy: agent.busy, name, detail: session?.detail, now: Date.now() })
+  const note = hookNote(event, { turns, agentBusy: agent.busy, name: sessions.names(event).name, detail: session?.detail, now: Date.now() })
   if (!note || settings.steward().alertPeek === 'none' || (note.kind === 'finished' && !settings.notifications().sessionFinished)) return
   islandNotes.show(note)
 }
@@ -1304,7 +1303,7 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   // A prompt was sent: photograph the page now (in the background), before Claude changes it.
   if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
   const alert = await sessions.apply(event)
-  // After the session strip has it, so a finished note has the session's name and what Claude said.
+  // After the session strip has it, so a note has the chat's name and a finished one what Claude said.
   islandNote(event, turns)
   sendSessions()
   if (alert) raise(alert)
@@ -2569,7 +2568,7 @@ async function checkIsland(out: string): Promise<void> {
   const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
   const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, said?: string) =>
     onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : { last_assistant_message: said }) } as HookPayload)
-  const noteLine = () => page.executeJavaScript(`(() => { const n = document.querySelector('.isl-note'); return { text: n?.textContent ?? '', shown: Number(getComputedStyle(n).opacity) } })()`) as Promise<{ text: string; shown: number }>
+  const noteLine = () => page.executeJavaScript(`(() => { const n = document.querySelector('.isl-note'); return { text: [...(n?.querySelectorAll('b, span') ?? [])].map((e) => e.textContent).join(' '), shown: Number(getComputedStyle(n).opacity) } })()`) as Promise<{ text: string; shown: number }>
 
   // At rest: no island; Steward peeks out past the notch's left edge, and nothing is on its right.
   const restPill = islandParts('rest', layout).pill
@@ -2639,7 +2638,7 @@ async function checkIsland(out: string): Promise<void> {
   await hook('Stop', 'smoke-island-1', 'I made the button blue.')
   await sleep(700)
   line = await noteLine()
-  if (notch.state().island?.right !== 'working' || notch.state().island?.note?.kind !== 'finished' || !line.text.includes('Claude finished · I made the button blue.') || line.shown < 0.9) throw new Error(`one project finishing shows ${JSON.stringify(notch.state().island)}, line "${line.text}"`)
+  if (notch.state().island?.right !== 'working' || notch.state().island?.note?.kind !== 'finished' || !line.text.includes('finished · I made the button blue.') || line.shown < 0.9) throw new Error(`one project finishing shows ${JSON.stringify(notch.state().island)}, line "${line.text}"`)
   await hook('Stop', 'smoke-island-2', 'All the tests pass.')
   await sleep(700)
   side = await right()
@@ -2650,7 +2649,7 @@ async function checkIsland(out: string): Promise<void> {
   await sleep(300)
   const dockNow = (): DockState => dock
   if (dockNow() === 'nudge') throw new Error('a session finishing came out under the notch as well as in the island')
-  console.log(`smoke: island: Claude finishing shows a note ("${line.text}"), and no alert under the notch`)
+  console.log(`smoke: island: a chat finishing shows a note ("${line.text}"), and no alert under the notch`)
   const stepsOut = await motionLook(page, '.isl-pill', '.isl')
   smoothly(`Steward stepping out of the island${stepsOut.label}`, await watchMotion(page, stepsOut, 900, () => {
     for (const id of ['smoke-island-1', 'smoke-island-2']) sessions.dismiss(id)
