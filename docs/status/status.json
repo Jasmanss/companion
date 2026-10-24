@@ -1,49 +1,60 @@
 {
-  "checked": "2026-10-15",
+  "checked": "2026-10-24",
   "sections": [
     {
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
+        { "name": "Answer the Overnight Watch questions", "line": "Six questions, none blocks the start: provider (Twilio), when a quiet session calls you (text at 45 minutes, call at 90), a stand-in for texts while registration is pending, no Twilio package, the build order, and a second key in GitHub secrets. Design: design/overnight-watch.html.", "date": "2026-10-24" },
         { "name": "Try Visual Review by hand", "line": "Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.", "date": "2026-10-20" },
         { "name": "Try the movable panel by hand", "line": "Smoke is hidden now, so you can run the app. Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.", "date": "2026-10-21" },
-        { "name": "Dependabot #30", "line": "Six minor and patch updates, still open. Merge once CI is green.", "date": "2026-10-22" },
         { "name": "Try notch 3b by hand", "line": "Trigger an alert while Steward is in the notch: it should come out under the menu bar, and a click opens the panel.", "date": "2026-10-20" },
         { "name": "Tell us your vision for the website", "line": "Planned for tomorrow, 2026-10-20. The site design and Phase 2 wait for it.", "date": "2026-10-19" },
         { "name": "Idea inbox", "line": "Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-10-15" },
         { "name": "Review before push", "line": "Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-10-15" },
-        { "name": "Overnight Watch account", "line": "Set up the phone/text account. Registration takes days.", "date": "2026-10-15", "tag": "unconfirmed: only in research notes" }
+        { "name": "Start the Overnight Watch phone account", "line": "Make a Twilio account and a US number, then start US text registration (it takes days, and review runs while the first phases are built). Steps, costs and where the keys go: design/overnight-watch.html, section 6. You type the keys into the app yourself, never into a chat.", "date": "2026-10-24" }
       ]
     },
     {
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Nothing is being built right now", "line": "Every build chat is done. The next ones wait for your go (see Up next). The showcase now lists every feature, with a new Island section.", "date": "2026-10-22" }
+        { "name": "Nothing is being built right now", "line": "Notch island Phase 1 is merged. The next builds wait for your go: island Phases 2 to 5 in Main building, Visual Review 1b in Feature building.", "date": "2026-10-24" }
       ]
     },
     {
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Visual Review, Phase 1b: Look closely", "line": "A big before and after viewer (slide, side by side, flip, zoom to the real pixels, keys, the two decisions inside it) and a one-line \"Claude says\" note on what changed. Design page: design/visual-review-viewer.html. Recommended before Phase 2. Waits for your go in Feature building.", "date": "2026-10-22" },
-        { "name": "Visual Review, Phase 2: the alert", "line": "Tell me: an alert when a Claude turn changed what the page looks like. Waits for your go in Feature building.", "date": "2026-10-21" },
-        { "name": "Movable panel, Phase 2: screens and edges", "line": "A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Waits for you to try Phase 1, then your go in Main building.", "date": "2026-10-21" },
-        { "name": "Notch island, Phase 1: the joined shape", "line": "Brief is ready (you said covering the menu bar is fine). Phase 1: the one joined black shape with compact, Steward peeking and stepping into it, the Smart right side and hover. It moves to In progress when you type the go into Main building.", "date": "2026-10-22" },
-        { "name": "Notch 3c: drop images", "line": "Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.", "date": "2026-10-20" },
+        { "name": "Notch island, Phases 2 to 5", "line": "Phase 1 is merged (PR #34, a4fc04f). Next: the note and the settle, the approval and review sizes with Steward joining, the hand-off to the side panel, hardening. Each waits for your go typed into Main building.", "date": "2026-10-24" },
+        { "name": "Visual Review, Phase 1b: Look closely", "line": "A big before and after viewer (slide, side by side, flip, zoom to the real pixels, keys, the two decisions inside it) and a one-line \"Claude says\" note on what changed. Design page: design/visual-review-viewer.html. Waits for your go in Feature building.", "date": "2026-10-22" },
+        { "name": "Visual Review, Phase 2: the alert", "line": "Tell me: an alert when a Claude turn changed what the page looks like, plus the review history. Overnight Watch uses that history. Waits for your go in Feature building.", "date": "2026-10-21" },
+        { "name": "Visual Review, Phases 3 and 4", "line": "Phase 3: highlight what changed, and phone width. Phase 4: a spike on holding the Stop hook, then the opt-in \"hold for my review\" setting. Recommended after Overnight Watch phase 4 (see below), not before.", "date": "2026-10-24" },
+        { "name": "Overnight Watch (designed)", "line": "Go rest, I've got the build: a goodnight card, then Steward watches sessions, deploys and CI while the Mac is awake, calls for urgent things, texts for things waiting on you, and shows a night report in the morning. Five small phases; 1 to 3 need no phone account. Brief: docs/briefs/overnight-watch.md. Design: design/overnight-watch.html. Recommended order: Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4. Waits for your answers and your go in Feature building.", "date": "2026-10-24" },
         { "name": "Site, Phase 2: the five scenes", "line": "On hold until your vision talk. Then your go, typed into Site building.", "date": "2026-10-19" },
+        { "name": "Notch 3c: drop images", "line": "Does not fold into the island: it is a separate feature (drag events on the notch window). Its spike can run any time, but its \"mouth\" look was drawn for the old chin, so it needs a small redraw as the island growing to the note size. Best after island Phase 1 is in the app, which it now is. Waits for your go in Main building.", "date": "2026-10-24" },
         { "name": "Idea inbox and Review before push", "line": "Designed in side chats, waiting for a pick. No brief files yet.", "date": "2026-10-15" }
+      ]
+    },
+    {
+      "id": "small",
+      "title": "Small fixes, later",
+      "items": [
+        { "name": "Movable panel, Phase 2: screens and edges", "line": "A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Moved here from Up next.", "date": "2026-10-21" },
+        { "name": "Feature building row in CLAUDE.md", "line": "The front door's docs commit that adds the Feature building row to the chat table in CLAUDE.md. Not in main yet.", "date": "2026-10-24" },
+        { "name": "Notch nudge: short entrance in smoke", "line": "The smoke check for the notch nudge's short entrance. One nudge check missed once on CI, unexplained.", "date": "2026-10-22" },
+        { "name": "release.yml does not set STEWARD_SMOKE_NOTCH", "line": "The release workflow runs smoke without the pretend notch that the CI workflow sets.", "date": "2026-10-24" },
+        { "name": "Model line in Settings", "line": "Show which model answered.", "date": "2026-10-24" },
+        { "name": "Confused mood trigger", "line": "The Confused mood exists but nothing sets it.", "date": "2026-10-24" },
+        { "name": "Stray thumbnail in the Showcase", "line": "Bug. A leftover screenshot thumbnail on the page.", "date": "2026-10-24" },
+        { "name": "Friendly names in alerts", "line": "Alerts say plain words (\"wants to switch branch\") instead of raw tool names like mcp__ccd_directory__propose_branch.", "date": "2026-10-24" },
+        { "name": "Haiku 5.5 for cheap jobs", "line": "Check it works with Steward's tools.", "date": "2026-10-24" }
       ]
     },
     {
       "id": "ideas",
       "title": "Ideas not planned yet",
       "items": [
-        { "name": "Overnight Watch", "line": "Hero feature. Decided, nothing designed. Needs the phone/text account.", "date": "2026-10-15" },
-        { "name": "Model line in Settings", "line": "Show which model answered.", "date": "2026-10-15" },
-        { "name": "Confused mood trigger", "line": "The Confused mood exists but nothing sets it.", "date": "2026-10-15" },
-        { "name": "Stray thumbnail in the Showcase", "line": "Bug. A leftover screenshot thumbnail on the page.", "date": "2026-10-15" },
-        { "name": "Haiku 5.5 for cheap jobs", "line": "Check it works with Steward's tools.", "date": "2026-10-15" },
         { "name": "First run: API key or Claude login", "line": "Decide what a new user sees first.", "date": "2026-10-15" },
         { "name": "Name availability check", "line": "Companion / Steward.", "date": "2026-10-15" },
         { "name": "Energy face as AI budget", "line": "From the mid-October feature list.", "date": "2026-10-15" },
@@ -58,7 +69,6 @@
         { "name": "\"What was I doing\"", "line": "From the mid-October feature list.", "date": "2026-10-15" },
         { "name": "Upgrade to TypeScript 7 and Vite 8", "line": "With @vitejs/plugin-react 6. The Dependabot PRs failed CI, so it needs its own planned upgrade.", "date": "2026-10-15" },
         { "name": "Notch at the top center of any screen", "line": "On screens without a notch (external monitors), draw a notch-like home at the top center, so monitors get the same always-findable spot. Would also let notch features be tested on a monitor.", "date": "2026-10-16" },
-        { "name": "Friendly names in alerts", "line": "Alerts say plain words (\"wants to switch branch\") instead of raw tool names like mcp__ccd_directory__propose_branch.", "date": "2026-10-16" },
         { "name": "Hats and glasses", "line": "Parked.", "date": "2026-10-15" },
         { "name": "Screenshot catcher", "line": "Parked (prompt 07).", "date": "2026-10-15" },
         { "name": "Smarter design research", "line": "Parked (prompt 09).", "date": "2026-10-15" }
@@ -68,6 +78,10 @@
       "id": "done",
       "title": "Done",
       "items": [
+        { "name": "Notch island, Phase 1", "line": "Merged into main (PR #34, a4fc04f): Steward peeks out of the notch and the island grows while Claude works. Phases 2 to 5 wait for your go in Main building.", "date": "2026-10-24" },
+        { "name": "Settings is no longer hidden behind the panel", "line": "Merged into main (PR #33, b13cf70).", "date": "2026-10-24" },
+        { "name": "Visual Review: quiet checks", "line": "Merged into main (PR #32, be57476): says when nothing changed and catches soft color changes.", "date": "2026-10-23" },
+        { "name": "Dependabot #30", "line": "Merged into main (6fb7904): six minor and patch updates.", "date": "2026-10-22" },
         { "name": "Hidden smoke", "line": "Merged into main (PR #29, 3f174f9): smoke runs hidden by default (windows at 1% opacity, click-through, never focused), one run at a time, with a pretend notch on CI. Testing on your Mac is back on. One notch nudge miss on CI is unexplained.", "date": "2026-10-22" },
         { "name": "Auto mode", "line": "Merged into main (PR #28, 193f67f): Running commands, Ask each time | Auto. Auto skips the Run card only for known-safe commands.", "date": "2026-10-22" },
         { "name": "Movable panel, Phase 1", "line": "Merged into main (PR #27, 5f55836): drag the panel by its top bar, it opens where you left it, double-click the bar to put it back. Phase 2 waits for your go.", "date": "2026-10-22" },

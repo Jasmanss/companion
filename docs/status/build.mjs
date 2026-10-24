@@ -122,6 +122,7 @@ h2 { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weig
 .waiting { --c: rgb(var(--warm)); background: linear-gradient(var(--warm-bg), var(--warm-bg)), rgba(var(--fill), 0.7); border-color: rgba(var(--warm), 0.4); }
 .progress { --c: rgb(var(--live)); }
 .next { --c: rgb(var(--ink)); }
+.small { --c: rgb(var(--warm)); }
 .ideas { --c: var(--t3); }
 .done { --c: rgb(var(--ok)); }
 :root[data-theme="dark"] .next { --c: rgb(var(--soft)); }

@@ -89,6 +89,7 @@ h2 { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weig
 .waiting { --c: rgb(var(--warm)); background: linear-gradient(var(--warm-bg), var(--warm-bg)), rgba(var(--fill), 0.7); border-color: rgba(var(--warm), 0.4); }
 .progress { --c: rgb(var(--live)); }
 .next { --c: rgb(var(--ink)); }
+.small { --c: rgb(var(--warm)); }
 .ideas { --c: var(--t3); }
 .done { --c: rgb(var(--ok)); }
 :root[data-theme="dark"] .next { --c: rgb(var(--soft)); }
@@ -112,12 +113,16 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <div class="pill" aria-hidden="true"></div>
     <div>
       <h1>Steward status</h1>
-      <p class="sub">Checked against git and GitHub on Oct 15. Each date is when that line last changed.</p>
+      <p class="sub">Checked against git and GitHub on Oct 24. Each date is when that line last changed.</p>
     </div>
   </header>
   <section id="waiting" class="card waiting">
     <h2><span class="dot"></span>Waiting on you <span class="count">8</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Answer the Overnight Watch questions</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Six questions, none blocks the start: provider (Twilio), when a quiet session calls you (text at 45 minutes, call at 90), a stand-in for texts while registration is pending, no Twilio package, the build order, and a second key in GitHub secrets. Design: design/overnight-watch.html.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Try Visual Review by hand</span><time datetime="2026-10-20">Oct 20</time></div>
         <p>Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.</p>
@@ -125,10 +130,6 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       <li>
         <div class="row"><span class="name">Try the movable panel by hand</span><time datetime="2026-10-21">Oct 21</time></div>
         <p>Smoke is hidden now, so you can run the app. Drag the panel by its top bar, close it, open it again (it should pop in where you left it), double-click the bar to put it back. Frost flicker, Reduce Motion, a second screen and the pin are not checked yet.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Dependabot #30</span><time datetime="2026-10-22">Oct 22</time></div>
-        <p>Six minor and patch updates, still open. Merge once CI is green.</p>
       </li>
       <li>
         <div class="row"><span class="name">Try notch 3b by hand</span><time datetime="2026-10-20">Oct 20</time></div>
@@ -147,8 +148,8 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
         <p>Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Overnight Watch account</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Set up the phone/text account. Registration takes days. <span class="tag">unconfirmed: only in research notes</span></p>
+        <div class="row"><span class="name">Start the Overnight Watch phone account</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Make a Twilio account and a US number, then start US text registration (it takes days, and review runs while the first phases are built). Steps, costs and where the keys go: design/overnight-watch.html, section 6. You type the keys into the app yourself, never into a chat.</p>
       </li>
     </ul>
   </section>
@@ -156,37 +157,41 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <h2><span class="dot"></span>In progress <span class="count">1</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Nothing is being built right now</span><time datetime="2026-10-22">Oct 22</time></div>
-        <p>Every build chat is done. The next ones wait for your go (see Up next). The showcase now lists every feature, with a new Island section.</p>
+        <div class="row"><span class="name">Nothing is being built right now</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Notch island Phase 1 is merged. The next builds wait for your go: island Phases 2 to 5 in Main building, Visual Review 1b in Feature building.</p>
       </li>
     </ul>
   </section>
   <section id="next" class="card next">
-    <h2><span class="dot"></span>Up next <span class="count">7</span></h2>
+    <h2><span class="dot"></span>Up next <span class="count">8</span></h2>
     <ul>
       <li>
+        <div class="row"><span class="name">Notch island, Phases 2 to 5</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Phase 1 is merged (PR #34, a4fc04f). Next: the note and the settle, the approval and review sizes with Steward joining, the hand-off to the side panel, hardening. Each waits for your go typed into Main building.</p>
+      </li>
+      <li>
         <div class="row"><span class="name">Visual Review, Phase 1b: Look closely</span><time datetime="2026-10-22">Oct 22</time></div>
-        <p>A big before and after viewer (slide, side by side, flip, zoom to the real pixels, keys, the two decisions inside it) and a one-line &quot;Claude says&quot; note on what changed. Design page: design/visual-review-viewer.html. Recommended before Phase 2. Waits for your go in Feature building.</p>
+        <p>A big before and after viewer (slide, side by side, flip, zoom to the real pixels, keys, the two decisions inside it) and a one-line &quot;Claude says&quot; note on what changed. Design page: design/visual-review-viewer.html. Waits for your go in Feature building.</p>
       </li>
       <li>
         <div class="row"><span class="name">Visual Review, Phase 2: the alert</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>Tell me: an alert when a Claude turn changed what the page looks like. Waits for your go in Feature building.</p>
+        <p>Tell me: an alert when a Claude turn changed what the page looks like, plus the review history. Overnight Watch uses that history. Waits for your go in Feature building.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Movable panel, Phase 2: screens and edges</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Waits for you to try Phase 1, then your go in Main building.</p>
+        <div class="row"><span class="name">Visual Review, Phases 3 and 4</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Phase 3: highlight what changed, and phone width. Phase 4: a spike on holding the Stop hook, then the opt-in &quot;hold for my review&quot; setting. Recommended after Overnight Watch phase 4 (see below), not before.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Notch island, Phase 1: the joined shape</span><time datetime="2026-10-22">Oct 22</time></div>
-        <p>Brief is ready (you said covering the menu bar is fine). Phase 1: the one joined black shape with compact, Steward peeking and stepping into it, the Smart right side and hover. It moves to In progress when you type the go into Main building.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Notch 3c: drop images</span><time datetime="2026-10-20">Oct 20</time></div>
-        <p>Drag an image onto the notch and it goes into the tray. Starts with a spike on drag events. Waits for your go in Main building. 3d, the optional morph, comes after.</p>
+        <div class="row"><span class="name">Overnight Watch (designed)</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Go rest, I've got the build: a goodnight card, then Steward watches sessions, deploys and CI while the Mac is awake, calls for urgent things, texts for things waiting on you, and shows a night report in the morning. Five small phases; 1 to 3 need no phone account. Brief: docs/briefs/overnight-watch.md. Design: design/overnight-watch.html. Recommended order: Visual Review 1b and 2, then Overnight Watch 1 to 3, then 4, then Visual Review 3 and 4. Waits for your answers and your go in Feature building.</p>
       </li>
       <li>
         <div class="row"><span class="name">Site, Phase 2: the five scenes</span><time datetime="2026-10-19">Oct 19</time></div>
         <p>On hold until your vision talk. Then your go, typed into Site building.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch 3c: drop images</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Does not fold into the island: it is a separate feature (drag events on the notch window). Its spike can run any time, but its &quot;mouth&quot; look was drawn for the old chin, so it needs a small redraw as the island growing to the note size. Best after island Phase 1 is in the app, which it now is. Waits for your go in Main building.</p>
       </li>
       <li>
         <div class="row"><span class="name">Idea inbox and Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
@@ -194,29 +199,50 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       </li>
     </ul>
   </section>
-  <section id="ideas" class="card ideas">
-    <h2><span class="dot"></span>Ideas not planned yet <span class="count">23</span></h2>
+  <section id="small" class="card small">
+    <h2><span class="dot"></span>Small fixes, later <span class="count">9</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Overnight Watch</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Hero feature. Decided, nothing designed. Needs the phone/text account.</p>
+        <div class="row"><span class="name">Movable panel, Phase 2: screens and edges</span><time datetime="2026-10-21">Oct 21</time></div>
+        <p>A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Moved here from Up next.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Model line in Settings</span><time datetime="2026-10-15">Oct 15</time></div>
+        <div class="row"><span class="name">Feature building row in CLAUDE.md</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>The front door's docs commit that adds the Feature building row to the chat table in CLAUDE.md. Not in main yet.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch nudge: short entrance in smoke</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>The smoke check for the notch nudge's short entrance. One nudge check missed once on CI, unexplained.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">release.yml does not set STEWARD_SMOKE_NOTCH</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>The release workflow runs smoke without the pretend notch that the CI workflow sets.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Model line in Settings</span><time datetime="2026-10-24">Oct 24</time></div>
         <p>Show which model answered.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Confused mood trigger</span><time datetime="2026-10-15">Oct 15</time></div>
+        <div class="row"><span class="name">Confused mood trigger</span><time datetime="2026-10-24">Oct 24</time></div>
         <p>The Confused mood exists but nothing sets it.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Stray thumbnail in the Showcase</span><time datetime="2026-10-15">Oct 15</time></div>
+        <div class="row"><span class="name">Stray thumbnail in the Showcase</span><time datetime="2026-10-24">Oct 24</time></div>
         <p>Bug. A leftover screenshot thumbnail on the page.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Haiku 5.5 for cheap jobs</span><time datetime="2026-10-15">Oct 15</time></div>
+        <div class="row"><span class="name">Friendly names in alerts</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Alerts say plain words (&quot;wants to switch branch&quot;) instead of raw tool names like mcp__ccd_directory__propose_branch.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Haiku 5.5 for cheap jobs</span><time datetime="2026-10-24">Oct 24</time></div>
         <p>Check it works with Steward's tools.</p>
       </li>
+    </ul>
+  </section>
+  <section id="ideas" class="card ideas">
+    <h2><span class="dot"></span>Ideas not planned yet <span class="count">17</span></h2>
+    <ul>
       <li>
         <div class="row"><span class="name">First run: API key or Claude login</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Decide what a new user sees first.</p>
@@ -274,10 +300,6 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
         <p>On screens without a notch (external monitors), draw a notch-like home at the top center, so monitors get the same always-findable spot. Would also let notch features be tested on a monitor.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Friendly names in alerts</span><time datetime="2026-10-16">Oct 16</time></div>
-        <p>Alerts say plain words (&quot;wants to switch branch&quot;) instead of raw tool names like mcp__ccd_directory__propose_branch.</p>
-      </li>
-      <li>
         <div class="row"><span class="name">Hats and glasses</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Parked.</p>
       </li>
@@ -292,8 +314,24 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="done" class="card done">
-    <h2><span class="dot"></span>Done <span class="count">27</span></h2>
+    <h2><span class="dot"></span>Done <span class="count">31</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Notch island, Phase 1</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Merged into main (PR #34, a4fc04f): Steward peeks out of the notch and the island grows while Claude works. Phases 2 to 5 wait for your go in Main building.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Settings is no longer hidden behind the panel</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Merged into main (PR #33, b13cf70).</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Visual Review: quiet checks</span><time datetime="2026-10-23">Oct 23</time></div>
+        <p>Merged into main (PR #32, be57476): says when nothing changed and catches soft color changes.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Dependabot #30</span><time datetime="2026-10-22">Oct 22</time></div>
+        <p>Merged into main (6fb7904): six minor and patch updates.</p>
+      </li>
       <li>
         <div class="row"><span class="name">Hidden smoke</span><time datetime="2026-10-22">Oct 22</time></div>
         <p>Merged into main (PR #29, 3f174f9): smoke runs hidden by default (windows at 1% opacity, click-through, never focused), one run at a time, with a pretend notch on CI. Testing on your Mac is back on. One notch nudge miss on CI is unexplained.</p>
