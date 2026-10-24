@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, underNotch } from '../shared/notch'
+import { islandParts, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, underNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
@@ -59,6 +59,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
+import { islandStatus, nextChange, noteTurn, type Turns } from './island-status'
 import { ReviewTracker } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
@@ -1206,6 +1207,7 @@ function sendMood(): void {
 
 function sendSessions(): void {
   win?.webContents.send('sessions:changed', sessions.list())
+  updateIsland()
   updateMenuBar()
 }
 
@@ -1254,7 +1256,30 @@ async function deployLogs(projectName: string, deploymentId?: string): Promise<{
   return { deploymentId: id, log: await fetchBuildLog(id, link.orgId, token) }
 }
 
+/** The notch island: the turns going on (a prompt sent, until Claude stops), Steward's own, and the reviews waiting. */
+let islandTurns: Turns = {}
+let agentSince: number | undefined
+let pendingReviews = 0
+let islandTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
+ * whenever something it shows from changes; a finished check goes by itself, so the next look is set for then.
+ */
+function updateIsland(): void {
+  if (!notch || !sessions || !agent) return
+  const now = Date.now()
+  if (!agent.busy) agentSince = undefined
+  else agentSince ??= now
+  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, now }
+  notch.setIsland(islandStatus(input))
+  clearTimeout(islandTimer)
+  const next = nextChange(input)
+  if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
+}
+
 async function onHookEvent(event: HookPayload): Promise<void> {
+  islandTurns = noteTurn(islandTurns, event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
@@ -1269,7 +1294,11 @@ async function onHookEvent(event: HookPayload): Promise<void> {
 
 /** The reviews waiting for a decision go to the panel: the card at its top. */
 function sendReviews(): void {
-  void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
+  void reviews.pending().then((list) => {
+    win?.webContents.send('review:changed', list)
+    pendingReviews = list.length
+    updateIsland()
+  })
 }
 
 /** A check that found no visible change goes to the panel as a quiet line, so it's never silent. */
@@ -1611,7 +1640,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
       await checkSettingsClearOfPanel()
       clearTimeout(besideTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 130_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       if (unseen?.focusTaken()) return fail('a window took keyboard focus in a hidden run')
@@ -2452,6 +2481,7 @@ async function checkNotch(out: string): Promise<void> {
     await settings.update({ steward: { presence: 'always' } })
     presenceChanged()
   }
+  await checkIsland(out)
   const idle = Number(process.env.STEWARD_SMOKE_IDLE ?? 0)
   const measure = async (what: string) => {
     const pid = notch.pid()
@@ -2475,6 +2505,120 @@ async function checkNotch(out: string): Promise<void> {
   replaceForNotch()
   if (!win?.isVisible()) throw new Error('the tab did not come back to the edge')
   console.log('smoke: notch off, the tab is back at the edge')
+}
+
+/**
+ * The notch island (Settings → Steward → In the notch → Island), driven by the hook events Claude Code sends. At rest
+ * there's no island and Steward peeks out from behind the notch's left edge, part of it showing, the rest hidden. A
+ * prompt sent grows the compact island out of the notch: Steward steps into its left side and a spinner with the time
+ * shows on its right; a second project shows a count; the cursor on it widens it a little; Claude stopping leaves a
+ * check; with nothing going on it shrinks back into the notch and Steward peeks again. Asleep (Only when needed),
+ * Steward is tucked fully behind the notch. The growing and the stepping in are drawn frame by frame.
+ */
+async function checkIsland(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const geo = notchGeo!
+  await settings.update({ steward: { notch: true, notchStyle: 'island', presence: 'always' } })
+  presenceChanged()
+  replaceForNotch()
+  notch.restyle()
+  // Nothing going on to start with (reviews from the Visual Review check are left out).
+  pendingReviews = 0
+  islandTurns = {}
+  updateIsland()
+  await sleep(1500)
+  const page = notch.contents()!
+  const layout = notch.state().layout!
+  const hw = layout.width / 2
+  const pixel = (img: Electron.NativeImage, x: number, y: number) => {
+    const { width, height } = img.getSize()
+    const k = width / NOTCH_WINDOW.width
+    const i = (Math.min(height - 1, Math.round(y * k)) * width + Math.min(width - 1, Math.round(x * k))) * 4
+    const b = img.toBitmap()
+    return { alpha: b[i + 3], light: Math.max(b[i], b[i + 1], b[i + 2]) }
+  }
+  const shot = async () => (await notch.capture())!
+  const black = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha > 200 && pixel(img, x, y).light < 30
+  const clear = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha < 20
+  /** Steward's body (lit, not black, not see-through) at this point, a little under where its eyes are. */
+  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 200 && pixel(img, x, y + 9).light > 40
+  const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
+  const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string) =>
+    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : {}) } as HookPayload)
+
+  // At rest: no island; Steward peeks out past the notch's left edge, and nothing is on its right.
+  const restPill = islandParts('rest', layout).pill
+  let img = await shot()
+  if (notch.state().island?.right !== null) throw new Error(`the island shows "${notch.state().island?.right}" with nothing going on`)
+  if (!steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('at rest, Steward does not peek out past the notch\'s left edge')
+  if (!black(img, layout.cx - hw + 4, 8) || !black(img, layout.cx, 8)) throw new Error('at rest, the notch is not black where Steward hides behind it')
+  if (!clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx - hw - 60, 8)) throw new Error('at rest, there is an island beside the notch')
+  await fs.writeFile(out.replace(/\.png$/, '-island-rest.png'), img.toPNG())
+
+  // A prompt sent: the compact island grows out of the notch, Steward steps into its left side, the time on its right.
+  const grows = await motionLook(page, '.isl .bp', '.isl')
+  smoothly(`the island growing out of the notch${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-1')))
+  const compact = islandParts('compact', layout)
+  img = await shot()
+  if (notch.state().island?.right !== 'working') throw new Error(`a prompt sent did not show as working (${notch.state().island?.right})`)
+  if (!black(img, layout.cx - hw - 60, 6) || !black(img, layout.cx + hw + 60, 6)) throw new Error('the compact island did not grow out of the notch on both sides')
+  if (!clear(img, layout.cx + compact.width / 2 + 6, 6)) throw new Error('the compact island is wider than it should be')
+  if (!steward(img, layout.cx + compact.pill.x, compact.pill.y)) throw new Error("Steward did not step into the compact island's left side")
+  let side = await right()
+  if (!side.html.includes('isl-spin') || !/^\d+:\d\d$/.test(side.time) || side.shown < 0.9) throw new Error(`the island's right side shows "${side.html}" (time "${side.time}"), not a spinner and the time`)
+  await fs.writeFile(out.replace(/\.png$/, '-island-working.png'), img.toPNG())
+  console.log(`smoke: island: at rest Steward peeks from the notch; a prompt grows the compact island (${compact.width}x${compact.height}), Steward steps in, the time shows (${side.time})`)
+
+  // The cursor on it: a little wider.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 10 }
+  await sleep(700)
+  img = await shot()
+  if (!notch.state().hover || !black(img, layout.cx + compact.width / 2 + 3, 6)) throw new Error('the cursor on the island did not widen it')
+  smokeNotchCursor = null
+  await sleep(900)
+  if (notch.state().hover || !clear(await shot(), layout.cx + compact.width / 2 + 3, 6)) throw new Error('the island did not narrow again once the cursor left')
+
+  // A second project: a count. Both stopping: a check. Then nothing going on: back into the notch, Steward peeking.
+  await hook('UserPromptSubmit', 'smoke-island-2')
+  await sleep(500)
+  side = await right()
+  if (notch.state().island?.right !== 'two' || side.count !== '2') throw new Error(`two projects working show "${side.html}"`)
+  await hook('Stop', 'smoke-island-1')
+  await hook('Stop', 'smoke-island-2')
+  await sleep(500)
+  side = await right()
+  if (notch.state().island?.right !== 'finished' || !side.html.includes('isl-check')) throw new Error(`Claude stopping shows "${side.html}", not a check`)
+  const stepsOut = await motionLook(page, '.isl-pill', '.isl')
+  smoothly(`Steward stepping out of the island${stepsOut.label}`, await watchMotion(page, stepsOut, 900, () => {
+    for (const id of ['smoke-island-1', 'smoke-island-2']) sessions.dismiss(id)
+    sendSessions()
+  }))
+  img = await shot()
+  if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
+  console.log('smoke: island: wider with the cursor on it, a count for two projects, a check when Claude stops, then back into the notch')
+
+  // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
+  raise({ key: 'approval:smoke-island', level: 'urgent', title: 'A session needs you', detail: 'under the island' })
+  alerts.flush()
+  await sleep(900)
+  img = await shot()
+  if (dock !== 'nudge' || !notch.state().nudge || !black(img, layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('with an alert under the notch, the island is not the chin the alert joins')
+  setDock('collapsed')
+  await sleep(700)
+  if (!clear(await shot(), layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('after the alert, the island did not go back into the notch')
+  console.log('smoke: island: an alert under the notch joins the island, grown into a chin, and it goes back after')
+
+  // Asleep: Steward tucked fully behind the notch.
+  await settings.update({ steward: { presence: 'quiet' } })
+  presenceChanged()
+  await sleep(1200)
+  img = await shot()
+  if (!clear(img, layout.cx - hw - 12, restPill.y) || !black(img, layout.cx, 8)) throw new Error('asleep, Steward is not tucked behind the notch')
+  console.log('smoke: island: asleep, Steward is tucked behind the notch')
+  await settings.update({ steward: { presence: 'always', notchStyle: 'chin' } })
+  presenceChanged()
+  notch.restyle()
+  sendReviews()
 }
 
 /**
@@ -3085,6 +3229,7 @@ app.whenReady().then(async () => {
     name: () => settings.steward().name,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
+      updateIsland()
       // Peek out when the agent needs a decision; the approval card is in the panel.
       if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Steward needs your OK', detail: event.command, mood: 'needs-you' })
     },
@@ -3113,6 +3258,7 @@ app.whenReady().then(async () => {
   })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
+  updateIsland()
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
   await refreshNotch()
   win = createWindow()

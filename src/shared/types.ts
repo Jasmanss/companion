@@ -18,7 +18,21 @@ export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphit
 /** The color the panel's glass is tinted with. */
 export type PanelTint = 'ice' | 'lilac' | 'mint' | 'peach' | 'graphite'
 
-export type NotchStyle = 'chin' | 'wings'
+export type NotchStyle = 'chin' | 'wings' | 'island'
+
+/**
+ * What the island's right side shows (the Smart choice): Claude working (a spinner and the time), two projects working
+ * (a spinner and a count), finished (a check), needs you (an amber mark), a review ready (a thumbnail).
+ */
+export type IslandRight = 'working' | 'two' | 'finished' | 'needs' | 'review'
+export interface IslandStatus {
+  /** null: nothing going on, so no island; Steward peeks from the notch. */
+  right: IslandRight | null
+  /** Working: when the turn began, so the time counts up from it. */
+  since?: number
+  /** Two projects: how many are working. */
+  count?: number
+}
 
 /** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
 export type Presence = 'always' | 'quiet'
@@ -55,6 +69,8 @@ export interface NotchState {
   hover?: boolean
   /** An alert is out under the notch, joined to the chin (Wings grows its chin for it). */
   nudge?: boolean
+  /** The island (Settings → Steward → In the notch → Island): what it shows. */
+  island?: IslandStatus
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
