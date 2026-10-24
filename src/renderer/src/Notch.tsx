@@ -89,7 +89,7 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, prefs }: 
     if (notchStyle === 'island') {
       const lit = palette(version, { color: colorHex(color), tinted: true, light: false, mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
       const face = buildIsland(el, { layout: { cx, width, height }, kind: version, color: colorHex(color), lit, mouth, light: !dark, reduced })
-      reshape.current = (_mood, isAwake, isHovered, nudgeOut) => face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right }), isHovered, islandNow.current)
+      reshape.current = (_mood, isAwake, isHovered, nudgeOut) => face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: !!islandNow.current.note }), isHovered, islandNow.current)
       reshape.current(st.mood, awakeNow.current, hoverNow.current, nudgeNow.current)
       let pointer: { x: number; y: number } | null = null
       const off = api.notch.onCursor((p) => (pointer = p))
