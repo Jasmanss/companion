@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="showcase/shelf.css">
 <link rel="stylesheet" href="showcase/mascot.css">
 <link rel="stylesheet" href="showcase/peeking.css">
+<link rel="stylesheet" href="showcase/reactions.css">
 <style>
 /* ---------- page ---------- */
 :root{--bg:#F3F4F7;--card:#fff;--line:#E2E4EA;--text:#1C1F25;--muted:#596070;--accent:#2F6FEB;--chip:#fff;--barbg:rgba(243,244,247,.88);--barh:120px;color-scheme:light}
@@ -457,6 +458,7 @@ figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
     <a href="#docking"><b>6</b>Docking</a>
     <a href="#island"><b>7</b>The notch island</a>
     <a href="#newer"><b>8</b>Added since</a>
+    <a href="#reactions"><b>9</b>Steward's reactions</a>
     <a href="#features"><b>·</b>Every feature</a>
   </nav>
   <main>
@@ -468,6 +470,7 @@ figcaption{font-size:11.5px;font-weight:800;color:var(--muted)}
     <section class="sec" id="docking"><h2>6. Docking</h2><p class="lead">Where Steward sits when you aren't using it, and how it gets out.</p><div class="content"></div></section>
     <section class="sec" id="island"><h2>7. The notch island</h2><p class="lead">Peeking, as one island joined to the notch: Steward peeks from behind the notch, and the island grows out of it in the size the message needs, with Steward joining it when it is big. The main chat stays in the side panel. The earlier tries are folded under it.</p><div class="content"></div></section>
     <section class="sec" id="newer"><h2>8. Added since</h2><p class="lead">What was built after the first showcase, and the next piece of Visual Review.</p><div class="content"></div></section>
+    <section class="sec" id="reactions"><h2>9. Steward's reactions</h2><p class="lead">Steward watches your chats, so its face should say what they are doing: focusing, juggling, a quick nod or a proud finish, confused, frustrated, and a calm idle loop. Planned, not built; the brief is docs/briefs/steward-reactions.md.</p><div class="content"></div></section>
     <section class="sec" id="features"><h2>Every feature on this page</h2><p class="lead">Each card above, with its status and the page it came from.</p><div class="content"></div></section>
   </main>
 </div>
@@ -484,6 +487,7 @@ import * as shelf from './showcase/shelf.js'
 import * as mascot from './showcase/mascot.js'
 import * as peeking from './showcase/peeking.js'
 import * as newer from './showcase/newer.js'
+import * as reactions from './showcase/reactions.js'
 import { esc } from './shared/activity.js'
 
 applyRoot()
@@ -530,11 +534,12 @@ peeking.render(content('island'))
 
 
 newer.render(content('newer'))
+reactions.render(content('reactions'))
 // Cards that run no timeline of their own still freeze their CSS loops (resting glows, live dots) off screen.
 document.querySelectorAll('.feat:not([data-demo])').forEach(watch)
 
 /* ---------------- every feature ---------------- */
-const NAMES = ['', 'Character and moods', 'Activity animations', 'A full request', 'Liquid glass', 'The panel', 'Docking', 'The notch island', 'Added since']
+const NAMES = ['', 'Character and moods', 'Activity animations', 'A full request', 'Liquid glass', 'The panel', 'Docking', 'The notch island', 'Added since', 'Steward\'s reactions']
 const count = (label) => FEATURES.filter((f) => f.status === label).length
 content('features').innerHTML = `<div class="counts">${Object.values(STATUS).map(([l, k]) => `<span class="tag ${k}">${l}: ${count(l)}</span>`).join('')}</div>
   <table class="ftable"><thead><tr><th>Feature</th><th>Section</th><th>Status</th><th>From</th></tr></thead><tbody>${FEATURES.map((f) => {

@@ -102,6 +102,25 @@ const PX = {
   done: ['happy', 'happy'], celebrating: ['happy', 'happy'], 'needs-you': ['big', 'big'], worried: ['worried', 'worried'],
   mad: ['mad', 'mad'], confused: ['big', 'short'], resting: ['heavy', 'heavy'], sleepy: ['asleep', 'asleep'],
 }
+/* ---------------- moods added by other pages ---------------- */
+/**
+ * A page can add moods without touching the twelve above (design/pill/reactions.js adds Steward's reactions).
+ * A definition: { id, V (vector targets), blink (seconds between blinks, 0 never), px ([left, right] blocky sprites),
+ *   still ([lookX, lookY] for reduced motion), look(st, t, age, px, py, glancing, g) -> [x, y],
+ *   tweak(tg, side, st, t, age) (changes one eye's targets each frame), body(B, st, t, age),
+ *   say(t, age) -> { open, round, stress } (the mouth, for a yawn), marks(out, st, o, age, rm) }.
+ * The hooks run only when motion is allowed; reduced motion holds V and still.
+ */
+export const EXT = {}
+export function addMoods(defs) {
+  for (const d of defs) {
+    EXT[d.id] = d
+    if (d.V) V[d.id] = d.V
+    if (d.blink !== undefined) BLINK[d.id] = d.blink
+    if (d.px) PX[d.id] = d.px
+  }
+}
+
 /** Talking's pixel mouths, as [column, row] cells under the eyes (which move up a row to make room). */
 const PX_MOUTH = {
   line: [[6, 5], [7, 5], [8, 5], [9, 5]],
@@ -203,7 +222,7 @@ export function stepEyes(st, t, dt, pointer, rm = false) {
   const restGlance = m === 'resting' && !rm && t < R.until
 
   // Talking: where the mouth is heading this frame. Reduced motion holds it half open.
-  const say = !talking ? { open: 0, round: 0, stress: 0 } : rm ? { open: 0.45, round: 0, stress: 0 } : speech(t)
+  const say = !talking ? (EXT[m]?.say && !rm ? EXT[m].say(t, age) : { open: 0, round: 0, stress: 0 }) : rm ? { open: 0.45, round: 0, stress: 0 } : speech(t)
   st.say.stress = say.stress
 
   const targets = {}
@@ -217,6 +236,7 @@ export function stepEyes(st, t, dt, pointer, rm = false) {
       if (mouth) tg.squint += 0.36 * say.stress // a small squint on stressed words
       if (talking && !mouth) tg.sy *= 0.72 + 0.32 * st.say.open // no mouth: the eyes bounce with the words
       if (m === 'resting' && near && !restGlance) tg.lid = 0.28 // the cursor came close: lids lift
+      EXT[m]?.tweak?.(tg, side, st, t, age)
     }
     targets[side] = tg
   }
@@ -238,6 +258,7 @@ export function stepEyes(st, t, dt, pointer, rm = false) {
     case 'confused': lx = 0; ly = 0; break // each eye has its own offset
     case 'resting': if (restGlance) { lx = -0.8; ly = 0.05 } else if (near && !rm) { lx = px * 0.4; ly = 0.2 + py * 0.25 } else { lx = 0.1; ly = 0.45 } break
     case 'sleepy': lx = 0; ly = 0.35; break
+    default: { const e = EXT[m]; if (e) { const r = !rm && e.look ? e.look(st, t, age, px, py, glancing, g) : (e.still ?? [0, 0]); lx = r[0]; ly = r[1] } }
   }
 
   // The body leans for confused, which rocks slowly from side to side. Resting keeps still to stay cheap.
@@ -292,6 +313,7 @@ export function stepEyes(st, t, dt, pointer, rm = false) {
   if (m === 'mad') { B.tx = 0.025 * Math.sin(age * 58) * Math.exp(-age * 3.5); B.ty = 0.01 }
   if (m === 'worried') B.tx = 0.005 * Math.sin(t * 41)
   if (m === 'sleepy') { const br = 0.5 - 0.5 * Math.cos((t * Math.PI * 2) / 4.6); B.sc = 1 + 0.03 * br; B.ty = 0.035 * br } // slow breathing
+  EXT[m]?.body?.(B, st, t, age)
   return st
 }
 
@@ -407,14 +429,14 @@ export function vectorEyes(st, G) {
 
 /* ---------------- marks outside the eyes ---------------- */
 const easeOutBack = (x) => 1 + 2.70158 * (x - 1) ** 3 + 1.70158 * (x - 1) ** 2
-const pop = (age, rm) => (rm ? 1 : age >= 0.35 ? 1 : Math.max(0, easeOutBack(age / 0.35)))
+export const pop = (age, rm) => (rm ? 1 : age >= 0.35 ? 1 : Math.max(0, easeOutBack(age / 0.35)))
 // Where confetti comes to rest after the bursts (and the still scatter for reduced motion), in symbol sizes.
 const SCATTER = [
   { x: 0.55, y: -0.8, rot: 20, c: 0, shape: 'rect' }, { x: 1.15, y: -0.3, rot: -35, c: 1, shape: 'dot' },
   { x: 0.1, y: -1.3, rot: 60, c: 2, shape: 'rect' }, { x: 1.0, y: -1.15, rot: 10, c: 1, shape: 'rect' },
   { x: -0.25, y: -0.6, rot: 0, c: 2, shape: 'dot' },
 ]
-function confetti(age, rm, peek) {
+export function confetti(age, rm, peek) {
   const flip = (p) => (peek ? { ...p, x: -p.x * 0.9 } : p) // at the screen edge, spray inward instead
   const keep = peek ? 4 : 5
   if (rm) return SCATTER.slice(0, keep).map((p) => flip({ ...p, a: 1 }))
@@ -475,6 +497,7 @@ export function marks(st, o) {
     case 'talking': // with the mouth off, glass speaks in ripples instead
       if (!o.mouth && o.glass && !rm) for (let i = 0; i < 2; i++) { const u = ((age / 1.1) + i / 2) % 1; out.rings.push({ u, a: (1 - u) * (0.35 + 0.65 * st.say.open), kind: 'voice' }) }
       break
+    default: EXT[m]?.marks?.(out, st, o, age, rm)
   }
   return out
 }
