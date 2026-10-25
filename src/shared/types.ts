@@ -34,6 +34,17 @@ export interface IslandStatus {
   since?: number
   /** Two projects: how many are working. */
   count?: number
+  /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
+  note?: IslandNote
+}
+/** finished: "Main building finished", and what Claude said. started: a second project started while one works. */
+export interface IslandNote {
+  kind: 'finished' | 'started'
+  /** The chat's name (or the project's), in bold, then the rest. */
+  name: string
+  text: string
+  /** When it was shown: a new note, even one saying the same, is a new message. */
+  at: number
 }
 
 /** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
@@ -73,6 +84,8 @@ export interface NotchState {
   nudge?: boolean
   /** The island (Settings → Steward → In the notch → Island): what it shows. */
   island?: IslandStatus
+  /** The panel is open at the side: which way it is from the notch (x and y from -1 to 1), for Steward to look at. */
+  panel?: { x: number; y: number } | null
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
@@ -207,8 +220,10 @@ export type SessionState = 'working' | 'needs-approval' | 'needs-input' | 'finis
 
 export interface SessionView {
   id: string
-  /** The matching project's name, or the folder name. */
+  /** The chat's own name in the Claude app, else the matching project's name, or the folder name. */
   name: string
+  /** With a chat name: the project or folder, as a quieter second word. */
+  place?: string
   projectPath: string | null
   cwd: string
   state: SessionState

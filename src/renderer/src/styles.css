@@ -545,6 +545,12 @@ pre {
   height: 11px;
 }
 
+/* Until the page draws its first frame, the way in waits at its start (Nudge.tsx, useDrawn). */
+.notch-nudge.wait,
+.notch-nudge.wait * {
+  animation-play-state: paused;
+}
+
 /* Going back up into the notch: the pieces, not the whole (App.tsx waits for the middle's end). */
 :root[data-leaving] #root > .notch-nudge {
   animation: none;
@@ -583,16 +589,10 @@ pre {
   animation: panel-in 0.35s var(--spring) backwards;
 }
 
-/* Docked in the notch, the panel comes down from it: it grows from its top center instead of sliding in from the side. */
-:root[data-notch] .panel {
-  transform-origin: 50% 0;
-  animation-name: panel-drop;
-}
-
-/* Closing goes back up into the notch, the entrance in reverse, and then the window goes (App.tsx says when). */
+/* Docked in the notch, the panel opens at the side and slides in from it, as at the edge. Closing, it slides back out
+   toward its side, the entrance in reverse, and then the window goes (App.tsx says when): there's no tab to go back to. */
 :root[data-leaving] #root > * {
-  transform-origin: 50% 0;
-  animation: panel-rise 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 
@@ -2864,17 +2864,10 @@ button.rvv-flip-tag {
   }
 }
 
-@keyframes panel-drop {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-}
-
-@keyframes panel-rise {
+@keyframes panel-out {
   to {
     opacity: 0;
-    transform: translateY(-8px) scale(0.96);
+    transform: translateX(calc(12px * var(--side)));
   }
 }
 
@@ -3158,11 +3151,7 @@ button.rvv-flip-tag {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
-  /* From the notch, the panel only fades in, and out. */
-  :root[data-notch] .panel {
-    animation-name: fadein;
-  }
-
+  /* Closing in the notch, the panel only fades out. */
   :root[data-leaving] #root > * {
     animation-name: panel-fade-out;
   }

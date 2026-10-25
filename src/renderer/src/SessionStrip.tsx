@@ -23,7 +23,10 @@ export function SessionStrip({ sessions, onDismiss }: { sessions: SessionView[];
             <button className={`session-chip ${s.state} ${s.id === openId ? 'on' : ''}`} onClick={() => setOpenId(s.id === openId ? null : s.id)} aria-expanded={s.id === openId}>
               <span className="session-dot" aria-hidden />
               <span className="session-name">{s.name}</span>
-              <span className="session-state">{s.state === 'finished' ? `finished ${ago(s.updatedAt)}` : LABEL[s.state]}</span>
+              <span className="session-state">
+                {s.place && `${s.place} · `}
+                {s.state === 'finished' ? `finished ${ago(s.updatedAt)}` : LABEL[s.state]}
+              </span>
             </button>
           </li>
         ))}

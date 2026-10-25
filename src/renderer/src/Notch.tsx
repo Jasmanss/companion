@@ -44,10 +44,12 @@ export function NotchWindow() {
     return () => window.removeEventListener('click', click)
   }, [])
   if (!state?.layout) return null
-  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} island={state.island ?? NO_ISLAND} prefs={prefs} />
+  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} island={state.island ?? NO_ISLAND} panel={state.panel ?? null} prefs={prefs} />
 }
 
-function NotchFace({ layout, mood, glint, awake, hover, nudge, island, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; island: IslandStatus; prefs: StewardPrefs }) {
+type Look = { x: number; y: number }
+
+function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; island: IslandStatus; panel: Look | null; prefs: StewardPrefs }) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), performance.now() / 1000))
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
@@ -73,15 +75,18 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, prefs }: 
   const hoverNow = useRef(hover)
   const nudgeNow = useRef(nudge)
   const islandNow = useRef(island)
+  // The panel open at the side: the eyes look toward it when the cursor isn't near.
+  const panelNow = useRef(panel)
   useEffect(() => {
     hoverNow.current = hover
     nudgeNow.current = nudge
     islandNow.current = island
-  }, [hover, nudge, island])
+    panelNow.current = panel
+  }, [hover, nudge, island, panel])
   useEffect(() => {
     setMood(st, mood, glint)
     reshape.current?.(mood, awake, hover, nudge)
-  }, [st, mood, glint, awake, hover, nudge, island])
+  }, [st, mood, glint, awake, hover, nudge, island, panel])
 
   useEffect(() => {
     const el = host.current
@@ -89,12 +94,13 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, prefs }: 
     if (notchStyle === 'island') {
       const lit = palette(version, { color: colorHex(color), tinted: true, light: false, mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
       const face = buildIsland(el, { layout: { cx, width, height }, kind: version, color: colorHex(color), lit, mouth, light: !dark, reduced })
-      reshape.current = (_mood, isAwake, isHovered, nudgeOut) => face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right }), isHovered, islandNow.current)
+      reshape.current = (_mood, isAwake, isHovered, nudgeOut) =>
+        face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: !!islandNow.current.note, open: !!panelNow.current }), isHovered, islandNow.current)
       reshape.current(st.mood, awakeNow.current, hoverNow.current, nudgeNow.current)
       let pointer: { x: number; y: number } | null = null
       const off = api.notch.onCursor((p) => (pointer = p))
-      // Toward the cursor when it's near; otherwise toward the status, while there is one.
-      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : face.gaze()), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+      // Toward the cursor when it's near; otherwise toward the open panel, or the status while there is one.
+      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : (panelNow.current ?? face.gaze())), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
       return () => {
         stop()
         off()
@@ -107,7 +113,7 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, prefs }: 
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
-    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : null), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : panelNow.current), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
     return () => {
       stop()
       off()

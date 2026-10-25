@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { islandParts, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, underNotch } from '../shared/notch'
+import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
@@ -60,7 +60,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { islandStatus, nextChange, noteTurn, type Turns } from './island-status'
+import { hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, noteTurn, type Turns } from './island-status'
 import { ReviewTracker } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
@@ -248,14 +248,17 @@ function boundsFor(state: DockState): Electron.Rectangle {
   const spot = state === 'expanded' ? panelSpot() : null
   if (spot) return panelRect(spot.display.workArea, panelSize(spot.display.workArea), spot.spot)
   if (state === 'nudge' && inNotch() && notchGeo) return nudgeUnderNotch(notchGeo, notchDisplay().workArea, NUDGE_WIDTH)
+  const { edge, size } = settings.steward()
+  // Docked in the notch, the panel opens at the side Settings says, on the notch's screen, near its top: never under
+  // the notch, which keeps Steward.
   if ((state === 'expanded' || state === 'viewing') && inNotch() && notchGeo) {
     const area = notchDisplay().workArea
-    if (state === 'expanded') return underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
-    const size = { width: Math.min(VIEWER_MAX_WIDTH, area.width - 120), height: area.height - 48 }
-    return { ...underNotch(notchGeo, area, size), y: area.y + Math.round((area.height - size.height) / 2) }
+    const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
+    const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
+    const y = state === 'viewing' ? area.y + Math.round((area.height - height) / 2) : area.y + 8
+    return { x: edge === 'left' ? area.x + 8 : area.x + area.width - width - 8, y, width, height }
   }
   const area = screen.getPrimaryDisplay().workArea
-  const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab
   /** Left of a window this wide that sits gap points from the edge. */
   const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
@@ -346,6 +349,8 @@ function dragPanel(phase: unknown, x?: unknown, y?: unknown): void {
   if (phase === 'end') {
     if (panelDrag?.moved) savePanelPlace(win.getBounds(), panelDrag.display)
     panelDrag = null
+    // Steward in the notch looks where the panel is now.
+    placeNotch()
     return
   }
   const pointer = typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null
@@ -374,7 +379,7 @@ function savePanelPlace(bounds: Rect, display: Electron.Display): void {
 
 /**
  * Double-click on the top bar, or Settings → Steward → Reset: the panel forgets where it was moved, on every screen. An
- * open one glides home (at its edge, or under the notch), and the old way in and out is back.
+ * open one glides home (at its edge, the notch's screen in the notch), and the old way in and out is back.
  */
 async function resetPanelPlace(): Promise<void> {
   panelPlaces = {}
@@ -382,6 +387,7 @@ async function resetPanelPlace(): Promise<void> {
   await appState.update({ panelPlaces, panelDisplay })
   sendPlaced()
   if (win && !win.isDestroyed() && dock === 'expanded' && win.isVisible()) win.setBounds(boundsFor('expanded'), true)
+  placeNotch()
 }
 
 /**
@@ -485,12 +491,21 @@ const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
 /**
- * Steward shows in the notch while it's tucked away, and while a nudge is out under it, joined to its chin. The panel
- * opens under the notch and takes over from it. Not in the notch: the tab is back at the edge.
+ * Steward shows in the notch unless it was hidden by hand: tucked away, with a nudge out under it (joined to its chin),
+ * and while the panel is open at the side, looking toward it. Not in the notch: the tab is back at the edge.
  */
 function placeNotch(): void {
   notch?.setNudge(inNotch() && dock === 'nudge')
-  notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge') && !steppedAside)
+  notch?.setPanel(inNotch() ? panelLook() : null)
+  notch?.show(inNotch() && dock !== 'hidden' && !steppedAside)
+}
+
+/** Which way the open panel is from the notch, for Steward to look at; null while it isn't open. */
+function panelLook(): { x: number; y: number } | null {
+  if (!isOpen(dock) || !notchGeo) return null
+  const b = boundsFor(dock)
+  const dx = b.x + b.width / 2 - (notchGeo.x + notchGeo.width / 2)
+  return { x: Math.round(Math.max(-1, Math.min(1, dx / 300)) * 80) / 100, y: 0.35 }
 }
 
 /**
@@ -973,7 +988,7 @@ function openSettings(section?: SettingsSection): void {
     return
   }
   // Centered on the open panel's screen, unless the panel would cover part of it; then beside the panel, wherever it is
-  // (at its edge, under the notch, or dragged somewhere), when there's room.
+  // (at its edge, at its side in the notch, or dragged somewhere), when there's room.
   const panel = win && !win.isDestroyed() && isOpen(dock) && win.isVisible() ? win.getBounds() : null
   const area = (panel ? screen.getDisplayMatching(panel) : screen.getPrimaryDisplay()).workArea
   const at = clearOfPanel(area, SETTINGS_SIZE, panel)
@@ -1081,7 +1096,8 @@ function showAlerts(list: AlertView[]): void {
     asideAlerts = [...asideAlerts, ...list].slice(-MAX_HELD)
     return updateMenuBar()
   }
-  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek)
+  const island = inNotch() && settings.steward().notchStyle === 'island'
+  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
     win?.webContents.send('alerts:show', peek)
@@ -1270,6 +1286,8 @@ let islandTurns: Turns = {}
 let agentSince: number | undefined
 let pendingReviews = 0
 let islandTimer: ReturnType<typeof setTimeout> | undefined
+/** Its note, one line under the notch for a few seconds: a session finished, or a second project started. */
+const islandNotes = new IslandNotes({ changed: () => updateIsland() })
 
 /**
  * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
@@ -1280,14 +1298,28 @@ function updateIsland(): void {
   const now = Date.now()
   if (!agent.busy) agentSince = undefined
   else agentSince ??= now
-  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, now }
+  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
   notch.setIsland(islandStatus(input))
   clearTimeout(islandTimer)
   const next = nextChange(input)
   if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
 }
 
+/**
+ * News for the island's note, from a hook event (turns: the turns going on before it). Settings → Steward → "Alerts
+ * that peek out: Nothing" means no note either, and a finished turn only gets one while Notifications says so.
+ */
+function islandNote(event: HookPayload, turns: Turns): void {
+  // A new turn in any session: the island is about the work now, not what finished before.
+  if (event.hook_event_name === 'UserPromptSubmit') islandNotes.drop('finished')
+  const session = sessions.list().find((s) => s.id === event.session_id)
+  const note = hookNote(event, { turns, agentBusy: agent.busy, name: sessions.names(event).name, detail: session?.detail, now: Date.now() })
+  if (!note || settings.steward().alertPeek === 'none' || (note.kind === 'finished' && !settings.notifications().sessionFinished)) return
+  islandNotes.show(note)
+}
+
 async function onHookEvent(event: HookPayload): Promise<void> {
+  const turns = islandTurns
   islandTurns = noteTurn(islandTurns, event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
@@ -1295,6 +1327,8 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   // A prompt was sent: photograph the page now (in the background), before Claude changes it.
   if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
   const alert = await sessions.apply(event)
+  // After the session strip has it, so a note has the chat's name and a finished one what Claude said.
+  islandNote(event, turns)
   sendSessions()
   if (alert) raise(alert)
   // The turn ended: photograph it again, and keep a review if the page looks different.
@@ -1658,7 +1692,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
       await checkSettingsClearOfPanel()
       clearTimeout(besideTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 130_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       if (unseen?.focusTaken()) return fail('a window took keyboard focus in a hidden run')
@@ -2529,25 +2563,26 @@ async function checkNotch(out: string): Promise<void> {
     if (notch.state().hover || (await grown())) throw new Error(`the notch (${notchStyle}) did not shrink back once the cursor left`)
     console.log(`smoke: notch ${notchStyle}: the cursor on it ${reducedNow ? 'is seen (Reduce Motion: no growth)' : 'grows it a little'}, and leaving shrinks it back`)
 
-    // A click opens the panel under the notch, on the notch's screen, its top just under the menu bar, coming down from
-    // it. Closing it brings Steward back to the notch.
+    // A click opens the panel at the side Settings says, on the notch's screen, near its top: never under the notch. It
+    // slides in from that side, and Steward stays in the notch, looking toward it. Closing it slides it back out.
     if (notchStyle === 'chin') {
       // Kept open for the check: an open panel that loses focus folds away, and someone may be using another app.
       const keptOpen = settings.keepPanelOpen()
       await settings.update({ keepPanelOpen: true })
       setDock('expanded')
       const area = notchDisplay().workArea
-      const want = underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
       const at = win!.getBounds()
-      if (at.x !== want.x || at.y !== area.y || at.width !== want.width || at.height !== want.height) throw new Error(`the panel opened at ${JSON.stringify(at)}, not under the notch (${JSON.stringify(want)})`)
-      if (notch.visible) throw new Error('the notch window still shows with the panel open')
+      const side = settings.steward().edge
+      const atSide = side === 'left' ? at.x === area.x + 8 : at.x + at.width === area.x + area.width - 8
+      if (!atSide || at.y !== area.y + 8 || at.width !== PANEL_WIDTH) throw new Error(`the panel opened at ${JSON.stringify(at)}, not at the ${side} side of the notch's screen (${JSON.stringify(area)})`)
+      if (!notch.visible || !notch.state().panel || Math.sign(notch.state().panel!.x) !== (side === 'left' ? -1 : 1)) throw new Error(`with the panel open, Steward is not in the notch looking toward it (${JSON.stringify(notch.state().panel)})`)
       let entrance = ''
       for (let tries = 0; tries < 12 && !entrance; tries++) {
         await sleep(50)
-        entrance = String(await win!.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-notch') ? getComputedStyle(document.querySelector('.panel') ?? document.body).animationName : 'no notch'`))
+        entrance = String(await win!.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.panel') ?? document.body).animationName`))
         if (entrance === 'none') entrance = ''
       }
-      if (entrance !== (reducedNow ? 'fadein' : 'panel-drop')) throw new Error(`the panel from the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the drop from the notch'}`)
+      if (entrance !== (reducedNow ? 'fadein' : 'panel-in')) throw new Error(`the panel in the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the slide from its side'}`)
       await sleep(500)
       await fs.writeFile(out.replace(/\.png$/, '-notch-panel.png'), (await win!.webContents.capturePage()).toPNG())
       const closed = Date.now()
@@ -2557,12 +2592,12 @@ async function checkNotch(out: string): Promise<void> {
       // 400 ms safety timer instead, so wait for it rather than sleep a flat 400 ms (up to 1.5 s).
       while ((win!.isVisible() || !notch.visible) && Date.now() - closed < 1500) await sleep(20)
       const backIn = Date.now() - closed
-      if (!notch.visible || win!.isVisible()) throw new Error(`closing the panel did not bring Steward back to the notch (after ${backIn} ms)`)
+      if (!notch.visible || win!.isVisible() || notch.state().panel) throw new Error(`closing the panel did not let it go, with Steward in the notch (after ${backIn} ms)`)
       console.log(
-        `smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back in ${backIn} ms${backIn >= 380 ? ' (on its safety timer, not a drawn frame)' : ''}`,
+        `smoke: notch: a click opens the panel at the ${side} side (${at.width}x${at.height} at ${at.x},${at.y}), sliding in, Steward looking toward it from the notch, and closing lets it go in ${backIn} ms${backIn >= 380 ? ' (on its safety timer, not a drawn frame)' : ''}`,
       )
 
-      // Every way of closing goes back up into the notch: while the panel goes, the window stays where it is (it never
+      // Every way of closing plays the way out: while the panel goes, the window stays where it is (it never
       // takes the edge's bounds, not even for a frame), the exit plays, and then the window goes and the notch is back,
       // awake or asleep as Presence says. After Hide, Steward stays out of sight until it's brought back.
       await settings.update({ keepPanelOpen: true })
@@ -2607,12 +2642,12 @@ async function checkNotch(out: string): Promise<void> {
           await sleep(10)
         }
         if (win!.isVisible()) throw new Error(`closing with ${closer} (opened by ${opener}) did not let the window go`)
-        if (!exit || visibleFor < 100) throw new Error(`closing with ${closer} (opened by ${opener}) did not play the way back into the notch (out after ${visibleFor} ms)`)
+        if (!exit || visibleFor < 100) throw new Error(`closing with ${closer} (opened by ${opener}) did not play the way out (out after ${visibleFor} ms)`)
         const hidden = closer === 'the hide button'
         await sleep(200)
         if (notch.visible === hidden) throw new Error(hidden ? 'after the hide button, the notch still shows' : `after closing with ${closer}, the notch did not come back`)
         if (!hidden && notch.state().awake !== (presence === 'always')) throw new Error(`after closing with ${closer}, the notch is ${notch.state().awake ? 'awake' : 'asleep'} in ${presence}`)
-        console.log(`smoke: notch: opened by ${opener}, closing with ${closer} (${presence === 'always' ? 'Always visible' : 'Only when needed'}) goes back up into the notch in ${visibleFor} ms, never at the edge`)
+        console.log(`smoke: notch: opened by ${opener}, closing with ${closer} (${presence === 'always' ? 'Always visible' : 'Only when needed'}) slides it out in ${visibleFor} ms, the window staying put`)
         if (hidden) {
           setDock('collapsed')
           await sleep(300)
@@ -2691,33 +2726,39 @@ async function checkNotch(out: string): Promise<void> {
 async function checkIsland(out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   const geo = notchGeo!
-  await settings.update({ steward: { notch: true, notchStyle: 'island', presence: 'always' } })
+  // Every alert that got through peeks out, so the check sees a finished session not coming out under the notch.
+  const alertPeek = settings.steward().alertPeek
+  await settings.update({ steward: { notch: true, notchStyle: 'island', presence: 'always', alertPeek: 'all' } })
   presenceChanged()
   replaceForNotch()
   notch.restyle()
   // Nothing going on to start with (reviews from the Visual Review check are left out).
   pendingReviews = 0
   islandTurns = {}
+  islandNotes.drop()
   updateIsland()
   await sleep(1500)
   const page = notch.contents()!
   const layout = notch.state().layout!
   const hw = layout.width / 2
+  if (notch.windowBounds()?.width !== ISLAND_WINDOW.width) throw new Error(`the island's window is ${notch.windowBounds()?.width} wide, not ${ISLAND_WINDOW.width}`)
   const pixel = (img: Electron.NativeImage, x: number, y: number) => {
     const { width, height } = img.getSize()
-    const k = width / NOTCH_WINDOW.width
+    const k = width / ISLAND_WINDOW.width
     const i = (Math.min(height - 1, Math.round(y * k)) * width + Math.min(width - 1, Math.round(x * k))) * 4
     const b = img.toBitmap()
     return { alpha: b[i + 3], light: Math.max(b[i], b[i + 1], b[i + 2]) }
   }
   const shot = async () => (await notch.capture())!
+  const dockNow = (): DockState => dock
   const black = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha > 200 && pixel(img, x, y).light < 30
   const clear = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha < 20
   /** Steward's body (lit, not black, not see-through) at this point, a little under where its eyes are. */
   const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 200 && pixel(img, x, y + 9).light > 40
   const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
-  const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string) =>
-    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : {}) } as HookPayload)
+  const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, said?: string) =>
+    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : { last_assistant_message: said }) } as HookPayload)
+  const noteLine = () => page.executeJavaScript(`(() => { const n = document.querySelector('.isl-note'); return { text: [...(n?.querySelectorAll('b, span') ?? [])].map((e) => e.textContent).join(' '), shown: Number(getComputedStyle(n).opacity) } })()`) as Promise<{ text: string; shown: number }>
 
   // At rest: no island; Steward peeks out past the notch's left edge, and nothing is on its right.
   const restPill = islandParts('rest', layout).pill
@@ -2751,23 +2792,87 @@ async function checkIsland(out: string): Promise<void> {
   await sleep(900)
   if (notch.state().hover || !clear(await shot(), layout.cx + compact.width / 2 + 3, 6)) throw new Error('the island did not narrow again once the cursor left')
 
-  // A second project: a count. Both stopping: a check. Then nothing going on: back into the notch, Steward peeking.
-  await hook('UserPromptSubmit', 'smoke-island-2')
-  await sleep(500)
+  // A click on the island opens the panel at the side, never under the notch. While it's open the island steps back to
+  // Steward peeking, looking toward the panel; closing it brings the island back.
+  const keptOpen = settings.keepPanelOpen()
+  await settings.update({ keepPanelOpen: true })
+  const at = { x: layout.cx + compact.right!.x, y: layout.height / 2 }
+  page.sendInputEvent({ type: 'mouseDown', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  page.sendInputEvent({ type: 'mouseUp', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  await sleep(900)
+  const area = notchDisplay().workArea
+  const panel = win!.getBounds()
+  const edge = settings.steward().edge
+  const atSide = edge === 'left' ? panel.x === area.x + 8 : panel.x + panel.width === area.x + area.width - 8
+  if (dockNow() !== 'expanded' || !win!.isVisible() || !atSide) throw new Error(`a click on the island opened ${dockNow()} at ${JSON.stringify(panel)}, not the panel at the ${edge} side`)
+  img = await shot()
+  if (!notch.visible || Math.sign(notch.state().panel?.x ?? 0) !== (edge === 'left' ? -1 : 1)) throw new Error(`with the panel open, Steward is not in the notch looking toward it (${JSON.stringify(notch.state().panel)})`)
+  if (!clear(img, layout.cx + hw + 30, 8) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with the panel open, the island did not step back to Steward peeking')
+  await fs.writeFile(out.replace(/\.png$/, '-island-open.png'), img.toPNG())
+  await fs.writeFile(out.replace(/\.png$/, '-island-open-panel.png'), (await win!.webContents.capturePage()).toPNG())
+  setDock('collapsed')
+  await settings.update({ keepPanelOpen: keptOpen })
+  const closed = Date.now()
+  while (win!.isVisible() && Date.now() - closed < 1500) await sleep(20)
+  await sleep(800)
+  if (win!.isVisible() || notch.state().panel || !black(await shot(), layout.cx + hw + 60, 6)) throw new Error('closing the panel did not bring the island back')
+  console.log(`smoke: island: a click on it opens the panel at the ${edge} side (${panel.width}x${panel.height} at ${panel.x},${panel.y}); the island steps back to Steward peeking toward it, and comes back after`)
+
+  // A second project: the island grows into a note, "started", with a count on its right.
+  const noted = Date.now()
+  smoothly(`the island growing into a note${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-2')))
+  const note = islandParts('note', layout)
+  img = await shot()
   side = await right()
-  if (notch.state().island?.right !== 'two' || side.count !== '2') throw new Error(`two projects working show "${side.html}"`)
-  await hook('Stop', 'smoke-island-1')
-  await hook('Stop', 'smoke-island-2')
-  await sleep(500)
+  let line = await noteLine()
+  if (notch.state().island?.note?.kind !== 'started' || side.count !== '2') throw new Error(`a second project starting shows ${JSON.stringify(notch.state().island)}, "${side.html}"`)
+  if (!black(img, layout.cx, layout.height + 4) || !black(img, layout.cx + note.width / 2 - 8, 6) || !black(img, layout.cx - note.width / 2 + 8, 6)) throw new Error('the island did not grow into the note size')
+  if (!clear(img, layout.cx + note.width / 2 + 6, 6) || !clear(img, layout.cx, note.height + 6)) throw new Error('the note is bigger than it should be')
+  if (!/started/.test(line.text) || line.shown < 0.9) throw new Error(`the note's line shows "${line.text}" (opacity ${line.shown}), not that a project started`)
+  await fs.writeFile(out.replace(/\.png$/, '-island-note.png'), img.toPNG())
+
+  // The cursor on it keeps the note past its time; once the cursor leaves, a moment more, then it settles to compact.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 10 }
+  await sleep(noted + NOTE_SHOW_MS + 600 - Date.now())
+  if (!notch.state().hover || !notch.state().island?.note) throw new Error('the cursor on the island did not keep its note')
+  let keptAfterLeaving = false
+  const settles = await watchMotion(page, grows, 3000, () => {
+    smokeNotchCursor = null
+    setTimeout(() => (keptAfterLeaving = !!notch.state().island?.note), 1000)
+  })
+  if (!keptAfterLeaving) throw new Error('the note went as soon as the cursor left the island')
+  smoothly(`the note settling to compact${grows.label}`, settles)
+  img = await shot()
   side = await right()
+  line = await noteLine()
+  if (notch.state().island?.note || !clear(img, layout.cx, layout.height + 6) || line.shown > 0.1) throw new Error(`the note did not settle (line "${line.text}", opacity ${line.shown})`)
+  if (notch.state().island?.right !== 'two' || side.count !== '2' || !black(img, layout.cx + compact.width / 2 - 8, 6)) throw new Error(`settled, the island is not compact with the count (${side.html})`)
+  console.log(`smoke: island: a second project grows a note (${note.width}x${note.height}), "${line.text || 'started'}"; the cursor on it keeps it, and it settles to compact`)
+
+  // One stopping while the other works: "Claude finished" and what it said, the spinner still on the right. The other
+  // stopping too: its own note, and a check. Neither comes out under the notch as an alert as well.
+  await hook('Stop', 'smoke-island-1', 'I made the button blue.')
+  await sleep(700)
+  line = await noteLine()
+  if (notch.state().island?.right !== 'working' || notch.state().island?.note?.kind !== 'finished' || !line.text.includes('finished · I made the button blue.') || line.shown < 0.9) throw new Error(`one project finishing shows ${JSON.stringify(notch.state().island)}, line "${line.text}"`)
+  await hook('Stop', 'smoke-island-2', 'All the tests pass.')
+  await sleep(700)
+  side = await right()
+  line = await noteLine()
   if (notch.state().island?.right !== 'finished' || !side.html.includes('isl-check')) throw new Error(`Claude stopping shows "${side.html}", not a check`)
+  if (!line.text.includes('All the tests pass.') || line.shown < 0.9) throw new Error(`the second finish did not take the note's place (line "${line.text}")`)
+  await fs.writeFile(out.replace(/\.png$/, '-island-finished.png'), (await shot()).toPNG())
+  alerts.flush()
+  await sleep(300)
+  if (dockNow() === 'nudge') throw new Error('a session finishing came out under the notch as well as in the island')
+  console.log(`smoke: island: a chat finishing shows a note ("${line.text}"), and no alert under the notch`)
   const stepsOut = await motionLook(page, '.isl-pill', '.isl')
   smoothly(`Steward stepping out of the island${stepsOut.label}`, await watchMotion(page, stepsOut, 900, () => {
     for (const id of ['smoke-island-1', 'smoke-island-2']) sessions.dismiss(id)
     sendSessions()
   }))
   img = await shot()
-  if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
+  if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx, layout.height + 6) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
   console.log('smoke: island: wider with the cursor on it, a count for two projects, a check when Claude stops, then back into the notch')
 
   // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
@@ -2788,9 +2893,11 @@ async function checkIsland(out: string): Promise<void> {
   img = await shot()
   if (!clear(img, layout.cx - hw - 12, restPill.y) || !black(img, layout.cx, 8)) throw new Error('asleep, Steward is not tucked behind the notch')
   console.log('smoke: island: asleep, Steward is tucked behind the notch')
-  await settings.update({ steward: { presence: 'always', notchStyle: 'chin' } })
+  await settings.update({ steward: { presence: 'always', notchStyle: 'chin', alertPeek } })
   presenceChanged()
   notch.restyle()
+  islandNotes.drop()
+  if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
   sendReviews()
 }
 
@@ -3069,16 +3176,16 @@ async function checkMovablePanel(): Promise<void> {
   await resetPanelPlace()
   console.log("smoke: a spot for a screen that isn't connected is ignored")
 
-  // In the notch: before it's moved it drops from the notch; moved, it closes and opens where it is, not into the notch.
+  // In the notch: before it's moved it slides in at its side; moved, it closes and opens where it is.
   if (notchGeo) {
     setDock('collapsed')
     await settings.update({ steward: { notch: true } })
     replaceForNotch()
     await sleep(800)
     setDock('expanded')
-    const drop = await entrance()
+    const slide = await entrance()
     const under = w.getBounds()
-    if (drop !== (reduced ? 'fadein' : 'panel-drop')) throw new Error(`in the notch, the unmoved panel came in with "${drop}"`)
+    if (slide !== (reduced ? 'fadein' : 'panel-in') || !same(under, boundsFor('expanded'))) throw new Error(`in the notch, the unmoved panel came in with "${slide}" at ${JSON.stringify(under)}`)
     // The same messages the page sends.
     const p0 = { x: under.x + 100, y: under.y + 20 }
     dragPanel('start', p0.x, p0.y)
@@ -3088,29 +3195,29 @@ async function checkMovablePanel(): Promise<void> {
     if (same(there, under) || !placed()) throw new Error('in the notch, the panel did not move')
     const closing = Date.now()
     setDock('collapsed')
-    let rose = false
+    let slid = false
     let shrank = false
     while (w.isVisible() && Date.now() - closing < 900) {
       if (!same(w.getBounds(), there)) throw new Error(`in the notch, closing the moved panel moved the window to ${JSON.stringify(w.getBounds())}`)
       const how = await page.executeJavaScript(`document.documentElement.getAttribute('data-leaving')`)
       shrank ||= how === 'in-place'
-      rose ||= how === ''
+      slid ||= how === ''
       await sleep(10)
     }
-    if (!shrank || rose || w.isVisible()) throw new Error(`in the notch, the moved panel did not close where it is (in place ${shrank}, into the notch ${rose})`)
+    if (!shrank || slid || w.isVisible()) throw new Error(`in the notch, the moved panel did not close where it is (in place ${shrank}, out to its side ${slid})`)
     await sleep(300)
     if (!notch.visible) throw new Error('in the notch, after the moved panel closed, the notch is not back')
     setDock('expanded')
     const back = await entrance()
     if (!near(w.getBounds(), there) || back !== popIn) throw new Error(`in the notch, the moved panel opened at ${JSON.stringify(w.getBounds())} with "${back}", not at ${JSON.stringify(there)} with ${popIn}`)
     await resetPanelPlace()
-    if (!(await settles(() => same(w.getBounds(), under)))) throw new Error('in the notch, putting the panel back did not bring it under the notch')
+    if (!(await settles(() => same(w.getBounds(), under)))) throw new Error('in the notch, putting the panel back did not bring it to its side')
     setDock('collapsed')
     await sleep(500)
     await settings.update({ steward: { notch: false } })
     replaceForNotch()
     await sleep(300)
-    console.log('smoke: in the notch, the panel drops from it until it is moved, then closes and opens where it is, and putting it back brings it under the notch')
+    console.log('smoke: in the notch, the panel slides in at its side until it is moved, then closes and opens where it is, and putting it back brings it to its side')
   }
   await settings.update({ keepPanelOpen: keptOpen })
   setDock('collapsed')
@@ -3119,7 +3226,7 @@ async function checkMovablePanel(): Promise<void> {
 
 /**
  * Settings and the open panel. Settings opens beside the panel when there's room, wherever the panel is (dragged, or
- * under the notch), and centered when there isn't. While Settings is the window in use it floats above the panel, and
+ * at its side in the notch), and centered when there isn't. While Settings is the window in use it floats above the panel, and
  * once it isn't, it's a normal window again, under the panel. The panel stays open throughout, and the pin isn't
  * touched. A hidden run has no real focus, so the check sends Settings the focus and blur macOS would.
  */
@@ -3204,11 +3311,11 @@ async function checkSettingsClearOfPanel(): Promise<void> {
     replaceForNotch()
     await sleep(600)
     const panel = await panelAt(null)
-    if (JSON.stringify(panel) !== JSON.stringify(boundsFor('expanded'))) throw new Error('the panel did not open under the notch for the Settings check')
+    if (JSON.stringify(panel) !== JSON.stringify(boundsFor('expanded'))) throw new Error('the panel did not open at its side in the notch for the Settings check')
     const s = await openIt()
-    const opened = besideOrCentered('under the notch', panel, s.getBounds())
-    onTopWhileUsed(s, 'under the notch')
-    console.log(`smoke: with the panel under the notch (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
+    const opened = besideOrCentered('at its side in the notch', panel, s.getBounds())
+    onTopWhileUsed(s, 'at its side in the notch')
+    console.log(`smoke: with the panel at its side in the notch (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
     s.close()
     await sleep(400)
     setDock('collapsed')
@@ -3431,6 +3538,7 @@ app.whenReady().then(async () => {
     load: (w) => loadPage(w, 'notch.html'),
     style: () => settings.steward().notchStyle,
     onCursor: lookAtNotch,
+    onHover: (hover) => islandNotes.hover(hover),
     cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
     // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
     hoverable: () => !quiet(),

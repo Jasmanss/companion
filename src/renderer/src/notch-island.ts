@@ -3,14 +3,15 @@
 // working model. One black shape joined to the notch, flush with the top of the screen. At rest it's only the notch, and
 // Steward peeks out from behind its left edge, half hidden; with the cursor on it, it leans out further. While Claude
 // works the compact island grows out of the notch, Steward steps into its left side, and the status shows on its
-// right (the Smart choice: a spinner and the time, a check, an amber mark, a thumbnail, a count). Asleep, Steward is
-// tucked behind the notch.
+// right (the Smart choice: a spinner and the time, a check, an amber mark, a thumbnail, a count). For news (Claude
+// finished, a second project started) it grows into the note size, a little wider and taller, with one line under the
+// notch, and settles back to compact a few seconds later (main says when). Asleep, Steward is tucked behind the notch.
 //
 // Springs move it, setting only transforms and opacity, and only while something is still moving. With Reduce Motion
 // it fades out, changes and fades back in instead. The real notch has no pixels: the island's own copy of it is drawn
 // over Steward, so what's behind the notch is hidden on a screen without one too (a test run's pretend notch).
-import { islandParts, ISLAND_RADIUS, NOTCH_RADIUS, PEEK_SIZE, type IslandLevel } from '../../shared/notch'
-import type { IslandStatus, NotchLayout } from '../../shared/types'
+import { islandParts, ISLAND_NOTE_LINE, ISLAND_RADIUS, NOTCH_RADIUS, PEEK_SIZE, type IslandLevel } from '../../shared/notch'
+import type { IslandNote, IslandStatus, NotchLayout } from '../../shared/types'
 import { blob, div, px } from './notch-blob'
 import { makeView, type PillKind, type PillView } from './pill/render'
 
@@ -102,9 +103,10 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
 
   // The one black shape, flush with the top of the screen; as wide and tall as the notch, it's hidden (no island).
   const compact = islandParts('compact', { width: nw, height: nh })
+  const noteW = islandParts('note', { width: nw, height: nh }).width
   const shape = div('isl-shape')
   root.append(shape)
-  const black = blob(shape, compact.width, compact.height, ISLAND_RADIUS)
+  const black = blob(shape, noteW, nh + ISLAND_NOTE_LINE, ISLAND_RADIUS)
   // Steward, the panel header's Pill. Outside the black it's the solid body: glass needs something to refract.
   const pill = div('isl-pill')
   const view = makeView(o.kind === 'glass' ? 'flat' : o.kind, PEEK_SIZE.width, PEEK_SIZE.height, { color: o.color, tinted: true, light: o.light, mouth: o.mouth, cls: 'header' })
@@ -118,6 +120,11 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
   const rightIn = div('isl-right-in')
   right.append(rightIn)
   root.append(right)
+  // The note's line, under the notch. It fades in once the black has grown under it, and is clipped to the black.
+  const line = div('isl-note', `left:${px(-noteW / 2)};top:${px(nh)};width:${px(noteW)};height:${px(ISLAND_NOTE_LINE)}`)
+  const lineIn = div('isl-note-in')
+  line.append(lineIn)
+  root.append(line)
 
   const W = new Spring(nw)
   const H = new Spring(nh)
@@ -132,6 +139,8 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
     pill.style.transform = `translate(${px(P.x.v)},${px(P.y.v)}) rotate(${P.r.v.toFixed(2)}deg) scale(${Math.max(0.01, P.s.v).toFixed(4)})`
     right.style.transform = `translate(${px(RX.v)},${px(nh / 2)})`
     right.style.opacity = String(clamp01(RO.v))
+    const side = Math.max(0, (noteW - W.v) / 2)
+    line.style.clipPath = `inset(0 ${px(side)} ${px(Math.max(0, nh + ISLAND_NOTE_LINE - H.v))} ${px(side)})`
   }
   let frame = 0
   let last = 0
@@ -182,6 +191,31 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
     swap = setTimeout(put, 110)
   }
 
+  // The note: the project's name in bold, then the rest. A new one swaps in like the right side does.
+  let noteAt: number | undefined
+  let noteSwap: ReturnType<typeof setTimeout> | undefined
+  const setNote = (note: IslandNote | undefined, on: boolean, now: boolean): boolean => {
+    const wasOn = line.classList.contains('on')
+    line.classList.toggle('on', on && !!note)
+    if (!note || note.at === noteAt) return false
+    noteAt = note.at
+    const put = () => {
+      const name = document.createElement('b')
+      name.textContent = note.name
+      const text = document.createElement('span')
+      text.textContent = note.text
+      lineIn.replaceChildren(name, text)
+      lineIn.classList.remove('out')
+    }
+    clearTimeout(noteSwap)
+    if (now || !wasOn) put()
+    else {
+      lineIn.classList.add('out')
+      noteSwap = setTimeout(put, 110)
+    }
+    return true
+  }
+
   let level: IslandLevel = 'rest'
   let shown = false
   let fade: ReturnType<typeof setTimeout> | undefined
@@ -209,12 +243,15 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
       root.dataset.level = lv
       root.dataset.hover = String(hover)
       setRight(status, first || o.reduced)
+      const news = setNote(status.note, lv === 'note', first || o.reduced)
       if (first) {
         target(lv, hover, true)
         return apply()
       }
       if (!o.reduced) {
         target(lv, hover, false)
+        // Claude finished: a little hop for joy.
+        if (news && lv === 'note' && status.note?.kind === 'finished') P.y.x = -110
         return kick()
       }
       // Reduce Motion: fade out, change, fade back in.
@@ -226,11 +263,12 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
         root.classList.remove('rm-out')
       }, 130)
     },
-    gaze: () => (level === 'compact' ? { x: 0.6, y: 0.08 } : null),
+    gaze: () => (level === 'compact' || level === 'note' ? { x: 0.6, y: 0.08 } : null),
     stop() {
       cancelAnimationFrame(frame)
       clearInterval(clock)
       clearTimeout(swap)
+      clearTimeout(noteSwap)
       clearTimeout(fade)
     },
   }

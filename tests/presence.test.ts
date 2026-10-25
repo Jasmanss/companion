@@ -266,6 +266,13 @@ describe('which alerts peek out', () => {
     expect(Object.values(table('none')).some(Boolean)).toBe(false)
   })
 
+  it("in the notch island, a session finishing is the island's note, so it doesn't come out under the notch too", () => {
+    const island = (choice: AlertPeek) => Object.fromEntries(KINDS.map(([name, key]) => [name, peeksOut(key, choice, true)]))
+    expect(island('all')).toEqual({ ...table('all'), 'a session finished': false })
+    expect(island('needs-me')).toEqual(table('needs-me'))
+    expect(splitAlerts([alert('finished:a'), alert('deploy-ready:c')], 'all', true)).toEqual({ peek: [alert('deploy-ready:c')], held: [alert('finished:a')] })
+  })
+
   it('splits what reached it into what peeks out and what waits, in order', () => {
     const list = [alert('finished:a'), alert('approval:b', 'urgent'), alert('deploy-ready:c'), alert('input:d')]
     const { peek, held } = splitAlerts(list, 'needs-me')

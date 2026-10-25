@@ -108,6 +108,45 @@
 .isl-right-in.out {
   opacity: 0;
 }
+/* The note's one line under the notch: in once the black has grown under it, out quickly before it shrinks. */
+.isl-note {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.1s linear;
+}
+.isl-note.on {
+  opacity: 1;
+  transition: opacity 0.2s linear 0.15s;
+}
+.isl-note-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 22px 2px;
+  white-space: nowrap;
+  color: rgba(242, 243, 245, 0.66);
+  font: 500 12.5px/16px -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  transition: opacity 0.11s linear;
+}
+.isl-note-in.out {
+  opacity: 0;
+}
+.isl-note-in b {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f2f3f5;
+  font-weight: 800;
+}
+.isl-note-in span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .isl-spin {
   display: block;
   width: 15px;

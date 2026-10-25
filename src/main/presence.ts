@@ -158,10 +158,13 @@ export const nextLookMs = (s: PresenceState, i: Pick<PresenceInput, 'inZone'>): 
 /** Steward's own request (it needs your OK to run a command) blocks work like a session waiting on you does. */
 const needsMe = (key: string): boolean => alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:')
 
-/** Whether an alert peeks out from where Steward sits, for the "Alerts that peek out" choice. */
-export function peeksOut(key: string, choice: AlertPeek): boolean {
+/**
+ * Whether an alert peeks out from where Steward sits, for the "Alerts that peek out" choice. island: Steward is the notch
+ * island, whose note says a session finished, so that alert doesn't come out under the notch as well.
+ */
+export function peeksOut(key: string, choice: AlertPeek, island = false): boolean {
+  if (choice === 'none' || (island && key.startsWith('finished:'))) return false
   if (choice === 'all') return true
-  if (choice === 'none') return false
   return needsMe(key)
 }
 
@@ -169,10 +172,10 @@ export function peeksOut(key: string, choice: AlertPeek): boolean {
  * Alerts that made it through the queue (Settings → Notifications has already silenced the types switched off), split
  * into the ones that peek out and the ones that wait in the menu bar until the panel opens.
  */
-export function splitAlerts(list: AlertView[], choice: AlertPeek): { peek: AlertView[]; held: AlertView[] } {
+export function splitAlerts(list: AlertView[], choice: AlertPeek, island = false): { peek: AlertView[]; held: AlertView[] } {
   const peek: AlertView[] = []
   const held: AlertView[] = []
-  for (const alert of list) (peeksOut(alert.key, choice) ? peek : held).push(alert)
+  for (const alert of list) (peeksOut(alert.key, choice, island) ? peek : held).push(alert)
   return { peek, held }
 }
 

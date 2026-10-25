@@ -10,7 +10,8 @@
 // The island (the third style): one black shape joined to the notch, sized by what's going on (design/showcase,
 // section 7, "Peeking, as one joined island"). At rest there's no island and Steward peeks out from behind the notch's
 // left edge; while Claude works the compact island grows out of the notch, Steward steps into its left side and the
-// status sits on its right.
+// status sits on its right. For a short message (Claude finished, a second project started) it grows a little wider
+// and taller, the note size, with one line under the notch, then settles back to compact.
 import type { IslandRight, Mood, NotchGeometry, NotchLayout, NotchStyle } from './types'
 
 /** How tall the eyes are, in points; the lip and the wings are sized from it. */
@@ -23,6 +24,8 @@ export const NOTCH_WING = NOTCH_EYE + 14
 export const NOTCH_RADIUS = 10
 /** The window along the top of the screen that holds it, centered on the notch. */
 export const NOTCH_WINDOW = { width: 360, height: 96 } as const
+/** The island's window is wider: the note size and the springs' overshoot past it. */
+export const ISLAND_WINDOW = { width: 460, height: 96 } as const
 /** Hovered (the cursor on the black, Always visible): the chin this much taller, or the wings this much wider in all. */
 export const NOTCH_HOVER_LIP = 4
 export const NOTCH_HOVER_WINGS = 8
@@ -69,7 +72,7 @@ export function stepHover(s: HoverState, over: boolean, now: number): HoverState
 }
 
 /**
- * Where something that comes out of the notch goes (the panel, a nudge): centered under the notch on the
+ * Where something that comes out of the notch goes (a nudge): centered under the notch on the
  * notch's own screen, its top at the top of that screen's work area (just under the menu bar), kept inside the work
  * area with margin points to spare at the sides.
  */
@@ -113,6 +116,9 @@ export function notchBoxes(shape: NotchShape, l: NotchLayout): Box[] {
 export const ISLAND_SIDE = 70
 /** Hovered, the compact island is this much wider in all, and the status moves out by half of it. */
 export const ISLAND_HOVER = 12
+/** The note size: this far past the notch on each side, and this much taller than the notch for its one line. */
+export const ISLAND_NOTE_SIDE = 98
+export const ISLAND_NOTE_LINE = 28
 /** The island's bottom corners. */
 export const ISLAND_RADIUS = 24
 /** Steward's Pill (64 by 54 points, the panel header's) at the notch is drawn at this scale. */
@@ -120,16 +126,19 @@ export const PEEK_SCALE = 0.8
 export const PEEK_SIZE = { width: 64, height: 54 } as const
 
 /**
- * asleep: Steward tucked behind the notch (Only when needed, at rest). rest: no island, Steward peeks. compact: the island
- * is out, Steward in its left side, the status on its right. chin: an alert is out under the notch (the 3b nudge), so
- * the black is the chin it joins, with Steward peeking beside it.
+ * asleep: Steward tucked behind the notch (Only when needed, at rest). rest: no island, Steward peeks (also while the
+ * panel is open at the side: it shows what's going on, and Steward looks at it). compact: the island
+ * is out, Steward in its left side, the status on its right. note: the same, a little wider, with one line under the
+ * notch. chin: an alert is out under the notch (the 3b nudge), so the black is the chin it joins, with Steward peeking
+ * beside it.
  */
-export type IslandLevel = 'asleep' | 'rest' | 'compact' | 'chin'
+export type IslandLevel = 'asleep' | 'rest' | 'compact' | 'note' | 'chin'
 
-export function islandLevel(o: { awake: boolean; nudge: boolean; right: IslandRight | null }): IslandLevel {
+export function islandLevel(o: { awake: boolean; nudge: boolean; right: IslandRight | null; note?: boolean; open?: boolean }): IslandLevel {
   if (o.nudge) return 'chin'
   if (!o.awake) return 'asleep'
-  return o.right ? 'compact' : 'rest'
+  if (!o.right || o.open) return 'rest'
+  return o.note ? 'note' : 'compact'
 }
 
 /** Where things are for a level, from the notch's center (x) and the top of the screen (y), in points. */
@@ -146,7 +155,8 @@ export interface IslandParts {
 /**
  * The island's size and where Steward and the status go (design/showcase/peeking.js). Steward peeks at rest from just
  * past the notch's left edge, tilted, leaning out further with the cursor on it; it steps into the compact island's left
- * side; asleep it's tucked fully behind the notch. Hovered, the compact island widens a little.
+ * side; asleep it's tucked fully behind the notch. Hovered, the compact island widens a little. The note keeps Steward and
+ * the status where compact has them, beside the notch, and its line goes under the notch.
  */
 export function islandParts(level: IslandLevel, notch: { width: number; height: number }, hover = false): IslandParts {
   const hw = notch.width / 2
@@ -155,6 +165,7 @@ export function islandParts(level: IslandLevel, notch: { width: number; height: 
   if (level === 'asleep') return { width: notch.width, height: notch.height, pill: pill(-hw + 26.5), right: null }
   if (level === 'chin') return { width: notch.width, height: notch.height + NOTCH_LIP, pill: pill(-hw - 7.5, -8), right: null }
   if (level === 'rest') return { width: notch.width, height: notch.height, pill: hover ? pill(-hw - 15.5, -12) : pill(-hw - 7.5, -8), right: null }
+  if (level === 'note') return { width: notch.width + 2 * ISLAND_NOTE_SIDE, height: notch.height + ISLAND_NOTE_LINE, pill: pill(-hw - 34), right: { x: hw + 34, y } }
   return { width: notch.width + 2 * ISLAND_SIDE + (hover ? ISLAND_HOVER : 0), height: notch.height, pill: pill(-hw - 34), right: { x: hw + 34 + (hover ? ISLAND_HOVER / 2 : 0), y } }
 }
 

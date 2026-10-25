@@ -1,12 +1,15 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { sayFrom } from '../shared/review'
 import type { Project, SessionState, SessionView } from '../shared/types'
 import type { AlertInput } from './alerts'
 import type { HookPayload } from './hook-payload'
-import { isTranscriptPath, readTail, turnStartedAt } from './transcript'
+import { isTranscriptPath, readChatTitle, readTail, turnStartedAt } from './transcript'
 
 const KEEP_FOR_MS = 12 * 60 * 60 * 1000
 const MAX_SESSIONS = 20
+/** Chat names remembered, by session: plenty for a day's chats. */
+const MAX_TITLES = 200
 /** A turn shorter than this probably happened while you watched, so its finishing isn't news. */
 const NOTEWORTHY_TURN_MS = 60_000
 /** PermissionRequest already covers permission prompts; the rest aren't about you. */
@@ -54,22 +57,31 @@ interface Deps {
   now?(): number
   fileSize?(file: string): Promise<number | null>
   turnStart?(file: string, promptId: string): Promise<number | null>
+  /** The chat's own name in the Claude app, from its log. */
+  chatTitle?(file: string): Promise<string | null>
 }
 
 /** What every Claude Code session is doing, from its hook events. */
 export class SessionTracker {
   private sessions = new Map<string, Session>()
+  /** Each session's chat name in the Claude app, once looked for; null: it has none. */
+  private titles = new Map<string, string | null>()
 
   constructor(private readonly deps: Deps) {}
 
-  /** Record a hook event. Returns the alert it deserves, if any. */
+  /**
+   * Record a hook event. Returns the alert it deserves, if any. A session is called by its chat's name in the Claude
+   * app (looked for when it first shows up, and again when it stops, in case it was renamed), with the project or
+   * folder as a second word; with no chat name, by the project or folder.
+   */
   async apply(event: HookPayload): Promise<AlertInput | null> {
     const now = this.now()
     const project = matchProject(event.cwd, this.deps.projects())
-    const name = project?.name ?? path.basename(event.cwd)
     const transcriptPath = event.transcript_path && isTranscriptPath(event.transcript_path) ? event.transcript_path : undefined
+    await this.lookForTitle(event.session_id, transcriptPath, event.hook_event_name === 'Stop')
+    const { name, place } = this.names(event)
     const set = (state: SessionState, detail: string | undefined, extra: Partial<Session> = {}) =>
-      this.sessions.set(event.session_id, { id: event.session_id, name, projectPath: project?.path ?? null, cwd: event.cwd, state, detail, updatedAt: now, transcriptPath, ...extra })
+      this.sessions.set(event.session_id, { id: event.session_id, name, place, projectPath: project?.path ?? null, cwd: event.cwd, state, detail, updatedAt: now, transcriptPath, ...extra })
 
     switch (event.hook_event_name) {
       case 'PermissionRequest': {
@@ -86,7 +98,8 @@ export class SessionTracker {
       case 'Stop': {
         // A Stop hook asked Claude to keep going, so this isn't the real end.
         if (event.stop_hook_active) return null
-        const detail = summary(event.last_assistant_message)
+        // What Claude said, in plain words (Visual Review's "Claude says"): no markdown, no "Want me to commit?".
+        const detail = sayFrom(event.last_assistant_message) ?? undefined
         set('finished', detail)
         const started = transcriptPath && event.prompt_id ? await this.turnStart(transcriptPath, event.prompt_id) : null
         const level = started !== null && now - started < NOTEWORTHY_TURN_MS ? 'quiet' : 'normal'
@@ -120,7 +133,7 @@ export class SessionTracker {
     return [...this.sessions.values()]
       .sort((a, b) => waiting(a) - waiting(b) || b.updatedAt - a.updatedAt)
       .slice(0, MAX_SESSIONS)
-      .map(({ id, name, projectPath, cwd, state, detail, updatedAt }) => ({ id, name, projectPath, cwd, state, detail, updatedAt }))
+      .map(({ id, name, place, projectPath, cwd, state, detail, updatedAt }) => ({ id, name, place, projectPath, cwd, state, detail, updatedAt }))
   }
 
   /** How many sessions are waiting on you. */
@@ -130,6 +143,22 @@ export class SessionTracker {
 
   dismiss(id: string): void {
     this.sessions.delete(id)
+  }
+
+  /** What a session is called: its chat's name if it has one (with the project or folder as place), else the project or folder. */
+  names(event: Pick<HookPayload, 'session_id' | 'cwd'>): { name: string; place?: string } {
+    const folder = matchProject(event.cwd, this.deps.projects())?.name ?? path.basename(event.cwd)
+    const title = this.titles.get(event.session_id)
+    return title ? { name: title, place: folder } : { name: folder }
+  }
+
+  /** Read the chat's name from its log the first time a session shows up, and again when asked (a Stop). */
+  private async lookForTitle(id: string, file: string | undefined, again: boolean): Promise<void> {
+    if (!file || (this.titles.has(id) && !again)) return
+    const found = await (this.deps.chatTitle ?? readChatTitle)(file)
+    // Not in the end of the log this time (a long tool output can push it further back): the name it had stays.
+    this.titles.set(id, found ?? this.titles.get(id) ?? null)
+    if (this.titles.size > MAX_TITLES) this.titles.delete(this.titles.keys().next().value!)
   }
 
   private now(): number {

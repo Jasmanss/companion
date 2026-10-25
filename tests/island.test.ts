@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
-import { FINISHED_SHOW_MS, islandStatus, nextChange, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
-import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_HOVER, ISLAND_SIDE, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
-import type { SessionState, SessionView } from '../src/shared/types'
+import { FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
+import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_HOVER, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
+import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
 /** The 14-inch MacBook Pro's notch. */
 const NOTCH = { width: 185, height: 32 }
@@ -53,8 +53,34 @@ describe('the island shape', () => {
     expect(p.pill.rotate).toBe(0)
   })
 
+  it('grows into the note size for a short message: about 380 by 60, Steward and the status where compact has them', () => {
+    const note = islandParts('note', NOTCH)
+    const compact = islandParts('compact', NOTCH)
+    expect(Math.abs(note.width - 380)).toBeLessThanOrEqual(1)
+    expect(note.height).toBe(32 + ISLAND_NOTE_LINE)
+    expect(Math.abs(note.height - 60)).toBeLessThanOrEqual(1)
+    expect(note.width).toBeGreaterThan(islandParts('compact', NOTCH, true).width)
+    expect(note.pill).toEqual(compact.pill)
+    expect(note.right).toEqual(compact.right)
+    // Hovering keeps it as it is: it doesn't widen again.
+    expect(islandParts('note', NOTCH, true)).toEqual(note)
+  })
+
+  it("fits the island's window with room for the springs' overshoot, and takes clicks on the line under the notch", () => {
+    const note = islandParts('note', NOTCH)
+    expect(note.width * 1.1).toBeLessThan(ISLAND_WINDOW.width)
+    expect(note.height * 1.1).toBeLessThan(ISLAND_WINDOW.height)
+    const layout = { cx: ISLAND_WINDOW.width / 2, ...NOTCH }
+    const boxes = islandBoxes(note, 'note', layout)
+    expect(inBoxes({ x: layout.cx, y: 32 + 20 }, boxes)).toBe(true)
+    expect(inBoxes({ x: layout.cx + 185, y: 10 }, boxes)).toBe(true)
+    expect(inBoxes({ x: layout.cx + 200, y: 10 }, boxes)).toBe(false)
+    expect(inBoxes({ x: layout.cx, y: 32 + 20 }, islandBoxes(islandParts('compact', NOTCH), 'compact', layout))).toBe(false)
+  })
+
   it('is the chin while an alert is out under the notch, so the alert still joins it', () => {
     expect(islandLevel({ awake: true, nudge: true, right: 'working' })).toBe('chin')
+    expect(islandLevel({ awake: true, nudge: true, right: 'working', note: true })).toBe('chin')
     expect(islandParts('chin', NOTCH)).toMatchObject({ width: 185, height: 32 + NOTCH_LIP, right: null })
   })
 
@@ -62,6 +88,12 @@ describe('the island shape', () => {
     expect(islandLevel({ awake: false, nudge: false, right: 'working' })).toBe('asleep')
     expect(islandLevel({ awake: true, nudge: false, right: null })).toBe('rest')
     expect(islandLevel({ awake: true, nudge: false, right: 'needs' })).toBe('compact')
+    expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true })).toBe('note')
+    // Asleep, or nothing going on, there's no note to show.
+    expect(islandLevel({ awake: false, nudge: false, right: 'working', note: true })).toBe('asleep')
+    expect(islandLevel({ awake: true, nudge: false, right: null, note: true })).toBe('rest')
+    // The panel open at the side shows what's going on: the island steps back to Steward peeking, looking at it.
+    expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true, open: true })).toBe('rest')
   })
 
   it('takes clicks on the black and on Steward, not on the menu bar beside them', () => {
@@ -120,5 +152,90 @@ describe('what the island shows', () => {
     expect(noteTurn(turns, hook('Stop', 'a', { stop_hook_active: true }), 30)).toEqual({ a: 10 })
     expect(noteTurn(turns, hook('Stop', 'a'), 30)).toEqual({})
     expect(islandStatus(input({ turns: { a: 0 }, now: TURN_GIVE_UP_MS + 1 })).right).toBeNull()
+  })
+})
+
+describe('the note', () => {
+  const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, extra = {}) => ({ hook_event_name, session_id, cwd: '/p', ...extra }) as HookPayload
+  const at = { agentBusy: false, name: 'haven', now: 100_000 }
+
+  it('says a session finished, with the last thing Claude said', () => {
+    expect(hookNote(hook('Stop', 'a'), { ...at, turns: { a: 1 }, detail: 'I made the button blue.' })).toEqual({ kind: 'finished', name: 'haven', text: 'finished · I made the button blue.', at: 100_000 })
+    expect(hookNote(hook('Stop', 'a'), { ...at, turns: {} })?.text).toBe('finished')
+    // A Stop hook asked Claude to keep going: not finished yet.
+    expect(hookNote(hook('Stop', 'a', { stop_hook_active: true }), { ...at, turns: { a: 1 } })).toBeNull()
+  })
+
+  it('says a second project started while another works, and nothing for the first one', () => {
+    expect(hookNote(hook('UserPromptSubmit', 'b'), { ...at, turns: { a: 90_000 } })).toEqual({ kind: 'started', name: 'haven', text: 'started', at: 100_000 })
+    expect(hookNote(hook('UserPromptSubmit', 'b'), { ...at, turns: {}, agentBusy: true })?.kind).toBe('started')
+    expect(hookNote(hook('UserPromptSubmit', 'a'), { ...at, turns: {} })).toBeNull()
+    // The same turn going on, or the only other one long given up on: no news.
+    expect(hookNote(hook('UserPromptSubmit', 'a'), { ...at, turns: { a: 90_000, b: 95_000 } })).toBeNull()
+    expect(hookNote(hook('UserPromptSubmit', 'b'), { ...at, turns: { a: 100_000 - TURN_GIVE_UP_MS } })).toBeNull()
+  })
+
+  it('shows with the status, and not with nothing going on', () => {
+    const note: IslandNote = { kind: 'finished', name: 'haven', text: 'Claude finished', at: 1 }
+    const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
+    expect(islandStatus(input({ turns: { a: 1 }, note }))).toEqual({ right: 'working', since: 1, note })
+    expect(islandStatus(input({ note }))).toEqual({ right: null })
+  })
+
+  describe('settling', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+    const note: IslandNote = { kind: 'started', name: 'api', text: 'started', at: 1 }
+
+    it('settles after a few seconds', () => {
+      const changed = vi.fn()
+      const notes = new IslandNotes({ changed })
+      notes.show(note)
+      expect(notes.current).toEqual(note)
+      vi.advanceTimersByTime(NOTE_SHOW_MS - 1)
+      expect(notes.current).toEqual(note)
+      vi.advanceTimersByTime(1)
+      expect(notes.current).toBeNull()
+      expect(changed).toHaveBeenCalledTimes(2)
+    })
+
+    it('stays while the cursor is on the island, and a moment longer once it leaves', () => {
+      const notes = new IslandNotes({ changed: () => {} })
+      notes.show(note)
+      notes.hover(true)
+      vi.advanceTimersByTime(NOTE_SHOW_MS * 3)
+      expect(notes.current).toEqual(note)
+      notes.hover(false)
+      vi.advanceTimersByTime(NOTE_AFTER_HOVER_MS - 1)
+      expect(notes.current).toEqual(note)
+      vi.advanceTimersByTime(1)
+      expect(notes.current).toBeNull()
+    })
+
+    it('keeps its own time when the cursor only passes over it early on', () => {
+      const notes = new IslandNotes({ changed: () => {} })
+      notes.show(note)
+      vi.advanceTimersByTime(500)
+      notes.hover(true)
+      notes.hover(false)
+      vi.advanceTimersByTime(NOTE_SHOW_MS - 501)
+      expect(notes.current).toEqual(note)
+      vi.advanceTimersByTime(1)
+      expect(notes.current).toBeNull()
+    })
+
+    it('gives a new note its own time, and drops a finished note when a new turn starts', () => {
+      const notes = new IslandNotes({ changed: () => {} })
+      notes.show(note)
+      vi.advanceTimersByTime(NOTE_SHOW_MS - 100)
+      const finished: IslandNote = { kind: 'finished', name: 'haven', text: 'Claude finished', at: 2 }
+      notes.show(finished)
+      vi.advanceTimersByTime(NOTE_SHOW_MS - 1)
+      expect(notes.current).toEqual(finished)
+      notes.drop('started')
+      expect(notes.current).toEqual(finished)
+      notes.drop('finished')
+      expect(notes.current).toBeNull()
+    })
   })
 })
