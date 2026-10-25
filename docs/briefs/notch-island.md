@@ -86,10 +86,10 @@ Main building's audit of Island mode after Phase 2 (PR #36): finished and two pr
 
 **Phase 3 now covers:** the approval and review sizes, **plus** the four sizes above, the red and spark marks, the "Later" settle, the catch-all note, the no-old-pill rule and its smoke check. Phase 2 and the other phases are unchanged.
 
-**For the user to pick (defaults in bold; none blocks Phase 3):**
-1. **A failed build under "Needs me":** should it come out? **Yes, it is an urgent alert (recommended)**, or wait in the menu bar dot as built today (only waiting-on-you things come out under Needs me).
-2. **Under "Nothing":** **no notes and no big sizes, only the compact status (recommended)**, or let the finished and started notes keep showing as built in Phase 2.
-3. **No Allow or Deny on a session's approval,** because Steward cannot answer a session (a limit, not a choice): confirm Open and Later.
+**Decided by the user (2026-10-24, via the front door):** "Accept all three island alert picks: a failed build comes out under Needs me, Nothing means only the small status marks, and chat approvals get Open and Later."
+1. **A failed build comes out under "Needs me",** as an urgent alert. (Build the failed-build alert's `peeksOut` check to count it with the waiting-on-you kinds.)
+2. **"Alerts that peek out: Nothing"** means no notes and no big sizes, only the compact status marks (spinner and time, check, amber or red). Main building's Phase 2 report says Nothing already turns the finished note off, which differs from how I read the code, so this is **Phase 3 work to check, not assume:** under Nothing, post a finished and a "second project started" event and confirm neither note shows; if either still does, fix it. Add that to the smoke check.
+3. **A session's approval (and input) has Open and Later only.** Allow and Deny are only for Steward's own requests, because the hooks do not wait for Steward's answer.
 
 ### The hand-off to the side panel
 A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. The island goes back to Steward peeking, looking toward the panel. Closing is today's close. The panel in notch mode no longer drops from the notch; that special case goes away.

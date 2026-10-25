@@ -117,15 +117,11 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </div>
   </header>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">8</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">7</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Try Visual Review by hand</span><time datetime="2026-10-20">Oct 20</time></div>
         <p>Set an App address on a project, run a Claude turn, and look at the card in the panel: the slider, Looks good, Send it back, Later. Dark mode and logins are not checked yet.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Pick for the island: failed builds and &quot;Nothing&quot;</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Three small picks for Phase 3, none blocks it: should a failed build come out under &quot;Needs me&quot; (recommended yes), what &quot;Nothing&quot; means for the finished note (recommended: no notes, compact status only), and confirm a session's approval has Open and Later, not Allow and Deny. Try it: design/showcase.html, section 7, &quot;Every alert opens as the island&quot;.</p>
       </li>
       <li>
         <div class="row"><span class="name">Try the movable panel by hand</span><time datetime="2026-10-21">Oct 21</time></div>
@@ -167,7 +163,7 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <ul>
       <li>
         <div class="row"><span class="name">Notch island, Phases 2 to 5</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Phase 1 is merged (PR #34). Phase 2 (PR #36, in review): the note, chat names, the panel opening on the side. Phase 3: the approval and review sizes plus four more alerts as the island (needs input, build failed, deployed or merged, first launch), a catch-all note, and the rule that nothing in Island mode ever uses the old under-notch pill. Then Phase 4 (the rest of the hand-off, quiet mode) and Phase 5 (hardening). Each waits for your go typed into Main building.</p>
+        <p>Phase 1 is merged (PR #34). Phase 2 (PR #36, in review): the note, chat names, the panel opening on the side. Phase 3: the approval and review sizes plus four more alerts as the island (needs input, build failed, deployed or merged, first launch), a catch-all note, and the rule that nothing in Island mode ever uses the old under-notch pill. Decided: a failed build comes out under Needs me, Nothing means only the small status marks (Phase 3 also checks the finished and started notes under Nothing), and a session's approval has Open and Later only. Then Phase 4 (the rest of the hand-off, quiet mode) and Phase 5 (hardening). Each waits for your go typed into Main building.</p>
       </li>
       <li>
         <div class="row"><span class="name">Steward's reactions, R1 to R3 (designed)</span><time datetime="2026-10-24">Oct 24</time></div>
@@ -257,8 +253,12 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="ideas" class="card ideas">
-    <h2><span class="dot"></span>Ideas not planned yet <span class="count">17</span></h2>
+    <h2><span class="dot"></span>Ideas not planned yet <span class="count">18</span></h2>
     <ul>
+      <li>
+        <div class="row"><span class="name">Approve from the island</span><time datetime="2026-10-24">Oct 24</time></div>
+        <p>Steward's PermissionRequest hook would wait for your Allow or Deny and give it back to Claude Code, so a session's approval could be answered from the island. Needs a spike first, like Visual Review Phase 4's held Stop hook: both Claude apps, the timeout, and what happens if Steward is not running. Only offered so far, not designed.</p>
+      </li>
       <li>
         <div class="row"><span class="name">First run: API key or Claude login</span><time datetime="2026-10-15">Oct 15</time></div>
         <p>Decide what a new user sees first.</p>
