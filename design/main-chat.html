@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steward: Main chat, four directions</title>
+<style>
+/* Design page for Steward's main chat redesign (docs/briefs/main-chat-redesign.md). Plain HTML, CSS and JS, no libraries,
+   no web fonts. Four directions, each drawn at the real panel size (400 wide) in four situations. Steward is the real
+   Pill from design/pill. Nothing here is the app: it is a picture of the plan, and it is all clickable. */
+:root{--tint:200,228,255;--glow:96,190,255;--ink:18,70,120;--soft:178,220,255;--t1:#0d1015;--t2:rgb(var(--ink));--t3:rgba(var(--ink),.78);--fill:255,255,255;--frost:.58;
+  --edge:rgba(255,255,255,.85);--inset:rgba(var(--ink),.07);--inset2:rgba(var(--ink),.14);--line:rgba(var(--ink),.12);--live:26,140,255;--warm:176,100,0;--ok:31,138,76;--bad:200,50,50;
+  --page:#e9f0fa;--shadow:rgba(20,30,60,.22);--btn:rgb(18,70,120);--btnt:#fff;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+:root[data-theme=dark]{--t1:#f5f7fa;--t3:rgba(var(--soft),.78);--fill:24,27,34;--frost:.62;--edge:rgba(255,255,255,.26);--inset:rgba(255,255,255,.07);--inset2:rgba(255,255,255,.12);--line:rgba(255,255,255,.1);
+  --live:96,190,255;--warm:255,196,107;--ok:95,214,142;--bad:255,120,120;--page:#0c1017;--shadow:rgba(0,0,0,.55);--btn:rgb(96,190,255);--btnt:#0b0d12;color-scheme:dark}
+:root[data-theme=dark] .pn{--t2:rgb(var(--soft))}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(60rem 30rem at 85% -10%,rgba(var(--glow),.22),transparent 70%),var(--page);color:var(--t1);font:500 14px/1.5 var(--font);-webkit-font-smoothing:antialiased;padding:28px 16px 90px}
+main{max-width:76rem;margin:0 auto}
+h1{font-size:2rem;letter-spacing:-.03em;margin:0 0 6px}h2{font-size:1.2rem;margin:40px 0 6px;letter-spacing:-.01em}h3{font-size:1rem;margin:0 0 4px}
+p{margin:0 0 10px;color:var(--t3);max-width:74ch}p.t1{color:var(--t1)}
+a{color:rgb(var(--live))}
+code{font-family:var(--mono);font-size:.88em}
+.btn{font:700 .84rem var(--font);border:0;border-radius:999px;padding:7px 14px;cursor:pointer;background:var(--inset);color:var(--t1)}
+.btn[aria-pressed=true]{background:var(--btn);color:var(--btnt)}
+.btn:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:2px solid rgb(var(--live));outline-offset:2px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin:14px 0}
+.ctl .lbl{font:800 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-right:8px}
+.seg{display:inline-flex;gap:3px;padding:3px;border-radius:999px;background:var(--inset)}
+.seg .btn{background:none;padding:5px 12px}.seg .btn[aria-pressed=true]{background:var(--btn);color:var(--btnt)}
+.card{padding:14px 16px;border-radius:14px;background:var(--inset)}.card b{display:block;margin-bottom:3px}.card span{color:var(--t3);font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--t3);font-weight:700}
+.tbl{overflow-x:auto}
+
+/* the stage: a wallpaper with the real-size panel on it */
+.stagewrap{display:grid;grid-template-columns:minmax(0,430px) minmax(0,1fr);gap:26px;align-items:start;margin-top:10px}
+@media (max-width:900px){.stagewrap{grid-template-columns:1fr}}
+.wall{position:relative;border-radius:16px;padding:14px 14px 14px;overflow:hidden;background:radial-gradient(70% 60% at 20% 15%,#8ec0ff,transparent 62%),radial-gradient(60% 60% at 90% 90%,#c8a8ff,transparent 62%),#7aa0e0;box-shadow:0 0 0 1px var(--line)}
+:root[data-theme=dark] .wall{background:radial-gradient(70% 60% at 20% 15%,#33477e,transparent 62%),radial-gradient(60% 60% at 90% 90%,#53378a,transparent 62%),#1a2240}
+.wall.busy::before{content:"";position:absolute;inset:0;background:
+  repeating-linear-gradient(0deg,rgba(255,255,255,.2) 0 6px,transparent 6px 18px),
+  repeating-linear-gradient(90deg,rgba(0,0,0,.16) 0 70px,transparent 70px 150px);opacity:.7}
+.wall>*{position:relative}
+.fitbox{overflow:hidden}
+
+/* the panel, shared by every direction */
+.pn{width:400px;height:680px;border-radius:18px;position:relative;display:flex;flex-direction:column;overflow:hidden;color:var(--t1);font-size:13.5px;line-height:1.45;
+  background:linear-gradient(180deg,rgba(var(--tint),.24),rgba(var(--tint),.08)),rgba(var(--fill),var(--frost));-webkit-backdrop-filter:blur(26px) saturate(1.35);backdrop-filter:blur(26px) saturate(1.35);
+  box-shadow:inset 0 1px 0 var(--edge),0 24px 60px var(--shadow);border:1px solid var(--line)}
+.pn *{min-width:0}
+.pn button{font:inherit;color:inherit}
+.pn .muted{color:var(--t3)}.pn small,.pn .sm{font-size:12px}
+.pn .scroll{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.pn .ib{width:28px;height:28px;border-radius:9px;border:0;background:transparent;color:var(--t3);display:grid;place-items:center;cursor:pointer;padding:0;flex:none}
+.pn .ib:hover{background:var(--inset)}.pn .ib svg{width:16px;height:16px}
+.pn .pillslot{display:block;flex:none}
+.pn .ctxb{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--t3);padding:2px 6px 2px 0;border-radius:8px;cursor:pointer;font-weight:600;font-size:12.5px}
+.pn .ctxb:hover{color:var(--t1)}.pn .ctxb svg{width:11px;height:11px}
+.pn .pbtn{border:0;border-radius:999px;padding:6px 13px;font-weight:700;font-size:12.5px;cursor:pointer;background:var(--inset2)}
+.pn .pbtn.pri{background:var(--btn);color:var(--btnt)}
+.pn .pbtn.quiet{background:transparent;color:var(--t3);padding-left:6px;padding-right:6px}
+.pn .chp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(var(--fill),.35);border-radius:999px;padding:5px 11px;font-weight:600;font-size:12.5px;cursor:pointer}
+.pn .chp:hover{background:var(--inset)}
+.pn .dot{width:8px;height:8px;border-radius:50%;background:rgb(var(--ok));flex:none}.pn .dot.warn{background:rgb(var(--warm))}.pn .dot.live{background:rgb(var(--live));animation:blinkd 1.6s ease-in-out infinite}
+@keyframes blinkd{50%{opacity:.35}}
+.pn kbd{font:600 10.5px var(--font);color:var(--t3);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.pn code,.pn .mono{font-family:var(--mono);font-size:12px}
+.pn .hash{font-family:var(--mono);font-size:11.5px;color:rgb(var(--live));background:rgba(var(--live),.1);border-radius:6px;padding:1px 6px}
+
+/* thumbnails of a page, before and after */
+.fp{position:relative;border-radius:9px;overflow:hidden;background:#fff;height:100%;width:100%}
+.fp i{position:absolute;display:block}
+.fp .hero{left:0;right:0;top:0;height:38%;background:#3b6fd6}.fp .l1{left:8%;top:12%;width:34%;height:6%;border-radius:3px;background:rgba(255,255,255,.85)}
+.fp .l2{left:8%;top:24%;width:50%;height:4%;border-radius:3px;background:rgba(255,255,255,.5)}.fp .cta{right:8%;top:14%;width:22%;height:12%;border-radius:99px;background:#fff}
+.fp .c{top:48%;height:36%;width:26%;border-radius:5px;background:#e3e8f0}.fp .c1{left:6%}.fp .c2{left:37%}.fp .c3{left:68%}
+.fp.after .hero{background:#2f8f5b}.fp.after .cta{background:#ffd978}.fp.after .c2{background:#cfe9da}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:3px;border-radius:10px;overflow:hidden;position:relative}
+.pair .fp{border-radius:0}
+.pair em{position:absolute;bottom:5px;font:800 9px var(--font);font-style:normal;background:rgba(0,0,0,.6);color:#fff;border-radius:99px;padding:1px 6px}.pair em.b{left:5px}.pair em.a{right:5px}
+
+/* commands and approvals, shared */
+.cmd{border-radius:12px;background:var(--inset);padding:8px 11px}
+.cmd .top{display:flex;align-items:center;gap:7px;font-weight:700;font-size:12.5px}
+.cmd .top .tag{margin-left:auto;font-weight:700;font-size:11px;color:rgb(var(--live));background:rgba(var(--live),.12);border-radius:99px;padding:1px 8px}
+.cmd .top svg{width:13px;height:13px;color:rgb(var(--ok))}
+.cmd pre{margin:5px 0 0;font:500 12px var(--mono);white-space:pre-wrap;word-break:break-all;color:var(--t1)}
+.cmd .res{margin-top:4px;font-size:12px;color:var(--t3)}
+.apv{border-radius:12px;background:rgba(var(--warm),.14);border:1px solid rgba(var(--warm),.35);padding:9px 11px}
+.apv .top{display:flex;align-items:center;gap:7px;font-weight:800;font-size:12.5px;color:rgb(var(--warm))}.apv .top svg{width:14px;height:14px}
+.apv pre{margin:5px 0 4px;font:500 12px var(--mono);white-space:pre-wrap;word-break:break-all}
+.apv .why{font-size:12px;color:var(--t3);margin-bottom:8px}
+.apv .acts{display:flex;gap:8px}
+.steps{display:flex;align-items:center;gap:7px;color:var(--t3);font-size:12.5px;font-weight:600}.steps svg{width:12px;height:12px}
+.rc{border-radius:14px;background:rgba(var(--fill),.38);border:1px solid var(--line);padding:11px}
+.rc .rh{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}.rc .rh b{font-size:13.5px}.rc .rh span{font-size:12px;color:var(--t3)}
+.rc .pair{height:112px}.rc .says{margin:9px 0 10px;font-size:12.5px;color:var(--t3)}.rc .says b{color:var(--t1)}
+.rc .acts{display:flex;gap:8px;flex-wrap:wrap}
+
+/* the running-commands control: the same two states, drawn four ways */
+.mode{position:relative}
+.mode .pop{position:absolute;bottom:calc(100% + 8px);left:0;width:276px;padding:11px 13px;border-radius:13px;background:rgb(var(--fill));border:1px solid var(--line);box-shadow:0 12px 30px var(--shadow);
+  font-size:12.5px;color:var(--t1);opacity:0;pointer-events:none;transform:translateY(4px);transition:opacity .16s,transform .16s;z-index:5}
+.mode:hover .pop,.mode:focus-within .pop{opacity:1;transform:none}
+.mode .pop b{display:block;margin-bottom:3px}.mode .pop span{color:var(--t3)}
+.mode .pop .sep{display:block;height:6px}
+.vd .mode .pop{left:auto;right:-6px;bottom:auto;top:calc(100% + 10px)}
+.sh{width:14px;height:14px;flex:none}
+.mseg{display:inline-flex;padding:2px;border-radius:999px;background:var(--inset)}
+.mseg button{border:0;background:none;border-radius:999px;padding:4px 10px;font-weight:700;font-size:12px;cursor:pointer;color:var(--t3);display:inline-flex;align-items:center;gap:5px}
+.mseg button[aria-pressed=true]{background:rgba(var(--fill),.9);color:var(--t1);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.mseg button[aria-pressed=true].auto{background:rgb(var(--live));color:#fff}
+.mseg button.auto svg{width:12px;height:12px}
+.mtog{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;padding:5px 11px 5px 8px;font-weight:700;font-size:12px;cursor:pointer;background:var(--inset);color:var(--t3)}
+.mtog.on{background:rgba(var(--live),.16);color:rgb(var(--live))}.mtog svg{width:14px;height:14px}
+.mrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t3)}.mrow .hint{margin-left:auto}
+
+/* composer parts */
+.send{width:32px;height:32px;border-radius:50%;border:0;display:grid;place-items:center;cursor:pointer;background:var(--inset2);color:var(--t3);flex:none}
+.send svg{width:15px;height:15px}.send.on{background:var(--btn);color:var(--btnt)}
+.fld{flex:1;color:var(--t3);padding:7px 2px;font-size:13.5px}
+.fld.typed{color:var(--t1)}
+.cap{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);font:700 11px var(--font);color:var(--t3);white-space:nowrap}
+
+/* ---------------- A: Home ---------------- */
+.va .hd{display:flex;align-items:center;gap:10px;padding:12px 12px 8px 14px}
+.va .hd .tt{flex:1}.va .hd .tt b{display:block;font-size:16px;letter-spacing:-.01em;line-height:1.1}
+.va .hd .acts{display:flex;gap:2px}
+.va .body{flex:1;display:flex;flex-direction:column;padding:6px 14px 8px;gap:12px;min-height:0;overflow:hidden}
+.va .focus{border-radius:18px;background:rgba(var(--fill),.4);border:1px solid var(--line);padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+.va .focus .eyebrow{font:800 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.va .focus h4{margin:0 0 10px;font-size:17px;letter-spacing:-.015em;line-height:1.25}
+.va .tl{position:relative;display:flex;flex-direction:column;gap:11px;margin:4px 0 12px;padding-left:20px}
+.va .tl::before{content:"";position:absolute;left:5px;top:7px;bottom:7px;width:2px;border-radius:2px;background:var(--inset2)}
+.va .tl .it{position:relative;font-size:13px;line-height:1.35}.va .tl .it::before{content:"";position:absolute;left:-19px;top:5px;width:8px;height:8px;border-radius:50%;background:rgb(var(--live));box-shadow:0 0 0 3px rgba(var(--fill),.9)}
+.va .tl .it small{display:block;color:var(--t3)}
+.va .quote{font-size:12.5px;color:var(--t3);border-radius:12px;background:var(--inset);padding:9px 12px}.va .quote b{color:var(--t1)}
+.va .tryrow{display:flex;flex-wrap:wrap;gap:8px}
+.va .low{margin-top:auto;display:flex;flex-direction:column;gap:12px}
+.va .sect{font:800 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin:2px 2px -4px}
+.va .drop{border:1.5px dashed var(--inset2);border-radius:12px;padding:8px 12px;font-size:12.5px;color:var(--t3);display:flex;align-items:center;gap:8px}.va .drop svg{width:14px;height:14px}
+.va .stat{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--t3);padding:0 4px}
+.va .rowi{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.va .rowi:first-of-type{border-top:0}
+.va .rowi .tx{flex:1}.va .rowi .tx b{display:block;font-size:13.5px}.va .rowi .tx span{font-size:12.5px;color:var(--t3);display:block}
+.va .composer{padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.va .cbox{display:flex;align-items:center;gap:8px;border-radius:16px;background:rgba(var(--fill),.5);border:1px solid var(--line);padding:5px 6px 5px 8px}
+.va .thread{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;overflow:hidden}
+.va .msg.me{align-self:flex-end;max-width:84%;background:rgba(var(--live),.16);border-radius:14px 14px 4px 14px;padding:8px 12px}
+.va .msg.st{color:var(--t1)}
+.va .ctxline{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t3);padding:0 4px}
+
+/* ---------------- B: Chat first ---------------- */
+.vb .hd{display:flex;align-items:center;gap:9px;padding:10px 10px 10px 12px;border-bottom:1px solid var(--line)}
+.vb .hd .tt{flex:1}.vb .hd .tt b{display:block;font-size:14.5px;line-height:1.15}
+.vb .hd .acts{display:flex;gap:2px}
+.vb .need{margin:8px 12px 0;border-radius:11px;background:rgba(var(--warm),.16);padding:6px 11px;font-size:12.5px;font-weight:700;color:rgb(var(--warm));display:flex;align-items:center;gap:8px}
+.vb .body{flex:1;display:flex;flex-direction:column;gap:10px;padding:12px;min-height:0;overflow:hidden;justify-content:flex-end}
+.vb .day{align-self:center;font:700 11px var(--font);color:var(--t3);letter-spacing:.04em}
+.vb .row{display:flex;gap:8px;align-items:flex-end}.vb .row.me{justify-content:flex-end}
+.vb .av{width:32px;height:22px;border-radius:99px;background:linear-gradient(180deg,#f4f7fb,#a9b4c4);flex:none;position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);margin-bottom:2px}
+.vb .av::before,.vb .av::after{content:"";position:absolute;top:6px;width:3.5px;height:10px;border-radius:3px;background:rgb(var(--live));left:9px;box-shadow:0 0 5px rgba(var(--live),.6)}.vb .av::after{left:19.5px}
+.vb .bub{border-radius:16px 16px 16px 5px;background:rgba(var(--fill),.55);border:1px solid var(--line);padding:9px 12px;max-width:86%}
+.vb .row.me .bub{border-radius:16px 16px 5px 16px;background:rgba(var(--live),.18);border-color:transparent}
+.vb .bub b{display:block;font-size:13px}.vb .bub .meta{font-size:12px;color:var(--t3)}
+.vb .mini{display:flex;flex-direction:column;margin:7px 0 2px;border-top:1px solid var(--line)}
+.vb .mini div{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}.vb .mini div:last-child{border-bottom:0}
+.vb .mini span.w{margin-left:auto;color:var(--t3);font-size:11.5px;white-space:nowrap}
+.vb .qr{display:flex;gap:7px;overflow:hidden;padding:0 12px 8px;flex-wrap:wrap}
+.vb .composer{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.vb .cbox{display:flex;align-items:center;gap:8px;border-radius:22px;background:rgba(var(--fill),.55);border:1px solid var(--line);padding:5px 6px 5px 12px}
+.vb .clip{position:relative}.vb .clip em{position:absolute;right:-4px;top:-4px;font:800 9px var(--font);font-style:normal;background:rgb(var(--live));color:#fff;border-radius:99px;padding:0 5px}
+
+/* ---------------- C: Cards ---------------- */
+.vc .hd{display:flex;align-items:center;gap:9px;padding:11px 10px 8px 14px}
+.vc .hd .tt{flex:1}.vc .hd .tt b{display:block;font-size:15px;line-height:1.1}
+.vc .hd .acts{display:flex;gap:2px}
+.vc .body{flex:1;padding:4px 12px 8px;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:min-content;gap:10px;align-content:start;overflow:hidden;min-height:0}
+.vc .tile{border-radius:16px;background:rgba(var(--fill),.42);border:1px solid var(--line);padding:11px 12px;display:flex;flex-direction:column;gap:7px}
+.vc .tile.w2{grid-column:1/-1}
+.vc .th{display:flex;align-items:center;gap:7px;font:800 10.5px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--t3)}.vc .th svg{width:13px;height:13px}
+.vc .th .n{margin-left:auto;background:var(--inset2);color:var(--t1);border-radius:99px;padding:0 7px;letter-spacing:0}
+.vc .big{font-size:15px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.vc .srow{display:flex;align-items:center;gap:9px;font-size:13px}.vc .srow b{font-weight:700}.vc .srow span{color:var(--t3);margin-left:auto;font-size:12px;white-space:nowrap}
+.vc .said{font-size:12.5px;color:var(--t3);margin:-2px 0 2px 17px}
+.vc .chain{display:flex;flex-wrap:wrap;gap:6px}
+.vc .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;height:44px}.vc .thumbs i{border-radius:7px;background:var(--inset2);display:block}
+.vc .thumbs i.d{background:transparent;border:1.5px dashed var(--inset2)}
+.vc .bar{display:flex;gap:8px;padding:0 12px 8px}
+.vc .bar .mini{flex:1;border-radius:12px;background:rgba(var(--fill),.42);border:1px solid var(--line);padding:6px 10px;font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px}.vc .bar .mini b{color:var(--t1)}
+.vc .thread{flex:1;display:flex;flex-direction:column;gap:9px;padding:4px 14px 8px;min-height:0;overflow:hidden;justify-content:flex-end}
+.vc .msg.me{align-self:flex-end;max-width:84%;background:rgba(var(--live),.16);border-radius:14px 14px 4px 14px;padding:8px 12px}
+.vc .composer{padding:8px 12px 12px}
+.vc .cbox{display:flex;align-items:center;gap:8px;border-radius:16px;background:rgba(var(--fill),.55);border:1px solid var(--line);padding:5px 6px 5px 6px}
+
+/* ---------------- D: Command bar ---------------- */
+.vd .bar{display:flex;align-items:center;gap:8px;margin:12px 12px 6px;border-radius:18px;background:rgba(var(--fill),.55);border:1px solid var(--line);padding:6px 8px 6px 8px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+.vd .bar .fld{padding:8px 2px}
+.vd .body{flex:1;overflow:hidden;padding:2px 12px 10px;display:flex;flex-direction:column;gap:2px;min-height:0}
+.vd .grp{font:800 10.5px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--t3);padding:10px 8px 4px}
+.vd .row{display:flex;align-items:center;gap:11px;padding:8px 8px;border-radius:12px}
+.vd .row.sel{background:rgba(var(--live),.14)}
+.vd .row .ic{width:30px;height:30px;border-radius:9px;background:var(--inset);display:grid;place-items:center;flex:none;color:var(--t3)}.vd .row .ic svg{width:15px;height:15px}
+.vd .row .ic .dot{margin:0}
+.vd .row .tx{flex:1;line-height:1.3}.vd .row .tx b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vd .row .tx span{display:block;font-size:12px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vd .row kbd{flex:none}
+.vd .foot{display:flex;gap:14px;padding:8px 18px 12px;font-size:11.5px;color:var(--t3)}
+.vd .q{display:flex;align-items:center;gap:8px;padding:6px 8px 4px;font-weight:800;font-size:15px;letter-spacing:-.01em}
+.vd .ans{padding:2px 8px;display:flex;flex-direction:column;gap:9px;flex:1;overflow:hidden}
+.vd .ans .cmd,.vd .ans .apv{margin:0}
+.vd .nowline{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t3);padding:0 8px}
+
+/* explainer */
+.col2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:12px 0}
+.vcard{padding:14px 16px;border-radius:14px;background:var(--inset)}.vcard h3{display:flex;align-items:center;gap:8px}.vcard h3 i{font-style:normal;display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:var(--btn);color:var(--btnt);font-size:13px}
+.vcard ul{margin:6px 0 0;padding-left:18px;color:var(--t3);font-size:13px}.vcard li{margin:3px 0}.vcard li b{color:var(--t1)}
+.cmpgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px 12px;margin-top:12px}
+.cmpgrid figure{margin:0}.cmpgrid figcaption{font-weight:800;margin:0 0 6px}
+.cmpgrid .wall{padding:8px}
+.fit{overflow:hidden;border-radius:18px}
+.fit .pn{transform-origin:0 0}
+.note{padding:12px 14px;border-radius:12px;background:var(--inset);font-size:13px;color:var(--t1);margin:12px 0}.note b{font-weight:800}
+.rm *{transition-duration:.01s!important;animation-duration:.01s!important}
+@media (prefers-reduced-motion:reduce){.pn .dot.live{animation:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Steward's main chat: four directions</h1>
+<p class="t1">The user's words (2026-10-25): "I just dont like the bullet points. No need for the hiding feature. I just dont like the way it looks. It feel off. Lets add the auto and manual near the text bar. Lets do a couple of things different. Draw up a couple of different deigns and lets see what we come up with."</p>
+<p>Below are four directions that really differ, each at the real panel size (400 wide), in light and dark, over a plain or busy desktop, in the four situations: nothing going on, a chat in progress, a Visual Review waiting, and two sessions finished. Steward is the real Pill. Everything is clickable: the Ask / Auto control changes what the chat does, and hovering it explains it. The brief is <code>docs/briefs/main-chat-redesign.md</code>.</p>
+
+<h2>What makes today's panel feel off</h2>
+<div class="cards">
+  <div class="card"><b>1. Everything above the chat</b><span>Session chips, banner, tray, notices, review, brief and the left-off card all stack above the log. In the empty state the chat gets what is left, and the ask box sits far below a pile of unrelated things.</span></div>
+  <div class="card"><b>2. Equal weight for everything</b><span>A Tray with nothing in it takes as much room as a card that needs you. There is no sense of "this first".</span></div>
+  <div class="card"><b>3. Three styles of small heading</b><span>"Tray" is a bold heading, "Where you left off" is a card with an X, "Try:" is plain text. Chips, dots, quotes and code in the same few inches.</span></div>
+  <div class="card"><b>4. The same word four times</b><span>The project's name is in the header chip, the session chips, the left-off title and its status line.</span></div>
+  <div class="card"><b>5. Bullets and clipping</b><span>Two bulleted lists make a glass app read like a document. The session chips scroll sideways and clip ("5m ag"), and the quote is cut off.</span></div>
+  <div class="card"><b>6. A crowded header and a dead Send</b><span>A Pill, a name, five same-weight icons (two of them ways to leave) and a second row for the project. Send is a grey, lifeless button, and the one setting you change while working, Auto or Ask, is hidden in Settings.</span></div>
+</div>
+<div class="note"><b>The same in all four.</b> No bullet points anywhere (commits, suggestions and sessions each get another form). <b>No hide button.</b> It leaves the header; hiding still lives in the menu bar icon's menu ("Hide from Screen Edge") and the Hide shortcut in Settings → Shortcuts, both of which exist today. Esc and the tuck arrow remain the way to put the panel away. <b>Ask / Auto sits next to the text box</b>, says which mode is on, and says what Auto will never do on its own.</div>
+
+<h2>Try them</h2>
+<div class="ctl">
+  <span><span class="lbl">Situation</span><span class="seg" id="sc"><button class="btn" data-v="empty" aria-pressed="true">Nothing going on</button><button class="btn" data-v="chat" aria-pressed="false">Chat in progress</button><button class="btn" data-v="review" aria-pressed="false">Review waiting</button><button class="btn" data-v="two" aria-pressed="false">Two finished</button></span></span>
+  <span><span class="lbl">Running commands</span><span class="seg" id="md"><button class="btn" data-v="ask" aria-pressed="false">Ask each time</button><button class="btn" data-v="auto" aria-pressed="true">Auto</button></span></span>
+  <span><span class="lbl">Theme</span><span class="seg" id="th"><button class="btn" data-v="light" aria-pressed="true">Light</button><button class="btn" data-v="dark" aria-pressed="false">Dark</button></span></span>
+  <span><span class="lbl">Desktop</span><span class="seg" id="wl"><button class="btn" data-v="calm" aria-pressed="true">Calm</button><button class="btn" data-v="busy" aria-pressed="false">Busy</button></span></span>
+  <span><span class="lbl">Reduce motion</span><span class="seg" id="rmseg"><button class="btn" data-v="off" aria-pressed="true">Off</button><button class="btn" data-v="on" aria-pressed="false">On</button></span></span>
+</div>
+<div class="ctl"><span><span class="lbl">Direction</span><span class="seg" id="vr"><button class="btn" data-v="a" aria-pressed="true">A · Home</button><button class="btn" data-v="b" aria-pressed="false">B · Chat first</button><button class="btn" data-v="c" aria-pressed="false">C · Cards</button><button class="btn" data-v="d" aria-pressed="false">D · Command bar</button></span></span></div>
+<div class="stagewrap">
+  <div class="wall" id="wall"><div id="stage"></div></div>
+  <div id="about"></div>
+</div>
+
+<h2>All four, same situation</h2>
+<p>The same moment in each direction, scaled to 80%. Change the situation, mode or theme above and these follow.</p>
+<div class="cmpgrid" id="cmp"></div>
+
+<h2>The running-commands control</h2>
+<p>It is the same two states in all four, drawn four ways. Hover or focus it for what it means. In <b>Ask each time</b> every command waits for a Run click, as today. In <b>Auto</b> only commands Steward knows are safe run by themselves; anything it cannot read or does not know counts as risky and asks, the way <code>isRisky</code> works today.</p>
+<div class="cards">
+  <div class="card"><b>What Auto runs by itself</b><span>Reading and listing files, searching, git status, log and diff, and running tests, lint and typecheck in the project. A row shows "Ran automatically" with a small "auto" tag, so you can see what happened.</span></div>
+  <div class="card"><b>What always asks, even in Auto</b><span>Deleting, <code>git push</code>, deploys and rollbacks, installing packages, and anything outside the project. The card says why ("Auto is on, but pushing always asks"), so Auto never feels like a loophole.</span></div>
+  <div class="card"><b>What changes in Settings</b><span>Nothing is removed: Settings → Steward → Running commands stays, and the two stay in step. The control by the text box is the quick way, not a second setting.</span></div>
+  <div class="card"><b>Where it lives per direction</b><span>A: a two-part switch inside the text box. B: a line above it with a sentence under it. C: a shield toggle in the box. D: a chip on the right of the command bar.</span></div>
+</div>
+
+<h2>Where hiding goes</h2>
+<p>The eye-with-slash button is gone from the header in all four. "Hide from the screen edge" stays in the menu bar icon's menu (it switches to "Show at Screen Edge" while hidden) and as the Hide shortcut in Settings → Shortcuts. Nothing else changes about hiding.</p>
+</main>
+<script type="module">
+import { createStage } from './shared/pill-stage.js'
+import { ICONS } from './shared/icons.js'
+
+const $ = (s, r = document) => r.querySelector(s)
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const svg = (b) => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${b}</svg>`
+const I = { ...ICONS,
+  shield: svg('<path d="M8 1.8l5 1.8v4c0 3-2 5-5 6.6C5 12.6 3 10.6 3 7.6v-4z"/>'),
+  shieldok: svg('<path d="M8 1.8l5 1.8v4c0 3-2 5-5 6.6C5 12.6 3 10.6 3 7.6v-4z"/><path d="M5.6 8l1.7 1.7L10.6 6.3"/>'),
+  hand: svg('<path d="M5.5 8V3.4a1 1 0 012 0V7M7.5 7V2.6a1 1 0 012 0V7M9.5 7V3.4a1 1 0 012 0V9.6a4.4 4.4 0 01-4.4 4.4h-.4a3.4 3.4 0 01-2.7-1.4L2 9.8a1 1 0 011.6-1.2L5.5 10"/>'),
+  bolt: svg('<path d="M8.8 1.8L3.6 9h4l-.8 5.2L12.4 7h-4z"/>'),
+  send: svg('<path d="M8 13V3M8 3L4 7M8 3l4 4"/>'),
+  more: svg('<circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/>'),
+  chev: svg('<path d="M4 6l4 4 4-4"/>'),
+  branch: svg('<circle cx="4.5" cy="3.8" r="1.5"/><circle cx="4.5" cy="12.2" r="1.5"/><circle cx="11.5" cy="6" r="1.5"/><path d="M4.5 5.3v5.4M11.5 7.5c0 2.2-2 2.6-7 3"/>'),
+  check: svg('<path d="M3.2 8.4l3 3 6.6-6.8"/>'),
+  clip: svg('<path d="M11.5 6.5L7 11a2 2 0 01-2.8-2.8l5-5a3 3 0 014.2 4.2l-5 5"/>'),
+  eye: svg('<path d="M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z"/><circle cx="8" cy="8" r="1.8"/>'),
+  warn: svg('<path d="M8 2.2l6.2 11H1.8z"/><path d="M8 6.6v3M8 11.6h.01"/>'),
+  user: svg('<circle cx="8" cy="5.4" r="2.4"/><path d="M3 13.6c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/>'),
+  clock: svg('<circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.2 1.4"/>'),
+  spark: svg('<path d="M8 2l1.2 3.6L13 7l-3.8 1.4L8 12l-1.2-3.6L3 7l3.8-1.4z"/>'),
+  ret: svg('<path d="M12.5 4v4.4H4M6.6 6l-2.4 2.4 2.4 2.4"/>'),
+}
+
+/* ---------------- the stuff on screen ---------------- */
+const D = {
+  project: 'companion', branch: 'front-door',
+  commits: [['f0bb635', 'Preview: serve the design pages on port 4322', '2 days ago'], ['d307f13', 'Merge main into front-door (Visual Review quiet checks)', '2 days ago'], ['be57476', 'Merge pull request #32 from visual-review-quiet-checks', '2 days ago']],
+  said: { when: '34m ago', text: 'Pushed the brief to PR #36 and checked CI. Nothing else is waiting on you.' },
+  prompts: ['Find 4 landing pages with bento grids', '3 dark desk-setup photos for a hero', 'Run the tests'],
+  sessions: [{ name: 'companion', when: '1m ago', said: 'Phase 2 is up as a draft PR, CI running.' }, { name: 'steward-app', when: '5m ago', said: 'Moved the settings fix and ran the tests: all pass.' }],
+  review: { name: 'haven', url: 'localhost:3000/pricing', says: 'I made the Start button blue and added a row of logos.' },
+}
+const state = { scene: 'empty', mode: 'auto', theme: 'light', wall: 'calm', rm: 'off', v: 'a' }
+const VARS = { a: 'A · Home', b: 'B · Chat first', c: 'C · Cards', d: 'D · Command bar' }
+
+/* ---------------- shared pieces ---------------- */
+const pill = (mood, w = 64, h = 54) => `<span class="pillslot" data-pill data-mood="${mood}" data-w="${w}" data-h="${h}" style="width:${w}px;height:${h}px"></span>`
+const moodOf = () => ({ empty: 'idle', chat: 'thinking', review: 'idle', two: 'done' })[state.scene]
+const ib = (k, l) => `<button class="ib" aria-label="${l}" title="${l}">${I[k]}</button>`
+const fp = (after) => `<div class="fp ${after ? 'after' : ''}"><i class="hero"></i><i class="l1"></i><i class="l2"></i><i class="cta"></i><i class="c c1"></i><i class="c c2"></i><i class="c c3"></i></div>`
+const pair = () => `<div class="pair">${fp(false)}${fp(true)}<em class="b">Before</em><em class="a">After</em></div>`
+const review = () => `<div class="rc"><div class="rh"><b>${D.review.name} changed</b><span>${D.review.url}</span></div>${pair()}<p class="says"><b>Claude says:</b> ${D.review.says}</p><div class="acts"><button class="pbtn pri">Looks good</button><button class="pbtn">Send it back</button><button class="pbtn quiet">Open big</button></div></div>`
+const cmdDone = (cmd, res) => `<div class="cmd"><div class="top">${I.shieldok}<span>Ran automatically</span><span class="tag">auto · safe</span></div><pre>${cmd}</pre><div class="res">${res}</div></div>`
+const cmdAsk = (cmd, why) => `<div class="apv"><div class="top">${I.hand}<span>Run this?</span></div><pre>${cmd}</pre><div class="why">${why}</div><div class="acts"><button class="pbtn pri">Run</button><button class="pbtn">Skip</button></div></div>`
+const cmdRisky = (cmd) => `<div class="apv"><div class="top">${I.warn}<span>Needs your OK</span></div><pre>${cmd}</pre><div class="why">${state.mode === 'auto' ? 'Auto is on, but pushing always asks.' : 'Steward asks before running anything.'}</div><div class="acts"><button class="pbtn pri">Run</button><button class="pbtn">Skip</button></div></div>`
+const stepsLine = () => `<div class="steps">${I.chev}<span>Read 3 files, searched the project</span></div>`
+const POP = () => `<span class="pop" role="tooltip"><b>${state.mode === 'auto' ? 'Auto' : 'Ask each time'}</b><span>${state.mode === 'auto' ? 'Safe commands (reading, searching, tests, lint) run by themselves. Anything that deletes, pushes, deploys, installs or goes outside the project still asks.' : 'Every command waits for your Run click.'}</span><span class="sep"></span><span>Same as Settings → Steward → Running commands.</span></span>`
+const modeBtn = (m, label) => `<button data-mode="${m}" aria-pressed="${state.mode === m}" class="${m}">${m === 'auto' ? I.shield : ''}${label}</button>`
+const segMode = () => `<span class="mode"><span class="mseg" role="group" aria-label="Running commands">${modeBtn('ask', 'Ask')}${modeBtn('auto', 'Auto')}</span>${POP()}</span>`
+const sendBtn = (typed) => `<button class="send ${typed ? 'on' : ''}" aria-label="Send">${I.send}</button>`
+const placeholder = 'Ask, or run a command…'
+const CHAT_TYPED = ''
+const finishedList = (cls) => D.sessions.map((s) => `<div class="${cls}"><span class="ic"><i class="dot"></i></span><span class="tx"><b>${s.name} finished ${s.when}</b><span>${s.said}</span></span><button class="pbtn quiet">Open</button></div>`).join('')
+
+/* ---------------- A: Home ---------------- */
+function vaFocus() {
+  const s = state.scene
+  if (s === 'review') return `<div class="focus"><div class="eyebrow"><i class="dot warn"></i> Waiting on you</div>${review()}</div>`.replace('<div class="rc">', '<div class="rc" style="background:none;border:0;padding:0">')
+  if (s === 'two') return `<div class="focus"><div class="eyebrow"><i class="dot"></i> 2 sessions finished</div>${D.sessions.map((x) => `<div class="rowi"><span class="tx"><b>${x.name} <span style="display:inline;font-weight:500">· ${x.when}</span></b><span>${x.said}</span></span><button class="pbtn">Open</button></div>`).join('')}</div>`
+  return `<div class="focus"><div class="eyebrow">${I.branch.replace('<svg', '<svg width="13" height="13"')} Where you left off</div><h4>On ${D.branch}, pushed. Nothing waiting.</h4><div class="tl">${D.commits.slice(0, 2).map((c) => `<div class="it">${c[1]}<small>${c[0]} · ${c[2]}</small></div>`).join('')}</div><div class="quote"><b>Claude said ${D.said.when}:</b> ${D.said.text}</div></div>`
+}
+function vaBody() {
+  const s = state.scene
+  if (s === 'chat') return `<div class="body"><div class="thread">${chatThread()}</div><div class="ctxline"><i class="dot live"></i>Working in ${D.project} · ${state.mode === 'auto' ? 'npm run lint' : 'waiting for your Run'}</div></div>`
+  const extra = s === 'review' ? `<div class="stat"><i class="dot"></i>1 session finished</div>` : s === 'two' ? `<div class="stat">${I.image.replace('<svg', '<svg width="14" height="14"')}No images in the tray. Drop one anywhere here.</div>` : ''
+  const sug = s === 'empty' ? `<div class="low"><div class="sect">Try asking</div><div class="tryrow">${D.prompts.map((p) => `<button class="chp">${p}</button>`).join('')}</div><div class="drop">${I.image}Drop images here, or paste with ⌘V</div></div>` : ''
+  return `<div class="body">${vaFocus()}${extra}${sug}</div>`
+}
+function vaHead() {
+  return `<div class="hd">${pill(moodOf())}<div class="tt"><b>Steward</b><button class="ctxb">${D.project} · ${D.branch}${I.chev}</button></div><div class="acts">${ib('newchat', 'New chat')}${ib('gear', 'Settings')}${ib('tuck', 'Tuck away (Esc)')}</div></div>`
+}
+function vaComposer() {
+  return `<div class="composer"><div class="cbox">${segMode()}<span class="fld">${placeholder}</span>${sendBtn(false)}</div></div>`
+}
+
+/* ---------------- shared conversation ---------------- */
+function chatThread() {
+  const out = [`<p class="msg me" style="margin:0">Run the tests and tell me what fails</p>`, stepsLine()]
+  if (state.mode === 'auto') {
+    out.push(cmdDone('npm run test', '423 passed · 41 s'))
+    out.push(`<div class="msg st">All 423 tests pass and the lint is clean. I can push <code>front-door</code> when you want.</div>`)
+    out.push(cmdRisky('git push origin front-door'))
+  } else {
+    out.push(cmdAsk('npm run test', 'Reads the project and runs its tests. Nothing is changed.'))
+  }
+  return out.join('')
+}
+
+/* ---------------- B: Chat first ---------------- */
+const stMsg = (inner) => `<div class="row"><span class="av"></span><div class="bub">${inner}</div></div>`
+function vbHead() { return `<div class="hd">${pill(moodOf(), 52, 44)}<div class="tt"><b>Steward</b><button class="ctxb">${D.project}${I.chev}</button></div><div class="acts">${ib('newchat', 'New chat')}${ib('more', 'More: keep open, settings')}${ib('tuck', 'Tuck away (Esc)')}</div></div>` }
+function vbBody() {
+  const s = state.scene
+  let need = ''
+  if (s === 'review') need = `<div class="need">${I.eye.replace('<svg', '<svg width="14" height="14"')} A review is waiting on you</div>`
+  if (s === 'chat') need = `<div class="need">${I.hand.replace('<svg', '<svg width="14" height="14"')} ${state.mode === 'auto' ? 'A push is waiting on you' : 'A command is waiting on you'}</div>`
+  let msgs = ''
+  if (s === 'empty') msgs = `<div class="day">Today</div>${stMsg(`<b>Welcome back to ${D.project}</b><span class="meta">You were on ${D.branch}, pushed. Nothing is waiting.</span><div class="mini">${D.commits.slice(0, 3).map((c) => `<div><span class="hash">${c[0]}</span><span>${c[1].length > 34 ? c[1].slice(0, 34) + '…' : c[1]}</span><span class="w">${c[2]}</span></div>`).join('')}</div>`)}${stMsg(`<span class="meta">Claude said ${D.said.when}</span><br>${D.said.text}`)}`
+  if (s === 'chat') msgs = `<div class="row me"><div class="bub">Run the tests and tell me what fails</div></div>${stMsg(stepsLine())}${stMsg(state.mode === 'auto' ? cmdDone('npm run test', '423 passed · 41 s') : cmdAsk('npm run test', 'Reads the project and runs its tests. Nothing is changed.'))}${state.mode === 'auto' ? stMsg('All 423 tests pass and the lint is clean. I can push <code>front-door</code> when you want.') + stMsg(cmdRisky('git push origin front-door')) : ''}`
+  if (s === 'review') msgs = `<div class="day">Just now</div>${stMsg(`<b>${D.review.name} finished</b><span class="meta">The page looks different.</span>`)}${stMsg(review())}`
+  if (s === 'two') msgs = `<div class="day">Just now</div>${D.sessions.map((x) => stMsg(`<b>${x.name} finished</b> <span class="meta">${x.when}</span><br>${x.said}<div style="margin-top:7px"><button class="pbtn">Open</button></div>`)).join('')}`
+  return `${need}<div class="body">${msgs}</div>${s === 'empty' ? `<div class="qr">${D.prompts.map((p) => `<button class="chp">${p}</button>`).join('')}</div>` : ''}`
+}
+function vbComposer() {
+  return `<div class="composer"><div class="mrow">${segMode()}<span class="hint">${state.mode === 'auto' ? 'Risky commands still ask' : 'Every command asks'}</span></div><div class="cbox"><span class="clip"><button class="ib" aria-label="Images in the tray">${I.clip}</button></span><span class="fld">Ask for designs, images, or a command…</span>${sendBtn(false)}</div></div>`
+}
+
+/* ---------------- C: Cards ---------------- */
+const tile = (cls, icon, label, n, inner) => `<div class="tile ${cls}"><div class="th">${I[icon]}${label}${n ? `<span class="n">${n}</span>` : ''}</div>${inner}</div>`
+function vcHead() { return `<div class="hd">${pill(moodOf(), 48, 41)}<div class="tt"><b>Steward</b><button class="ctxb">${D.project}${I.chev}</button></div><div class="acts">${ib('newchat', 'New chat')}${ib('gear', 'Settings')}${ib('tuck', 'Tuck away (Esc)')}</div></div>` }
+function vcBody() {
+  const s = state.scene
+  if (s === 'chat') return `<div class="bar"><span class="mini"><i class="dot live"></i><b>1</b> working</span><span class="mini">${I.image.replace('<svg', '<svg width="13" height="13"')} <b>0</b> images</span><span class="mini">${I.eye.replace('<svg', '<svg width="13" height="13"')} <b>0</b> reviews</span></div><div class="thread">${chatThread()}</div>`
+  let t = ''
+  if (s === 'review') t += tile('w2', 'eye', 'Review', 1, review().replace('class="rc"', 'class="rc" style="background:none;border:0;padding:0"'))
+  const nSess = s === 'two' ? 2 : s === 'review' ? 1 : 0
+  if (nSess) t += tile('w2', 'user', 'Sessions', nSess, (s === 'two' ? D.sessions : D.sessions.slice(0, 1)).map((x) => `<div class="srow"><i class="dot"></i><b>${x.name}</b><span>finished ${x.when}</span></div><div class="said">${x.said}</div>`).join(''))
+  else t += tile('w2', 'user', 'Sessions', 0, `<div class="muted" style="font-size:12.5px">Quiet. No Claude Code sessions need you.</div>`)
+  t += tile('', 'branch', 'Left off', 0, `<div class="big">${D.branch}</div><div class="muted" style="font-size:12px">pushed · 3 commits</div><div class="chain">${D.commits.map((c) => `<span class="hash">${c[0].slice(0, 5)}</span>`).join('')}</div>`)
+  t += tile('', 'image', 'Tray', 0, `<div class="thumbs"><i class="d"></i><i class="d"></i><i class="d"></i></div><div class="muted" style="font-size:12px">Drop or paste images</div>`)
+  if (s === 'empty') t += tile('w2', 'spark', 'Try', 0, `<div class="chain">${D.prompts.map((p) => `<button class="chp">${p}</button>`).join('')}</div>`)
+  return `<div class="body">${t}</div>`
+}
+function vcComposer() { return `<div class="composer"><div class="cbox"><span class="mode"><button class="mtog ${state.mode === 'auto' ? 'on' : ''}" data-toggle aria-pressed="${state.mode === 'auto'}" aria-label="Auto mode">${state.mode === 'auto' ? I.shieldok : I.hand}${state.mode === 'auto' ? 'Auto' : 'Ask'}</button>${POP()}</span><span class="fld">${placeholder}</span>${sendBtn(false)}</div></div>` }
+
+/* ---------------- D: Command bar ---------------- */
+const drow = (sel, ic, t, sub, key) => `<div class="row ${sel ? 'sel' : ''}"><span class="ic">${ic}</span><span class="tx"><b>${t}</b><span>${sub}</span></span>${key ? `<kbd>${key}</kbd>` : ''}</div>`
+function vdBar(text) {
+  return `<div class="bar">${pill(moodOf(), 44, 37)}<span class="fld ${text ? 'typed' : ''}">${text || 'Ask, or run a command…'}</span><span class="mode"><button class="mtog ${state.mode === 'auto' ? 'on' : ''}" data-toggle aria-pressed="${state.mode === 'auto'}" aria-label="Auto mode">${state.mode === 'auto' ? I.shieldok : I.hand}${state.mode === 'auto' ? 'Auto' : 'Ask'}</button>${POP()}</span>${sendBtn(false)}</div>`
+}
+function vdMain() {
+  const s = state.scene
+  if (s === 'chat') return `${vdBar('Run the tests and tell me what fails')}<div class="body"><div class="nowline"><i class="dot live"></i>Working in ${D.project}</div><div class="ans">${stepsLine()}${state.mode === 'auto' ? cmdDone('npm run test', '423 passed · 41 s') + `<div>All 423 tests pass and the lint is clean. I can push <code>front-door</code> when you want.</div>` + cmdRisky('git push origin front-door') : cmdAsk('npm run test', 'Reads the project and runs its tests. Nothing is changed.')}</div></div>`
+  let rows = ''
+  if (s === 'review') rows += `<div class="grp">Needs you</div>${drow(true, I.eye, `${D.review.name} changed`, D.review.says, '↵')}<div class="grp">Sessions</div>${drow(false, '<i class="dot"></i>', 'haven finished 1m ago', 'Claude said it is ready to look at', '⌘1')}`
+  else if (s === 'two') rows += `<div class="grp">Sessions</div>${D.sessions.map((x, i) => drow(i === 0, '<i class="dot"></i>', `${x.name} finished ${x.when}`, x.said, i === 0 ? '↵' : '⌘2')).join('')}`
+  else rows += `<div class="grp">Pick up</div>${drow(true, I.branch, `${D.branch}, pushed`, `${D.commits[0][1]}`, '↵')}${drow(false, I.spark, `Claude said ${D.said.when}`, D.said.text, '⌘1')}<div class="grp">Try</div>${D.prompts.map((p, i) => drow(false, I.spark, p, '', `⌘${i + 2}`)).join('')}`
+  if (s !== 'two') rows += `<div class="grp">Tray</div>${drow(false, I.image, 'No images yet', 'Drop one anywhere, or paste with ⌘V', '')}`
+  return `${vdBar('')}<div class="body">${rows}</div><div class="foot"><span>↑↓ choose</span><span>↵ open</span><span>⌘N new chat</span><span>⋯ settings, keep open</span></div>`
+}
+
+/* ---------------- put it together ---------------- */
+function panel(v) {
+  const wrap = (cls, inner) => `<div class="pn ${cls}" data-v="${v}">${inner}</div>`
+  if (v === 'a') return wrap('va', `${vaHead()}${vaBody()}${vaComposer()}`)
+  if (v === 'b') return wrap('vb', `${vbHead()}${vbBody()}${vbComposer()}`)
+  if (v === 'c') return wrap('vc', `${vcHead()}${vcBody()}${vcComposer()}`)
+  return wrap('vd', vdMain())
+}
+const ABOUT = {
+  a: { name: 'A · Home', pitch: 'A calm home with one focus card. The panel shows the single most important thing right now (something waiting on you, then a review, then finished sessions, then where you left off) and nothing else competes with it.', rm: ['The Tray block when it is empty (it becomes a quiet drop line)', 'The session chips row (sessions become the focus card, or one status line)', 'The bulleted commits and Try list (a short timeline, and suggestion chips)', 'The pin button (it stays in Settings as Keep panel open)', 'The second project row (the project is a plain line under the name)'], mv: ['The mode switch into the text box', 'Where you left off becomes the empty-state focus card, not a stack of its own'], fix: 'Hierarchy: one thing first. In the empty state there are three things on screen, not seven.', cost: 'Smallest change to the chat itself: the log and the text box stay as they are.' },
+  b: { name: 'B · Chat first', pitch: 'The panel is a conversation. Steward posts into the thread like a teammate: a finished session, a review, the welcome back. Nothing is stacked above it any more.', rm: ['The whole stack above the chat: session strip, banner, tray block, cards', 'The Try bullets (quick-reply chips above the box)', 'Pin and settings from the header (a "more" menu)', 'The hide button'], mv: ['Sessions, reviews, the left-off summary and images become messages in the thread', 'A thin "waiting on you" line is the only thing pinned above it', 'The mode switch goes on a line above the box, with a sentence under it'], fix: 'One place to look, in time order, with the same bubble for everything.', cost: 'Bigger: the thread becomes a feed, so it needs message kinds, history and a way to keep a long feed from burying what waits.' },
+  c: { name: 'C · Cards', pitch: 'A small dashboard of equal tiles: sessions, review, where you left off, tray, things to try. Typing opens the chat, with the tiles folded to a one-line status bar.', rm: ['Bullets, banners and the stacked cards', 'Different styles for each block (every tile is the same card)', 'The hide button'], mv: ['Each block becomes a tile with one heading style', 'Commits become short hash chips; the tray is a row of three slots', 'The mode switch is a shield toggle in the box'], fix: 'Consistency: one card style, one heading style, everything visible at a glance.', cost: 'Medium: new tiles and a home-to-chat transition. The densest of the four.' },
+  d: { name: 'D · Command bar', pitch: 'The ask box is the hero, at the top, with Steward in it, like Spotlight or Raycast. Below it is one list of rows grouped by what needs you. Answers open under the box.', rm: ['The header (its actions move behind a menu)', 'Every card, chip and bullet: it is all rows', 'The hide button'], mv: ['The input moves to the top and the chat reads under it', 'The mode switch is a chip on the right of the bar', 'New chat, keep open and settings live in a "more" menu and on keys'], fix: 'Fewest elements and the clearest focus: the box.', cost: 'The biggest departure: the input leaves the bottom, and the chat reads top to bottom under it. Long answers need a sticky bar.' },
+}
+function about() {
+  const a = ABOUT[state.v]
+  $('#about').innerHTML = `<div class="vcard"><h3><i>${state.v.toUpperCase()}</i>${a.name}</h3><p class="t1" style="margin:6px 0 8px">${a.pitch}</p>
+    <b style="font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3)">Removes</b><ul>${a.rm.map((x) => `<li>${x}</li>`).join('')}</ul>
+    <b style="font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);display:block;margin-top:10px">Moves</b><ul>${a.mv.map((x) => `<li>${x}</li>`).join('')}</ul>
+    <p style="margin:12px 0 4px"><b class="t1">What fixes "off":</b> ${a.fix}</p><p style="margin:0"><b class="t1">Cost to build:</b> ${a.cost}</p></div>`
+}
+
+const stage = createStage({ reduced: () => state.rm === 'on', awake: new URLSearchParams(location.search).has('awake') })
+stage.start()
+function hydrate(root) {
+  root.querySelectorAll('[data-pill]').forEach((el, i) => {
+    const w = +el.dataset.w, h = +el.dataset.h
+    const g = stage.group({ seed: 40 + i, anchor: el, mood: el.dataset.mood, mouth: true, owner: 'mc' })
+    stage.view(g, 'glass', el, w, h, { color: '#8ec0ff', tinted: true, light: state.theme === 'light', mouth: true })
+  })
+}
+function render() {
+  document.documentElement.dataset.theme = state.theme
+  document.body.classList.toggle('rm', state.rm === 'on')
+  $('#wall').classList.toggle('busy', state.wall === 'busy')
+  stage.clear('mc')
+  document.getElementById('pill-filters')?.replaceChildren()
+  $('#stage').innerHTML = panel(state.v)
+  about()
+  $('#cmp').innerHTML = ['a', 'b', 'c', 'd'].map((v) => `<figure><figcaption>${VARS[v]}</figcaption><div class="wall ${state.wall === 'busy' ? 'busy' : ''}"><div class="fit" style="width:320px;height:544px"><div style="transform:scale(.8);transform-origin:0 0;width:400px">${panel(v)}</div></div></div></figure>`).join('')
+  hydrate($('#stage')); hydrate($('#cmp'))
+  for (const [id, key] of [['sc', 'scene'], ['md', 'mode'], ['th', 'theme'], ['wl', 'wall'], ['vr', 'v'], ['rmseg', 'rm']]) $(`#${id}`).querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === state[key])))
+}
+for (const [id, key] of [['sc', 'scene'], ['md', 'mode'], ['th', 'theme'], ['wl', 'wall'], ['vr', 'v'], ['rmseg', 'rm']]) $(`#${id}`).addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { state[key] = b.dataset.v; render() } })
+document.addEventListener('click', (e) => {
+  const m = e.target.closest('[data-mode]'); if (m) { state.mode = m.dataset.mode; render(); return }
+  const t = e.target.closest('[data-toggle]'); if (t) { state.mode = state.mode === 'auto' ? 'ask' : 'auto'; render() }
+})
+render()
+</script>
+</body>
+</html>
