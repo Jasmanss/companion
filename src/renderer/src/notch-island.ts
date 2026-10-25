@@ -53,9 +53,12 @@ function rightHtml(s: IslandStatus): string {
     case 'two':
       return `<i class="isl-spin"></i><span class="isl-count">${s.count ?? 2}</span>`
     case 'finished':
-      return '<i class="isl-check"></i>'
+      // Proud: a small spark pops once by the check.
+      return s.spark ? '<i class="isl-check"></i><i class="isl-spark"></i>' : '<i class="isl-check"></i>'
     case 'needs':
       return '<i class="isl-ask">!</i>'
+    case 'asks':
+      return '<i class="isl-q">?</i>'
     case 'review':
       return '<span class="isl-thumb"></span>'
     default:
@@ -171,11 +174,14 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
     if (el && since !== undefined) el.textContent = elapsed(Date.now() - since)
   }
   let shownHtml = ''
+  let shownRight: IslandStatus['right'] = null
   let swap: ReturnType<typeof setTimeout> | undefined
   const setRight = (status: IslandStatus, now: boolean) => {
     since = status.since
     const html = rightHtml(status)
-    if (html === shownHtml) return tickTime()
+    // The spark going doesn't swap the check: it has already popped and faded.
+    if (html === shownHtml || (status.right === 'finished' && shownRight === 'finished')) return tickTime()
+    shownRight = status.right
     shownHtml = html
     clearTimeout(swap)
     const put = () => {

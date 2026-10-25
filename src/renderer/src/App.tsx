@@ -526,12 +526,15 @@ export function App() {
 
   // The pin is the "tuck away when I click elsewhere" setting, so Settings shows it too.
   const pinned = settings?.keepPanelOpen ?? false
-  const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
+  // An approval is needs-you; a chat waiting for input is confused (main's reactions say so).
+  const waiting = sessions.some((s) => s.state === 'needs-approval')
   const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
   const glint = glintFor(work)
   // Docked in the notch, the notch window shows the character: it gets the same mood.
   useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
+  // The tab at the edge: the panel opens inward from it.
+  const inward = look.edge === 'right' ? -1 : 1
   // The tab can be dragged up or down its edge; a plain click still opens the panel.
   const tabDrag = useTabDrag(() => void api.dock.expand())
   // Dim when idle: the tab's eyes fade after a while at rest, until something happens or the cursor comes near.
@@ -600,7 +603,7 @@ export function App() {
   if (view === 'nudge') {
     return (
       <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
-        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} panelSide={inward} />
       </Nudge>
     )
   }
@@ -609,7 +612,7 @@ export function App() {
     const open = settings?.shortcuts?.togglePanel
     return (
       <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
-        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked dimmed={tabDimmed} />
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked dimmed={tabDimmed} panelSide={inward} />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )

@@ -420,6 +420,7 @@ function blockyView(el: HTMLElement, W: number, H: number, o: ViewOptions): { up
   const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr), className: 'pv-dim' })
   cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px`
   const msvg = document.createElementNS(NS, 'svg')
+  msvg.setAttribute('class', 'marks')
   msvg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   msvg.setAttribute('shape-rendering', 'crispEdges')
   msvg.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible;pointer-events:none`

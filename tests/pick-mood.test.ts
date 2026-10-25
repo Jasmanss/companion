@@ -10,11 +10,19 @@ describe('pickMood', () => {
     expect(pickMood({ ...calm, lateNight: true })).toBe('sleepy')
   })
 
-  it('puts the chat first, then short event moods, then sessions waiting, then a lingering worry', () => {
+  it('puts the chat first, then a failed deploy, an approval waiting, then the reactions, then a lingering worry', () => {
     expect(pickMood({ ...calm, agentMood: 'thinking', eventMood: 'celebrating' })).toBe('thinking')
-    expect(pickMood({ ...calm, eventMood: 'celebrating', waiting: true })).toBe('celebrating')
+    expect(pickMood({ ...calm, eventMood: 'mad', waiting: true })).toBe('mad')
+    expect(pickMood({ ...calm, eventMood: 'celebrating', waiting: true })).toBe('needs-you')
     expect(pickMood({ ...calm, eventMood: 'worried', waiting: true })).toBe('needs-you')
     expect(pickMood({ ...calm, eventMood: 'worried', lateNight: true })).toBe('worried')
+  })
+
+  it('lets what needs you or just happened beat you typing, and you typing beat what is only going on', () => {
+    for (const mood of ['confused', 'proud', 'done', 'nod', 'hello', 'celebrating'] as const) expect(pickMood({ ...calm, eventMood: mood, listening: true })).toBe(mood)
+    for (const mood of ['focused', 'juggling', 'worried'] as const) expect(pickMood({ ...calm, eventMood: mood, listening: true })).toBe('listening')
+    // A chat working shows even tucked away and late at night: the face follows the chats.
+    expect(pickMood({ ...calm, eventMood: 'focused', lateNight: true })).toBe('focused')
   })
 })
 
