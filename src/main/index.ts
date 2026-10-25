@@ -1755,9 +1755,11 @@ async function checkReactions(out: string): Promise<void> {
   // ends with "done", which clears it). End it the same way, and start from rest.
   if (agent.waitingForApproval) throw new Error('an approval from an earlier check is still waiting')
   win!.webContents.send('agent:event', { type: 'done' })
+  // At rest is resting or idle, or sleepy after midnight.
+  const atRest = () => ['resting', 'idle', 'sleepy'].includes(notch.state().mood)
   const settling = Date.now()
-  while (!['resting', 'idle'].includes(notch.state().mood) && Date.now() - settling < 4000) await sleep(50)
-  if (!['resting', 'idle'].includes(notch.state().mood)) throw new Error(`before the reactions, Steward's face is ${notch.state().mood} (${pickReaction(reactionInput(Date.now())!).why}), not at rest`)
+  while (!atRest() && Date.now() - settling < 4000) await sleep(50)
+  if (!atRest()) throw new Error(`before the reactions, Steward's face is ${notch.state().mood} (${pickReaction(reactionInput(Date.now())!).why}), not at rest`)
   const ids = ['react-1', 'react-2', 'react-3', 'react-4', 'react-5']
   const clean = () => {
     for (const id of ids) sessions.dismiss(id)
