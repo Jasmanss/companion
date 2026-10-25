@@ -99,6 +99,28 @@ describe('ReviewTracker, a turn that changed the page', () => {
     expect(review?.before).toBe('turn-start')
   })
 
+  it("keeps what Claude said about the turn, from the Stop hook, as the card's note", async () => {
+    const { tracker, store, state } = await setup()
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'new page'
+    const review = await tracker.turnStopped(stop({ last_assistant_message: '**Done.** I made the `Start` button blue and moved the logos under the hero.\n\nWant me to commit?' }))
+    expect(store.get(review!.id)?.said).toBe('I made the Start button blue and moved the logos under the hero.')
+    expect((await tracker.pending())[0].said).toBe('I made the Start button blue and moved the logos under the hero.')
+  })
+
+  it('has no note when Claude said nothing worth showing', async () => {
+    const { tracker, store, state } = await setup()
+    for (const [id, message] of [['1', undefined], ['2', 'Should I also change the footer?']] as const) {
+      tracker.turnStarted(start({ prompt_id: id }))
+      await tick()
+      state.page = `page ${id}`
+      const review = await tracker.turnStopped(stop({ prompt_id: id, last_assistant_message: message }))
+      expect(store.get(review!.id)).not.toHaveProperty('said')
+    }
+    expect((await tracker.pending()).map((v) => v.said)).toEqual([null, null])
+  })
+
   it('makes one review however many times the same turn stops', async () => {
     const { tracker, state } = await setup()
     tracker.turnStarted(start())

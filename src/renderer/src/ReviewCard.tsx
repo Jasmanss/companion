@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { addressLabel, reviewNote } from '../../shared/review'
 import type { ReviewCheck, ReviewProblem, ReviewView } from '../../shared/types'
-import { CloseIcon } from './icons'
+import { CloseIcon, SearchIcon } from './icons'
 
 const api = () => window.steward
 
@@ -12,11 +12,13 @@ const TALLER_BY = 40
 
 /**
  * Visual Review: the page as it was and as it is now, with a slider, and the two buttons that are the whole decision.
- * Looks good marks it reviewed. Send it back asks what should change, then copies a note for the session.
+ * Looks good marks it reviewed. Send it back asks what should change, then copies a note for the session. Open big
+ * shows the whole page before and after in the big viewer, and what Claude said it did sits under the picture.
  */
 export function ReviewCard({
   review,
   more,
+  onOpen,
   onLater,
   onDone,
   onError,
@@ -24,6 +26,8 @@ export function ReviewCard({
   review: ReviewView
   /** How many more reviews wait behind this one. */
   more: number
+  /** Open the big viewer on this review. */
+  onOpen: () => void
   /** Hide it until the panel is opened again. */
   onLater: () => void
   /** A decision was made: say what happened. */
@@ -79,14 +83,27 @@ export function ReviewCard({
             <div className="rv-ring" />
           </>
         )}
+        {/* The slider takes drags on the picture, so its corner opens it big. With no before, all of it does. */}
+        <button className={`rv-open${review.before ? '' : ' all'}`} onClick={onOpen} aria-label="Open the before and after big" title="Open big">
+          <span>
+            <SearchIcon />
+            Open big
+          </span>
+        </button>
       </div>
+
+      {review.said && (
+        <p className="rv-said" title={review.said}>
+          <b>Claude says:</b> {review.said}
+        </p>
+      )}
 
       <p className="rv-facts muted small">
         {review.beforeFrom === 'none' && 'There is no earlier picture of this page, so only how it looks now is shown. '}
         {review.beforeFrom === 'last-look' && 'The before picture is from the last time Steward looked, not from when you sent the prompt. '}
         {taller && `The page is taller now (${review.heightAfter} px, was ${review.heightBefore} px): this shows the top. `}
-        <button className="rv-link" onClick={() => api().review.openFull(review.id, 'after').catch((err: unknown) => onError(message(err)))}>
-          Full image
+        <button className="rv-link" onClick={onOpen}>
+          Open big
         </button>
         {more > 0 && ` · ${more} more to look at`}
       </p>

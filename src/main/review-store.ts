@@ -29,6 +29,8 @@ export interface ReviewRecord {
   /** new: waiting for a decision. good: marked as looking good. sent-back: the note was copied. */
   status: 'new' | 'good' | 'sent-back'
   note?: string
+  /** The "Claude says" note: the start of Claude's last reply for the turn (sayFrom), when it said something. */
+  said?: string
 }
 
 /** The files of one review, besides review.json. The card pictures are small JPEGs of the top of the page. */
@@ -136,6 +138,25 @@ export class ReviewStore {
     return entry ? path.join(entry.dir, FILE_NAMES[which]) : null
   }
 
+  /**
+   * What review://<id>/before and review://<id>/after load, for the big viewer: the full-page picture of a review that is
+   * in the store, and nothing else. Any other id, file name or path gives null.
+   */
+  pictureFor(url: string): string | null {
+    // The URL parser would resolve a "..", which could only reach this review's own pictures; refused all the same.
+    if (/\.\.|%2e/i.test(url)) return null
+    let u: URL
+    try {
+      u = new URL(url)
+    } catch {
+      return null
+    }
+    const which = u.pathname === '/before' ? 'before' : u.pathname === '/after' ? 'after' : null
+    const record = u.protocol === 'review:' && isReviewId(u.hostname) ? this.get(u.hostname) : null
+    if (!which || !record || u.search || u.hash || (which === 'before' && record.before === 'none')) return null
+    return this.file(record.id, which)
+  }
+
   /** The contents of one of a review's files. */
   async read(id: string, which: ReviewFile): Promise<Buffer | null> {
     const file = this.file(id, which)
@@ -212,7 +233,8 @@ function parseRecord(text: string): ReviewRecord | null {
       typeof r.createdAt === 'number' &&
       (r.before === 'turn-start' || r.before === 'last-look' || r.before === 'none') &&
       typeof r.heightAfter === 'number' &&
-      (r.status === 'new' || r.status === 'good' || r.status === 'sent-back')
+      (r.status === 'new' || r.status === 'good' || r.status === 'sent-back') &&
+      (r.said === undefined || typeof r.said === 'string')
     return ok ? (r as ReviewRecord) : null
   } catch {
     return null

@@ -3,7 +3,7 @@ import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem, ViewerKind } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
@@ -12,6 +12,7 @@ import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './ic
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
 import { ReviewCard, ReviewProblems } from './ReviewCard'
+import { ReviewViewer } from './ReviewViewer'
 import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
@@ -58,6 +59,9 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null)
   const [viewIndex, setViewIndex] = useState(0)
+  // The big view shows the tray's images or a review's before and after; which one it is, and which review.
+  const [viewKind, setViewKind] = useState<ViewerKind>('tray')
+  const [reviewIndex, setReviewIndex] = useState(0)
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   const [banner, setBanner] = useState<AlertView | null>(null)
@@ -496,7 +500,14 @@ export function App() {
 
   const openViewer = (index: number) => {
     setViewIndex(index)
-    void api.dock.view()
+    setViewKind('tray')
+    void api.dock.view('tray')
+  }
+
+  const openReview = (index: number) => {
+    setReviewIndex(index)
+    setViewKind('review')
+    void api.dock.view('review')
   }
 
   const pickProject = (project: Project) => {
@@ -531,6 +542,10 @@ export function App() {
   const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
   const shownReviews = reviews.filter((r) => !laterReviews.has(r.id))
+  const noReviewToView = dock === 'viewing' && viewKind === 'review' && shownReviews.length === 0
+  useEffect(() => {
+    if (noReviewToView) void api.dock.expand()
+  }, [noReviewToView])
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
   const runAction = (alert: AlertView) => {
@@ -549,6 +564,22 @@ export function App() {
 
   // Going back into the notch, what was open stays on screen until it's gone (see leaving, above).
   const view = leaving ?? dock
+
+  if (view === 'viewing' && viewKind === 'review') {
+    // Decided or cleared while it's open: an empty viewer for the moment it takes to go back to the panel.
+    if (!shownReviews.length) return <div className="viewer review-viewer" data-app />
+    return (
+      <ReviewViewer
+        reviews={shownReviews}
+        index={Math.min(reviewIndex, shownReviews.length - 1)}
+        onIndex={setReviewIndex}
+        onDone={(text) => {
+          void api.dock.expand()
+          setReviewNotice(text)
+        }}
+      />
+    )
+  }
 
   if (view === 'viewing' && items.length > 0) {
     return (
@@ -693,6 +724,7 @@ export function App() {
             key={shownReviews[0].id}
             review={shownReviews[0]}
             more={shownReviews.length - 1}
+            onOpen={() => openReview(0)}
             onLater={() => setLaterReviews(new Set(laterReviews).add(shownReviews[0].id))}
             onDone={setReviewNotice}
             onError={setToast}
