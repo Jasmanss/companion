@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { sayFrom } from '../shared/review'
 import type { Project, SessionState, SessionView } from '../shared/types'
 import type { AlertInput } from './alerts'
 import type { HookPayload } from './hook-payload'
@@ -97,7 +98,8 @@ export class SessionTracker {
       case 'Stop': {
         // A Stop hook asked Claude to keep going, so this isn't the real end.
         if (event.stop_hook_active) return null
-        const detail = summary(event.last_assistant_message)
+        // What Claude said, in plain words (Visual Review's "Claude says"): no markdown, no "Want me to commit?".
+        const detail = sayFrom(event.last_assistant_message) ?? undefined
         set('finished', detail)
         const started = transcriptPath && event.prompt_id ? await this.turnStart(transcriptPath, event.prompt_id) : null
         const level = started !== null && now - started < NOTEWORTHY_TURN_MS ? 'quiet' : 'normal'
