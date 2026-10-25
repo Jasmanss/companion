@@ -58,6 +58,25 @@ Top to bottom: header (the Pill, the name, five icons: new chat, pin, settings, 
 - **Fixes "off":** fewest elements and the clearest focus.
 - **Cost:** the biggest departure. The input leaves the bottom, long answers need a sticky bar, and keyboard rows need building.
 
+### The mix of A and C (2026-10-25, from the user)
+The user: "Go with C, Cards. Move the pin to Settings and use 'Ask | Auto'." and right after, "mix of a and c". **Decided:** the **pin moves to Settings** (it stays there as Keep panel open), and the control **reads "Ask | Auto"** (a two-part switch; every direction on the page now uses it, replacing C's and D's single toggle). Pick 2 and 3 below are closed. The direction is the mix. Two ways to mix are drawn at the end of the Direction row on `design/main-chat.html`, in the same four situations, light and dark, with C's one-line status bar shown while a chat is open.
+
+**The status bar (from C, used by both mixes).** While a chat is open the cards fold into one line of three counts: `1 working`, `1 waiting` (amber when something waits on you, with a click that scrolls to it) and `0 images`. The amber chip is the only cue that something needs you, and the thread below carries the card itself (the Run or push approval).
+
+**E. Focus plus cards.** C's cards, with A's focus card on top **only when something needs you** (a review, a waiting approval or input, a failed build). The focus card is a different, larger surface: an orange "Waiting on you" label, a warm border and the thing's full content and actions; the small cards (Sessions, Left off, Tray) sit below it. When nothing is going on the cards stand alone, exactly as in C (its empty state is C's). Finished sessions are information, not a demand, so two finished sessions are just a bigger Sessions card.
+- **Removes:** bullets and the stacked blocks, the pin, the hide button; a fixed card order that ignores what matters.
+- **Cost:** medium: C's tiles plus one new component (the focus card) and the rule for when it shows.
+- **Weakness:** two kinds of surface to keep consistent, and the layout jumps when something starts or stops needing you. The empty state has no first thing (A's point), because the grid is flat.
+
+**F. Cards, one promoted.** One system and one rule: the most important card grows to full width and moves to the top, with a heading, an accent border and its actions; the rest stay small, in a fixed order below. Rank: waiting on you (a review, an approval, a failed build), then finished sessions, then where you left off. There is **always** a first card, even when nothing is going on (then it is Where you left off: the branch, two commits as a short timeline and Claude's last line).
+- **Removes:** bullets, the stacked blocks, the pin, the hide button, and the second kind of surface (the promoted card is just a bigger tile).
+- **Cost:** the smallest of the mixes: C's tile with a promoted size and a sort.
+- **Weakness:** the promoted card is not always urgent, so "bigger" can mean "most recent" rather than "needs you". The orange border and the "Waiting on you" label are what mark real urgency.
+
+**How they differ in the four situations:** empty: E is C's grid, F promotes Where you left off. Chat in progress: identical (the status bar and the thread). Review waiting: both put the review on top (E as a focus card, F as the promoted tile), so they look alike; the difference is the rule behind them. Two finished: E is a Sessions card at the usual size, F promotes it with Open buttons.
+
+**Recommendation for the mix: F.** One component with one rule, so there is always one clear first thing and the layout never switches between two designs. It is the least to build and the easiest to keep consistent as new kinds of card arrive (a failed build, a night report, a Watch card). Choose E only if the user wants the empty state to look exactly like C, with no first thing.
+
 ### Recommendation
 **A, Home.** It fixes the hierarchy, which is what most of "off" is: one thing first, the chat untouched, and the least to build. It is also the one whose empty state looks calmest next to the notch island and Steward's reactions. Take one idea from C: the small status line (A's "1 session finished") can become a one-line bar of three counts while a chat is open. B is the friendliest but buries status in a feed and is the most work; D is the boldest and best for keyboard users, but moves the input, which every other chat does not. If the user wants everything visible at once, C is the pick.
 

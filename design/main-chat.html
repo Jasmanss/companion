@@ -192,6 +192,22 @@ table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{te
 .vc .composer{padding:8px 12px 12px}
 .vc .cbox{display:flex;align-items:center;gap:8px;border-radius:16px;background:rgba(var(--fill),.55);border:1px solid var(--line);padding:5px 6px 5px 6px}
 
+/* E and F: the mixes (they use C's tiles) */
+.vc .bar .mini{white-space:nowrap}
+.vc .bar .mini.warn{background:rgba(var(--warm),.16);color:rgb(var(--warm));border-color:rgba(var(--warm),.35)}.vc .bar .mini.warn b{color:inherit}
+.vc .hl{margin:0 0 2px;font-size:16px;font-weight:800;letter-spacing:-.015em;line-height:1.25}
+.vc .tl{position:relative;display:flex;flex-direction:column;gap:10px;margin:4px 0 4px;padding-left:20px}
+.vc .tl::before{content:"";position:absolute;left:5px;top:7px;bottom:7px;width:2px;border-radius:2px;background:var(--inset2)}
+.vc .tl .it{position:relative;font-size:13px;line-height:1.35}.vc .tl .it::before{content:"";position:absolute;left:-19px;top:5px;width:8px;height:8px;border-radius:50%;background:rgb(var(--live));box-shadow:0 0 0 3px rgba(var(--fill),.9)}
+.vc .tl .it small{display:block;color:var(--t3)}
+.vc .quote{font-size:12.5px;color:var(--t3);border-radius:12px;background:var(--inset);padding:9px 12px}.vc .quote b{color:var(--t1)}
+.vc .rowi{display:flex;align-items:center;gap:10px}
+.ve .focus{grid-column:1/-1;border-radius:18px;background:rgba(var(--fill),.6);border:1px solid rgba(var(--warm),.5);padding:14px;box-shadow:0 8px 24px rgba(0,0,0,.08),0 0 0 3px rgba(var(--warm),.1)}
+.ve .focus .eyebrow{font:800 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:rgb(var(--warm));margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.vf .tile.hero{border-radius:18px;padding:14px;gap:9px;background:rgba(var(--fill),.58);border-color:rgba(var(--live),.4);box-shadow:0 8px 24px rgba(0,0,0,.08),0 0 0 3px rgba(var(--live),.08)}
+.vf .tile.hero.warn{border-color:rgba(var(--warm),.5);box-shadow:0 8px 24px rgba(0,0,0,.08),0 0 0 3px rgba(var(--warm),.1)}
+.vf .tile.hero .th{font-size:11px}
+
 /* ---------------- D: Command bar ---------------- */
 .vd .bar{display:flex;align-items:center;gap:8px;margin:12px 12px 6px;border-radius:18px;background:rgba(var(--fill),.55);border:1px solid var(--line);padding:6px 8px 6px 8px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
 .vd .bar .fld{padding:8px 2px}
@@ -227,6 +243,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{te
 <main>
 <h1>Steward's main chat: four directions</h1>
 <p class="t1">The user's words (2026-10-25): "I just dont like the bullet points. No need for the hiding feature. I just dont like the way it looks. It feel off. Lets add the auto and manual near the text bar. Lets do a couple of things different. Draw up a couple of different deigns and lets see what we come up with."</p>
+<div class="note"><b>Decided so far (2026-10-25).</b> The user picked a mix of A (Home) and C (Cards). The pin moves to Settings (Keep panel open), and the control reads "Ask | Auto", which every direction below now uses. The two mixes are at the end of the Direction row: <b>E</b>, a focus card on top only when something needs you, and <b>F</b>, one promoted card in an always-ranked grid. Also drawn: C's one-line status bar, shown while a chat is open.</div>
 <p>Below are four directions that really differ, each at the real panel size (400 wide), in light and dark, over a plain or busy desktop, in the four situations: nothing going on, a chat in progress, a Visual Review waiting, and two sessions finished. Steward is the real Pill. Everything is clickable: the Ask / Auto control changes what the chat does, and hovering it explains it. The brief is <code>docs/briefs/main-chat-redesign.md</code>.</p>
 
 <h2>What makes today's panel feel off</h2>
@@ -248,7 +265,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{te
   <span><span class="lbl">Desktop</span><span class="seg" id="wl"><button class="btn" data-v="calm" aria-pressed="true">Calm</button><button class="btn" data-v="busy" aria-pressed="false">Busy</button></span></span>
   <span><span class="lbl">Reduce motion</span><span class="seg" id="rmseg"><button class="btn" data-v="off" aria-pressed="true">Off</button><button class="btn" data-v="on" aria-pressed="false">On</button></span></span>
 </div>
-<div class="ctl"><span><span class="lbl">Direction</span><span class="seg" id="vr"><button class="btn" data-v="a" aria-pressed="true">A · Home</button><button class="btn" data-v="b" aria-pressed="false">B · Chat first</button><button class="btn" data-v="c" aria-pressed="false">C · Cards</button><button class="btn" data-v="d" aria-pressed="false">D · Command bar</button></span></span></div>
+<div class="ctl"><span><span class="lbl">Direction</span><span class="seg" id="vr"><button class="btn" data-v="a" aria-pressed="true">A · Home</button><button class="btn" data-v="b" aria-pressed="false">B · Chat first</button><button class="btn" data-v="c" aria-pressed="false">C · Cards</button><button class="btn" data-v="d" aria-pressed="false">D · Command bar</button></span></span> <span><span class="lbl">The mix of A and C</span><span class="seg" id="vr2"><button class="btn" data-v="e" aria-pressed="false">E · Focus plus cards</button><button class="btn" data-v="f" aria-pressed="false">F · Cards, one promoted</button></span></span></div>
 <div class="stagewrap">
   <div class="wall" id="wall"><div id="stage"></div></div>
   <div id="about"></div>
@@ -306,7 +323,7 @@ const D = {
   review: { name: 'haven', url: 'localhost:3000/pricing', says: 'I made the Start button blue and added a row of logos.' },
 }
 const state = { scene: 'empty', mode: 'auto', theme: 'light', wall: 'calm', rm: 'off', v: 'a' }
-const VARS = { a: 'A · Home', b: 'B · Chat first', c: 'C · Cards', d: 'D · Command bar' }
+const VARS = { a: 'A · Home', b: 'B · Chat first', c: 'C · Cards', d: 'D · Command bar', e: 'E · Focus plus cards', f: 'F · Cards, one promoted' }
 
 /* ---------------- shared pieces ---------------- */
 const pill = (mood, w = 64, h = 54) => `<span class="pillslot" data-pill data-mood="${mood}" data-w="${w}" data-h="${h}" style="width:${w}px;height:${h}px"></span>`
@@ -381,11 +398,12 @@ function vbComposer() {
 }
 
 /* ---------------- C: Cards ---------------- */
+const statusBar = () => `<div class="bar"><span class="mini"><i class="dot live"></i><b>1</b> working</span><span class="mini warn">${I.hand.replace('<svg', '<svg width="13" height="13"')} <b>1</b> waiting</span><span class="mini">${I.image.replace('<svg', '<svg width="13" height="13"')} <b>0</b> images</span></div>`
 const tile = (cls, icon, label, n, inner) => `<div class="tile ${cls}"><div class="th">${I[icon]}${label}${n ? `<span class="n">${n}</span>` : ''}</div>${inner}</div>`
 function vcHead() { return `<div class="hd">${pill(moodOf(), 48, 41)}<div class="tt"><b>Steward</b><button class="ctxb">${D.project}${I.chev}</button></div><div class="acts">${ib('newchat', 'New chat')}${ib('gear', 'Settings')}${ib('tuck', 'Tuck away (Esc)')}</div></div>` }
 function vcBody() {
   const s = state.scene
-  if (s === 'chat') return `<div class="bar"><span class="mini"><i class="dot live"></i><b>1</b> working</span><span class="mini">${I.image.replace('<svg', '<svg width="13" height="13"')} <b>0</b> images</span><span class="mini">${I.eye.replace('<svg', '<svg width="13" height="13"')} <b>0</b> reviews</span></div><div class="thread">${chatThread()}</div>`
+  if (s === 'chat') return `${statusBar()}<div class="thread">${chatThread()}</div>`
   let t = ''
   if (s === 'review') t += tile('w2', 'eye', 'Review', 1, review().replace('class="rc"', 'class="rc" style="background:none;border:0;padding:0"'))
   const nSess = s === 'two' ? 2 : s === 'review' ? 1 : 0
@@ -396,12 +414,42 @@ function vcBody() {
   if (s === 'empty') t += tile('w2', 'spark', 'Try', 0, `<div class="chain">${D.prompts.map((p) => `<button class="chp">${p}</button>`).join('')}</div>`)
   return `<div class="body">${t}</div>`
 }
-function vcComposer() { return `<div class="composer"><div class="cbox"><span class="mode"><button class="mtog ${state.mode === 'auto' ? 'on' : ''}" data-toggle aria-pressed="${state.mode === 'auto'}" aria-label="Auto mode">${state.mode === 'auto' ? I.shieldok : I.hand}${state.mode === 'auto' ? 'Auto' : 'Ask'}</button>${POP()}</span><span class="fld">${placeholder}</span>${sendBtn(false)}</div></div>` }
+function vcComposer() { return `<div class="composer"><div class="cbox">${segMode()}<span class="fld">${placeholder}</span>${sendBtn(false)}</div></div>` }
+
+/* ---------------- E and F: the mixes of A and C ---------------- */
+const sessRows = (list, hero) => list.map((x) => `<div class="srow"><i class="dot"></i><b>${x.name}</b><span>finished ${x.when}</span></div><div class="said">${x.said}</div>${hero ? '<div style="margin:2px 0 4px 17px"><button class="pbtn">Open</button></div>' : ''}`).join('')
+const quietNote = (t) => `<div class="muted" style="font-size:12.5px">${t}</div>`
+const leftSmall = () => tile('', 'branch', 'Left off', 0, `<div class="big">${D.branch}</div><div class="muted" style="font-size:12px">pushed · 3 commits</div><div class="chain">${D.commits.map((c) => `<span class="hash">${c[0].slice(0, 5)}</span>`).join('')}</div>`)
+const leftHero = (cls) => tile(`${cls} w2`, 'branch', 'Where you left off', 0, `<p class="hl">On ${D.branch}, pushed. Nothing waiting.</p><div class="tl">${D.commits.slice(0, 2).map((c) => `<div class="it">${c[1]}<small>${c[0]} · ${c[2]}</small></div>`).join('')}</div><div class="quote"><b>Claude said ${D.said.when}:</b> ${D.said.text}</div>`)
+const trayT = () => tile('', 'image', 'Tray', 0, `<div class="thumbs"><i class="d"></i><i class="d"></i><i class="d"></i></div><div class="muted" style="font-size:12px">Drop or paste images</div>`)
+const tryT = () => tile('w2', 'spark', 'Try', 0, `<div class="chain">${D.prompts.map((p) => `<button class="chp">${p}</button>`).join('')}</div>`)
+const bare = (h) => h.replace('class="rc"', 'class="rc" style="background:none;border:0;padding:0"')
+function veBody() {
+  const s = state.scene
+  if (s === 'chat') return `${statusBar()}<div class="thread">${chatThread()}</div>`
+  let t = ''
+  if (s === 'review') t += `<div class="focus"><div class="eyebrow"><i class="dot warn"></i> Waiting on you</div>${bare(review())}</div>`
+  if (s === 'two') t += tile('w2', 'user', 'Sessions', 2, sessRows(D.sessions))
+  else if (s === 'review') t += tile('w2', 'user', 'Sessions', 1, sessRows(D.sessions.slice(0, 1)))
+  else t += tile('w2', 'user', 'Sessions', 0, quietNote('Quiet. No Claude Code sessions need you.'))
+  t += leftSmall() + trayT()
+  if (s === 'empty') t += tryT()
+  return `<div class="body">${t}</div>`
+}
+function vfBody() {
+  const s = state.scene
+  if (s === 'chat') return `${statusBar()}<div class="thread">${chatThread()}</div>`
+  let t = ''
+  if (s === 'review') t += tile('hero warn w2', 'eye', 'Waiting on you · Review', 1, bare(review())) + tile('w2', 'user', 'Sessions', 1, sessRows(D.sessions.slice(0, 1))) + leftSmall() + trayT()
+  else if (s === 'two') t += tile('hero w2', 'user', 'Sessions finished', 2, sessRows(D.sessions, true)) + leftSmall() + trayT()
+  else t += leftHero('hero') + tile('', 'user', 'Sessions', 0, quietNote('Quiet. Nothing needs you.')) + trayT() + tryT()
+  return `<div class="body">${t}</div>`
+}
 
 /* ---------------- D: Command bar ---------------- */
 const drow = (sel, ic, t, sub, key) => `<div class="row ${sel ? 'sel' : ''}"><span class="ic">${ic}</span><span class="tx"><b>${t}</b><span>${sub}</span></span>${key ? `<kbd>${key}</kbd>` : ''}</div>`
 function vdBar(text) {
-  return `<div class="bar">${pill(moodOf(), 44, 37)}<span class="fld ${text ? 'typed' : ''}">${text || 'Ask, or run a command…'}</span><span class="mode"><button class="mtog ${state.mode === 'auto' ? 'on' : ''}" data-toggle aria-pressed="${state.mode === 'auto'}" aria-label="Auto mode">${state.mode === 'auto' ? I.shieldok : I.hand}${state.mode === 'auto' ? 'Auto' : 'Ask'}</button>${POP()}</span>${sendBtn(false)}</div>`
+  return `<div class="bar">${pill(moodOf(), 44, 37)}<span class="fld ${text ? 'typed' : ''}">${text || 'Ask, or run a command…'}</span>${segMode()}${sendBtn(false)}</div>`
 }
 function vdMain() {
   const s = state.scene
@@ -420,12 +468,16 @@ function panel(v) {
   if (v === 'a') return wrap('va', `${vaHead()}${vaBody()}${vaComposer()}`)
   if (v === 'b') return wrap('vb', `${vbHead()}${vbBody()}${vbComposer()}`)
   if (v === 'c') return wrap('vc', `${vcHead()}${vcBody()}${vcComposer()}`)
+  if (v === 'e') return wrap('vc ve', `${vcHead()}${veBody()}${vcComposer()}`)
+  if (v === 'f') return wrap('vc vf', `${vcHead()}${vfBody()}${vcComposer()}`)
   return wrap('vd', vdMain())
 }
 const ABOUT = {
   a: { name: 'A · Home', pitch: 'A calm home with one focus card. The panel shows the single most important thing right now (something waiting on you, then a review, then finished sessions, then where you left off) and nothing else competes with it.', rm: ['The Tray block when it is empty (it becomes a quiet drop line)', 'The session chips row (sessions become the focus card, or one status line)', 'The bulleted commits and Try list (a short timeline, and suggestion chips)', 'The pin button (it stays in Settings as Keep panel open)', 'The second project row (the project is a plain line under the name)'], mv: ['The mode switch into the text box', 'Where you left off becomes the empty-state focus card, not a stack of its own'], fix: 'Hierarchy: one thing first. In the empty state there are three things on screen, not seven.', cost: 'Smallest change to the chat itself: the log and the text box stay as they are.' },
   b: { name: 'B · Chat first', pitch: 'The panel is a conversation. Steward posts into the thread like a teammate: a finished session, a review, the welcome back. Nothing is stacked above it any more.', rm: ['The whole stack above the chat: session strip, banner, tray block, cards', 'The Try bullets (quick-reply chips above the box)', 'Pin and settings from the header (a "more" menu)', 'The hide button'], mv: ['Sessions, reviews, the left-off summary and images become messages in the thread', 'A thin "waiting on you" line is the only thing pinned above it', 'The mode switch goes on a line above the box, with a sentence under it'], fix: 'One place to look, in time order, with the same bubble for everything.', cost: 'Bigger: the thread becomes a feed, so it needs message kinds, history and a way to keep a long feed from burying what waits.' },
   c: { name: 'C · Cards', pitch: 'A small dashboard of equal tiles: sessions, review, where you left off, tray, things to try. Typing opens the chat, with the tiles folded to a one-line status bar.', rm: ['Bullets, banners and the stacked cards', 'Different styles for each block (every tile is the same card)', 'The hide button'], mv: ['Each block becomes a tile with one heading style', 'Commits become short hash chips; the tray is a row of three slots', 'The mode switch is a shield toggle in the box'], fix: 'Consistency: one card style, one heading style, everything visible at a glance.', cost: 'Medium: new tiles and a home-to-chat transition. The densest of the four.' },
+  e: { name: 'E · Focus plus cards', pitch: 'C\'s tidy cards with A\'s focus card on top, but only when something needs you (a review, a waiting approval, a failed build). When nothing is going on the cards stand alone, exactly as in C.', rm: ['Bullets, the stacked blocks and the hide button', 'The pin (Keep panel open lives in Settings)', 'A fixed card order that ignores what matters: when something needs you it leaves the grid and takes the top'], mv: ['The thing that needs you moves out of the grid into a larger focus card with a "Waiting on you" label', 'Sessions, Left off and Tray stay as small cards below it', 'While a chat is open the cards fold into C\'s one-line status bar, with an amber "waiting on you" count'], fix: 'Hierarchy only when it matters, and a calm grid the rest of the time.', cost: 'Medium: C\'s tiles plus one new component (the focus card) and the rule for when it shows. Two kinds of surface to keep consistent.' },
+  f: { name: 'F · Cards, one promoted', pitch: 'One system, one rule: the most important card grows to full width, moves to the top and gets more weight; the rest stay small. There is always a first card, even when nothing is going on (then it is Where you left off).', rm: ['Bullets, the stacked blocks and the hide button', 'The pin (Keep panel open lives in Settings)', 'Two kinds of surface: the promoted card is just a bigger tile'], mv: ['The rank decides the order: waiting on you, then a review, then finished sessions, then where you left off', 'The promoted tile gets a heading, an accent border and its actions; the others keep C\'s small form', 'While a chat is open the tiles fold into the one-line status bar, with an amber "waiting on you" count'], fix: 'One component with a size and a ranking rule, so there is always one clear thing first.', cost: 'Smallest of the mixes: C\'s tile with a promoted size and a sort. The empty state is not C\'s: Where you left off is promoted.' },
   d: { name: 'D · Command bar', pitch: 'The ask box is the hero, at the top, with Steward in it, like Spotlight or Raycast. Below it is one list of rows grouped by what needs you. Answers open under the box.', rm: ['The header (its actions move behind a menu)', 'Every card, chip and bullet: it is all rows', 'The hide button'], mv: ['The input moves to the top and the chat reads under it', 'The mode switch is a chip on the right of the bar', 'New chat, keep open and settings live in a "more" menu and on keys'], fix: 'Fewest elements and the clearest focus: the box.', cost: 'The biggest departure: the input leaves the bottom, and the chat reads top to bottom under it. Long answers need a sticky bar.' },
 }
 function about() {
@@ -453,11 +505,11 @@ function render() {
   document.getElementById('pill-filters')?.replaceChildren()
   $('#stage').innerHTML = panel(state.v)
   about()
-  $('#cmp').innerHTML = ['a', 'b', 'c', 'd'].map((v) => `<figure><figcaption>${VARS[v]}</figcaption><div class="wall ${state.wall === 'busy' ? 'busy' : ''}"><div class="fit" style="width:320px;height:544px"><div style="transform:scale(.8);transform-origin:0 0;width:400px">${panel(v)}</div></div></div></figure>`).join('')
+  $('#cmp').innerHTML = ['a', 'b', 'c', 'd', 'e', 'f'].map((v) => `<figure><figcaption>${VARS[v]}</figcaption><div class="wall ${state.wall === 'busy' ? 'busy' : ''}"><div class="fit" style="width:320px;height:544px"><div style="transform:scale(.8);transform-origin:0 0;width:400px">${panel(v)}</div></div></div></figure>`).join('')
   hydrate($('#stage')); hydrate($('#cmp'))
-  for (const [id, key] of [['sc', 'scene'], ['md', 'mode'], ['th', 'theme'], ['wl', 'wall'], ['vr', 'v'], ['rmseg', 'rm']]) $(`#${id}`).querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === state[key])))
+  for (const [id, key] of [['sc', 'scene'], ['md', 'mode'], ['th', 'theme'], ['wl', 'wall'], ['vr', 'v'], ['vr2', 'v'], ['rmseg', 'rm']]) $(`#${id}`).querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === state[key])))
 }
-for (const [id, key] of [['sc', 'scene'], ['md', 'mode'], ['th', 'theme'], ['wl', 'wall'], ['vr', 'v'], ['rmseg', 'rm']]) $(`#${id}`).addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { state[key] = b.dataset.v; render() } })
+for (const [id, key] of [['sc', 'scene'], ['md', 'mode'], ['th', 'theme'], ['wl', 'wall'], ['vr', 'v'], ['vr2', 'v'], ['rmseg', 'rm']]) $(`#${id}`).addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { state[key] = b.dataset.v; render() } })
 document.addEventListener('click', (e) => {
   const m = e.target.closest('[data-mode]'); if (m) { state.mode = m.dataset.mode; render(); return }
   const t = e.target.closest('[data-toggle]'); if (t) { state.mode = state.mode === 'auto' ? 'ask' : 'auto'; render() }
