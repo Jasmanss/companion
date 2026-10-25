@@ -71,7 +71,7 @@ import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
 import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, smokeHidden, type Unseen } from './smoke-env'
-import { deadPort, startPageServer, type SmokeVersion } from './smoke-review'
+import { deadPort, gitInit, startPageServer, type SmokeVersion } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -1885,6 +1885,8 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
 
 async function checkReview(w: BrowserWindow, out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  // Read fresh each time (TypeScript would otherwise keep what an earlier check narrowed it to).
+  const dockNow = (): DockState => dock
   const need = (ok: boolean, why: string) => {
     if (!ok) throw new Error(why)
   }
@@ -1912,8 +1914,11 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need((await reviews.turnStopped({ ...turn('same'), hook_event_name: 'Stop' })) === null, 'a page that did not change made a review')
     need(reviewStore.list().length === 0, 'a page that did not change was kept')
 
-    // A turn that changes it does, with both pictures and both card pictures, and what Claude said it did.
+    // A turn that changes it does, with both pictures and both card pictures, what Claude said it did, and how many
+    // files it changed in the project's checkout (one, written during the turn).
+    await gitInit(projectDir)
     await prompt('changed')
+    await fs.writeFile(path.join(projectDir, 'page.html'), `<h1>Build faster, ship calmer</h1> ${Date.now()}`)
     server.setVersion('b')
     const lastMessage = '**Done.** I changed the heading to `Build faster, ship calmer` and the button to Get started.\n\nWant me to commit this?'
     const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop', last_assistant_message: lastMessage })
@@ -1925,6 +1930,9 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need(reviewStore.file(review!.id, 'after')!.startsWith(path.join(app.getPath('userData'), 'reviews')), 'a review picture is outside the Steward data folder')
     const said = 'I changed the heading to Build faster, ship calmer and the button to Get started.'
     need(review!.said === said, `the review did not keep what Claude said ("${review!.said}")`)
+    need(review!.filesChanged === 1, `the review counted ${review!.filesChanged} files changed, not the one written during the turn`)
+    const looks = reviews.history(projectDir).map((e) => e.found)
+    need(looks.join() === 'review,same', `the history says ${looks.join()}, not a review after the page that stayed the same`)
     console.log(`smoke: a changed page made a review (${review!.changedPixels} small pixels changed, it takes ${review!.minPixels})`)
 
     // The same page again makes none.
@@ -1941,6 +1949,26 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     )
     need(/another site/.test(away), `a page that sends the visitor elsewhere was not refused (${away})`)
     console.log('smoke: only pages on this Mac are captured, and a redirect away is refused')
+
+    // The review comes out as an alert that needs you: at the edge, the nudge. The same turn's finished alert, still
+    // waiting for its batch, is taken back, so there's one alert, not two. The menu bar's dot shows while it waits.
+    setDock('collapsed')
+    await sleep(700)
+    const finishedKey = 'finished:smoke-review:changed'
+    raise({ key: finishedKey, level: 'normal', title: 'steward-smoke-review-project finished' })
+    await reviewReady(review!, turn('changed'))
+    await until(
+      w.webContents,
+      `document.querySelector('.nudge')?.textContent.includes('steward-smoke-review-project changed') && document.querySelector('.nudge')?.textContent.includes('Review what Claude did?')`,
+      'the review did not peek out as an alert',
+    )
+    need(dockNow() === 'nudge', `the review alert left Steward ${dockNow()}, not peeking out`)
+    alerts.flush()
+    need(!heldAlerts.some((a) => a.key === finishedKey), "the turn's finished alert came as well as the review's")
+    need(menuBar === null || menuBar.getTitle().includes('•'), `the menu bar shows "${menuBar?.getTitle()}", no dot for the review waiting`)
+    await sleep(400)
+    await fs.writeFile(out.replace(/\.png$/, '-review-alert.png'), (await w.webContents.capturePage()).toPNG())
+    console.log(`smoke: the review comes out as an alert ("steward-smoke-review-project changed"), the turn's finished alert is taken back, the menu bar shows "${menuBar?.getTitle()}"`)
 
     // The panel shows the card at its top.
     setDock('expanded')
@@ -2926,6 +2954,28 @@ async function checkIsland(out: string): Promise<void> {
   img = await shot()
   if (!clear(img, layout.cx - hw - 12, restPill.y) || !black(img, layout.cx, 8)) throw new Error('asleep, Steward is not tucked behind the notch')
   console.log('smoke: island: asleep, Steward is tucked behind the notch')
+
+  // A Visual Review in the island comes out as the island itself: its catch-all note ("haven changed" and one line),
+  // with the review's mark on the right, never as the old alert under the notch. Asleep (Only when needed), the island
+  // wakes for it and goes back to sleep once it settles. "Only when a session needs me" lets it through.
+  await settings.update({ steward: { alertPeek: 'needs-me' } })
+  pendingReviews = 1
+  updateIsland()
+  raise(reviewAlert({ id: '20261024-120000-5a0ce111', project: 'haven', projectPath: '/tmp/steward-smoke-island' }))
+  await sleep(700)
+  line = await noteLine()
+  const reviewed = notch.state()
+  if (dockNow() === 'nudge' || reviewed.nudge || win!.isVisible()) throw new Error('a review came out as the old alert under the notch')
+  if (reviewed.island?.note?.kind !== 'alert' || reviewed.island.right !== 'review' || !reviewed.awake || !line.text.includes('haven changed') || !line.text.includes('Review what Claude did?') || line.shown < 0.9)
+    throw new Error(`a review in the island shows ${JSON.stringify(reviewed.island)} (awake: ${reviewed.awake}), line "${line.text}"`)
+  img = await shot()
+  if (!black(img, layout.cx, layout.height + 6)) throw new Error("the review's note did not grow the island")
+  await fs.writeFile(out.replace(/\.png$/, '-island-review.png'), img.toPNG())
+  await sleep(NOTE_SHOW_MS + 800)
+  if (notch.state().island?.note || notch.state().awake || dockNow() === 'nudge' || win!.isVisible()) throw new Error('after the review note settled, the island did not go back to sleep')
+  console.log(`smoke: island: a review comes out as the island's note ("${line.text}"), never under the notch; asleep, the island wakes for it and sleeps after`)
+  pendingReviews = 0
+
   await settings.update({ steward: { presence: 'always', notchStyle: 'chin', alertPeek } })
   presenceChanged()
   notch.restyle()

@@ -1,5 +1,10 @@
+import { execFile } from 'node:child_process'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
+
+/** Make the smoke's test project a git checkout (again, if it is one already), so the review can count changed files. */
+export const gitInit = (dir: string): Promise<void> =>
+  new Promise((resolve, reject) => execFile('git', ['init', '-q'], { cwd: dir }, (err) => (err ? reject(err) : resolve())))
 
 /** Two versions of a small page, for the smoke check: B has a longer heading and a different button. A spinner and a fade run in both. */
 export type SmokeVersion = 'a' | 'b' | 'fade' | 'reshaped'
