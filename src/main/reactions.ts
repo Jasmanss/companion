@@ -72,6 +72,14 @@ export function nextReactionChange(o: ReactionInput): number | null {
   return ends.length ? Math.min(...ends) : null
 }
 
+/** For the notch island's right side: a chat stopped a moment ago asking you something (a "?"), or after a long turn (a spark). */
+export function recentStops(stops: StopSeen[], now: number): { asked: boolean; proud: boolean } {
+  return {
+    asked: stops.some((s) => s.asked && now - s.at < HOLD_MS.asked),
+    proud: stops.some((s) => !s.asked && turnTier(s.turnMs) === 'proud' && now - s.at < HOLD_MS.proud),
+  }
+}
+
 /** The Mac's idle time went from a long while to less: you're back. Seconds, as powerMonitor gives them. */
 export const cameBack = (beforeS: number | null, nowS: number): boolean => beforeS !== null && beforeS >= BACK_AFTER_S && nowS < beforeS
 

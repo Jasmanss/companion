@@ -60,7 +60,9 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, noteTurn, type Turns } from './island-status'
+import { hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, type Turns } from './island-status'
+import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
+import { SessionActivity } from './session-activity'
 import { ReviewTracker } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore } from './review-store'
@@ -1222,18 +1224,47 @@ function raise(input: AlertInput): void {
   sendMood()
 }
 
+/** What Steward's reactions work from (main/reactions.ts): deploys and merges, the chats, and you coming back. */
+function reactionInput(now: number): ReactionInput | null {
+  if (!sessions || !agent) return null
+  return { event: moods.current(now), sessions: sessions.list(), turns: activity.turns, stops: activity.lastStops(), agentWaiting: agent.waitingForApproval, backAt, now }
+}
+
+/**
+ * The face the chats, deploys and you coming back call for goes to the panel, which puts the chat's own moods (and you
+ * typing) above it and tells the notch. A one-shot's hold running out changes it, so the next look is set for then.
+ */
 function sendMood(): void {
   const now = Date.now()
-  win?.webContents.send('alerts:mood', moods.current(now))
+  const input = reactionInput(now)
+  const reaction = input ? pickReaction(input) : { mood: moods.current(now) }
+  win?.webContents.send('alerts:mood', reaction.mood)
   clearTimeout(moodTimer)
-  const next = moods.nextChange(now)
-  if (next !== null) moodTimer = setTimeout(sendMood, next - now + 50)
+  const next = [moods.nextChange(now), input && nextReactionChange(input)].filter((t): t is number => typeof t === 'number')
+  if (next.length) moodTimer = setTimeout(sendMood, Math.min(...next) - now + 50)
+  // The island's right side follows the reactions too (a "?", proud's spark).
+  updateIsland()
 }
 
 function sendSessions(): void {
   win?.webContents.send('sessions:changed', sessions.list())
-  updateIsland()
+  sendMood()
   updateMenuBar()
+}
+
+/** When you came back to the Mac after ten minutes or more away (Steward says hello), and the idle time last seen. */
+let backAt: number | null = null
+let idleSeen: number | null = null
+
+/** Look at how long the Mac has been idle: rarely, and every second once a return would count. */
+function lookAtIdle(): void {
+  const idle = powerMonitor.getSystemIdleTime()
+  if (cameBack(idleSeen, idle)) {
+    backAt = Date.now()
+    sendMood()
+  }
+  idleSeen = idle
+  setTimeout(lookAtIdle, idleLookMs(idle))
 }
 
 /**
@@ -1281,8 +1312,11 @@ async function deployLogs(projectName: string, deploymentId?: string): Promise<{
   return { deploymentId: id, log: await fetchBuildLog(id, link.orgId, token) }
 }
 
-/** The notch island: the turns going on (a prompt sent, until Claude stops), Steward's own, and the reviews waiting. */
-let islandTurns: Turns = {}
+/**
+ * What the chats have been doing (a prompt sent, until Claude stops, and how each stop went): the notch island and
+ * Steward's reactions read it. Then Steward's own agent, and the reviews waiting.
+ */
+const activity = new SessionActivity()
 let agentSince: number | undefined
 let pendingReviews = 0
 let islandTimer: ReturnType<typeof setTimeout> | undefined
@@ -1298,7 +1332,7 @@ function updateIsland(): void {
   const now = Date.now()
   if (!agent.busy) agentSince = undefined
   else agentSince ??= now
-  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
+  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
   notch.setIsland(islandStatus(input))
   clearTimeout(islandTimer)
   const next = nextChange(input)
@@ -1319,8 +1353,8 @@ function islandNote(event: HookPayload, turns: Turns): void {
 }
 
 async function onHookEvent(event: HookPayload): Promise<void> {
-  const turns = islandTurns
-  islandTurns = noteTurn(islandTurns, event, Date.now())
+  const turns = activity.turns
+  activity.note(event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
@@ -2734,7 +2768,7 @@ async function checkIsland(out: string): Promise<void> {
   notch.restyle()
   // Nothing going on to start with (reviews from the Visual Review check are left out).
   pendingReviews = 0
-  islandTurns = {}
+  activity.reset()
   islandNotes.drop()
   updateIsland()
   await sleep(1500)
@@ -3509,7 +3543,8 @@ app.whenReady().then(async () => {
     name: () => settings.steward().name,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
-      updateIsland()
+      // Its asking for your OK, or getting it, changes the face and the island.
+      sendMood()
       // Peek out when the agent needs a decision; the approval card is in the panel.
       if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Steward needs your OK', detail: event.command, mood: 'needs-you' })
     },
@@ -3567,6 +3602,8 @@ app.whenReady().then(async () => {
   powerMonitor.on('unlock-screen', screenIs(false))
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
   else {
+    // The smoke check says when you're back itself, so a real return during it can't change a face it checks.
+    lookAtIdle()
     menuBar = new Tray(menuBarIcon())
     menuBar.setToolTip('Steward')
     updateMenuBar()

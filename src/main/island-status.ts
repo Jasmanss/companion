@@ -1,7 +1,7 @@
 // What the notch island shows (Settings → Steward → In the notch → Island): the Smart right side, from what Steward
 // already hears. Pure, so it's tested without sessions running. The most pressing thing wins: a session (or Steward
-// itself) waiting on you, then a review ready, then two working at once, then one working, then one that just
-// finished. Nothing going on: no island, Steward peeks from the notch.
+// itself) waiting for your OK, then one asking you something, then a review ready, then two working at once, then one
+// working, then one that just finished. Nothing going on: no island, Steward peeks from the notch.
 //
 // "Working" is a turn: from the prompt being sent (the UserPromptSubmit hook) until Claude stops (Stop). The session
 // strip doesn't keep those, so the island keeps its own.
@@ -36,6 +36,9 @@ export interface IslandInput {
   reviews: number
   /** The note showing, if any (IslandNotes). */
   note?: IslandNote | null
+  /** A chat stopped a moment ago asking you something, or after a long turn (main/reactions.ts, recentStops). */
+  asked?: boolean
+  proud?: boolean
   now: number
 }
 
@@ -54,7 +57,9 @@ export function islandStatus(o: IslandInput): IslandStatus {
 
 function rightSide(o: IslandInput): IslandStatus {
   const waiting = new Set(o.sessions.filter((s) => s.state === 'needs-approval' || s.state === 'needs-input').map((s) => s.id))
-  if (o.agentWaiting || waiting.size) return { right: 'needs' }
+  // An approval is the amber mark; a chat asking you something (waiting for input, or ending on a question) a "?".
+  if (o.agentWaiting || o.sessions.some((s) => s.state === 'needs-approval')) return { right: 'needs' }
+  if (waiting.size || o.asked) return { right: 'asks' }
   if (o.reviews > 0) return { right: 'review' }
   const starts = Object.entries(o.turns)
     .filter(([id, at]) => !waiting.has(id) && o.now - at < TURN_GIVE_UP_MS)
@@ -65,7 +70,7 @@ function rightSide(o: IslandInput): IslandStatus {
   const count = starts.length
   if (count >= 2) return { right: 'two', count, since }
   if (count === 1) return { right: 'working', since }
-  if (o.sessions.some((s) => s.state === 'finished' && o.now - s.updatedAt < FINISHED_SHOW_MS)) return { right: 'finished' }
+  if (o.sessions.some((s) => s.state === 'finished' && o.now - s.updatedAt < FINISHED_SHOW_MS)) return o.proud ? { right: 'finished', spark: true } : { right: 'finished' }
   return { right: null }
 }
 

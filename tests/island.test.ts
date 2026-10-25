@@ -132,13 +132,18 @@ describe('what the island shows', () => {
   it('puts what needs you first, then a review', () => {
     expect(islandStatus(input({ turns: { a: 1, b: 2 }, sessions: [session('c', 'needs-approval')], reviews: 1 })).right).toBe('needs')
     expect(islandStatus(input({ agentWaiting: true })).right).toBe('needs')
-    expect(islandStatus(input({ sessions: [session('c', 'needs-input')] })).right).toBe('needs')
+    // A chat asking you something is a "?", below an approval.
+    expect(islandStatus(input({ sessions: [session('c', 'needs-input')] })).right).toBe('asks')
+    expect(islandStatus(input({ sessions: [session('c', 'needs-input'), session('d', 'needs-approval')] })).right).toBe('needs')
+    expect(islandStatus(input({ turns: { a: 1 }, asked: true })).right).toBe('asks')
     expect(islandStatus(input({ turns: { a: 1, b: 2 }, reviews: 2 })).right).toBe('review')
   })
 
   it('shows a check for a while after a session finished, then nothing', () => {
     const done = [session('a', 'finished', 95_000)]
     expect(islandStatus(input({ sessions: done })).right).toBe('finished')
+    // After a long turn, Steward is proud: a spark pops once by the check.
+    expect(islandStatus(input({ sessions: done, proud: true }))).toEqual({ right: 'finished', spark: true })
     expect(nextChange(input({ sessions: done }))).toBe(95_000 + FINISHED_SHOW_MS)
     expect(islandStatus(input({ sessions: done, now: 95_000 + FINISHED_SHOW_MS })).right).toBeNull()
     expect(nextChange(input({ sessions: done, now: 95_000 + FINISHED_SHOW_MS }))).toBeNull()
