@@ -664,6 +664,7 @@ export function App() {
           settings={settings}
           anchor={pill}
           leaving={switcherShown.leaving}
+          reviewing={new Set(reviews.map((r) => r.projectPath))}
           onPick={pickProject}
           onAdd={addProject}
           onClose={closeSwitcher}

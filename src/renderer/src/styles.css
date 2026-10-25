@@ -843,6 +843,16 @@ pre {
   font-weight: 700;
 }
 
+/* A Visual Review waiting for a decision: the island's violet. */
+.sw-list .sw-review {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: rgb(165, 139, 255);
+}
+
 .sw-list .pp {
   flex: 1;
   min-width: 0;
