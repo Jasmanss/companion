@@ -1366,7 +1366,14 @@ function sendReviews(): Promise<void> {
     pendingReviews = list.length
     updateIsland()
     updateMenuBar()
+    // A decision changes what the history says became of a review.
+    sendReviewHistory()
   })
+}
+
+/** The history changed (a look after a turn, a decision, or Clear): Settings asks for it again. */
+function sendReviewHistory(): void {
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('review:history')
 }
 
 /** A check that found no visible change goes to the panel as a quiet line, so it's never silent. */
@@ -1601,6 +1608,7 @@ function registerIpc(): void {
     const file = isReviewId(id) && (which === 'before' || which === 'after') ? reviewStore.file(id, which) : null
     if (file) await shell.openPath(file)
   })
+  ipcMain.handle('review:history', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.history(projectPath) : []))
   ipcMain.handle('review:usage', () => reviewStore.usage())
   ipcMain.handle('review:clear', () => reviews.clear())
 
@@ -3513,6 +3521,7 @@ app.whenReady().then(async () => {
     onChange: () => void sendReviews(),
     onProblems: sendReviewProblems,
     onChecks: sendReviewChecks,
+    onHistory: sendReviewHistory,
     gitFiles: { look: (dir) => lookAtFiles(dir), changed: (dir, since, start) => filesChangedSince(dir, since, start) },
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })

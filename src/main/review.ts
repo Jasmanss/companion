@@ -1,4 +1,4 @@
-import type { Project, ReviewCheck, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
+import type { Project, ReviewCheck, ReviewHistoryEntry, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
 import { addressLabel, landingNote, reviewNote, sayFrom } from '../shared/review'
 import type { AlertInput } from './alerts'
 import type { HookPayload } from './hook-payload'
@@ -33,6 +33,8 @@ export interface ReviewDeps {
   onProblems?(): void
   /** The list of projects checked with no visible change changed. */
   onChecks?(): void
+  /** A look after a turn was added to the history. */
+  onHistory?(): void
   /** The project's git checkout: what it lists as changed when a turn starts, and how many files changed by its end (turn-files.ts). */
   gitFiles?: {
     look(dir: string): Promise<StatusEntry[] | null>
@@ -168,16 +170,21 @@ export class ReviewTracker {
         after = await this.capture(address)
       } catch (err) {
         this.failed(project, address, err, 'no after picture')
+        await this.keepLook(project, address, 'failed', { text: describeCaptureError(err, address) })
         return null
       }
       this.remember(project.path, after)
       // A login page is all Steward would ever see there: say so, and make no card of it.
       const landing = this.looked(project, address, after)
-      if (landing?.login) return this.skip(`${project.name}: ${landing.text}`)
+      if (landing?.login) {
+        await this.keepLook(project, address, 'login', { text: landing.text })
+        return this.skip(`${project.name}: ${landing.text}`)
+      }
       const diff = before ? await this.deps.compare(before.png, after.png) : null
       // Nothing to compare with shows the page as it is. A page that looks the same makes no card, but a quiet note.
       if (diff && !diff.changed) {
         this.checkedSame(project, address)
+        await this.keepLook(project, address, 'same')
         return this.skip(`${project.name}: the page looks the same (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})`)
       }
       // What Claude said it did, from the Stop hook itself: nothing else is read, and nothing leaves the Mac.
@@ -205,6 +212,7 @@ export class ReviewTracker {
       )
       this.log(`a review of ${project.name}: ${diff ? `the page changed (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})` : 'no earlier picture, so only how it looks now'}`)
       this.clearCheck(project.path)
+      await this.keepLook(project, address, 'review', { reviewId: record.id })
       this.deps.onChange()
       return record
     } catch (err) {
@@ -297,6 +305,22 @@ export class ReviewTracker {
     await this.deps.store.clear()
     this.lastLooks.clear()
     this.deps.onChange()
+  }
+
+  /** The looks after recent turns in a project, newest first, for Settings. Only for the address it has now. */
+  history(projectPath: string): ReviewHistoryEntry[] {
+    const url = this.deps.projects().find((p) => p.path === projectPath)?.url
+    return url ? this.deps.store.history(projectPath).filter((e) => e.address === url) : []
+  }
+
+  /** Keep what a look after a turn found, in the history. Never throws: the history is a nicety. */
+  private async keepLook(project: Project, address: string, found: ReviewHistoryEntry['found'], extra: Pick<ReviewHistoryEntry, 'text' | 'reviewId'> = {}): Promise<void> {
+    try {
+      await this.deps.store.addLook({ projectPath: project.path, address, at: this.now(), found, ...extra })
+      this.deps.onHistory?.()
+    } catch (err) {
+      this.log(`couldn't keep the history of ${project.name}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   /** How many files the turn changed in the project's checkout, or null when git can't say. */

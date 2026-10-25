@@ -297,6 +297,46 @@ describe('ReviewTracker, a check is never silent', () => {
   })
 })
 
+describe('ReviewTracker, the history', () => {
+  it('keeps every look after a turn, what it found, and what became of a review', async () => {
+    let page: string | Error | Shot = 'old page'
+    const { tracker, store } = await setup({ page: () => page })
+    const turn = async (id: string, now: string | Error | Shot) => {
+      tracker.turnStarted(start({ prompt_id: id }))
+      await tick()
+      page = now
+      return tracker.turnStopped(stop({ prompt_id: id }))
+    }
+    const review = await turn('1', 'new page')
+    await turn('2', 'new page') // the same
+    await turn('3', new Error('net::ERR_CONNECTION_REFUSED'))
+    page = 'new page'
+    await turn('4', { ...shot('login'), landedOn: 'http://localhost:3000/login' })
+    expect(tracker.history(project.path).map((e) => [e.found, e.text ?? '', e.decided ?? ''])).toEqual([
+      ['login', expect.stringContaining('sends you to /login'), ''],
+      ['failed', 'Nothing is answering at localhost:3000. Start the app, then try again.', ''],
+      ['same', '', ''],
+      ['review', '', 'new'],
+    ])
+    await tracker.markGood(review!.id)
+    expect(tracker.history(project.path).at(-1)).toMatchObject({ found: 'review', reviewId: review!.id, decided: 'good' })
+    // Kept on disk: a restart reads it back.
+    const again = new ReviewStore(path.dirname(path.dirname(path.dirname(store.file(review!.id, 'after')!))), REVIEW_LIMITS)
+    await again.load()
+    expect(again.history(project.path)).toHaveLength(4)
+  })
+
+  it("keeps nothing for a turn it didn't look at, and shows only the address the project has now", async () => {
+    const { tracker, store } = await setup({ projects: [{ name: 'site', path: '/Users/me/site' }] })
+    tracker.turnStarted(start())
+    expect(await tracker.turnStopped(stop())).toBeNull()
+    expect(store.history('/Users/me/site')).toEqual([])
+    await store.addLook({ projectPath: '/Users/me/site', address: 'http://localhost:3000', at: Date.now(), found: 'same' })
+    // No address now: nothing to show for it.
+    expect(tracker.history('/Users/me/site')).toEqual([])
+  })
+})
+
 describe('ReviewTracker, decisions', () => {
   it('Looks good takes it off the list', async () => {
     const { tracker, store, state, onChange } = await setup()

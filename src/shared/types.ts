@@ -332,6 +332,21 @@ export interface ReviewCheck {
   at: number
 }
 
+/**
+ * Visual Review's history: one look at a project's page as a turn ended, and what it found, so a quiet turn can be
+ * explained. review: the page changed and made a review (decided says what became of it, gone once it isn't kept).
+ * same: it looked the same. failed: it couldn't be seen (text says why). login: all it found was a login page.
+ */
+export interface ReviewHistoryEntry {
+  projectPath: string
+  address: string
+  at: number
+  found: 'review' | 'same' | 'failed' | 'login'
+  text?: string
+  reviewId?: string
+  decided?: 'new' | 'good' | 'sent-back' | 'gone'
+}
+
 /** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
 export interface ReviewProblem {
   projectPath: string
@@ -546,6 +561,10 @@ export interface StewardAPI {
     sendBack(id: string, note: string): Promise<string>
     /** Open the full-page picture. */
     openFull(id: string, which: 'before' | 'after'): Promise<void>
+    /** The looks after recent turns in a project, newest first. */
+    history(projectPath: string): Promise<ReviewHistoryEntry[]>
+    /** The history changed (a turn ended, a review was decided, or it was cleared): ask again. */
+    onHistory(cb: () => void): Unsubscribe
     /** How many reviews are kept and how much space they take. */
     usage(): Promise<{ count: number; bytes: number }>
     /** Delete every review picture. */

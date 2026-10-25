@@ -90,6 +90,8 @@ const api: StewardAPI = {
     markGood: (id) => ipcRenderer.invoke('review:markGood', id),
     sendBack: (id, note) => ipcRenderer.invoke('review:sendBack', id, note),
     openFull: (id, which) => ipcRenderer.invoke('review:openFull', id, which),
+    history: (projectPath) => ipcRenderer.invoke('review:history', projectPath),
+    onHistory: (cb) => subscribe<void>('review:history', () => cb()),
     usage: () => ipcRenderer.invoke('review:usage'),
     clear: () => ipcRenderer.invoke('review:clear'),
   },

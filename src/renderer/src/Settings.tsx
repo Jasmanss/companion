@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
 import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, SUGGESTED_STEP_ASIDE_APPS, TAB_SIZES, panelTint } from '../../shared/steward'
-import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewProblem, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
+import { historyLine } from '../../shared/review'
+import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewHistoryEntry, ReviewProblem, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
 import { Pill, pillKey } from './Pill'
 import type { Glint } from './pill/eyes'
@@ -755,9 +756,43 @@ function ReviewAddressRow({ project, problem, run }: { project: Project; problem
           {problem.reason}
         </p>
       )}
+      {saved && <ReviewHistory project={project} />}
     </div>
   )
 }
+
+/** "2:41 PM" today, "Oct 23, 2:41 PM" before. */
+function lookedAt(at: number): string {
+  const d = new Date(at)
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+}
+
+/** What Steward found each time a session in the project stopped: the newest few, so a quiet turn can be explained. */
+function ReviewHistory({ project }: { project: Project }) {
+  const [looks, setLooks] = useState<ReviewHistoryEntry[]>([])
+  useEffect(() => {
+    const load = () => void api().review.history(project.path).then(setLooks, () => setLooks([]))
+    load()
+    return api().review.onHistory(load)
+  }, [project.path, project.url])
+  if (!looks.length) return null
+  return (
+    <div className="set-history">
+      <small>After recent turns</small>
+      <ul>
+        {looks.slice(0, HISTORY_SHOWN).map((e) => (
+          <li key={`${e.at}:${e.found}:${e.reviewId ?? ''}`} title={e.text}>
+            <time dateTime={new Date(e.at).toISOString()}>{lookedAt(e.at)}</time> {historyLine(e)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** How many looks Settings shows of the 20 kept. */
+const HISTORY_SHOWN = 5
 
 /**
  * Visual Review needs the prompt hook. Said right under the addresses (not only in Connections), with the same
