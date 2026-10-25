@@ -1726,6 +1726,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
       await checkSettingsClearOfPanel()
       clearTimeout(besideTimer)
+      const reactionsTimer = setTimeout(() => fail("Steward's reactions timed out"), 60_000)
+      await checkReactions()
+      clearTimeout(reactionsTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -1735,6 +1738,66 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       fail(String(err))
     }
   })
+}
+
+/**
+ * Steward's reactions, through the real hook path with made-up chats: the face the panel works out (as it tells the
+ * notch) follows them. Focused for one working, juggling for two, a nod for a short turn, proud for a long one (and the
+ * island's spark), confused for a question or a wait for input (the island's "?"), needs you for an approval, and hello
+ * when you're back at the Mac.
+ */
+async function checkReactions(): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  // Nothing peeks out: this is about the face, and a nudge would move the window the next checks expect at rest.
+  const alertPeek = settings.steward().alertPeek
+  await settings.update({ steward: { alertPeek: 'none' } })
+  const ids = ['react-1', 'react-2', 'react-3', 'react-4', 'react-5']
+  const clean = () => {
+    for (const id of ids) sessions.dismiss(id)
+    activity.reset()
+    islandNotes.drop()
+    backAt = null
+    sendSessions()
+  }
+  clean()
+  const hook = (hook_event_name: HookPayload['hook_event_name'], session_id: string, extra: Record<string, unknown> = {}) =>
+    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-reactions', ...extra } as HookPayload)
+  const seen: string[] = []
+  const face = async (want: Mood, what: string, within = 2000) => {
+    const started = Date.now()
+    while (notch.state().mood !== want && Date.now() - started < within) await sleep(25)
+    if (notch.state().mood !== want) throw new Error(`${what}: Steward's face is ${notch.state().mood}, not ${want}`)
+    seen.push(`${want} (${what}, ${Date.now() - started} ms)`)
+  }
+  await hook('UserPromptSubmit', 'react-1')
+  await face('focused', 'one chat working')
+  await hook('UserPromptSubmit', 'react-2')
+  await face('juggling', 'two chats working')
+  await hook('Stop', 'react-2', { last_assistant_message: 'Done, the tests pass.' })
+  await face('nod', 'a short turn ending')
+  await face('focused', 'the nod over, one chat still working', 4000)
+  // The other turn began over five minutes ago.
+  activity.turns['react-1'] = Date.now() - 301_000
+  await hook('Stop', 'react-1', { last_assistant_message: 'I rebuilt the settings page.' })
+  await face('proud', 'a long turn ending')
+  if (!notch.state().island?.spark) throw new Error(`after a long turn the island shows ${JSON.stringify(notch.state().island)}, with no spark`)
+  await hook('UserPromptSubmit', 'react-3')
+  await hook('Stop', 'react-3', { last_assistant_message: 'I found two layouts. Which one did you mean, page.tsx or layout.tsx?' })
+  await face('confused', 'a chat ending on a question')
+  if (notch.state().island?.right !== 'asks') throw new Error(`after a question the island's right side is ${notch.state().island?.right}, not a "?"`)
+  await hook('Notification', 'react-4', { message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
+  await face('confused', 'a chat waiting for input')
+  await hook('PermissionRequest', 'react-5', { tool_name: 'Bash', tool_input: { command: 'npm test' } })
+  await face('needs-you', 'a chat waiting for your OK')
+  if (notch.state().island?.right !== 'needs') throw new Error(`with an approval waiting the island's right side is ${notch.state().island?.right}, not the amber mark`)
+  clean()
+  backAt = Date.now()
+  sendMood()
+  await face('hello', "back at the Mac after a while")
+  clean()
+  await settings.update({ steward: { alertPeek } })
+  alerts.flush()
+  console.log(`smoke: reactions: ${seen.join('; ')}`)
 }
 
 /**
