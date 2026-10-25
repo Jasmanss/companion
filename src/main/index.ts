@@ -2891,7 +2891,10 @@ async function checkIsland(out: string): Promise<void> {
   const restPill = islandParts('rest', layout).pill
   let img = await shot()
   if (notch.state().island?.right !== null) throw new Error(`the island shows "${notch.state().island?.right}" with nothing going on`)
-  if (!steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('at rest, Steward does not peek out past the notch\'s left edge')
+  if (!steward(img, layout.cx - hw - 12, restPill.y)) {
+    const px = pixel(img, layout.cx - hw - 12, restPill.y + 9)
+    throw new Error(`at rest, Steward does not peek out past the notch's left edge (pixel ${JSON.stringify(px)}; ${JSON.stringify({ visible: notch.visible, awake: notch.state().awake, mood: notch.state().mood, hover: notch.state().hover, steppedAside, dock })})`)
+  }
   if (!black(img, layout.cx - hw + 4, 8) || !black(img, layout.cx, 8)) throw new Error('at rest, the notch is not black where Steward hides behind it')
   if (!clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx - hw - 60, 8)) throw new Error('at rest, there is an island beside the notch')
   await fs.writeFile(out.replace(/\.png$/, '-island-rest.png'), img.toPNG())
