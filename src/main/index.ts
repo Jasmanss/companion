@@ -870,12 +870,18 @@ function menuBarIcon(): Electron.NativeImage {
   return image
 }
 
+/**
+ * The menu bar's title. While hidden, stepping aside, or when Steward only comes out when needed, it shows how many
+ * sessions are waiting on you, and a dot when something quieter is waiting too: an alert, or a review not decided yet.
+ */
+function menuBarText(): string {
+  const waiting = sessions?.waitingCount() ?? 0
+  return menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews)
+}
+
 function updateMenuBar(): void {
   if (!menuBar) return
-  // While hidden, stepping aside, or when Steward only comes out when needed, the menu bar shows how many sessions are
-  // waiting on you, and a dot when something quieter is waiting too: an alert, or a review not decided yet.
-  const waiting = sessions?.waitingCount() ?? 0
-  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews))
+  menuBar.setTitle(menuBarText())
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Steward', accelerator: registered.togglePanel || undefined, registerAccelerator: false, click: () => setDock('expanded') },
@@ -1965,10 +1971,11 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need(dockNow() === 'nudge', `the review alert left Steward ${dockNow()}, not peeking out`)
     alerts.flush()
     need(!heldAlerts.some((a) => a.key === finishedKey), "the turn's finished alert came as well as the review's")
-    need(menuBar === null || menuBar.getTitle().includes('•'), `the menu bar shows "${menuBar?.getTitle()}", no dot for the review waiting`)
+    // The smoke has no menu bar icon, so it asks what the title would be.
+    need(menuBarText().includes('•'), `the menu bar would show "${menuBarText()}", no dot for the review waiting`)
     await sleep(400)
     await fs.writeFile(out.replace(/\.png$/, '-review-alert.png'), (await w.webContents.capturePage()).toPNG())
-    console.log(`smoke: the review comes out as an alert ("steward-smoke-review-project changed"), the turn's finished alert is taken back, the menu bar shows "${menuBar?.getTitle()}"`)
+    console.log(`smoke: the review comes out as an alert ("steward-smoke-review-project changed"), the turn's finished alert is taken back, the menu bar title would be "${menuBarText()}"`)
 
     // The panel shows the card at its top.
     setDock('expanded')
