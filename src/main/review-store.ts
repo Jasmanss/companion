@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import type { ReviewHistoryEntry } from '../shared/types'
 
 /** What Visual Review keeps: the newest reviews per project, nothing older than 14 days, and about 300 MB in all. */
 export interface ReviewLimits {
@@ -31,6 +32,8 @@ export interface ReviewRecord {
   note?: string
   /** The "Claude says" note: the start of Claude's last reply for the turn (sayFrom), when it said something. */
   said?: string
+  /** How many files the turn changed in the project's git checkout (turn-files.ts), when git could say. */
+  filesChanged?: number
 }
 
 /** The files of one review, besides review.json. The card pictures are small JPEGs of the top of the page. */
@@ -73,6 +76,25 @@ export function chooseToDelete(kept: Kept[], now: number, limits: ReviewLimits =
   return [...gone]
 }
 
+/** The history keeps this many looks per project, and none older than the reviews themselves. */
+export const HISTORY_PER_PROJECT = 20
+const HISTORY_FILE = 'history.json'
+const FOUND = new Set<string>(['review', 'same', 'failed', 'login'])
+
+/** A look worth keeping as read back from history.json: anything else in the file is dropped. */
+function historyEntry(e: unknown): ReviewHistoryEntry | null {
+  const r = e as Partial<ReviewHistoryEntry> | null
+  if (!r || typeof r.projectPath !== 'string' || typeof r.address !== 'string' || typeof r.at !== 'number' || !FOUND.has(r.found as string)) return null
+  return {
+    projectPath: r.projectPath,
+    address: r.address,
+    at: r.at,
+    found: r.found as ReviewHistoryEntry['found'],
+    ...(typeof r.text === 'string' ? { text: r.text.slice(0, 300) } : {}),
+    ...(isReviewId(r.reviewId) ? { reviewId: r.reviewId } : {}),
+  }
+}
+
 const ID_PATTERN = /^\d{8}-\d{6}-[a-f0-9]{8}$/
 export const isReviewId = (id: unknown): id is string => typeof id === 'string' && ID_PATTERN.test(id)
 
@@ -94,6 +116,10 @@ interface Entry {
  */
 export class ReviewStore {
   private entries = new Map<string, Entry>()
+  /** The looks after turns, newest first (history.json beside the project folders). */
+  private looks: ReviewHistoryEntry[] = []
+  /** Writes of history.json, one after another. */
+  private writing: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly root: string,
@@ -104,7 +130,14 @@ export class ReviewStore {
   /** Read what's on disk. A review whose review.json is missing (a save that was cut off) is removed. */
   async load(): Promise<void> {
     this.entries.clear()
-    const projects = await fs.readdir(this.root).catch(() => [])
+    this.looks = await fs.readFile(path.join(this.root, HISTORY_FILE), 'utf8').then(
+      (text) => {
+        const list: unknown = JSON.parse(text)
+        return Array.isArray(list) ? list.map(historyEntry).filter((e): e is ReviewHistoryEntry => e !== null) : []
+      },
+      () => [],
+    )
+    const projects = (await fs.readdir(this.root).catch(() => [])).filter((name) => !name.startsWith(HISTORY_FILE))
     for (const project of projects) {
       const reviews = await fs.readdir(path.join(this.root, project)).catch(() => [])
       for (const review of reviews) {
@@ -202,10 +235,39 @@ export class ReviewStore {
     return gone
   }
 
-  /** "Clear review pictures": everything goes. */
+  /** "Clear review pictures": everything goes, the history too. */
   async clear(): Promise<void> {
+    await this.writing
     await fs.rm(this.root, { recursive: true, force: true })
     this.entries.clear()
+    this.looks = []
+  }
+
+  /** Keep one look after a turn: the newest HISTORY_PER_PROJECT of each project, none older than the reviews' limit. */
+  async addLook(look: ReviewHistoryEntry): Promise<void> {
+    const now = this.now()
+    const fresh = [look, ...this.looks].filter((e) => now - e.at <= this.limits.maxAgeMs)
+    const count = new Map<string, number>()
+    this.looks = fresh.filter((e) => {
+      const n = (count.get(e.projectPath) ?? 0) + 1
+      count.set(e.projectPath, n)
+      return n <= HISTORY_PER_PROJECT
+    })
+    const text = JSON.stringify(this.looks, null, 1)
+    this.writing = this.writing.then(async () => {
+      await fs.mkdir(this.root, { recursive: true })
+      const tmp = path.join(this.root, `${HISTORY_FILE}.tmp`)
+      await fs.writeFile(tmp, text)
+      await fs.rename(tmp, path.join(this.root, HISTORY_FILE))
+    })
+    await this.writing.catch(() => {})
+  }
+
+  /** A project's looks, newest first, each review with what became of it. */
+  history(projectPath: string): ReviewHistoryEntry[] {
+    return this.looks
+      .filter((e) => e.projectPath === projectPath)
+      .map((e) => (e.found === 'review' ? { ...e, decided: (e.reviewId && this.get(e.reviewId)?.status) || 'gone' } : e))
   }
 
   usage(): { count: number; bytes: number } {
@@ -234,7 +296,8 @@ function parseRecord(text: string): ReviewRecord | null {
       (r.before === 'turn-start' || r.before === 'last-look' || r.before === 'none') &&
       typeof r.heightAfter === 'number' &&
       (r.status === 'new' || r.status === 'good' || r.status === 'sent-back') &&
-      (r.said === undefined || typeof r.said === 'string')
+      (r.said === undefined || typeof r.said === 'string') &&
+      (r.filesChanged === undefined || (typeof r.filesChanged === 'number' && Number.isInteger(r.filesChanged) && r.filesChanged >= 0))
     return ok ? (r as ReviewRecord) : null
   } catch {
     return null

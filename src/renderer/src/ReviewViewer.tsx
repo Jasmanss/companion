@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
-import { addressLabel, CARD_SHOT, reviewNote, reviewPictureUrl } from '../../shared/review'
+import { addressLabel, CARD_SHOT, filesChangedLabel, reviewNote, reviewPictureUrl } from '../../shared/review'
 import type { ReviewView } from '../../shared/types'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons'
 
@@ -128,6 +128,7 @@ export function ReviewViewer({
         <div className="rvv-title">
           <span className="viewer-name">{review.project}</span>
           <span className="chip">{addressLabel(review.address)}</span>
+          {review.filesChanged !== null && <span className="chip quiet">{filesChangedLabel(review.filesChanged)}</span>}
           {reviews.length > 1 && (
             <span className="rvv-count">
               <button className="icon-btn" aria-label="Previous review" title="Previous review ([)" disabled={index === 0} onClick={() => go(index - 1)}>

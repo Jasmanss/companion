@@ -13,6 +13,7 @@ import {
   menuBarTitle,
   NOTCH_DWELL_MS,
   nextLookMs,
+  islandShows,
   peeksOut,
   presenceNote,
   firstPeekNote,
@@ -241,6 +242,7 @@ const KINDS: [string, string][] = [
   ['a build failed', 'deploy-failed:dpl_1'],
   ['a deploy went out', 'deploy-ready:dpl_1'],
   ['a PR was merged', 'pr-merged:/p:12'],
+  ['a Visual Review is ready', 'review:20261024-101010-abcdef12'],
 ]
 
 describe('which alerts peek out', () => {
@@ -255,6 +257,7 @@ describe('which alerts peek out', () => {
       'a build failed': false,
       'a deploy went out': false,
       'a PR was merged': false,
+      'a Visual Review is ready': true,
     })
   })
 
@@ -271,6 +274,10 @@ describe('which alerts peek out', () => {
     expect(island('all')).toEqual({ ...table('all'), 'a session finished': false })
     expect(island('needs-me')).toEqual(table('needs-me'))
     expect(splitAlerts([alert('finished:a'), alert('deploy-ready:c')], 'all', true)).toEqual({ peek: [alert('deploy-ready:c')], held: [alert('finished:a')] })
+  })
+
+  it('in the notch island, a review comes out as the island itself, and nothing else does yet', () => {
+    expect(Object.fromEntries(KINDS.map(([name, key]) => [name, islandShows(key)]))).toEqual({ ...Object.fromEntries(KINDS.map(([name]) => [name, false])), 'a Visual Review is ready': true })
   })
 
   it('splits what reached it into what peeks out and what waits, in order', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REVIEW_VIEWER_GAP, reviewViewerRect, SAID_MAX, sayFrom } from '../src/shared/review'
+import { historyLine, REVIEW_VIEWER_GAP, reviewViewerRect, SAID_MAX, sayFrom } from '../src/shared/review'
 
 describe('sayFrom: the "Claude says" note', () => {
   it('keeps the first two sentences of a plain reply', () => {
@@ -56,6 +56,22 @@ describe('sayFrom: the "Claude says" note', () => {
     expect(sayFrom('   \n\n ')).toBeNull()
     expect(sayFrom('```\nonly code\n```')).toBeNull()
     expect(sayFrom('## Summary')).toBeNull()
+  })
+})
+
+describe('historyLine: a look in the history, in words', () => {
+  it('says what it found, and what became of a review', () => {
+    expect(historyLine({ found: 'review', decided: 'new' })).toBe('The page changed: a review is waiting.')
+    expect(historyLine({ found: 'review', decided: 'good' })).toBe('The page changed: you marked it Looks good.')
+    expect(historyLine({ found: 'review', decided: 'sent-back' })).toBe('The page changed: you sent it back.')
+    expect(historyLine({ found: 'review', decided: 'gone' })).toBe('The page changed: the review is no longer kept.')
+    expect(historyLine({ found: 'same' })).toBe('No visible change.')
+    expect(historyLine({ found: 'login', text: 'localhost:3000 sends you to /login, so ...' })).toBe('Only a login page.')
+    expect(historyLine({ found: 'failed', text: 'Nothing is answering at localhost:3000. Start the app, then try again.' })).toBe(
+      "Couldn't see it: nothing is answering at localhost:3000. Start the app, then try again.",
+    )
+    expect(historyLine({ found: 'failed', text: 'localhost:3000 loaded, but the page is blank.' })).toBe("Couldn't see it: localhost:3000 loaded, but the page is blank.")
+    expect(historyLine({ found: 'failed' })).toBe("Couldn't see it.")
   })
 })
 

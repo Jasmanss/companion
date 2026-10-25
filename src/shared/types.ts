@@ -37,9 +37,12 @@ export interface IslandStatus {
   /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
   note?: IslandNote
 }
-/** finished: "Main building finished", and what Claude said. started: a second project started while one works. */
+/**
+ * finished: "Main building finished", and what Claude said. started: a second project started while one works. alert:
+ * the catch-all, an alert with no island size of its own (a Visual Review, until island Phase 3), its title and one line.
+ */
 export interface IslandNote {
-  kind: 'finished' | 'started'
+  kind: 'finished' | 'started' | 'alert'
   /** The chat's name (or the project's), in bold, then the rest. */
   name: string
   text: string
@@ -308,6 +311,8 @@ export interface ReviewView {
   files: { before: string | null; after: string }
   /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
   said: string | null
+  /** How many files the turn changed in the project's git checkout, or null when git couldn't say. */
+  filesChanged: number | null
 }
 
 /**
@@ -325,6 +330,21 @@ export interface ReviewCheck {
   /** The address it looked at. */
   address: string
   at: number
+}
+
+/**
+ * Visual Review's history: one look at a project's page as a turn ended, and what it found, so a quiet turn can be
+ * explained. review: the page changed and made a review (decided says what became of it, gone once it isn't kept).
+ * same: it looked the same. failed: it couldn't be seen (text says why). login: all it found was a login page.
+ */
+export interface ReviewHistoryEntry {
+  projectPath: string
+  address: string
+  at: number
+  found: 'review' | 'same' | 'failed' | 'login'
+  text?: string
+  reviewId?: string
+  decided?: 'new' | 'good' | 'sent-back' | 'gone'
 }
 
 /** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
@@ -541,6 +561,10 @@ export interface StewardAPI {
     sendBack(id: string, note: string): Promise<string>
     /** Open the full-page picture. */
     openFull(id: string, which: 'before' | 'after'): Promise<void>
+    /** The looks after recent turns in a project, newest first. */
+    history(projectPath: string): Promise<ReviewHistoryEntry[]>
+    /** The history changed (a turn ended, a review was decided, or it was cleared): ask again. */
+    onHistory(cb: () => void): Unsubscribe
     /** How many reviews are kept and how much space they take. */
     usage(): Promise<{ count: number; bytes: number }>
     /** Delete every review picture. */
