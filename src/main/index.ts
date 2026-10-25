@@ -1804,8 +1804,12 @@ async function checkReactions(out: string): Promise<void> {
   sendMood()
   await face('hello', "back at the Mac after a while")
   clean()
-  await settings.update({ steward: { alertPeek } })
+  // The made-up chats' alerts (the finished ones wait 20 s to be batched) go now, while nothing peeks out, and are
+  // dropped: a nudge coming out later would move the window the next checks expect at rest.
   alerts.flush()
+  heldAlerts = []
+  updateMenuBar()
+  await settings.update({ steward: { alertPeek } })
   console.log(`smoke: reactions: ${seen.join('; ')}`)
 
   // The new faces, as Settings → Steward previews them: each a moment in, where it shows best.
