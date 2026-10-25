@@ -486,7 +486,7 @@ function hideTab(why?: string): void {
   setSlide(quiet(), false)
 }
 
-const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy']
+const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello']
 const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
