@@ -106,11 +106,14 @@ Each is a draft PR into main with CI green; the user types each go into Main bui
 5. **The compact island is tiny.** The glyph slot and the 14 pt eyes carry the whole reaction there. Motion and feel are hand-tested only on the real Mac; CI cannot measure them.
 6. **`confused` was designed on `moods.html`** long ago and has never run in the app. It needs a hand look at the real sizes.
 
-### Questions for the user (defaults in bold; none blocks starting)
-1. **Frustrated without the hook:** the milder version (**recommended**), or nothing until the hook is installed?
-2. **Proud:** keep the confetti burst (**recommended**, one small one), or a plainer proud (hops only)?
-3. **Liveliness default:** **Calm**, or Quiet?
-4. **Who builds it:** **Main building after island Phase 2** (recommended), or wait for Feature building?
+### Decided by the user (2026-10-24, via the front door)
+The user: "Accept all four reactions defaults: the milder frustrated without the hook, keep Proud's small confetti, Calm liveliness, and Main building builds it after island Phase 2."
+1. **Without the hook:** Frustrated is the milder version from the weak signals (the same animation played through once, held 6 seconds, not repeating).
+2. **Proud** keeps the one small confetti burst.
+3. **Liveliness** defaults to **Calm**.
+4. **Who and when:** Main building builds R1 to R3 after island Phase 2 (almost done, on its last smoke run).
+
+**Status stays `designed`** until the user types R1's go into Main building.
 
 ### How to test
 - **Unit:** `pickReaction` against every rank (each row beats the one below, one-shots expire, a lost one-shot is dropped, Frustrated beats Juggling, two chats mix); the turn tiers at 14.9, 15, 299 and 300 s and with no turn start; the failure window (3 in 120 s, 2 in 120 s, a Stop clears it); stops in 10 minutes; `idleStep` with a fake clock and random (nothing in the first 20 s, no repeat, big actions after 2 quiet minutes and 4 minutes apart, none while dimmed, with reduced motion, or outside idle, the notch mapping of a yawn); the `PostToolUseFailure` payload keeps only the id, time and tool name and drops the error text and input; the Connections notice appears only when the hook is missing and a project uses reactions.
