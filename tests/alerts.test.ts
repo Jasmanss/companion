@@ -39,6 +39,20 @@ describe('AlertQueue', () => {
     expect(shown[0].map((a) => a.title)).toEqual(['steward finished', 'Portlkit finished'])
   })
 
+  it('takes back an alert still waiting for its batch, but not one already shown', () => {
+    queue.push({ key: 'finished:s1:p1', level: 'normal', title: 'haven finished' })
+    queue.push({ key: 'finished:s2:p1', level: 'normal', title: 'site finished' })
+    expect(queue.withdraw((a) => a.key === 'finished:s1:p1')).toBe(1)
+    vi.advanceTimersByTime(1000)
+    expect(shown).toEqual([[expect.objectContaining({ key: 'finished:s2:p1' })]])
+    expect(queue.withdraw((a) => a.key === 'finished:s2:p1')).toBe(0)
+    // With nothing left waiting, no empty batch shows later.
+    queue.push({ key: 'finished:s3:p1', level: 'normal', title: 'docs finished' })
+    queue.withdraw(() => true)
+    vi.advanceTimersByTime(5000)
+    expect(shown).toHaveLength(1)
+  })
+
   it('flushes the batch early on request, and keeps quiet alerts to the history', () => {
     queue.push({ key: 'f1', level: 'normal', title: 'finished' })
     queue.push({ key: 'q1', level: 'quiet', title: 'short turn finished' })
@@ -67,6 +81,8 @@ describe('notification switches', () => {
     expect(alertSwitch('deploy-ready:dpl_abc')).toBe('celebrations')
     expect(alertSwitch('pr-merged:/Users/me/haven:12')).toBe('celebrations')
     expect(alertSwitch('agent-approval:3f2a')).toBeNull()
+    // Giving a project an address turned Visual Review on: no switch hides its reviews.
+    expect(alertSwitch('review:20261024-101010-abcdef12')).toBeNull()
   })
 
   it("keep an alert whose switch is off from peeking out, and nothing else changes", () => {

@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
 import type { Project } from '../src/shared/types'
-import { describeCaptureError, ReviewTracker, type Shot } from '../src/main/review'
+import { describeCaptureError, reviewAlert, ReviewTracker, sameTurnFinished, type Shot } from '../src/main/review'
 import type { Diff } from '../src/main/review-diff'
 import { REVIEW_LIMITS, ReviewStore } from '../src/main/review-store'
 
@@ -378,6 +378,30 @@ describe('ReviewTracker, problems the user should see', () => {
     await tick()
     expect(log.filter((m) => m.includes('busy'))).toHaveLength(2) // two more than the queue holds
     expect(tracker.problems()).toEqual([])
+  })
+})
+
+describe('the review alert', () => {
+  it('needs you: urgent, under its own key, and opens on the card', () => {
+    expect(reviewAlert({ id: '20261024-101010-abcdef12', project: 'haven', projectPath: '/Users/me/haven' })).toEqual({
+      key: 'review:20261024-101010-abcdef12',
+      level: 'urgent',
+      title: 'haven changed',
+      detail: 'Review what Claude did?',
+      scope: '/Users/me/haven',
+    })
+  })
+
+  it("takes the place of the same turn's finished alert, and no other", () => {
+    const same = sameTurnFinished({ session_id: 's1', prompt_id: 'p2' })
+    expect(same({ key: 'finished:s1:p2' })).toBe(true)
+    expect(same({ key: 'finished:s1:p1' })).toBe(false)
+    expect(same({ key: 'finished:s2:p2' })).toBe(false)
+    expect(same({ key: 'approval:s1:p2:npm test' })).toBe(false)
+    // No prompt id (sessions.ts keys it by the time then): that session's finished alerts.
+    const any = sameTurnFinished({ session_id: 's1' })
+    expect(any({ key: 'finished:s1:1729800000000' })).toBe(true)
+    expect(any({ key: 'finished:s10:1729800000000' })).toBe(false)
   })
 })
 

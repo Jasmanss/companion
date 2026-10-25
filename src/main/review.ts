@@ -1,5 +1,6 @@
 import type { Project, ReviewCheck, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
 import { addressLabel, landingNote, reviewNote, sayFrom } from '../shared/review'
+import type { AlertInput } from './alerts'
 import type { HookPayload } from './hook-payload'
 import type { Diff } from './review-diff'
 import type { ReviewRecord, ReviewStore } from './review-store'
@@ -61,6 +62,23 @@ const BUSY = 'Steward is busy looking at other pages'
 
 const turnKey = (event: { session_id: string; prompt_id?: string }) => `${event.session_id}:${event.prompt_id ?? ''}`
 const dataUrl = (jpeg: Buffer) => `data:image/jpeg;base64,${jpeg.toString('base64')}`
+
+/**
+ * The alert a review gets. It waits for your decision, so it is urgent (no waiting for a batch) and counts as needing
+ * you (presence.ts). A click opens the panel, where the card is at the top.
+ */
+export function reviewAlert(record: Pick<ReviewRecord, 'id' | 'project' | 'projectPath'>): AlertInput {
+  return { key: `review:${record.id}`, level: 'urgent', title: `${record.project} changed`, detail: 'Review what Claude did?', scope: record.projectPath }
+}
+
+/**
+ * The plain "finished" alert of the turn a review is about (sessions.ts keys it by session and prompt): the review
+ * says more, so that one goes. Without a prompt id, any of that session's finished alerts.
+ */
+export function sameTurnFinished(event: { session_id: string; prompt_id?: string }): (alert: { key: string }) => boolean {
+  const key = `finished:${event.session_id}:`
+  return event.prompt_id ? (a) => a.key === `${key}${event.prompt_id}` : (a) => a.key.startsWith(key)
+}
 
 /** Words for why a page couldn't be captured, for Settings and the log. */
 export function describeCaptureError(err: unknown, address: string): string {

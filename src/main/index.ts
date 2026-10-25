@@ -43,6 +43,7 @@ import {
   EDGE_FAR_DWELL_MS,
   freshPush,
   inRect,
+  islandShows,
   MAX_HELD,
   menuBarTitle,
   nextLookMs,
@@ -60,10 +61,10 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, noteTurn, type Turns } from './island-status'
-import { ReviewTracker } from './review'
+import { alertNote, hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, noteTurn, type Turns } from './island-status'
+import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
-import { isReviewId, ReviewStore } from './review-store'
+import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
@@ -871,9 +872,9 @@ function menuBarIcon(): Electron.NativeImage {
 function updateMenuBar(): void {
   if (!menuBar) return
   // While hidden, stepping aside, or when Steward only comes out when needed, the menu bar shows how many sessions are
-  // waiting on you, and a dot when something quieter is waiting too.
+  // waiting on you, and a dot when something quieter is waiting too: an alert, or a review not decided yet.
   const waiting = sessions?.waitingCount() ?? 0
-  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length))
+  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews))
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Steward', accelerator: registered.togglePanel || undefined, registerAccelerator: false, click: () => setDock('expanded') },
@@ -1097,7 +1098,12 @@ function showAlerts(list: AlertView[]): void {
     return updateMenuBar()
   }
   const island = inNotch() && settings.steward().notchStyle === 'island'
-  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
+  const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
+  const { held } = split
+  // In the island a review comes out as the island itself (its note), never as the old alert under the notch.
+  const notes = island && !isOpen(dock) ? split.peek.filter((a) => islandShows(a.key)) : []
+  const peek = split.peek.filter((a) => !notes.includes(a))
+  for (const alert of notes) islandNotes.show(alertNote(alert, Date.now()))
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
     win?.webContents.send('alerts:show', peek)
@@ -1300,6 +1306,9 @@ function updateIsland(): void {
   else agentSince ??= now
   const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
   notch.setIsland(islandStatus(input))
+  // An alert's note (a review) comes out even when Steward only shows when needed: the island wakes while it shows,
+  // as the tab comes out for a nudge, and goes back to sleep once it settles.
+  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || islandNotes.current?.kind === 'alert')
   clearTimeout(islandTimer)
   const next = nextChange(input)
   if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
@@ -1332,15 +1341,30 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   sendSessions()
   if (alert) raise(alert)
   // The turn ended: photograph it again, and keep a review if the page looks different.
-  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event)
+  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event).then((record) => record && reviewReady(record, event))
 }
 
-/** The reviews waiting for a decision go to the panel: the card at its top. */
-function sendReviews(): void {
-  void reviews.pending().then((list) => {
+/**
+ * A review is ready: it comes out as an alert that needs you (in the notch island, as the island's note), and the plain
+ * "finished" alert of the same turn goes, so there's one alert, not two. One that already peeked out stays shown.
+ */
+async function reviewReady(record: ReviewRecord, event: { session_id: string; prompt_id?: string }): Promise<void> {
+  // The island and the menu bar count it first, so the note has the review's mark to settle to.
+  await sendReviews()
+  const same = sameTurnFinished(event)
+  alerts.withdraw(same)
+  heldAlerts = heldAlerts.filter((a) => !same(a))
+  asideAlerts = asideAlerts.filter((a) => !same(a))
+  raise(reviewAlert(record))
+}
+
+/** The reviews waiting for a decision go to the panel (the card at its top), the island and the menu bar's dot. */
+function sendReviews(): Promise<void> {
+  return reviews.pending().then((list) => {
     win?.webContents.send('review:changed', list)
     pendingReviews = list.length
     updateIsland()
+    updateMenuBar()
   })
 }
 
@@ -2898,7 +2922,7 @@ async function checkIsland(out: string): Promise<void> {
   notch.restyle()
   islandNotes.drop()
   if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
-  sendReviews()
+  void sendReviews()
 }
 
 /**
@@ -3485,7 +3509,7 @@ app.whenReady().then(async () => {
     compare: comparePictures,
     card: cardPicture,
     store: reviewStore,
-    onChange: sendReviews,
+    onChange: () => void sendReviews(),
     onProblems: sendReviewProblems,
     onChecks: sendReviewChecks,
     log: (message) => console.error(`[steward] visual review: ${message}`),

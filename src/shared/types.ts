@@ -37,9 +37,12 @@ export interface IslandStatus {
   /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
   note?: IslandNote
 }
-/** finished: "Main building finished", and what Claude said. started: a second project started while one works. */
+/**
+ * finished: "Main building finished", and what Claude said. started: a second project started while one works. alert:
+ * the catch-all, an alert with no island size of its own (a Visual Review, until island Phase 3), its title and one line.
+ */
 export interface IslandNote {
-  kind: 'finished' | 'started'
+  kind: 'finished' | 'started' | 'alert'
   /** The chat's name (or the project's), in bold, then the rest. */
   name: string
   text: string
