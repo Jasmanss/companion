@@ -66,6 +66,7 @@ import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
+import { filesChangedSince, lookAtFiles } from './turn-files'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
@@ -3512,6 +3513,7 @@ app.whenReady().then(async () => {
     onChange: () => void sendReviews(),
     onProblems: sendReviewProblems,
     onChecks: sendReviewChecks,
+    gitFiles: { look: (dir) => lookAtFiles(dir), changed: (dir, since, start) => filesChangedSince(dir, since, start) },
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })
   alerts = new AlertQueue({ show: showAlerts })

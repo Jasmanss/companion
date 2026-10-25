@@ -109,6 +109,41 @@ describe('ReviewTracker, a turn that changed the page', () => {
     expect((await tracker.pending())[0].said).toBe('I made the Start button blue and moved the logos under the hero.')
   })
 
+  it('counts the files the turn changed, from a look at its start, and has no count when git cannot say', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
+    dirs.push(dir)
+    const state = { page: 'old page' }
+    const calls: string[] = []
+    const make = (changed: number | null) =>
+      new ReviewTracker({
+        projects: () => [project],
+        capture: async () => shot(state.page),
+        compare: (a, b) => diff(a.toString() !== b.toString()),
+        card: (png) => png,
+        store: new ReviewStore(dir),
+        onChange: () => {},
+        gitFiles: {
+          look: async (d) => (calls.push(`look ${d}`), [{ code: ' D', path: 'old.ts' }]),
+          changed: async (d, since, start) => (calls.push(`changed ${d} ${typeof since} ${start?.length}`), changed),
+        },
+      })
+    const tracker = make(3)
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'new page'
+    const review = await tracker.turnStopped(stop())
+    expect(review?.filesChanged).toBe(3)
+    expect(calls).toEqual(['look /Users/me/site', 'changed /Users/me/site number 1'])
+    expect((await tracker.pending())[0].filesChanged).toBe(3)
+
+    const unknown = make(null)
+    unknown.turnStarted(start({ prompt_id: 'p2' }))
+    await tick()
+    state.page = 'newer page'
+    const second = await unknown.turnStopped(stop({ prompt_id: 'p2' }))
+    expect(second).not.toHaveProperty('filesChanged')
+  })
+
   it('has no note when Claude said nothing worth showing', async () => {
     const { tracker, store, state } = await setup()
     for (const [id, message] of [['1', undefined], ['2', 'Should I also change the footer?']] as const) {

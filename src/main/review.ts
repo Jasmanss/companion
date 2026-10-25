@@ -5,6 +5,7 @@ import type { HookPayload } from './hook-payload'
 import type { Diff } from './review-diff'
 import type { ReviewRecord, ReviewStore } from './review-store'
 import { matchProject } from './sessions'
+import type { StatusEntry } from './turn-files'
 
 type TurnStart = Extract<HookPayload, { hook_event_name: 'UserPromptSubmit' }>
 type TurnStop = Extract<HookPayload, { hook_event_name: 'Stop' }>
@@ -32,6 +33,11 @@ export interface ReviewDeps {
   onProblems?(): void
   /** The list of projects checked with no visible change changed. */
   onChecks?(): void
+  /** The project's git checkout: what it lists as changed when a turn starts, and how many files changed by its end (turn-files.ts). */
+  gitFiles?: {
+    look(dir: string): Promise<StatusEntry[] | null>
+    changed(dir: string, since: number, start: StatusEntry[] | null): Promise<number | null>
+  }
   now?(): number
   log?(message: string): void
 }
@@ -55,6 +61,8 @@ interface Turn {
   startedAt: number
   /** The page as the prompt was sent, or null when it couldn't be captured. */
   before: Promise<Look | null>
+  /** What git listed as changed as the prompt was sent, for the file count. */
+  files: Promise<StatusEntry[] | null>
 }
 
 /** Too many captures were waiting: that says nothing about the app, so it's no problem to show. */
@@ -129,7 +137,8 @@ export class ReviewTracker {
         return null
       },
     )
-    this.turns.set(turnKey(event), { projectPath: project.path, startedAt: now, before })
+    const files = this.deps.gitFiles?.look(project.path).catch(() => null) ?? Promise.resolve(null)
+    this.turns.set(turnKey(event), { projectPath: project.path, startedAt: now, before, files })
   }
 
   /**
@@ -173,9 +182,11 @@ export class ReviewTracker {
       }
       // What Claude said it did, from the Stop hook itself: nothing else is read, and nothing leaves the Mac.
       const said = sayFrom(event.last_assistant_message)
+      const filesChanged = turn ? await this.filesChanged(project.path, turn) : null
       const record = await this.deps.store.save(
         {
           ...(said ? { said } : {}),
+          ...(filesChanged !== null ? { filesChanged } : {}),
           project: project.name,
           projectPath: project.path,
           url: address,
@@ -259,6 +270,7 @@ export class ReviewTracker {
         heightAfter: r.heightAfter,
         files: { before: r.before === 'none' ? null : store.file(r.id, 'before'), after },
         said: r.said ?? null,
+        filesChanged: r.filesChanged ?? null,
       })
       if (views.length >= MAX_CARDS) break
     }
@@ -285,6 +297,16 @@ export class ReviewTracker {
     await this.deps.store.clear()
     this.lastLooks.clear()
     this.deps.onChange()
+  }
+
+  /** How many files the turn changed in the project's checkout, or null when git can't say. */
+  private async filesChanged(dir: string, turn: Turn): Promise<number | null> {
+    if (!this.deps.gitFiles) return null
+    try {
+      return await this.deps.gitFiles.changed(dir, turn.startedAt, await turn.files)
+    } catch {
+      return null
+    }
   }
 
   private projectFor(cwd: string): Project | null {

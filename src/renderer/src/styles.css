@@ -1346,6 +1346,13 @@ pre {
   margin: 0;
 }
 
+.rv-facts .rv-files {
+  margin-right: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+
 .rv-link {
   padding: 0;
   border: none;

@@ -31,6 +31,8 @@ export interface ReviewRecord {
   note?: string
   /** The "Claude says" note: the start of Claude's last reply for the turn (sayFrom), when it said something. */
   said?: string
+  /** How many files the turn changed in the project's git checkout (turn-files.ts), when git could say. */
+  filesChanged?: number
 }
 
 /** The files of one review, besides review.json. The card pictures are small JPEGs of the top of the page. */
@@ -234,7 +236,8 @@ function parseRecord(text: string): ReviewRecord | null {
       (r.before === 'turn-start' || r.before === 'last-look' || r.before === 'none') &&
       typeof r.heightAfter === 'number' &&
       (r.status === 'new' || r.status === 'good' || r.status === 'sent-back') &&
-      (r.said === undefined || typeof r.said === 'string')
+      (r.said === undefined || typeof r.said === 'string') &&
+      (r.filesChanged === undefined || (typeof r.filesChanged === 'number' && Number.isInteger(r.filesChanged) && r.filesChanged >= 0))
     return ok ? (r as ReviewRecord) : null
   } catch {
     return null

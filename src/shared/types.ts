@@ -311,6 +311,8 @@ export interface ReviewView {
   files: { before: string | null; after: string }
   /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
   said: string | null
+  /** How many files the turn changed in the project's git checkout, or null when git couldn't say. */
+  filesChanged: number | null
 }
 
 /**

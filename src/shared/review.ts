@@ -51,6 +51,9 @@ export function reviewNote(r: { project: string; address: string; note: string; 
   return lines.join('\n')
 }
 
+/** "3 files changed": how many files the turn changed, for the card and the viewer. */
+export const filesChangedLabel = (n: number): string => `${n} ${n === 1 ? 'file' : 'files'} changed`
+
 /** The picture in the card shows the top of the page, this wide and 16:10, like the design. */
 export const CARD_SHOT = { width: 1440, height: 900 } as const
 
