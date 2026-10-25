@@ -103,9 +103,9 @@ Built by Main building (it owns the panel and the notch), each phase on the user
 6. Motion and feel are hand-tested only.
 
 ### For the user to pick (none blocks anything)
-1. **Which direction:** A (recommended), B, C, D, or a mix (for example A with C's status bar).
-2. **Pin:** move into Settings only, as Keep panel open (as drawn in A, B and C), or keep it in the header?
-3. **Ask / Auto wording:** "Ask | Auto" as drawn, or longer ("Ask each time | Auto")?
+1. **Which mix:** F (recommended) or E.
+2. Decided: the pin moves to Settings (Keep panel open).
+3. Decided: the control reads "Ask | Auto".
 
 ### How to test
 - **Unit:** the control reads and writes `commandMode` and stays in step with Settings; nothing runs in Ask; in Auto a safe command runs and each risky kind still asks (the existing `isRisky` tests); the focus-card priority (waiting > review > finished sessions > left off > nothing) for A.
