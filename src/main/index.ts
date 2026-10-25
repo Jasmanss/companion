@@ -2645,8 +2645,14 @@ async function checkNotch(out: string): Promise<void> {
       const page = notch.contents()!
       const dim = async () => Boolean(await page.executeJavaScript(`Boolean(document.querySelector('.notch-root.dim'))`))
       const waiting = Date.now()
-      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
-      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest`)
+      // Any change of mood starts the 20 s over: if it doesn't dim, say which moods it had and when.
+      const moodsSeen: string[] = []
+      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) {
+        const m = notch.state().mood
+        if (moodsSeen.at(-1)?.split(' ')[0] !== m) moodsSeen.push(`${m} at ${((Date.now() - waiting) / 1000).toFixed(1)} s`)
+        await sleep(250)
+      }
+      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest (moods: ${moodsSeen.join(', ')}; awake ${notch.state().awake})`)
       // What the notch window sends its page when the cursor comes near.
       notch.post('notch:cursor', { x: layout.cx, y: 10 })
       await sleep(300)
