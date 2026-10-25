@@ -33,8 +33,8 @@ export const RIGHT_MODES = [['smart', 'Smart (recommended)'], ['status', 'Status
 export function rightSide(c, mode) {
   const tile = { w: 36, h: '<span class="mc-tile">ha</span>' }
   const spin = (n = 1) => ({ w: n === 1 ? 36 : 54, h: '<i class="mc-spin"></i>'.repeat(n) })
-  const status = { idle: tile, working: spin(), finished: { w: 36, h: '<i class="mc-check"></i>' }, needs: { w: 36, h: '<i class="mc-ask">!</i>' }, review: { w: 36, h: '<i class="mc-rdot"></i>' }, two: spin(2) }
-  const waiting = { idle: 0, working: 0, finished: 1, needs: 1, review: 1, two: 2 }[c]
+  const status = { idle: tile, working: spin(), finished: { w: 36, h: '<i class="mc-check"></i>' }, needs: { w: 36, h: '<i class="mc-ask">!</i>' }, ask: { w: 36, h: '<i class="mc-ask">?</i>' }, fail: { w: 36, h: '<i class="mc-ask mc-bad">!</i>' }, good: { w: 36, h: '<i class="mc-spark"></i>' }, review: { w: 36, h: '<i class="mc-rdot"></i>' }, two: spin(2) }
+  const waiting = { idle: 0, working: 0, finished: 1, needs: 1, ask: 1, fail: 1, good: 0, review: 1, two: 2 }[c]
   const timer = { w: 60, h: '<span class="mc-time">2:41</span>' }
   const thumb = { w: 46, h: '<span class="mc-thumb"></span>' }
   const count = (n) => ({ w: 40, h: `<span class="mc-count">${n}</span>` })

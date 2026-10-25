@@ -18,3 +18,11 @@
 .pk2-ladder figcaption b{color:var(--text)}
 .pk2-ladder figcaption span{opacity:.9}
 .pk2-fig{max-width:100%;overflow:hidden}
+
+.pk-tw{overflow-x:auto}
+.pk-alerts td{font-size:12.5px;min-width:96px}.pk-alerts td:first-child{min-width:150px;white-space:normal}
+.pk-alerts tbody tr{cursor:pointer}.pk-alerts tbody tr:hover,.pk-alerts tbody tr:focus-visible{background:rgba(128,128,128,.1);outline:none}
+.pk-key{font:500 11px ui-monospace,Menlo,monospace;color:var(--muted)}
+.pk-pop.y{color:#1f8a4c;font-weight:800}.pk-pop.n{color:var(--muted)}
+:root[data-dark] .pk-pop.y{color:#5fd68e}
+.pk-pick{font-size:12.5px;margin-left:10px;display:inline-flex;align-items:center;gap:6px}

@@ -59,6 +59,38 @@ The user: "no more chat for the notch it goes to the sides no more in the middl"
 - "Friendly names in alerts" (plain words for raw tool names) on the status page is folded into Phase 2.
 - Not designed here: the exact look of a chat name in the note. Main building uses the note's existing layout (name before the message). Say if it needs a design page.
 
+### Plan update 2, 2026-10-24: every alert opens as the island (from the user, via the front door)
+The user, after a screenshot of the old under-notch alert pill (black starting under the menu bar, rounded top corners, concave ears beside the notch): "I just want to make sure that the island that was in the screenshot doesnt happen, its going to open like the island that we designed."
+
+Main building's audit of Island mode after Phase 2 (PR #36): finished and two projects are now the note; approvals and reviews are Phase 3's sizes; four alerts had no island size. Designed now, live in the Showcase (`design/showcase.html`, section 7, the card "Every alert opens as the island", and six new states on the main figure: Steward asks, A session waits, Needs input, Build failed, Deployed or merged, First launch, Anything else).
+
+**The rule (new, in Phase 3's definition of done): in Island mode, nothing uses the old under-notch pill once Phase 3 is in.** Every alert opens as one of the island's sizes, flush with the top, full width from the top edge, bottom corners only. An alert with no size of its own opens as a note with its title and one line, so a new kind of alert can never bring the old pill back. A Mac without a notch keeps the edge tab; this is only the island. A smoke check posts one alert of every kind (including an unknown key) in Island mode and fails if the old pill's window or style shows.
+
+| Alert (key) | Size | Steward | When it settles | Stays | A click |
+|---|---|---|---|---|---|
+| Session needs input (`input:`) | the Approval size without Allow or Deny: the chat's name, Claude's question (two lines), **Open** and **Later**, amber `?` at the top right | confused | compact with an amber `?` until the session resumes | 9 s, kept while the cursor is on it | opens the panel on that session; **Open** the same; **Later** settles now |
+| Session waits for an OK (`approval:`) | the same layout: what it wants to run, **Open** and **Later**, amber `!` | needs you | compact with an amber `!` until the session moves on | 9 s | as above |
+| Build failed (`deploy-failed:`) | the Approval size card: "haven deploy failed", the error or commit on one line, **Want me to look?** and **Later**, red `!` | mad, then worried | compact with a **red** `!` until a deploy for that project works, or 30 minutes (today's worry rule) | 9 s | opens the panel; **Want me to look?** also opens it and asks Steward's agent to read the build log, as today; **Later** settles now |
+| Deployed, PR merged (`deploy-ready:`, `pr-merged:`) | the Note size: "haven deployed · haven.vercel.app" or "haven: PR #12 merged", a spark on the right | celebrating | back to the notch (nothing waits) | 4.5 s; several in a moment join into one note, "and 2 more" | opens the panel (the page's screenshot is in the tray) |
+| First launch (not an alert) | the Note size: "Rest the cursor on the notch or press your shortcut" | looks at where to rest the cursor | back to the notch | at least 10 s, longer while the cursor is on it; ends once it has left after touching it (today's rule) | opens the panel and counts as learned |
+| Anything else | the Note size: title and one line | idle | back to the notch | 4.5 s | opens the panel |
+
+**One finding about approvals (changes Phase 3's Approval size).** Steward cannot answer a Claude Code session: its hook commands are `curl -s -m 1` and the hook server answers `204` before it looks at the event. So a **session's** approval cannot have working **Allow** and **Deny**; it gets **Open** and **Later**, like input. **Allow and Deny are only for Steward's own requests** (`agent-approval:`), which it can answer. The earlier mock showed Allow and Deny on every approval; it now shows them only on "Steward asks".
+
+**How each follows "Alerts that peek out".** The Notifications switches come first: a switched-off kind never reaches the island and lands in the history only (sessions needing me: approval and input; session finished; build failed; celebrations: deployed and merged). Then the choice:
+- **Needs me:** sessions that wait or ask, Steward's own requests, and reviews come out big. The finished and started notes still show, because they are the island's own status. Good news waits in the menu bar dot. A failed build: see pick 1.
+- **Everything:** all of them.
+- **Nothing:** no notes and no big sizes. Only the compact island's own status stays (spinner and time, check, amber or red mark), so the island still tells you at a glance, and the menu bar shows its number and dot. (As built in Phase 2 the finished and started notes ignore this choice; this makes them follow it. See pick 2.)
+- Hidden by hand or stepped aside: nothing comes out, as today. The first-launch note is not an alert: it ignores the choice and shows once ever, after stepping aside ends.
+- A failed build and good news each get their own mark colors (red, spark) so the compact island tells them apart from an amber wait.
+
+**Phase 3 now covers:** the approval and review sizes, **plus** the four sizes above, the red and spark marks, the "Later" settle, the catch-all note, the no-old-pill rule and its smoke check. Phase 2 and the other phases are unchanged.
+
+**For the user to pick (defaults in bold; none blocks Phase 3):**
+1. **A failed build under "Needs me":** should it come out? **Yes, it is an urgent alert (recommended)**, or wait in the menu bar dot as built today (only waiting-on-you things come out under Needs me).
+2. **Under "Nothing":** **no notes and no big sizes, only the compact status (recommended)**, or let the finished and started notes keep showing as built in Phase 2.
+3. **No Allow or Deny on a session's approval,** because Steward cannot answer a session (a limit, not a choice): confirm Open and Later.
+
 ### The hand-off to the side panel
 A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. The island goes back to Steward peeking, looking toward the panel. Closing is today's close. The panel in notch mode no longer drops from the notch; that special case goes away.
 
@@ -78,7 +110,7 @@ Joining the notch flush with the top means every size wider than the notch sits 
 - A small spring loop on the notch page that sets only transforms, opacity and clip paths; the Showcase's `peeking.js` and `island-kit.js` are the working model (a steady 60 fps in headless Chrome). Reduce Motion fades.
 - Content: the right side from the session tracker (`SessionView` state and detail), the turn start for the timer (Visual Review's `UserPromptSubmit` hook already tracks it), the Visual Review store for the thumbnail. The approval and review contents already exist.
 - Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the size and the mascot position), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size; the panel no longer opening under the notch).
-- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining; 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
+- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, and the no-old-pill rule); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
 
 ### Risks and open questions
 1. Matching the real notch's corners where the island starts, and hiding Steward exactly behind the notch's edge. Phase 1 checks both on the real Mac.

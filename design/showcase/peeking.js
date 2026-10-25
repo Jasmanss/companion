@@ -19,13 +19,19 @@ export const PSTATES = [
   ['hover', 'Hover', 'The cursor is on it: Steward leans out and looks at the cursor. A click opens the side panel.'],
   ['working', 'Working', 'The compact island grows out of the notch: Steward steps into the left side, a spinner and the time on the right.'],
   ['finished', 'Finished', 'The island widens a little with one line: "haven: Claude finished". It settles back to compact after a few seconds, with a check on the right.'],
-  ['needs', 'Needs you', 'The big island: Steward slides in and becomes part of it, with the command and Allow and Deny. After a few seconds it settles to compact with an amber mark. It is still waiting.'],
+  ['needs', 'Steward asks', 'Steward\'s own request (it needs your OK to run a command). The big island: Steward slides in and becomes part of it, with the command and Allow and Deny, which really work. After a few seconds it settles to compact with an amber mark. It is still waiting.'],
+  ['wait', 'A session waits', 'A Claude Code session needs your OK. The same big island, but Steward cannot answer a session, so no Allow or Deny: Open and Later. After a few seconds it settles to compact with an amber mark until the session moves on.'],
+  ['ask', 'Needs input', 'A session asks you something (a question, no Allow or Deny). The big island with the question, Open and Later, Steward confused. It settles to compact with an amber question mark until the session resumes.'],
+  ['fail', 'Build failed', 'A deploy failed. The big island with what broke, "Want me to look?" and Later, Steward mad. It settles to compact with a red mark until a deploy for that project works.'],
+  ['good', 'Deployed or merged', 'Good news. The note size with one line, Steward celebrating, a spark on the right. It settles away to rest after a few seconds; nothing waits.'],
+  ['first', 'First launch', 'Once ever, the first time Steward hides: the note size says how to bring it out. It stays at least 10 seconds, longer while the cursor is on it, then goes back to rest.'],
+  ['other', 'Anything else', 'The catch-all: any alert with no size of its own opens as a note with its title and one line. Nothing ever uses the old pill under the notch.'],
   ['review', 'Review ready', 'The biggest island: Steward joins it, before and after, what Claude says changed, Looks good. It settles to compact with a thumbnail.'],
   ['two', 'Two projects', 'A short note, "api started", then compact with two spinners and a count.'],
   ['quiet', 'Quiet mode', 'Asleep: Steward tucked behind the notch, no island. Resting the cursor wakes it.'],
 ]
-const CTX = { rest: 'idle', hover: 'idle', working: 'working', finished: 'finished', needs: 'needs', review: 'review', two: 'two', quiet: 'idle', open: 'idle' }
-const MOOD = { rest: ['resting'], hover: ['idle'], working: ['thinking', 'sweep'], finished: ['celebrating'], needs: ['needs-you'], review: ['idle'], two: ['thinking', 'sweep'], quiet: ['resting'], open: ['idle'] }
+const CTX = { rest: 'idle', hover: 'idle', working: 'working', finished: 'finished', needs: 'needs', wait: 'needs', ask: 'ask', fail: 'fail', good: 'good', first: 'idle', other: 'idle', review: 'review', two: 'two', quiet: 'idle', open: 'idle' }
+const MOOD = { rest: ['resting'], hover: ['idle'], working: ['thinking', 'sweep'], finished: ['celebrating'], needs: ['needs-you'], wait: ['needs-you'], ask: ['confused'], fail: ['mad'], good: ['celebrating'], first: ['idle'], other: ['idle'], review: ['idle'], two: ['thinking', 'sweep'], quiet: ['resting'], open: ['idle'] }
 const LOOK_RIGHT = { x: 0.6, y: 0.08 }
 
 /** The island's size for each step, in points: width and height. The width and height are of the one black shape. */
@@ -91,10 +97,11 @@ export function createPeeking(screen, o) {
     if (st === 'quiet' && !hovered) return 'asleep'
     if (st === 'rest' || st === 'hover' || st === 'open' || st === 'quiet') return 'rest'
     if (!settled) {
-      if (st === 'finished' || st === 'two') return 'note'
-      if (st === 'needs') return 'approval'
+      if (st === 'finished' || st === 'two' || st === 'good' || st === 'first' || st === 'other') return 'note'
+      if (st === 'needs' || st === 'wait' || st === 'ask' || st === 'fail') return 'approval'
       if (st === 'review') return 'review'
     }
+    if (st === 'good' || st === 'first' || st === 'other') return 'rest' // nothing waits: back to the notch
     return 'compact'
   }
   function plan(st) {
@@ -117,11 +124,15 @@ export function createPeeking(screen, o) {
     if (lv !== 'asleep' && lv !== 'rest') { p.rs = rightSide(c, rightMode); p.rsX = big ? bw / 2 - 30 : HW + 34 + (hov && lv === 'compact' ? 6 : 0) }
     // the words under the notch
     if (lv === 'note') {
-      const html = st === 'two' ? '<div class="ic-row" style="justify-content:center"><b>api</b> <span class="mut">started · Running tests</span></div>' : '<div class="ic-row" style="justify-content:center"><b>haven</b> <span class="mut">Claude finished · 3 files changed</span></div>'
+      const line = { two: '<b>api</b> <span class="mut">started · Running tests</span>', good: '<b>haven</b> <span class="mut">deployed · haven.vercel.app</span>', first: '<b>Rest the cursor on the notch</b> <span class="mut">or press ⌥Space</span>', other: '<b>haven</b> <span class="mut">Something happened · click to open</span>' }[st] ?? '<b>haven</b> <span class="mut">Claude finished · 3 files changed</span>'
+      const html = `<div class="ic-row" style="justify-content:center">${line}</div>`
       p.contents.push({ id: 'note', html, x: -bw / 2, y: 33, w: bw, h: 27, eyes: false })
     } else if (lv === 'approval') {
-      const html = abs(96, 14, 210, 70, '', '<div class="pk2-t"><b>haven needs you</b><div>Run <code>npm install</code> in haven?</div></div>') +
-        abs(bw - 118, 24, 44, 44, 'pk2-btn deny', '<svg viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg>') + abs(bw - 62, 24, 44, 44, 'pk2-btn allow', '<svg viewBox="0 0 14 14"><path d="M3 7.5l2.8 2.8L11 4.5"/></svg>')
+      const T = { wait: ['haven is waiting on you', 'Claude wants to run <code>npm install</code>', 'Open haven', 'Later'], ask: ['haven needs your input', 'Which database should the new table use?', 'Open haven', 'Later'], fail: ['haven deploy failed', 'Missing environment variable DATABASE_URL', 'Want me to look?', 'Later'] }[st]
+      const html = T
+        ? abs(96, 6, bw - 96 - 46, 48, '', `<div class="pk2-t"><b>${T[0]}</b><div>${T[1]}</div></div>`) + abs(96, 58, bw - 130, 28, 'pk2-acts', pill(T[2], 1) + pill(T[3]))
+        : abs(96, 14, 210, 70, '', '<div class="pk2-t"><b>Steward needs your OK</b><div>Run <code>npm install</code> in haven?</div></div>') +
+          abs(bw - 118, 24, 44, 44, 'pk2-btn deny', '<svg viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg>') + abs(bw - 62, 24, 44, 44, 'pk2-btn allow', '<svg viewBox="0 0 14 14"><path d="M3 7.5l2.8 2.8L11 4.5"/></svg>')
       p.contents.push({ id: 'approval', html, x: -bw / 2, y: 34, w: bw, h: bh - 34, eyes: false })
     } else if (lv === 'review') {
       const html = abs(96, 6, 206, 70, '', '<div class="pk2-t"><b>haven changed</b><div><b>Claude says:</b> I made the Start button blue and added a row of logos.</div></div>') +
@@ -183,11 +194,11 @@ export function createPeeking(screen, o) {
     if (first) { apply2(); ey.apply() }
   }
   let tSettle = 0
-  const peak = (st) => ['finished', 'two', 'needs', 'review'].includes(st)
+  const peak = (st) => ['finished', 'two', 'needs', 'wait', 'ask', 'fail', 'good', 'first', 'other', 'review'].includes(st)
   function armSettle(ms) {
     clearTimeout(tSettle)
     if (!o.autoSettle || !peak(state) || settled) return
-    tSettle = setTimeout(() => { if (hovered) return armSettle(1500); settled = true; show(state, false) }, ms ?? (state === 'needs' || state === 'review' ? 9000 : 4500))
+    tSettle = setTimeout(() => { if (hovered) return armSettle(1500); settled = true; show(state, false) }, ms ?? (['needs', 'wait', 'ask', 'fail', 'review'].includes(state) ? 9000 : state === 'first' ? 10000 : 4500))
   }
   function go(st, { first = false } = {}) {
     state = st
@@ -221,6 +232,25 @@ export function createPeeking(screen, o) {
 const STORY = [['rest', 1800], ['hover', 1700], ['working', 2400], ['two', 3200], ['working', 1400], ['finished', 4800], ['needs', 5200], ['working', 1600], ['review', 5600], ['rest', 2400], ['quiet', 2400]]
 const staticRight = (c, mode) => `<span class="mc-demo"><span class="blk">${rightSide(c, mode).h}</span></span>`
 const COVER = { compact: 70, note: 97, approval: 118, review: 128 }
+/** Every alert and the island size it opens as. peek: which choices of "Alerts that peek out" let it come out (needs = Needs me). */
+const ALERTS = [
+  { st: 'finished', name: 'A session finished', key: 'finished:', size: 'Note', steward: 'Happy, a nod or proud (by the turn)', after: 'Compact with a check, until opened', stays: '4.5 s, kept while the cursor is on it, 1.5 s after it leaves', click: 'Opens the panel', peek: 'status', sw: 'Session finished', built: 'Phase 2' },
+  { st: 'two', name: 'A second project starts', key: '(first prompt of a second turn)', size: 'Note', steward: 'Focusing, then juggling', after: 'Compact with two spinners and a count', stays: '4.5 s', click: 'Opens the panel', peek: 'status', sw: 'none (it is status)', built: 'Phase 2' },
+  { st: 'wait', name: 'A session waits for your OK', key: 'approval:', size: 'Approval, no Allow or Deny', steward: 'Needs you', after: 'Compact with an amber !, until the session moves on', stays: '9 s, kept while the cursor is on it', click: 'Opens the panel on that session. Open does the same, Later settles now', peek: 'needs', sw: 'Session needs me', built: 'Phase 3' },
+  { st: 'ask', name: 'A session needs input', key: 'input:', size: 'Approval, no Allow or Deny', steward: 'Confused', after: 'Compact with an amber ?, until the session resumes', stays: '9 s, kept while the cursor is on it', click: 'Opens the panel on that session. Open does the same, Later settles now', peek: 'needs', sw: 'Session needs me', built: 'Phase 3' },
+  { st: 'needs', name: 'Steward needs your OK', key: 'agent-approval:', size: 'Approval, with Allow and Deny', steward: 'Needs you', after: 'Compact with an amber !, until you answer', stays: '9 s, kept while the cursor is on it', click: 'Allow and Deny work on the island. A click elsewhere opens the panel', peek: 'needs', sw: 'none (always)', built: 'Phase 3' },
+  { st: 'review', name: 'A review is ready (Visual Review Phase 2)', key: 'review:', size: 'Review', steward: 'Idle, looking at the picture', after: 'Compact with a thumbnail, until decided', stays: '9 s, kept while the cursor is on it', click: 'Open big opens the viewer; a click elsewhere opens the panel on the card', peek: 'needs', sw: 'none (always)', built: 'Phase 3' },
+  { st: 'fail', name: 'A build failed', key: 'deploy-failed:', size: 'Approval-size card, with "Want me to look?"', steward: 'Mad, then worried', after: 'Compact with a red !, until a deploy for that project works (or 30 minutes)', stays: '9 s, kept while the cursor is on it', click: 'Opens the panel. "Want me to look?" also opens it and asks Steward\'s agent to read the build log, as the old card did. Later settles now', peek: 'fail', sw: 'Build failed', built: 'Phase 3' },
+  { st: 'good', name: 'Deployed, or a PR merged', key: 'deploy-ready: and pr-merged:', size: 'Note', steward: 'Celebrating', after: 'Nothing waits: back to the notch', stays: '4.5 s. Several within a moment join into one note with "and 2 more"', click: 'Opens the panel (the page\'s screenshot is in the tray)', peek: 'all', sw: 'Celebrations', built: 'Phase 3' },
+  { st: 'first', name: 'First launch', key: '(not an alert)', size: 'Note', steward: 'Looking at where to rest the cursor', after: 'Back to the notch', stays: 'At least 10 s; longer while the cursor is on it; ends once it has left after touching it', click: 'Opens the panel and counts as learned', peek: 'always', sw: 'none (shows once ever)', built: 'Phase 3' },
+  { st: 'other', name: 'Anything else', key: 'any key with no size of its own', size: 'Note: its title and one line', steward: 'Idle', after: 'Back to the notch', stays: '4.5 s', click: 'Opens the panel', peek: 'all', sw: 'its own switch, if it has one', built: 'Phase 3' },
+]
+const popsOut = (a, choice, failNeeds) => {
+  if (a.peek === 'always') return 'Yes, once ever'
+  if (choice === 'none') return a.peek === 'status' ? 'No (status only)' : 'No'
+  if (choice === 'all') return 'Yes'
+  return a.peek === 'needs' || a.peek === 'status' || (a.peek === 'fail' && failNeeds) ? 'Yes' : 'No: waits in the menu bar'
+}
 
 export function render(host) {
   const ladder = `<div class="pk2-ladder">${STEPS.map(([id, l, d]) => { const [w, h] = SIZES[id]; return `<figure><div class="shp" style="width:${Math.round(w * 0.78)}px;height:${Math.round(h * 0.78)}px"></div><figcaption><b>${l}</b> ${w} by ${h} pt · covers about ${COVER[id]} pt of menu bar each side of the notch<br><span>${esc(d)}</span></figcaption></figure>` }).join('')}</div>`
@@ -234,6 +264,13 @@ export function render(host) {
         <div class="ibar"><span class="lbl">Right side shows</span><span class="iseg" id="p-right">${RIGHT_MODES.map(([id, l], i) => `<button data-v="${id}" aria-pressed="${i === 0}">${l}</button>`).join('')}</span>
           <span class="lbl">Speed</span><span class="iseg" id="p-speed"><button data-v="1" aria-pressed="true">Normal</button><button data-v="0.3" aria-pressed="false">Slow motion</button></span></div>
         <div class="icrop pk2-fig" id="p-fig"></div>` })}
+    ${card({ id: 'p-alerts', section: 7, title: 'Every alert opens as the island', status: 'planned', from: null, cls: 'wide',
+      desc: 'Decided: in Island mode nothing ever uses the old pill that hangs under the notch (black starting under the menu bar, rounded top corners, concave ears beside the notch). Every message opens as the island: flush with the top, full width from the top edge, bottom corners only, sized by the message, Steward joining for the big ones. Click a row to see it above. Change Alerts that peek out to see which come out.',
+      tools: '<span class="lbl">Alerts that peek out</span> <span class="iseg" id="p-peek"><button data-v="needs-me" aria-pressed="true">Needs me</button><button data-v="all" aria-pressed="false">Everything</button><button data-v="none" aria-pressed="false">Nothing</button></span> <label class="pk-pick"><input type="checkbox" id="p-failneeds" checked> Count a failed build as Needs me</label>',
+      body: `<div class="pk-tw"><table class="itable pk-alerts"><thead><tr><th>Alert</th><th>Island size</th><th>Steward</th><th>When it settles</th><th>Stays</th><th>A click</th><th>Pops out?</th><th>Switch</th><th>Built in</th></tr></thead><tbody>${ALERTS.map((a) => `<tr data-st="${a.st}" tabindex="0"><td><b>${esc(a.name)}</b><br><span class="pk-key">${esc(a.key)}</span></td><td>${esc(a.size)}</td><td>${esc(a.steward)}</td><td>${esc(a.after)}</td><td>${esc(a.stays)}</td><td>${esc(a.click)}</td><td class="pk-pop"></td><td>${esc(a.sw)}</td><td>${a.built}</td></tr>`).join('')}</tbody></table></div>
+        <p class="inote"><b>The rule.</b> In Island mode no alert uses the old under-notch pill, from Phase 3 on. An alert with no size of its own opens as a note with its title and one line, so a new kind of alert can never bring the old pill back. A Mac without a notch keeps the edge tab and its cards; this is only the island.</p>
+        <p class="inote"><b>How "Alerts that peek out" works with it.</b> The Notifications switches come first: a switched-off kind never reaches the island and only lands in the history. Then the choice. <b>Needs me:</b> sessions that wait or ask, Steward's own requests and reviews come out big; the finished and started notes still show (they are the island's status); good news and failed builds wait in the menu bar dot, unless the failed-build pick above is on. <b>Everything:</b> all of it. <b>Nothing:</b> no notes and no big sizes; only the compact island's own status stays (spinner, check, amber or red mark), so you can still see at a glance, and the menu bar shows a number and a dot. Hidden by hand or stepped aside: nothing comes out, as today.</p>
+        <p class="inote"><b>What the island cannot do.</b> Steward cannot answer a Claude Code session (its hooks reply before it looks), so a session's approval has no Allow or Deny here, only Open and Later. Allow and Deny are only for Steward's own requests, which it can answer.</p>` })}
     ${card({ id: 'p-right', section: 7, title: 'The right side: something else', status: 'planned', from: null, cls: 'wide',
       desc: 'Decided: the Smart choice. The tile at rest, a spinner with the time while Claude works, a check when done, an amber mark for an approval, a thumbnail for a review, a spinner with a count for two projects. It stays in the right of the island at every size, at the top right once the island is big, like the Dynamic Island\'s trailing view.',
       body: `<table class="itable"><thead><tr><th>Choice</th><th>Idle</th><th>Working</th><th>Finished</th><th>Needs you</th><th>Review</th><th>Two projects</th></tr></thead><tbody>${[['smart', 'Smart (decided)'], ['status', 'Status'], ['timer', 'Timer'], ['count', 'Count'], ['thumb', 'Thumbnail']].map(([m, l]) => `<tr><td>${l}</td>${['idle', 'working', 'finished', 'needs', 'review', 'two'].map((c) => `<td>${staticRight(c, m)}</td>`).join('')}</tr>`).join('')}</tbody></table>` })}
@@ -311,6 +348,20 @@ export function render(host) {
   }, { clear: false, auto: false, once: true })
   host.querySelector('#p-hero').onclick = () => { run.cancel(); hero.replay() }
   host.querySelector('#p-states').addEventListener('click', () => hero.cancel())
+  const pop = () => {
+    const choice = host.querySelector('#p-peek [aria-pressed=true]').dataset.v, failNeeds = host.querySelector('#p-failneeds').checked
+    host.querySelectorAll('.pk-alerts tbody tr').forEach((tr, i) => { const t = popsOut(ALERTS[i], choice, failNeeds); const td = tr.querySelector('.pk-pop'); td.textContent = t; td.className = `pk-pop ${t.startsWith('Yes') ? 'y' : 'n'}` })
+  }
+  host.querySelector('#p-peek').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-v]'); if (!b) return
+    host.querySelectorAll('#p-peek button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)))
+    pop()
+  })
+  host.querySelector('#p-failneeds').addEventListener('change', pop)
+  const pick = (tr) => { run.cancel(); hero.cancel(); setMain(tr.dataset.st); host.querySelector('#p-fig').scrollIntoView({ block: 'center', behavior: S.rm ? 'auto' : 'smooth' }) }
+  host.querySelector('.pk-alerts').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-st]'); if (tr) pick(tr) })
+  host.querySelector('.pk-alerts').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('tr[data-st]')) pick(e.target) })
+  pop()
   build()
   let rt = 0
   window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 250) })
