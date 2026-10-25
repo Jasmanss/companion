@@ -3,6 +3,8 @@
  * expanded: the panel · viewing: the large image viewer
  */
 export type DockState = 'hidden' | 'collapsed' | 'nudge' | 'expanded' | 'viewing'
+/** What the viewing state shows: the tray's images, or a Visual Review's before and after (a bigger window). */
+export type ViewerKind = 'tray' | 'review'
 
 /**
  * What the character's face shows. Some come from real events: mad and then worried for a failed build, celebrating
@@ -304,6 +306,8 @@ export interface ReviewView {
   heightAfter: number
   /** The full-page pictures on disk (the note for the session points at them). */
   files: { before: string | null; after: string }
+  /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
+  said: string | null
 }
 
 /**
@@ -434,7 +438,7 @@ export interface StewardAPI {
     expand(): Promise<void>
     collapse(): Promise<void>
     hide(): Promise<void>
-    view(): Promise<void>
+    view(kind?: ViewerKind): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
     /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
     drag(phase: 'start' | 'move' | 'end', dy?: number): void

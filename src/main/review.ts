@@ -1,5 +1,5 @@
 import type { Project, ReviewCheck, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
-import { addressLabel, landingNote, reviewNote } from '../shared/review'
+import { addressLabel, landingNote, reviewNote, sayFrom } from '../shared/review'
 import type { HookPayload } from './hook-payload'
 import type { Diff } from './review-diff'
 import type { ReviewRecord, ReviewStore } from './review-store'
@@ -153,8 +153,11 @@ export class ReviewTracker {
         this.checkedSame(project, address)
         return this.skip(`${project.name}: the page looks the same (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})`)
       }
+      // What Claude said it did, from the Stop hook itself: nothing else is read, and nothing leaves the Mac.
+      const said = sayFrom(event.last_assistant_message)
       const record = await this.deps.store.save(
         {
+          ...(said ? { said } : {}),
           project: project.name,
           projectPath: project.path,
           url: address,
@@ -237,6 +240,7 @@ export class ReviewTracker {
         heightBefore: r.heightBefore,
         heightAfter: r.heightAfter,
         files: { before: r.before === 'none' ? null : store.file(r.id, 'before'), after },
+        said: r.said ?? null,
       })
       if (views.length >= MAX_CARDS) break
     }

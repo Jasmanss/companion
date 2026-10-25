@@ -12,7 +12,7 @@ const api: StewardAPI = {
     expand: () => ipcRenderer.invoke('dock:expand'),
     collapse: () => ipcRenderer.invoke('dock:collapse'),
     hide: () => ipcRenderer.invoke('dock:hide'),
-    view: () => ipcRenderer.invoke('dock:view'),
+    view: (kind = 'tray') => ipcRenderer.invoke('dock:view', kind),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
     drag: (phase, dy) => ipcRenderer.send('dock:drag', phase, dy),
     resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),

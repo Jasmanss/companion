@@ -9,7 +9,8 @@ import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
+import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -93,7 +94,10 @@ const SLIDE_MS = 700
 /** Why the window went, when the page's slide ended with no frame to draw its end (its own clock said so). */
 const SLIDE_END_UNDRAWN = "its slide's end time, with no frame drawn"
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  { scheme: 'review', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+])
 
 /** Set when the smoke check runs hidden (the default, see smoke-env.ts): its windows are see-through and never take focus. */
 let unseen: Unseen | null = null
@@ -121,6 +125,8 @@ let registered: Partial<Record<GlobalShortcutId, string>> = {}
 /** A new shortcut is being pressed in Settings: the global ones step aside so the keys reach the window. */
 let recordingShortcut = false
 let dock: DockState = 'collapsed'
+/** What the viewing state shows: the tray's images, or a Visual Review's before and after (bigger). */
+let viewKind: ViewerKind = 'tray'
 let modalOpen = false
 let draggingOut = false
 let settings: SettingsStore
@@ -230,11 +236,14 @@ let sentOverhang = -1
 
 /**
  * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
- * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered. Docked in
+ * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered (a review's
+ * is bigger, on the panel's screen). Docked in
  * the notch, the nudge, the panel and the viewer come down from the notch instead, on the notch's own screen. A panel
  * that was dragged somewhere opens there instead, at the edge or in the notch.
  */
 function boundsFor(state: DockState): Electron.Rectangle {
+  // A review's before and after gets nearly the whole screen the panel is on, wherever the panel was moved to.
+  if (state === 'viewing' && viewKind === 'review') return reviewViewerRect((panelSpot()?.display ?? panelHome()).workArea)
   // Dragged somewhere, the panel opens there: on the screen it was left on, inside its work area.
   const spot = state === 'expanded' ? panelSpot() : null
   if (spot) return panelRect(spot.display.workArea, panelSize(spot.display.workArea), spot.spot)
@@ -1384,7 +1393,16 @@ function registerIpc(): void {
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
   ipcMain.on('dock:intoNotchEnded', () => intoNotchEnded())
   ipcMain.handle('dock:hide', () => setDock('hidden'))
-  ipcMain.handle('dock:view', () => setDock('viewing'))
+  ipcMain.handle('dock:view', (_e, kind: unknown) => {
+    const next: ViewerKind = kind === 'review' ? 'review' : 'tray'
+    // Already viewing the other kind: only the size changes.
+    if (dock === 'viewing' && next !== viewKind && win && !win.isDestroyed()) {
+      viewKind = next
+      return win.setBounds(boundsFor('viewing'), true)
+    }
+    viewKind = next
+    setDock('viewing')
+  })
   ipcMain.handle('appearance:get', (e) => (settingsWin && e.sender === settingsWin.webContents ? settingsAppearance() : appearance()))
 
   ipcMain.handle('tray:list', () => tray.list())
@@ -1689,6 +1707,149 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
  * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
  * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
  */
+/**
+ * Visual Review's big viewer, opened from the card (which shows review `id`): the window grows to the review size on the
+ * panel's screen, both full-page pictures load, the note is there, the keys and a drag change what it shows, and Esc
+ * goes back to the panel, also to a panel that was moved. A moved panel's window is never animated (setDock), so it
+ * pops back rather than sliding across the screen; this can only see where it lands. Ends with Looks good inside it.
+ * Keys are sent as page events: the hidden smoke's window never has the keyboard. The drag is real mouse input.
+ */
+async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said: string, until: (wc: Electron.WebContents, script: string, why: string, ms?: number) => Promise<void>): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const wc = w.webContents
+  const same = (a: Rect, b: Rect) => JSON.stringify(a) === JSON.stringify(b)
+  // Read fresh each time (TypeScript would otherwise keep what an earlier check narrowed it to).
+  const dockNow = (): DockState => dock
+  const settled = async (want: () => Rect, why: string) => {
+    for (const started = Date.now(); !same(w.getBounds(), want()); await sleep(50)) if (Date.now() - started > 2000) throw new Error(`${why}: ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(want())}`)
+  }
+  const press = (key: string, shift = false) =>
+    wc.executeJavaScript(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, shiftKey: ${shift}, bubbles: true, cancelable: true }))`)
+  const look = () =>
+    wc.executeJavaScript(`({
+      pressed: [...document.querySelectorAll('.review-viewer .rvv-seg button[aria-pressed=true]')].map((b) => b.textContent),
+      x: document.querySelector('.rvv-slide')?.style.getPropertyValue('--x') ?? null,
+      side: Boolean(document.querySelector('.rvv-sbs')),
+      flipShows: document.querySelector('.rvv-flip img:not([hidden])')?.alt ?? null,
+      zoom: document.querySelector('.rvv-zoom')?.textContent ?? '',
+    })`)
+  const openFromCard = async (how: string) => {
+    await wc.executeJavaScript(how)
+    await until(wc, 'Boolean(document.querySelector(".review-viewer .rvv-stage"))', 'Open big did not open the viewer')
+    need(dockNow() === 'viewing', `Open big left Steward ${dockNow()}`)
+  }
+  const panelArea = () => screen.getDisplayMatching(boundsFor('expanded')).workArea
+  const home = boundsFor('expanded')
+  need(same(w.getBounds(), home), 'the panel was not at its spot before the viewer opened')
+
+  // From the picture's corner button: the window grows to the screen's work area less 24 points all round.
+  await openFromCard(`document.querySelector('.card.review .rv-open').click()`)
+  await settled(() => reviewViewerRect(panelArea()), 'the viewer is not the big size')
+  const big = w.getBounds()
+  await until(
+    wc,
+    `(() => { const i = [...document.querySelectorAll('.rvv-slide img')]; return i.length === 2 && i.every((p) => p.complete && p.naturalWidth > 0) })()`,
+    'the viewer did not load both full-page pictures',
+  )
+  const pictures = await wc.executeJavaScript(`[...document.querySelectorAll('.rvv-slide img')].map((p) => [p.src, p.naturalWidth, p.naturalHeight])`)
+  need(
+    pictures[0][0] === `review://${id}/before` && pictures[1][0] === `review://${id}/after` && pictures.every((p: [string, number, number]) => p[1] === 1440),
+    `the viewer's pictures are not the page's full width (${JSON.stringify(pictures)})`,
+  )
+  const note = await wc.executeJavaScript(`document.querySelector('.rvv-note .rv-said')?.textContent ?? ''`)
+  need(note.includes(said), `the viewer does not show what Claude said ("${note}")`)
+  // The handler itself, asked from main: the page's own rules (its CSP) stop a fetch from the page before it gets there.
+  // Chromium tidies a ".." away before the handler sees the address, so a ".." can only name another file of this
+  // review (refused) or this review's own pictures.
+  const status = async (url: string) => (await net.fetch(url)).status
+  need((await status(`review://${id}/after`)) === 200, 'review:// did not serve the after picture')
+  for (const url of [`review://${id}/review.json`, `review://${id}/before-card`, `review://${id}/after/../review.json`, `review://${id}/../../after.png`, 'review://20261020-120000-deadbeef/after'])
+    need((await status(url)) === 404, `review:// served ${url}`)
+
+  // The keys: 2 and 3 pick the mode, Space flips, 1 is back to the slider, ← → move it, Z is 100%.
+  let seen = await look()
+  need(seen.pressed.includes('Slide') && seen.pressed.includes('Fit') && seen.x === '55%', `the viewer did not open on Slide and Fit (${JSON.stringify(seen)})`)
+  await press('2')
+  await until(wc, 'Boolean(document.querySelector(".rvv-sbs"))', '2 did not show the two side by side')
+  await press('3')
+  await until(wc, 'Boolean(document.querySelector(".rvv-flip"))', '3 did not pick Flip')
+  need((await look()).flipShows === 'The page now', 'Flip did not start on the page as it is now')
+  await press(' ')
+  await until(wc, `document.querySelector('.rvv-flip img:not([hidden])')?.alt === 'The page before'`, 'Space did not flip to the page before')
+  await press('1')
+  await until(wc, 'Boolean(document.querySelector(".rvv-slide"))', '1 did not go back to the slider')
+  await press('ArrowLeft')
+  await press('ArrowRight', true)
+  seen = await look()
+  need(seen.x === '70%', `← then Shift → did not move the slider to 70% (${seen.x})`)
+  await press('z')
+  await until(wc, `document.querySelector('.rvv-zoom')?.textContent.startsWith('100%')`, 'Z did not show the page at 100%')
+  await press('z')
+
+  // A drag on the picture moves the slider: real mouse input, from a fifth of the way across to four fifths.
+  const box = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rvv-slide').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width } })()`)
+  const at = (f: number) => ({ x: Math.round(box.x + box.width * f), y: Math.round(box.y + 60) })
+  const mouse = (type: 'mouseDown' | 'mouseMove' | 'mouseUp', p: { x: number; y: number }) =>
+    wc.sendInputEvent({ type, x: p.x, y: p.y, globalX: big.x + p.x, globalY: big.y + p.y, button: 'left', clickCount: 1, modifiers: type === 'mouseUp' ? [] : ['leftbuttondown'] })
+  mouse('mouseDown', at(0.2))
+  for (const f of [0.35, 0.5, 0.65, 0.8]) {
+    mouse('mouseMove', at(f))
+    await sleep(30)
+  }
+  mouse('mouseUp', at(0.8))
+  await sleep(150)
+  const dragged = parseFloat((await look()).x ?? '0')
+  need(Math.abs(dragged - 80) < 2, `dragging across the picture did not move the slider to about 80% (${dragged}%)`)
+  await press('ArrowLeft', true)
+  await sleep(300)
+  await fs.writeFile(out.replace(/\.png$/, '-review-viewer.png'), (await wc.capturePage()).toPNG())
+  await press('2')
+  await sleep(300)
+  await fs.writeFile(out.replace(/\.png$/, '-review-viewer-side.png'), (await wc.capturePage()).toPNG())
+  await press('1')
+  console.log(`smoke: Open big shows the review at ${big.width}×${big.height} (the work area less ${REVIEW_VIEWER_GAP} all round), both 1440 wide pictures, what Claude said; review:// serves only the pictures; keys and a drag change it`)
+
+  // Esc goes back to the panel, at its spot.
+  await press('Escape')
+  for (const started = Date.now(); dockNow() !== 'expanded'; await sleep(50)) if (Date.now() - started > 2000) throw new Error('Esc did not go back to the panel')
+  await settled(() => home, 'after Esc the panel is not back at its spot')
+  await until(wc, 'Boolean(document.querySelector(".card.review")) && !document.querySelector(".review-viewer")', 'after Esc the panel does not show the card')
+
+  // A moved panel: the viewer is the same, and Esc puts the panel back at its saved spot.
+  const area = panelArea()
+  const spot = clampPanel(area, { ...home, x: area.x + Math.round(area.width / 3), y: area.y + 40 })
+  savePanelPlace(spot, screen.getDisplayMatching(home))
+  w.setBounds(boundsFor('expanded'))
+  need(same(w.getBounds(), spot), 'the panel did not move for the check')
+  await openFromCard(`[...document.querySelectorAll('.card.review .rv-link')].find((b) => b.textContent === 'Open big').click()`)
+  await settled(() => big, 'with the panel moved, the viewer is not the same big size')
+  await press('Escape')
+  for (const started = Date.now(); dockNow() !== 'expanded'; await sleep(10)) if (Date.now() - started > 2000) throw new Error('Esc did not go back to the moved panel')
+  const back = w.getBounds()
+  need(same(back, spot), `the moved panel is not back at its spot (it is at ${JSON.stringify(back)}, not ${JSON.stringify(spot)})`)
+  await resetPanelPlace()
+  await settled(() => home, 'the panel did not go home after its spot was reset')
+  console.log('smoke: Esc goes back to the panel, and a moved panel is back at its saved spot')
+
+  // Send it back opens the note box inside; Esc there puts the box away, not the viewer. Then Looks good, from inside.
+  await openFromCard(`document.querySelector('.card.review .rv-open').click()`)
+  const button = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.rvv-foot button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+  await button('Send it back')
+  await until(wc, 'Boolean(document.querySelector(".rvv-foot textarea"))', 'Send it back in the viewer did not ask for a note')
+  const copied = await wc.executeJavaScript('document.querySelector(".rvv-foot .rv-out").textContent')
+  need(copied.includes(reviewStore.file(id, 'after')!), 'the note in the viewer does not point at the picture')
+  await wc.executeJavaScript(`document.querySelector('.rvv-foot textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await until(wc, '!document.querySelector(".rvv-foot textarea")', 'Esc in the note box did not put it away')
+  need(dockNow() === 'viewing', 'Esc in the note box closed the viewer')
+  await button('Looks good')
+  for (const started = Date.now(); dockNow() !== 'expanded'; await sleep(50)) if (Date.now() - started > 3000) throw new Error('Looks good in the viewer did not go back to the panel')
+  await settled(() => home, 'after Looks good the panel is not back at its spot')
+  console.log('smoke: Send it back and Looks good work inside the viewer, and Esc in the note box only puts the note away')
+}
+
 async function checkReview(w: BrowserWindow, out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   const need = (ok: boolean, why: string) => {
@@ -1718,16 +1879,19 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need((await reviews.turnStopped({ ...turn('same'), hook_event_name: 'Stop' })) === null, 'a page that did not change made a review')
     need(reviewStore.list().length === 0, 'a page that did not change was kept')
 
-    // A turn that changes it does, with both pictures and both card pictures.
+    // A turn that changes it does, with both pictures and both card pictures, and what Claude said it did.
     await prompt('changed')
     server.setVersion('b')
-    const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop' })
+    const lastMessage = '**Done.** I changed the heading to `Build faster, ship calmer` and the button to Get started.\n\nWant me to commit this?'
+    const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop', last_assistant_message: lastMessage })
     need(review !== null && review.before === 'turn-start', 'a page that changed made no review with a before picture')
     for (const which of ['before', 'after', 'before-card', 'after-card'] as const) {
       const file = reviewStore.file(review!.id, which)
       need(file !== null && (await fs.stat(file).then((s) => s.size, () => 0)) > 0, `the review has no ${which} picture`)
     }
     need(reviewStore.file(review!.id, 'after')!.startsWith(path.join(app.getPath('userData'), 'reviews')), 'a review picture is outside the Steward data folder')
+    const said = 'I changed the heading to Build faster, ship calmer and the button to Get started.'
+    need(review!.said === said, `the review did not keep what Claude said ("${review!.said}")`)
     console.log(`smoke: a changed page made a review (${review!.changedPixels} small pixels changed, it takes ${review!.minPixels})`)
 
     // The same page again makes none.
@@ -1761,10 +1925,12 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
         return at >= 0 && kids.slice(0, at).every((k) => k.classList.contains('review-problem'))
       })(),
       checked: document.querySelector('.review-check')?.textContent ?? '',
+      said: document.querySelector('.card.review .rv-said')?.textContent ?? '',
     })`)
     need(shown.images.length === 2 && shown.images.every((n: number) => n > 0), 'the card does not show both pictures')
     need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
     need(shown.first, 'the card is not at the top of the panel')
+    need(shown.said === `Claude says: ${said}`, `the card does not show what Claude said ("${shown.said}")`)
     // The last turn left the page as it was: the panel says it checked.
     need(/Checked steward-smoke-review-project after Claude finished: no visible change/.test(shown.checked), `the panel did not say the check found no change ("${shown.checked}")`)
     const card = await wc.executeJavaScript(`(() => { const r = document.querySelector('.card.review').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
@@ -1785,10 +1951,12 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     const copied = await wc.executeJavaScript('document.querySelector(".rv-out").textContent')
     need(copied.includes(reviewStore.file(review!.id, 'after')!) && copied.includes('please change this'), 'the note does not point at the picture')
     await click('Cancel')
-    await click('Looks good')
-    await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good did not clear the card')
+    console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}) with what Claude said, the slider moves, Send it back shows the note`)
+
+    // Open big: the review viewer, then Looks good from inside it.
+    await checkReviewViewer(w, out, review!.id, said, until)
+    await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good in the viewer did not clear the card')
     need(reviewStore.get(review!.id)?.status === 'good', 'Looks good was not remembered')
-    console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}), the slider moves, Looks good clears it`)
 
     // A soft colour change counts: haven's fade from #F4E6E1 to #FBFBF8, reshaped. First the numbers behind the cutoff:
     // the same page captured twice (text, and the fade), and the reshaped fade, at several cutoffs. Logged, then judged at ours.
@@ -1814,7 +1982,12 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     server.setVersion('reshaped')
     const softReview = await reviews.turnStopped({ ...turn('soft'), hook_event_name: 'Stop' })
     need(softReview !== null, 'a soft colour change made no review')
-    await reviews.markGood(softReview!.id)
+    // No last message from Claude: the card simply has no note. Its own Looks good takes it away.
+    await until(wc, 'Boolean(document.querySelector(".card.review .rv-layer img"))', 'the soft change made no card')
+    need(!(await wc.executeJavaScript('Boolean(document.querySelector(".card.review .rv-said"))')), 'a card shows a note though Claude said nothing')
+    await click('Looks good')
+    await until(wc, '!document.querySelector(".card.review")', 'Looks good on the card did not clear it')
+    need(reviewStore.get(softReview!.id)?.status === 'good', 'Looks good on the card was not remembered')
     server.setVersion('b')
     console.log(`smoke: a reshaped soft fade makes a review (${softReview!.changedPixels} small pixels changed at a cutoff of ${CHANNEL_TOLERANCE})`)
 
@@ -3347,6 +3520,12 @@ app.whenReady().then(async () => {
     const item = tray.get(new URL(request.url).hostname)
     if (!item) return new Response('Not found', { status: 404 })
     return net.fetch(pathToFileURL(item.file).toString())
+  })
+  // review://<id>/before and /after: a review's full-page pictures, for the big viewer. Only those (see pictureFor).
+  protocol.handle('review', (request) => {
+    const file = reviewStore.pictureFor(request.url)
+    if (!file) return new Response('Not found', { status: 404 })
+    return net.fetch(pathToFileURL(file).toString())
   })
 
   // Like other menu bar utilities, no Dock icon: macOS only lets accessory apps float over full-screen apps.
