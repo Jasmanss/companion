@@ -1727,7 +1727,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await checkSettingsClearOfPanel()
       clearTimeout(besideTimer)
       const reactionsTimer = setTimeout(() => fail("Steward's reactions timed out"), 60_000)
-      await checkReactions()
+      await checkReactions(out)
       clearTimeout(reactionsTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
@@ -1746,7 +1746,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
  * island's spark), confused for a question or a wait for input (the island's "?"), needs you for an approval, and hello
  * when you're back at the Mac.
  */
-async function checkReactions(): Promise<void> {
+async function checkReactions(out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   // Nothing peeks out: this is about the face, and a nudge would move the window the next checks expect at rest.
   const alertPeek = settings.steward().alertPeek
@@ -1798,6 +1798,23 @@ async function checkReactions(): Promise<void> {
   await settings.update({ steward: { alertPeek } })
   alerts.flush()
   console.log(`smoke: reactions: ${seen.join('; ')}`)
+
+  // The new faces, as Settings → Steward previews them: each a moment in, where it shows best.
+  openSettings('steward')
+  const sw = settingsWin!
+  if (sw.webContents.isLoading()) await new Promise<void>((resolve) => sw.webContents.once('did-finish-load', () => resolve()))
+  sw.webContents.send('settings:section', 'steward')
+  await sleep(800)
+  for (const [label, at] of [['Focusing', 1200], ['Juggling', 900], ['Quick nod', 420], ['Proud', 650], ['Confused', 1300], ['Welcome back', 750]] as const) {
+    const box = (await sw.webContents.executeJavaScript(
+      `(() => { const b = [...document.querySelectorAll('.set-moods button')].find((x) => x.textContent === ${JSON.stringify(label)}); b?.click(); const r = document.querySelector('.set-preview')?.getBoundingClientRect(); return b && r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null })()`,
+    )) as Electron.Rectangle | null
+    if (!box) throw new Error(`Settings → Steward has no "${label}" in its mood preview`)
+    await sleep(at)
+    await fs.writeFile(out.replace(/\.png$/, `-face-${label.toLowerCase().replace(/ /g, '-')}.png`), (await sw.webContents.capturePage(box)).toPNG())
+  }
+  sw.close()
+  await sleep(400)
 }
 
 /**
