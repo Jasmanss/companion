@@ -74,6 +74,18 @@ describe("the reactions' faces", () => {
     expect(conf(6.5).every((c) => c.a === 0)).toBe(true)
   })
 
+  it('stay whole when a frame comes a few milliseconds before the moment the mood was set', () => {
+    for (const mood of REACTIONS) {
+      const st = createEyes(4)
+      stepEyes(st, 100.05, 1 / 60, null)
+      setMood(st, mood)
+      stepEyes(st, 100.04, 1 / 60, null)
+      stepEyes(st, 100.06, 1 / 60, null)
+      expect(Number.isFinite(st.look.x) && Number.isFinite(st.look.y)).toBe(true)
+      for (const side of ['L', 'R'] as const) for (const v of Object.values(st.p[side])) expect(Number.isFinite(v)).toBe(true)
+    }
+  })
+
   it('the nod dips once and comes back', () => {
     expect(run('nod', 0.45).look.y).toBeGreaterThan(0.25)
     expect(Math.abs(run('nod', 1.6).look.y + 0.05)).toBeLessThan(0.05)

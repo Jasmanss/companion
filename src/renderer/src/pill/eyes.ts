@@ -316,7 +316,9 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
   dt = Math.min(Math.max(dt, 0), 0.25)
   st.t = t
   st.rm = rm
-  const m = st.mood, age = t - st.since
+  // A frame's clock can be a few milliseconds behind the one a mood was set on (runEyes draws its first frame with
+  // performance.now(), the rest with the frame's own time), so a mood is never younger than zero.
+  const m = st.mood, age = Math.max(0, t - st.since)
   // How big its moves are: calm is half as lively.
   const e = st.lively ? 1 : 0.5
   const pre = V[m] ?? {}
@@ -458,7 +460,7 @@ export interface Dot {
  * circling (searching the web). Reduced motion keeps the three still in a row, at medium height.
  */
 export function dotsAt(st: EyesState): Dot[] {
-  const age = st.t - st.since, row = [-1.6, 0, 1.6]
+  const age = Math.max(0, st.t - st.since), row = [-1.6, 0, 1.6]
   if (st.rm) return row.map((x) => ({ x, y: -0.25, s: 1, a: 1, orbit: 0 }))
   if (st.glint === 'step') {
     // One lit, two lit, three lit, a beat with all three, then none, and over again. A dot pops a little as it lights.
@@ -626,7 +628,7 @@ export interface Marks {
  * size (bigger and bolder in the tab at the screen edge). Only one corner symbol ever shows.
  */
 export function marks(st: EyesState, o: { cls: SizeClass; mouth: boolean; glass: boolean }): Marks {
-  const m = st.mood, age = st.t - st.since, rm = st.rm
+  const m = st.mood, age = Math.max(0, st.t - st.since), rm = st.rm
   const out: Marks = { symbol: null, zs: [], confetti: [], rings: [] }
   switch (m) {
     case 'needs-you': {
@@ -689,7 +691,7 @@ export interface Cell {
 
 /** The blocky Pill's eye cells. o.mouth adds talking's pixel mouth. */
 export function pixelEyes(st: EyesState, o: { mouth?: boolean } = {}): Cell[] {
-  const m = st.mood, age = st.t - st.since
+  const m = st.mood, age = Math.max(0, st.t - st.since)
   const dz = (st.p.L.dots + st.p.R.dots) / 2
   const talking = m === 'talking', mouth = talking && !!o.mouth && st.mouth
   let [l, r] = PX[m] ?? PX.idle
