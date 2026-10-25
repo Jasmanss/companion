@@ -1751,6 +1751,13 @@ async function checkReactions(out: string): Promise<void> {
   // Nothing peeks out: this is about the face, and a nudge would move the window the next checks expect at rest.
   const alertPeek = settings.steward().alertPeek
   await settings.update({ steward: { alertPeek: 'none' } })
+  // The auto-mode check runs commands straight through the agent, so the panel keeps the agent's last mood (a chat turn
+  // ends with "done", which clears it). End it the same way, and start from rest.
+  if (agent.waitingForApproval) throw new Error('an approval from an earlier check is still waiting')
+  win!.webContents.send('agent:event', { type: 'done' })
+  const settling = Date.now()
+  while (!['resting', 'idle'].includes(notch.state().mood) && Date.now() - settling < 4000) await sleep(50)
+  if (!['resting', 'idle'].includes(notch.state().mood)) throw new Error(`before the reactions, Steward's face is ${notch.state().mood} (${pickReaction(reactionInput(Date.now())!).why}), not at rest`)
   const ids = ['react-1', 'react-2', 'react-3', 'react-4', 'react-5']
   const clean = () => {
     for (const id of ids) sessions.dismiss(id)
