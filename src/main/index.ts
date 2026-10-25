@@ -1812,7 +1812,7 @@ async function checkReactions(out: string): Promise<void> {
   if (sw.webContents.isLoading()) await new Promise<void>((resolve) => sw.webContents.once('did-finish-load', () => resolve()))
   sw.webContents.send('settings:section', 'steward')
   await sleep(800)
-  for (const [label, at] of [['Focusing', 1200], ['Juggling', 900], ['Quick nod', 420], ['Proud', 650], ['Confused', 1300], ['Welcome back', 750]] as const) {
+  for (const [label, at] of [['Focusing', 1200], ['Juggling', 900], ['Quick nod', 420], ['Proud', 650], ['Confused', 800], ['Welcome back', 300]] as const) {
     const box = (await sw.webContents.executeJavaScript(
       `(() => { const b = [...document.querySelectorAll('.set-moods button')].find((x) => x.textContent === ${JSON.stringify(label)}); b?.click(); const r = document.querySelector('.set-preview')?.getBoundingClientRect(); return b && r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null })()`,
     )) as Electron.Rectangle | null
