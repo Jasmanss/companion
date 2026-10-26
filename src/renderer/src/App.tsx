@@ -731,6 +731,10 @@ export function App() {
       <Composer
         busy={busy}
         disabled={noKey}
+        mode={settings?.commandMode}
+        onMode={(commandMode) => {
+          if (commandMode !== settings?.commandMode) api.settings.update({ commandMode }).then(setSettings, showError)
+        }}
         onSend={send}
         onStop={() => api.agent.cancel()}
         onTyping={(on) => {
