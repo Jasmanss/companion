@@ -19,7 +19,6 @@ import {
 
 /** A local time on 2026-10-25. */
 const at = (h: number, m = 0, day = 25) => new Date(2026, 9, day, h, m, 0, 0).getTime()
-const MIN = 60_000
 
 describe('the wake time', () => {
   it('reads "07:30" and nothing else', () => {
