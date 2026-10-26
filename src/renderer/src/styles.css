@@ -2524,6 +2524,8 @@ a.icon-btn {
 /* ---------- Overnight Watch ---------- */
 
 .card.goodnight {
+  /* All of it shows: it doesn't shrink and scroll inside like the other cards (Go rest is at its foot). */
+  flex: none;
   max-height: none;
   display: flex;
   flex-direction: column;
@@ -2546,11 +2548,11 @@ a.icon-btn {
   color: rgb(165, 139, 255);
 }
 
-.gn-sub {
+.card .gn-sub {
   margin: 0;
 }
 
-.gn-list {
+.card .gn-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
