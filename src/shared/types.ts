@@ -10,7 +10,7 @@ export type ViewerKind = 'tray' | 'review'
  * What the character's face shows. Some come from real events: mad and then worried for a failed build, celebrating
  * for a deploy or merge, sleepy for the hour. The reactions follow the chats (main/reactions.ts): focused while one
  * works, juggling while several do, a nod, done or proud when one stops (by how long its turn was), confused when one
- * asks you something, hello when you're back at the Mac.
+ * asks you something, hello when you're back at the Mac. Watching is Overnight Watch: half-lidded, a slow blink.
  */
 export type Mood =
   | 'resting'
@@ -30,6 +30,7 @@ export type Mood =
   | 'nod'
   | 'proud'
   | 'hello'
+  | 'watching'
 
 /** Glass: a tinted lens. Flat: one solid color. Blocky: pixels. */
 export type PillVersion = 'glass' | 'flat' | 'blocky'
