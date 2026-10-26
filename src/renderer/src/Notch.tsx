@@ -71,7 +71,8 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
   const { notchStyle, version, color, mouth, personality } = prefs
   const { cx, width, height } = layout
 
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
+  // In the notch the panel opens at the side Settings says.
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1 }), [st, mouth, personality, prefs.edge])
   const hoverNow = useRef(hover)
   const nudgeNow = useRef(nudge)
   const islandNow = useRef(island)

@@ -161,6 +161,26 @@ export function sayFrom(text: string | null | undefined): string | null {
   return `${cut.slice(0, cut.lastIndexOf(' ') > SAID_MAX / 2 ? cut.lastIndexOf(' ') : cut.length).replace(/[\s,;:.]+$/, '')}…`
 }
 
+/** Offers that end a reply ("Want me to commit this?"): Claude's way of saying it's your turn, not a question. */
+const OFFER = /^(?:do you want me to|want me to|would you like me to|would you like|should i|shall i|let me know|anything else)\b/i
+
+/**
+ * Whether Claude's last reply ends by asking you something (Steward's reactions look confused for a moment): its last
+ * sentence, in the same plain words as the "Claude says" note, is a question. An offer like "Want me to commit this?"
+ * doesn't count: replies end with one so often that it only means it's your turn.
+ */
+export function endsAsking(text: string | null | undefined): boolean {
+  if (!text) return false
+  const lines = text
+    .replace(/(```|~~~)[\s\S]*?(\1|$)/g, '\n')
+    .split('\n')
+    .filter((l) => !/^\s*\|/.test(l))
+    .map((l) => plainInline(l.replace(/^\s*#{1,6}\s+/, '').replace(/^\s*>+\s?/, '').replace(/^\s*(?:[-*+•]|\d+[.)])\s+/, '')).replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  const last = lines.at(-1)?.split(SENTENCE_END).at(-1)?.trim() ?? ''
+  return /\?["'”’)\]]?$/.test(last) && !OFFER.test(last)
+}
+
 /** The big viewer for a review: the screen's work area less this much all round, so a 1,440 wide page fits at 100%. */
 export const REVIEW_VIEWER_GAP = 24
 

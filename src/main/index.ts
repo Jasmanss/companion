@@ -61,8 +61,10 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { alertNote, hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, noteTurn, type Turns } from './island-status'
+import { alertNote, hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, type Turns } from './island-status'
+import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
+import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
@@ -488,7 +490,7 @@ function hideTab(why?: string): void {
   setSlide(quiet(), false)
 }
 
-const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy']
+const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello']
 const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
@@ -1235,18 +1237,47 @@ function raise(input: AlertInput): void {
   sendMood()
 }
 
+/** What Steward's reactions work from (main/reactions.ts): deploys and merges, the chats, and you coming back. */
+function reactionInput(now: number): ReactionInput | null {
+  if (!sessions || !agent) return null
+  return { event: moods.current(now), sessions: sessions.list(), turns: activity.turns, stops: activity.lastStops(), agentWaiting: agent.waitingForApproval, backAt, now }
+}
+
+/**
+ * The face the chats, deploys and you coming back call for goes to the panel, which puts the chat's own moods (and you
+ * typing) above it and tells the notch. A one-shot's hold running out changes it, so the next look is set for then.
+ */
 function sendMood(): void {
   const now = Date.now()
-  win?.webContents.send('alerts:mood', moods.current(now))
+  const input = reactionInput(now)
+  const reaction = input ? pickReaction(input) : { mood: moods.current(now) }
+  win?.webContents.send('alerts:mood', reaction.mood)
   clearTimeout(moodTimer)
-  const next = moods.nextChange(now)
-  if (next !== null) moodTimer = setTimeout(sendMood, next - now + 50)
+  const next = [moods.nextChange(now), input && nextReactionChange(input)].filter((t): t is number => typeof t === 'number')
+  if (next.length) moodTimer = setTimeout(sendMood, Math.min(...next) - now + 50)
+  // The island's right side follows the reactions too (a "?", proud's spark).
+  updateIsland()
 }
 
 function sendSessions(): void {
   win?.webContents.send('sessions:changed', sessions.list())
-  updateIsland()
+  sendMood()
   updateMenuBar()
+}
+
+/** When you came back to the Mac after ten minutes or more away (Steward says hello), and the idle time last seen. */
+let backAt: number | null = null
+let idleSeen: number | null = null
+
+/** Look at how long the Mac has been idle: rarely, and every second once a return would count. */
+function lookAtIdle(): void {
+  const idle = powerMonitor.getSystemIdleTime()
+  if (cameBack(idleSeen, idle)) {
+    backAt = Date.now()
+    sendMood()
+  }
+  idleSeen = idle
+  setTimeout(lookAtIdle, idleLookMs(idle))
 }
 
 /**
@@ -1294,8 +1325,11 @@ async function deployLogs(projectName: string, deploymentId?: string): Promise<{
   return { deploymentId: id, log: await fetchBuildLog(id, link.orgId, token) }
 }
 
-/** The notch island: the turns going on (a prompt sent, until Claude stops), Steward's own, and the reviews waiting. */
-let islandTurns: Turns = {}
+/**
+ * What the chats have been doing (a prompt sent, until Claude stops, and how each stop went): the notch island and
+ * Steward's reactions read it. Then Steward's own agent, and the reviews waiting.
+ */
+const activity = new SessionActivity()
 let agentSince: number | undefined
 let pendingReviews = 0
 let islandTimer: ReturnType<typeof setTimeout> | undefined
@@ -1311,7 +1345,7 @@ function updateIsland(): void {
   const now = Date.now()
   if (!agent.busy) agentSince = undefined
   else agentSince ??= now
-  const input = { sessions: sessions.list(), turns: islandTurns, agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
+  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
   notch.setIsland(islandStatus(input))
   // An alert's note (a review) comes out even when Steward only shows when needed: the island wakes while it shows,
   // as the tab comes out for a nudge, and goes back to sleep once it settles.
@@ -1335,8 +1369,8 @@ function islandNote(event: HookPayload, turns: Turns): void {
 }
 
 async function onHookEvent(event: HookPayload): Promise<void> {
-  const turns = islandTurns
-  islandTurns = noteTurn(islandTurns, event, Date.now())
+  const turns = activity.turns
+  activity.note(event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
@@ -1731,6 +1765,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
       await checkSettingsClearOfPanel()
       clearTimeout(besideTimer)
+      const reactionsTimer = setTimeout(() => fail("Steward's reactions timed out"), 60_000)
+      await checkReactions(out)
+      clearTimeout(reactionsTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -1740,6 +1777,96 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       fail(String(err))
     }
   })
+}
+
+/**
+ * Steward's reactions, through the real hook path with made-up chats: the face the panel works out (as it tells the
+ * notch) follows them. Focused for one working, juggling for two, a nod for a short turn, proud for a long one (and the
+ * island's spark), confused for a question or a wait for input (the island's "?"), needs you for an approval, and hello
+ * when you're back at the Mac.
+ */
+async function checkReactions(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  // Nothing peeks out: this is about the face, and a nudge would move the window the next checks expect at rest.
+  const alertPeek = settings.steward().alertPeek
+  await settings.update({ steward: { alertPeek: 'none' } })
+  // The auto-mode check runs commands straight through the agent, so the panel keeps the agent's last mood (a chat turn
+  // ends with "done", which clears it). End it the same way, and start from rest.
+  if (agent.waitingForApproval) throw new Error('an approval from an earlier check is still waiting')
+  win!.webContents.send('agent:event', { type: 'done' })
+  // At rest is resting or idle, or sleepy after midnight.
+  const atRest = () => ['resting', 'idle', 'sleepy'].includes(notch.state().mood)
+  const settling = Date.now()
+  while (!atRest() && Date.now() - settling < 4000) await sleep(50)
+  if (!atRest()) throw new Error(`before the reactions, Steward's face is ${notch.state().mood} (${pickReaction(reactionInput(Date.now())!).why}), not at rest`)
+  const ids = ['react-1', 'react-2', 'react-3', 'react-4', 'react-5']
+  const clean = () => {
+    for (const id of ids) sessions.dismiss(id)
+    activity.reset()
+    islandNotes.drop()
+    backAt = null
+    sendSessions()
+  }
+  clean()
+  const hook = (hook_event_name: HookPayload['hook_event_name'], session_id: string, extra: Record<string, unknown> = {}) =>
+    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-reactions', ...extra } as HookPayload)
+  const seen: string[] = []
+  const face = async (want: Mood, what: string, within = 2000) => {
+    const started = Date.now()
+    while (notch.state().mood !== want && Date.now() - started < within) await sleep(25)
+    if (notch.state().mood !== want) throw new Error(`${what}: Steward's face is ${notch.state().mood}, not ${want}`)
+    seen.push(`${want} (${what}, ${Date.now() - started} ms)`)
+  }
+  await hook('UserPromptSubmit', 'react-1')
+  await face('focused', 'one chat working')
+  await hook('UserPromptSubmit', 'react-2')
+  await face('juggling', 'two chats working')
+  await hook('Stop', 'react-2', { last_assistant_message: 'Done, the tests pass.' })
+  await face('nod', 'a short turn ending')
+  await face('focused', 'the nod over, one chat still working', 4000)
+  // The other turn began over five minutes ago.
+  activity.turns['react-1'] = Date.now() - 301_000
+  await hook('Stop', 'react-1', { last_assistant_message: 'I rebuilt the settings page.' })
+  await face('proud', 'a long turn ending')
+  if (!notch.state().island?.spark) throw new Error(`after a long turn the island shows ${JSON.stringify(notch.state().island)}, with no spark`)
+  await hook('UserPromptSubmit', 'react-3')
+  await hook('Stop', 'react-3', { last_assistant_message: 'I found two layouts. Which one did you mean, page.tsx or layout.tsx?' })
+  await face('confused', 'a chat ending on a question')
+  if (notch.state().island?.right !== 'asks') throw new Error(`after a question the island's right side is ${notch.state().island?.right}, not a "?"`)
+  await hook('Notification', 'react-4', { message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
+  await face('confused', 'a chat waiting for input')
+  await hook('PermissionRequest', 'react-5', { tool_name: 'Bash', tool_input: { command: 'npm test' } })
+  await face('needs-you', 'a chat waiting for your OK')
+  if (notch.state().island?.right !== 'needs') throw new Error(`with an approval waiting the island's right side is ${notch.state().island?.right}, not the amber mark`)
+  clean()
+  backAt = Date.now()
+  sendMood()
+  await face('hello', "back at the Mac after a while")
+  clean()
+  // The made-up chats' alerts (the finished ones wait 20 s to be batched) go now, while nothing peeks out, and are
+  // dropped: a nudge coming out later would move the window the next checks expect at rest.
+  alerts.flush()
+  heldAlerts = []
+  updateMenuBar()
+  await settings.update({ steward: { alertPeek } })
+  console.log(`smoke: reactions: ${seen.join('; ')}`)
+
+  // The new faces, as Settings → Steward previews them: each a moment in, where it shows best.
+  openSettings('steward')
+  const sw = settingsWin!
+  if (sw.webContents.isLoading()) await new Promise<void>((resolve) => sw.webContents.once('did-finish-load', () => resolve()))
+  sw.webContents.send('settings:section', 'steward')
+  await sleep(800)
+  for (const [label, at] of [['Focusing', 1200], ['Juggling', 900], ['Quick nod', 420], ['Proud', 650], ['Confused', 800], ['Welcome back', 300]] as const) {
+    const box = (await sw.webContents.executeJavaScript(
+      `(() => { const b = [...document.querySelectorAll('.set-moods button')].find((x) => x.textContent === ${JSON.stringify(label)}); b?.click(); const r = document.querySelector('.set-preview')?.getBoundingClientRect(); return b && r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null })()`,
+    )) as Electron.Rectangle | null
+    if (!box) throw new Error(`Settings → Steward has no "${label}" in its mood preview`)
+    await sleep(at)
+    await fs.writeFile(out.replace(/\.png$/, `-face-${label.toLowerCase().replace(/ /g, '-')}.png`), (await sw.webContents.capturePage(box)).toPNG())
+  }
+  sw.close()
+  await sleep(400)
 }
 
 /**
@@ -2592,8 +2719,14 @@ async function checkNotch(out: string): Promise<void> {
       const page = notch.contents()!
       const dim = async () => Boolean(await page.executeJavaScript(`Boolean(document.querySelector('.notch-root.dim'))`))
       const waiting = Date.now()
-      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
-      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest`)
+      // Any change of mood starts the 20 s over: if it doesn't dim, say which moods it had and when.
+      const moodsSeen: string[] = []
+      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) {
+        const m = notch.state().mood
+        if (moodsSeen.at(-1)?.split(' ')[0] !== m) moodsSeen.push(`${m} at ${((Date.now() - waiting) / 1000).toFixed(1)} s`)
+        await sleep(250)
+      }
+      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest (moods: ${moodsSeen.join(', ')}; awake ${notch.state().awake})`)
       // What the notch window sends its page when the cursor comes near.
       notch.post('notch:cursor', { x: layout.cx, y: 10 })
       await sleep(300)
@@ -2802,7 +2935,7 @@ async function checkIsland(out: string): Promise<void> {
   notch.restyle()
   // Nothing going on to start with (reviews from the Visual Review check are left out).
   pendingReviews = 0
-  islandTurns = {}
+  activity.reset()
   islandNotes.drop()
   updateIsland()
   await sleep(1500)
@@ -2821,8 +2954,11 @@ async function checkIsland(out: string): Promise<void> {
   const dockNow = (): DockState => dock
   const black = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha > 200 && pixel(img, x, y).light < 30
   const clear = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha < 20
-  /** Steward's body (lit, not black, not see-through) at this point, a little under where its eyes are. */
-  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 200 && pixel(img, x, y + 9).light > 40
+  /**
+   * Steward's body (lit, not black) at this point, a little under where its eyes are. At rest its standby glow breathes
+   * the body's opacity down to 0.36 (dark) or 0.58 (light), so it's there when it's well above see-through.
+   */
+  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 80 && pixel(img, x, y + 9).light > 40
   const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
   const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, said?: string) =>
     onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : { last_assistant_message: said }) } as HookPayload)
@@ -2832,7 +2968,10 @@ async function checkIsland(out: string): Promise<void> {
   const restPill = islandParts('rest', layout).pill
   let img = await shot()
   if (notch.state().island?.right !== null) throw new Error(`the island shows "${notch.state().island?.right}" with nothing going on`)
-  if (!steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('at rest, Steward does not peek out past the notch\'s left edge')
+  if (!steward(img, layout.cx - hw - 12, restPill.y)) {
+    const px = pixel(img, layout.cx - hw - 12, restPill.y + 9)
+    throw new Error(`at rest, Steward does not peek out past the notch's left edge (pixel ${JSON.stringify(px)}; ${JSON.stringify({ visible: notch.visible, awake: notch.state().awake, mood: notch.state().mood, hover: notch.state().hover, steppedAside, dock })})`)
+  }
   if (!black(img, layout.cx - hw + 4, 8) || !black(img, layout.cx, 8)) throw new Error('at rest, the notch is not black where Steward hides behind it')
   if (!clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx - hw - 60, 8)) throw new Error('at rest, there is an island beside the notch')
   await fs.writeFile(out.replace(/\.png$/, '-island-rest.png'), img.toPNG())
@@ -3601,7 +3740,8 @@ app.whenReady().then(async () => {
     name: () => settings.steward().name,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
-      updateIsland()
+      // Its asking for your OK, or getting it, changes the face and the island.
+      sendMood()
       // Peek out when the agent needs a decision; the approval card is in the panel.
       if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Steward needs your OK', detail: event.command, mood: 'needs-you' })
     },
@@ -3659,6 +3799,8 @@ app.whenReady().then(async () => {
   powerMonitor.on('unlock-screen', screenIs(false))
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
   else {
+    // The smoke check says when you're back itself, so a real return during it can't change a face it checks.
+    lookAtIdle()
     menuBar = new Tray(menuBarIcon())
     menuBar.setToolTip('Steward')
     updateMenuBar()

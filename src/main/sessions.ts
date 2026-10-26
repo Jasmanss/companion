@@ -103,7 +103,8 @@ export class SessionTracker {
         set('finished', detail)
         const started = transcriptPath && event.prompt_id ? await this.turnStart(transcriptPath, event.prompt_id) : null
         const level = started !== null && now - started < NOTEWORTHY_TURN_MS ? 'quiet' : 'normal'
-        return { key: `finished:${event.session_id}:${event.prompt_id ?? now}`, level, title: `${name} finished`, detail, mood: 'done' }
+        // No mood: how the face greets a finished turn depends on its length (main/reactions.ts).
+        return { key: `finished:${event.session_id}:${event.prompt_id ?? now}`, level, title: `${name} finished`, detail }
       }
       // A turn starting is Visual Review's business (review.ts), not the session strip's.
       case 'UserPromptSubmit':

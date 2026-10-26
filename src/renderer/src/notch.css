@@ -195,6 +195,50 @@
   font-weight: 800;
   animation: isl-live 1s ease-in-out infinite;
 }
+/* A chat asking you something: a "?" in the eyes' own color. */
+.isl-q {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(var(--lit));
+  color: #101216;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+/* Proud: a small spark that pops once beside the check, then fades. */
+.isl-spark {
+  position: absolute;
+  left: 9px;
+  top: -9px;
+  width: 9px;
+  height: 9px;
+  background: rgb(255, 214, 102);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+  animation: isl-spark 0.9s ease-out 0.15s forwards;
+}
+@keyframes isl-spark {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.25) rotate(40deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9) rotate(80deg);
+  }
+}
+/* While the island is out, its right side carries the mark ("!", "?", the spark): the Pill's own corner marks hide. */
+.isl[data-level='compact'] .isl-pill .marks,
+.isl[data-level='note'] .isl-pill .marks {
+  visibility: hidden;
+}
 .isl-thumb {
   position: relative;
   display: block;
@@ -225,7 +269,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .isl-spin,
-  .isl-ask {
+  .isl-ask,
+  .isl-spark {
     animation: none;
   }
 }
