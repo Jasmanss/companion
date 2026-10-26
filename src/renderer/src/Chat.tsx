@@ -161,7 +161,8 @@ export function Composer({
           ref={inputRef}
           value={text}
           rows={Math.min(5, Math.max(1, text.split('\n').length))}
-          placeholder={disabled ? 'Add an API key in Settings to chat' : 'Ask for designs, images, or a command…'}
+          // Short: Ask | Auto shares the box with it.
+          placeholder={disabled ? 'Add an API key in Settings' : 'Ask, or run a command…'}
           disabled={disabled}
           onChange={(e) => {
             setText(e.target.value)
