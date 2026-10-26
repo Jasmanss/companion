@@ -10,7 +10,7 @@ import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../sh
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -69,6 +69,7 @@ import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PI
 import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
+import { OvernightWatch, wakeAt, WatchLog } from './watch'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
@@ -150,6 +151,13 @@ let gh: GhRunner | null = null
 const merges = new MergeTracker()
 /** Steward in the MacBook notch, and where the notch is (null: no screen has one right now). */
 let notch: NotchDock
+/** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
+let watch: OvernightWatch | null = null
+/** Its keep-awake blocker, while a night goes on. */
+let watchBlocker: number | null = null
+/** The smoke check says how long the Mac has been idle, so someone's real mouse can't change what it checks. */
+let smokeIdle = 0
+const idleSeconds = (): number => (SMOKE_OUT ? smokeIdle : powerMonitor.getSystemIdleTime())
 let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
@@ -878,7 +886,21 @@ function menuBarIcon(): Electron.NativeImage {
  */
 function menuBarText(): string {
   const waiting = sessions?.waitingCount() ?? 0
-  return menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews)
+  return menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews, watch?.watching ?? false)
+}
+
+/** "11:10 PM", for the menu bar. */
+const clockText = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
+/** The menu bar's Overnight Watch items: Goodnight, or how long it watches and the ways to end it. */
+function watchMenuItems(): Electron.MenuItemConstructorOptions[] {
+  const night = watch?.night
+  if (!night) return [{ label: 'Goodnight…', click: openGoodnight }]
+  return [
+    { label: `Watching until ${clockText(night.until)}`, enabled: false },
+    { label: "I'm Up", click: () => watch?.stop('up') },
+    { label: 'Stop Watching', click: () => watch?.stop('stopped') },
+  ]
 }
 
 function updateMenuBar(): void {
@@ -891,6 +913,8 @@ function updateMenuBar(): void {
         ? { label: 'Show at Screen Edge', accelerator: registered.hideFromEdge || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
         : { label: 'Hide from Screen Edge', accelerator: registered.hideFromEdge || undefined, registerAccelerator: false, click: () => setDock('hidden') },
       { label: 'Settings…', accelerator: 'Command+,', registerAccelerator: false, click: () => openSettings() },
+      { type: 'separator' },
+      ...watchMenuItems(),
       { type: 'separator' },
       { label: 'Quit Steward', role: 'quit' },
     ]),
@@ -1107,7 +1131,9 @@ function showAlerts(list: AlertView[]): void {
     return updateMenuBar()
   }
   const island = inNotch() && settings.steward().notchStyle === 'island'
-  const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
+  // Overnight Watch with nobody at the Mac: they wait for the panel (the menu bar's dot), as when Steward is hidden.
+  const holding = !isOpen(dock) && (watch?.holdsAlerts() ?? false)
+  const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' || holding ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
   const { held } = split
   // In the island a review comes out as the island itself (its note), never as the old alert under the notch.
   const notes = island && !isOpen(dock) ? split.peek.filter((a) => islandShows(a.key)) : []
@@ -1233,6 +1259,8 @@ async function switchProject(projectPath: string | null, before = settings.curre
  */
 function raise(input: AlertInput): void {
   if (!alerts.push(withNotificationPrefs(input, settings.notifications()))) return
+  // Overnight Watch writes it down, and whether it waits (nobody at the Mac).
+  watch?.alert(input, watch.holdsAlerts())
   moods.apply(input.mood, input.scope, Date.now())
   sendMood()
 }
@@ -1397,6 +1425,43 @@ async function reviewReady(record: ReviewRecord, event: { session_id: string; pr
   heldAlerts = heldAlerts.filter((a) => !same(a))
   asideAlerts = asideAlerts.filter((a) => !same(a))
   raise(reviewAlert(record))
+}
+
+/** Overnight Watch keeps the Mac from sleeping when idle (the screen may still sleep) for as long as a night goes on. */
+function keepAwakeForWatch(on: boolean): void {
+  if (on && watchBlocker === null) watchBlocker = powerSaveBlocker.start('prevent-app-suspension')
+  else if (!on && watchBlocker !== null) {
+    powerSaveBlocker.stop(watchBlocker)
+    watchBlocker = null
+  }
+}
+
+/** What the goodnight card and the Watching line show: the night, and what Steward can see tonight. */
+async function watchView(): Promise<WatchView> {
+  const night = watch?.night
+  const list = sessions.list()
+  const linked = settings.vercelToken() ? (await deploys.linked()).map((l) => l.name) : []
+  return {
+    watching: Boolean(night),
+    since: night?.since,
+    until: night?.until,
+    wakeTime: watch?.wakeTime ?? '07:30',
+    plan: { working: list.filter((s) => s.state === 'working').map((s) => s.name), waiting: sessions.waitingCount(), deploys: linked },
+    onBattery: powerMonitor.isOnBatteryPower(),
+    ended: watch?.ended,
+  }
+}
+
+/** The Watch started, stopped or changed: the panel and the menu bar follow. */
+function sendWatch(): void {
+  updateMenuBar()
+  void watchView().then((view) => win?.webContents.send('watch:changed', view))
+}
+
+/** Goodnight from the menu bar: the panel opens on the goodnight card. */
+function openGoodnight(): void {
+  setDock('expanded')
+  win?.webContents.send('watch:goodnight')
 }
 
 /** The reviews waiting for a decision go to the panel (the card at its top), the island and the menu bar's dot. */
@@ -1650,6 +1715,19 @@ function registerIpc(): void {
   })
   ipcMain.handle('review:history', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.history(projectPath) : []))
   ipcMain.handle('review:usage', () => reviewStore.usage())
+  ipcMain.handle('watch:get', () => watchView())
+  ipcMain.handle('watch:start', (_e, wakeTime: unknown) => {
+    watch?.start(typeof wakeTime === 'string' ? wakeTime : (watch?.wakeTime ?? ''))
+    return watchView()
+  })
+  ipcMain.handle('watch:stop', (_e, why: unknown) => {
+    watch?.stop(why === 'up' ? 'up' : 'stopped')
+    return watchView()
+  })
+  ipcMain.handle('watch:setWakeTime', (_e, wakeTime: unknown) => {
+    if (typeof wakeTime === 'string') watch?.setWakeTime(wakeTime)
+    return watchView()
+  })
   ipcMain.handle('review:clear', () => reviews.clear())
 
   // Connecting merges Steward's hooks into ~/.claude/settings.json; the renderer shows the preview first.
@@ -1752,6 +1830,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
       await checkReview(w, out)
       clearTimeout(reviewTimer)
+      const watchTimer = setTimeout(() => fail('overnight watch timed out'), 40_000)
+      await checkWatch(w, out)
+      clearTimeout(watchTimer)
       // The Settings window is its own page, so it gets checked too.
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
@@ -1873,6 +1954,103 @@ async function checkReactions(out: string): Promise<void> {
  * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
  * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
  */
+/**
+ * Overnight Watch, Phase 1: the goodnight card from the panel's moon button, Go rest with a wake time, the keep-awake,
+ * the moon in the menu bar, the Watching face, Steward tucking away; an alert waiting while nobody is at the Mac (and
+ * written down without its detail) and peeking out while someone is; sleep and waking written down; and "I'm up"
+ * ending it and letting the Mac sleep again. How long the Mac has been idle is the check's own (smokeIdle).
+ */
+async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const wc = w.webContents
+  const until = async (script: string, why: string, ms = 5000) => {
+    for (const started = Date.now(); Date.now() - started < ms; await sleep(100)) if (await wc.executeJavaScript(script)) return
+    throw new Error(why)
+  }
+  const dockNow = (): DockState => dock
+  const button = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.card.goodnight button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+  const log = new WatchLog(path.join(app.getPath('userData'), 'watch'))
+  try {
+    need(!watch!.watching, 'a night was going on before the check')
+    setDock('expanded')
+    await sleep(700)
+    // The moon in the panel's top bar opens the card: what Steward can see tonight, and the wake time.
+    await wc.executeJavaScript(`document.querySelector('.head-actions button[aria-label="Goodnight"]').click()`)
+    await until(`document.querySelector('.card.goodnight')?.textContent.includes("Here's what I'll watch tonight.")`, 'the moon did not open the goodnight card')
+    const card = await wc.executeJavaScript(`({
+      text: document.querySelector('.card.goodnight').textContent,
+      wake: document.querySelector('.gn-wake input').value,
+    })`)
+    need(card.wake === '07:30', `the wake time starts at ${card.wake}, not 7:30`)
+    need(/Claude Code sessions/.test(card.text) && /Deploys/.test(card.text) && /Keep the lid open/.test(card.text), `the card does not say what it watches ("${card.text}")`)
+    await wc.executeJavaScript(`(() => {
+      const input = document.querySelector('.gn-wake input')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '06:45')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+    await sleep(200)
+    await fs.writeFile(out.replace(/\.png$/, '-watch-goodnight.png'), (await wc.capturePage()).toPNG())
+
+    // Go rest: watching until 6:45, the Mac kept awake, a moon in the menu bar, the Watching face; Steward tucks away.
+    const started = Date.now()
+    await button('Go rest')
+    for (const t = Date.now(); !watch!.watching; await sleep(50)) if (Date.now() - t > 3000) throw new Error('Go rest did not start watching')
+    const night = watch!.night!
+    need(Math.abs(night.until - wakeAt(started, '06:45')) < 5000, `watching until ${new Date(night.until).toString()}, not the next 6:45`)
+    need(watchBlocker !== null && powerSaveBlocker.isStarted(watchBlocker), 'Go rest did not keep the Mac awake')
+    need(menuBarText().startsWith('☾'), `the menu bar would show "${menuBarText()}", no moon`)
+    await until(`document.querySelector('.card.goodnight')?.textContent.includes("Goodnight. I've got it.")`, 'Go rest did not say goodnight')
+    for (const t = Date.now(); notch.state().mood !== 'watching'; await sleep(100)) if (Date.now() - t > 3000) throw new Error(`watching, the face is ${notch.state().mood}`)
+    for (const t = Date.now(); dockNow() !== 'collapsed'; await sleep(100)) if (Date.now() - t > 4000) throw new Error(`after Go rest Steward is ${dockNow()}, not tucked away`)
+    console.log(`smoke: Go rest watches until ${clockText(night.until)}, keeps the Mac awake, puts a moon in the menu bar ("${menuBarText()}"), the face is Watching, and Steward tucks away`)
+
+    // Nobody at the Mac: an alert waits for the panel and is written down, without its detail.
+    smokeIdle = 600
+    raise({ key: 'approval:smoke-watch:p1:rm -rf build', level: 'urgent', title: 'A session is waiting on you', detail: 'rm -rf build' })
+    alerts.flush()
+    await sleep(500)
+    need(dockNow() === 'collapsed' && heldAlerts.some((a) => a.key === 'approval:smoke-watch:p1:rm -rf build'), `with nobody at the Mac the alert did not wait (Steward is ${dockNow()})`)
+    // Someone at the Mac late: it peeks out as usual.
+    smokeIdle = 3
+    raise({ key: 'approval:smoke-watch:p2', level: 'urgent', title: 'Another session is waiting on you' })
+    await sleep(500)
+    need(dockNow() === 'nudge', `with someone at the Mac the alert did not peek out (Steward is ${dockNow()})`)
+    setDock('collapsed')
+    // The Mac sleeping and waking is written down too.
+    watch!.power('suspend')
+    watch!.power('resume')
+    const events = await log.read(night.id)
+    const types: string[] = events.map((e) => e.type)
+    need(types[0] === 'start' && types.includes('slept') && types.includes('woke'), `the night's log is ${types.join(', ')}`)
+    const alertsLogged = events.filter((e) => e.type === 'alert')
+    need(alertsLogged.length === 2 && alertsLogged[0].type === 'alert' && alertsLogged[0].held && alertsLogged[1].type === 'alert' && !alertsLogged[1].held, `the log has ${JSON.stringify(alertsLogged)}`)
+    need(!JSON.stringify(events).includes('rm -rf'), "the log kept an alert's detail")
+    console.log(`smoke: watching, an alert waits while nobody is at the Mac and peeks out while someone is; the log has ${types.join(', ')}, no details`)
+
+    // I'm up: the night ends, the Mac may sleep again, the moon goes, the face too.
+    setDock('expanded')
+    await until(`document.querySelector('.card.goodnight.watching')?.textContent.includes('Watching since')`, 'the open panel does not say it is watching')
+    await sleep(300)
+    await fs.writeFile(out.replace(/\.png$/, '-watch-watching.png'), (await wc.capturePage()).toPNG())
+    const blocker = watchBlocker!
+    await button("I'm up")
+    for (const t = Date.now(); watch!.watching; await sleep(50)) if (Date.now() - t > 3000) throw new Error("I'm up did not end the night")
+    need(watch!.ended?.why === 'up' && watchBlocker === null && !powerSaveBlocker.isStarted(blocker), "after I'm up the Mac is still kept awake")
+    need(!menuBarText().includes('☾'), `after I'm up the menu bar would still show "${menuBarText()}"`)
+    for (const t = Date.now(); notch.state().mood === 'watching'; await sleep(100)) if (Date.now() - t > 3000) throw new Error("after I'm up the face is still Watching")
+    await until(`!document.querySelector('.card.goodnight')`, "after I'm up the card is still there")
+    need((await log.read(night.id)).at(-1)?.type === 'end', "the log does not end with I'm up")
+    console.log("smoke: I'm up ends the night, lets the Mac sleep again, and takes the moon and the Watching face away")
+  } finally {
+    smokeIdle = 0
+    watch?.stop('stopped')
+    heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('approval:smoke-watch'))
+  }
+}
+
 /**
  * Visual Review's big viewer, opened from the card (which shows review `id`): the window grows to the review size on the
  * panel's screen, both full-page pictures load, the note is there, the keys and a drag change what it shows, and Esc
@@ -3722,6 +3900,20 @@ app.whenReady().then(async () => {
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })
   alerts = new AlertQueue({ show: showAlerts })
+  watch = new OvernightWatch(
+    {
+      log: new WatchLog(path.join(userData, 'watch')),
+      idleSeconds,
+      onBattery: () => powerMonitor.isOnBatteryPower(),
+      sessionsWorking: () => sessions.list().filter((s) => s.state === 'working').length,
+      keepAwake: keepAwakeForWatch,
+      save: (saved) => void appState.update({ watch: saved }),
+      changed: sendWatch,
+    },
+    // A smoke run starts with no night going on, whatever an earlier run left.
+    SMOKE_OUT ? {} : appState.watch,
+  )
+  await watch.resume()
   deploys = new DeployWatcher({ projects: () => settings.projects(), token: () => settings.vercelToken(), onChanges: onDeployChanges })
   agent = new Agent({
     apiKey: () => settings.apiKey(),
@@ -3793,6 +3985,17 @@ app.whenReady().then(async () => {
     screenAsleep = asleepNow
     syncWatch()
   }
+  // Overnight Watch writes down when the Mac slept and woke, and the battery; the goodnight card says which it's on.
+  powerMonitor.on('suspend', () => watch?.power('suspend'))
+  powerMonitor.on('resume', () => watch?.power('resume'))
+  powerMonitor.on('on-battery', () => {
+    watch?.power('on-battery')
+    sendWatch()
+  })
+  powerMonitor.on('on-ac', () => {
+    watch?.power('on-ac')
+    sendWatch()
+  })
   powerMonitor.on('suspend', screenIs(true))
   powerMonitor.on('lock-screen', screenIs(true))
   powerMonitor.on('resume', screenIs(false))

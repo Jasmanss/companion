@@ -622,6 +622,19 @@ export interface StewardAPI {
     /** Delete every review picture. */
     clear(): Promise<void>
   }
+  /** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
+  watch: {
+    get(): Promise<WatchView>
+    /** Go rest, watching until this wake time ("07:30"). */
+    start(wakeTime: string): Promise<WatchView>
+    /** "I'm up", or Stop watching. */
+    stop(why: 'up' | 'stopped'): Promise<WatchView>
+    /** Remember the wake time picked on the card. */
+    setWakeTime(wakeTime: string): Promise<WatchView>
+    onChanged(cb: (view: WatchView) => void): Unsubscribe
+    /** Goodnight from the menu bar: show the goodnight card. */
+    onGoodnight(cb: () => void): Unsubscribe
+  }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */
     onShow(cb: (card: LeftOff) => void): Unsubscribe

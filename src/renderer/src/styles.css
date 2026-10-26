@@ -2521,6 +2521,122 @@ a.icon-btn {
   object-position: top;
 }
 
+/* ---------- Overnight Watch ---------- */
+
+.card.goodnight {
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card.goodnight .card-head {
+  margin-bottom: 0;
+}
+
+.gn-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--t1);
+  font-weight: 700;
+}
+
+.gn-title svg {
+  color: rgb(165, 139, 255);
+}
+
+.gn-sub {
+  margin: 0;
+}
+
+.gn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gn-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.45);
+  font-weight: 600;
+}
+
+.gn-list li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--t2);
+}
+
+.gn-list li span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gn-list small {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* On battery: the Mac may sleep, so the line stands out. */
+.gn-list li.warn small {
+  color: var(--t1);
+}
+
+.gn-wake {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.gn-wake input {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t1);
+  font: inherit;
+}
+
+.gn-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Watching: a slow glow by the title, the only thing that moves. */
+.gn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(165, 139, 255);
+  animation: gn-glow 3s ease-in-out infinite;
+}
+
+@keyframes gn-glow {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gn-dot {
+    animation: none;
+  }
+}
+
 /* ---------- Visual Review, big ---------- */
 
 /* On the card: the slider takes drags on the picture, so a corner button opens it big. It shows on hover and focus. */
