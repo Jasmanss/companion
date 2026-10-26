@@ -451,6 +451,8 @@ export interface Activity {
   detail?: string
   /** Search results: the sites (search-web), or photo thumbnail URLs (search-photos). */
   results?: string[]
+  /** run-command: it ran without a Run card, because Auto judged it safe, or it's on your list of commands. */
+  ranBy?: 'auto' | 'list'
   /** A tray item it made (screenshot, add-image), so the panel can fly its thumbnail into the tray. */
   image?: string
 }
@@ -459,7 +461,8 @@ export type AgentEvent =
   | { type: 'mood'; mood: Mood }
   | { type: 'text'; delta: string }
   | { type: 'activity'; activity: Activity }
-  | { type: 'approval'; id: string; command: string; cwd: string; why?: string }
+  /** reason: Auto is on but this still asks, and why, in a few words ("pushing always asks"). */
+  | { type: 'approval'; id: string; command: string; cwd: string; why?: string; reason?: string }
   | { type: 'approval-resolved'; id: string; approved: boolean }
   /** Command output as it arrives (chunk), then all of it once the command ends (exitCode set). */
   | { type: 'output'; activityId: string; command: string; chunk?: string; exitCode?: number | null; text?: string }

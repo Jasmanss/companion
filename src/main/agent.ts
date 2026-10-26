@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs'
 import { activityLabel, resultSites, siteOf } from '../shared/activity'
 import { DEFAULT_NAME } from '../shared/steward'
 import type { Activity, ActivityKind, AgentEvent, CommandMode, Mood, Project } from '../shared/types'
-import { alwaysAsks, isAllowlisted, isRisky, runCommand, stripAnsi } from './commands'
+import { alwaysAsks, isAllowlisted, isRisky, riskReason, runCommand, stripAnsi } from './commands'
 import { playDemo } from './demo'
 import { downloadImage } from './fetch-image'
 import { displayPath, FileAccessError, formatList, formatRead, listProjectFiles, readProjectFile } from './files'
@@ -369,11 +369,15 @@ export class Agent {
   private async runCommand({ command, why }: z.infer<typeof RunCommandInput>, signal: AbortSignal): Promise<string> {
     const project = this.project()
 
-    if (!isAllowlisted(command, this.deps.allowlist()) && !(this.commandMode() === 'auto' && !isRisky(command, project.path, existsSync))) {
+    // On your list, or safe in Auto: it runs without a card, and its step says so.
+    const auto = this.commandMode() === 'auto'
+    const ranBy = isAllowlisted(command, this.deps.allowlist()) ? 'list' : auto && !isRisky(command, project.path, existsSync) ? 'auto' : undefined
+    if (!ranBy) {
       const id = randomUUID()
       const approved = await new Promise<boolean>((resolve) => {
         this.approvals.set(id, resolve)
-        this.emit({ type: 'approval', id, command, cwd: project.path, why })
+        // In Auto the card says why this one still asks.
+        this.emit({ type: 'approval', id, command, cwd: project.path, why, ...(auto ? { reason: riskReason(command, project.path, existsSync) } : {}) })
         this.mood('needs-you')
       })
       this.emit({ type: 'approval-resolved', id, approved })
@@ -381,7 +385,7 @@ export class Agent {
     }
 
     this.mood('thinking')
-    const step = this.start('run-command', command)
+    const step = this.start('run-command', command, ranBy && { ranBy })
     // Output reaches the panel as it comes, a few times a second at most.
     let pending = ''
     let flushTimer: ReturnType<typeof setTimeout> | undefined
@@ -548,8 +552,8 @@ export class Agent {
   }
 
   /** A step starts: it shows in the panel right away. */
-  private start(kind: ActivityKind, target?: string): Activity {
-    const step: Activity = { id: randomUUID(), kind, label: activityLabel(kind, 'running'), status: 'running', ...(target ? { target } : {}) }
+  private start(kind: ActivityKind, target?: string, extra?: Partial<Activity>): Activity {
+    const step: Activity = { id: randomUUID(), kind, label: activityLabel(kind, 'running'), status: 'running', ...(target ? { target } : {}), ...extra }
     this.running.set(step.id, step)
     this.emit({ type: 'activity', activity: { ...step } })
     return step

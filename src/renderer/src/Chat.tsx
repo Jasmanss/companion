@@ -62,6 +62,8 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
                 </p>
                 <pre className="command">{entry.command}</pre>
                 {entry.why && <p className="why">{entry.why}</p>}
+                {/* Auto never looks like a loophole: what still asks says why. */}
+                {entry.reason && entry.status === 'pending' && <p className="why-asks">Auto is on, but {entry.reason}.</p>}
                 {entry.status === 'pending' && (
                   <div className="approval-actions">
                     <button className="btn primary" onClick={() => onApprove(entry.approvalId, true)}>

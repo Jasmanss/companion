@@ -353,7 +353,7 @@ export function App() {
       case 'approval':
         setEntries((prev) => [
           ...prev,
-          { kind: 'approval', id: nextId++, approvalId: event.id, command: event.command, cwd: event.cwd, why: event.why, status: 'pending' },
+          { kind: 'approval', id: nextId++, approvalId: event.id, command: event.command, cwd: event.cwd, why: event.why, reason: event.reason, status: 'pending' },
         ])
         break
       case 'approval-resolved':
