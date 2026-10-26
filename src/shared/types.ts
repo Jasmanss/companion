@@ -313,6 +313,35 @@ export interface ClaudeHookStatus {
   error?: string
 }
 
+/**
+ * Why a night's Watch ended: the wake time, "I'm up", Stop watching, you came back and used the Mac for a couple of
+ * minutes, or the 12-hour cap.
+ */
+export type WatchEnd = 'wake-time' | 'up' | 'stopped' | 'back' | 'cap'
+
+/** Overnight Watch, for the panel: watching or not, and what the goodnight card says Steward can watch tonight. */
+export interface WatchView {
+  watching: boolean
+  /** Watching: since when, and until when (the wake time, or the 12-hour cap). */
+  since?: number
+  until?: number
+  /** The wake time last picked, as "07:30". */
+  wakeTime: string
+  /** What there is to watch tonight. */
+  plan: {
+    /** Claude Code sessions working now, by name. */
+    working: string[]
+    /** How many sessions are waiting on you now. */
+    waiting: number
+    /** Projects whose deploys Steward can see (linked to Vercel). */
+    deploys: string[]
+  }
+  /** The Mac is on battery: it may sleep however Steward tries. */
+  onBattery: boolean
+  /** How the last Watch ended, while it's still worth saying (until the next one starts). */
+  ended?: { at: number; why: WatchEnd }
+}
+
 /** Visual Review: one finished turn whose page looks different, waiting for a decision. */
 export interface ReviewView {
   id: string
