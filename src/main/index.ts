@@ -3569,6 +3569,9 @@ async function captureSettings(out: string): Promise<void> {
   })
   await sleep(1000)
   if (!(await w.webContents.executeJavaScript('Boolean(document.querySelector("[data-settings]"))'))) throw new Error('settings window did not mount')
+  // The panel's pin moved here: General has Keep panel open, the same setting.
+  const keep = String(await w.webContents.executeJavaScript(`[...document.querySelectorAll('[data-settings] *')].some((e) => e.childElementCount === 0 && e.textContent === 'Keep panel open')`))
+  if (keep !== 'true') throw new Error('Settings → General has no Keep panel open')
   // Going to Settings isn't clicking away: the panel should still be out. (Logged, not failed: focus is up to macOS.)
   console.log(`smoke: settings focused ${w.isFocused()}, panel still ${dock}`)
   for (const section of SMOKE_SECTIONS ? SETTINGS_SECTIONS : (['general'] as const)) {
