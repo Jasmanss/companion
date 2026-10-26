@@ -141,3 +141,179 @@ export class WatchLog {
     for (const name of names.slice(0, Math.max(0, names.length - keep))) await fs.rm(path.join(this.dir, name), { force: true })
   }
 }
+
+export interface WatchDeps {
+  log: WatchLog
+  now?(): number
+  /** Seconds since the Mac was last used (powerMonitor.getSystemIdleTime). */
+  idleSeconds(): number
+  onBattery(): boolean
+  /** How many Claude Code sessions are working now, for the log's first line. */
+  sessionsWorking(): number
+  /** Keep the Mac from sleeping, or let it again (powerSaveBlocker). */
+  keepAwake(on: boolean): void
+  /** Keep what survives a restart: the night going on, the wake time picked, how the last one ended. */
+  save(state: WatchSaved): void
+  /** Watching started, stopped, or the wake time changed: tell the panel and the menu bar. */
+  changed(): void
+}
+
+export interface WatchSaved {
+  night?: Night
+  wakeTime?: string
+  ended?: { at: number; why: WatchEnd }
+}
+
+/**
+ * The Watch itself: Go rest starts a night, the look every WATCH_LOOK_MS ends it, and what happens meanwhile goes in
+ * its log. One blocker keeps the Mac awake for exactly as long as a night goes on.
+ */
+export class OvernightWatch {
+  private current: Night | null = null
+  private wake: string
+  private last: WatchSaved['ended']
+  private timer: ReturnType<typeof setInterval> | undefined
+  private lastBeat = 0
+
+  constructor(
+    private readonly deps: WatchDeps,
+    saved: WatchSaved = {},
+  ) {
+    this.wake = parseWakeTime(saved.wakeTime) ? saved.wakeTime! : DEFAULT_WAKE_TIME
+    this.last = saved.ended
+    this.current = saved.night ?? null
+  }
+
+  get watching(): boolean {
+    return this.current !== null
+  }
+
+  get night(): Night | null {
+    return this.current
+  }
+
+  get wakeTime(): string {
+    return this.wake
+  }
+
+  get ended(): WatchSaved['ended'] {
+    return this.last
+  }
+
+  /**
+   * At launch, with a night saved from before: it goes on if there's time left (the log says Steward wasn't running
+   * meanwhile), or it is closed at its end time.
+   */
+  async resume(): Promise<void> {
+    const night = this.current
+    if (!night) return
+    const now = this.now()
+    const events = await this.deps.log.read(night.id)
+    const lastSeen = events.at(-1)?.at ?? night.since
+    if (now >= night.until) {
+      await this.deps.log.append(night.id, { type: 'gap', at: night.until, from: lastSeen })
+      this.finish(night, night.until, night.until - night.since >= WATCH_MAX_MS ? 'cap' : 'wake-time')
+      return
+    }
+    await this.deps.log.append(night.id, { type: 'gap', at: now, from: lastSeen })
+    this.run()
+  }
+
+  /** Go rest: a night starts now, until the wake time (also remembered for next time). */
+  start(wakeTime: string): Night {
+    if (this.current) return this.current
+    if (parseWakeTime(wakeTime)) this.wake = wakeTime
+    const now = this.now()
+    const night = newNight(now, this.wake)
+    this.current = night
+    this.last = undefined
+    // The first line, before anything else this night writes; then the oldest nights beyond NIGHTS_KEPT go.
+    void this.deps.log.append(night.id, { type: 'start', at: now, until: night.until, onBattery: this.deps.onBattery(), sessionsWorking: this.deps.sessionsWorking() })
+    void this.deps.log.prune()
+    this.run()
+    return night
+  }
+
+  /** Stop watching, or "I'm up". */
+  stop(why: 'stopped' | 'up'): void {
+    if (this.current) this.finish(this.current, this.now(), why)
+  }
+
+  /** One look: the time, and whether you're back. Also writes the heartbeat. */
+  look(): void {
+    const night = this.current
+    if (!night) return
+    const now = this.now()
+    const { night: next, end } = lookAt(night, now, this.deps.idleSeconds())
+    if (end) return this.finish(next, end === 'back' ? now : Math.min(now, next.until), end)
+    if (next.away !== night.away || next.activeSince !== night.activeSince) {
+      this.current = next
+      if (next.away !== night.away) this.save()
+    }
+    if (now - this.lastBeat >= WATCH_BEAT_MS) {
+      this.lastBeat = now
+      void this.deps.log.append(next.id, { type: 'beat', at: now })
+    }
+  }
+
+  /** The Mac went to sleep or woke, or went on or off battery. */
+  power(kind: 'suspend' | 'resume' | 'on-battery' | 'on-ac'): void {
+    const night = this.current
+    if (!night) return
+    const at = this.now()
+    if (kind === 'suspend') void this.deps.log.append(night.id, { type: 'slept', at })
+    else if (kind === 'resume') {
+      void this.deps.log.append(night.id, { type: 'woke', at })
+      // It may have slept past the wake time.
+      this.look()
+    } else void this.deps.log.append(night.id, { type: 'power', at, onBattery: kind === 'on-battery' })
+  }
+
+  /** An alert came while watching: its kind and title go in the log, and whether it waited (nobody at the Mac). */
+  alert(a: { key: string; title: string; level: string }, held: boolean): void {
+    const night = this.current
+    if (night) void this.deps.log.append(night.id, { type: 'alert', at: this.now(), kind: alertKind(a.key), title: a.title, level: a.level, held })
+  }
+
+  /** On-screen alerts wait now: watching, and nobody at the Mac. */
+  holdsAlerts(): boolean {
+    return holdsAlerts(this.watching, this.deps.idleSeconds())
+  }
+
+  /** Remember a wake time picked on the card without starting. */
+  setWakeTime(wakeTime: string): void {
+    if (!parseWakeTime(wakeTime) || wakeTime === this.wake) return
+    this.wake = wakeTime
+    this.save()
+    this.deps.changed()
+  }
+
+  private run(): void {
+    this.deps.keepAwake(true)
+    clearInterval(this.timer)
+    this.timer = setInterval(() => this.look(), WATCH_LOOK_MS)
+    this.timer.unref?.()
+    this.lastBeat = this.now()
+    this.save()
+    this.deps.changed()
+  }
+
+  private finish(night: Night, at: number, why: WatchEnd): void {
+    clearInterval(this.timer)
+    this.timer = undefined
+    this.current = null
+    this.last = { at, why }
+    void this.deps.log.append(night.id, { type: 'end', at, why })
+    this.deps.keepAwake(false)
+    this.save()
+    this.deps.changed()
+  }
+
+  private save(): void {
+    this.deps.save({ night: this.current ?? undefined, wakeTime: this.wake, ended: this.last })
+  }
+
+  private now(): number {
+    return this.deps.now?.() ?? Date.now()
+  }
+}

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ACTIVE_IDLE_S,
   alertKind,
@@ -10,15 +10,19 @@ import {
   holdsAlerts,
   lookAt,
   newNight,
+  OvernightWatch,
   parseWakeTime,
   wakeAt,
+  WATCH_LOOK_MS,
   WATCH_MAX_MS,
   WatchLog,
   type Night,
+  type WatchSaved,
 } from '../src/main/watch'
 
 /** A local time on 2026-10-25. */
 const at = (h: number, m = 0, day = 25) => new Date(2026, 9, day, h, m, 0, 0).getTime()
+const MINUTE = 60_000
 
 describe('the wake time', () => {
   it('reads "07:30" and nothing else', () => {
@@ -146,5 +150,152 @@ describe('the log', () => {
     const log = new WatchLog(await temp())
     await log.append('n', { type: 'alert', at: 1, kind: 'approval', title: 'haven is waiting on you', level: 'urgent', held: false })
     expect(await fs.readFile(log.file('n'), 'utf8')).not.toContain('detail')
+  })
+})
+
+describe('the Watch', () => {
+  const dirs: string[] = []
+  afterEach(async () => {
+    vi.useRealTimers()
+    for (const d of dirs.splice(0)) await fs.rm(d, { recursive: true, force: true })
+  })
+
+  async function setup(saved: WatchSaved = {}, start = at(23, 10)) {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-watch-'))
+    dirs.push(dir)
+    const state = { now: start, idle: 2, battery: false }
+    const awake: boolean[] = []
+    const saves: WatchSaved[] = []
+    let changes = 0
+    const log = new WatchLog(dir)
+    const watch = new OvernightWatch(
+      {
+        log,
+        now: () => state.now,
+        idleSeconds: () => state.idle,
+        onBattery: () => state.battery,
+        sessionsWorking: () => 2,
+        keepAwake: (on) => awake.push(on),
+        save: (s) => saves.push(s),
+        changed: () => changes++,
+      },
+      saved,
+    )
+    /** Time passes: the clock moves and the looks every 15 s happen. */
+    const pass = (ms: number, idle = state.idle) => {
+      for (let t = 0; t < ms; t += WATCH_LOOK_MS) {
+        state.now += WATCH_LOOK_MS
+        state.idle = idle
+        vi.advanceTimersByTime(WATCH_LOOK_MS)
+      }
+    }
+    return { watch, log, state, awake, saves, pass, changes: () => changes }
+  }
+
+  it('starts at Go rest, keeps the Mac awake, and writes the first line', async () => {
+    const { watch, log, awake, saves, changes } = await setup()
+    expect(watch.watching).toBe(false)
+    const night = watch.start('06:45')
+    expect(night.until).toBe(at(6, 45, 26))
+    expect(watch.watching).toBe(true)
+    expect(awake).toEqual([true])
+    expect(saves.at(-1)).toEqual({ night, wakeTime: '06:45', ended: undefined })
+    expect(changes()).toBe(1)
+    // Go rest again while watching: the same night.
+    expect(watch.start('08:00')).toBe(night)
+    expect((await log.read(night.id))[0]).toEqual({ type: 'start', at: at(23, 10), until: at(6, 45, 26), onBattery: false, sessionsWorking: 2 })
+  })
+
+  it("ends at the wake time and lets the Mac sleep again; I'm up and Stop end it too", async () => {
+    const { watch, log, awake, pass, saves } = await setup()
+    const night = watch.start('07:30')
+    pass(8 * 60 * MINUTE + 20 * MINUTE, 900)
+    expect(watch.watching).toBe(false)
+    expect(watch.ended).toEqual({ at: at(7, 30, 26), why: 'wake-time' })
+    expect(awake).toEqual([true, false])
+    expect(saves.at(-1)).toEqual({ night: undefined, wakeTime: '07:30', ended: { at: at(7, 30, 26), why: 'wake-time' } })
+    const events = await log.read(night.id)
+    expect(events.at(-1)).toEqual({ type: 'end', at: at(7, 30, 26), why: 'wake-time' })
+    // A heartbeat every 5 minutes, so a gap can be told later.
+    expect(events.filter((e) => e.type === 'beat').length).toBeGreaterThan(90)
+
+    watch.start('07:30')
+    watch.stop('up')
+    expect(watch.ended?.why).toBe('up')
+    expect(awake).toEqual([true, false, true, false])
+  })
+
+  it('ends when you are back at the Mac after being away, and not before', async () => {
+    const { watch, pass } = await setup()
+    watch.start('07:30')
+    pass(10 * MINUTE, 3) // still at the Mac after Go rest
+    expect(watch.watching).toBe(true)
+    pass(30 * MINUTE, 900) // away
+    pass(BACK_ACTIVE_MS + WATCH_LOOK_MS, 3) // back
+    expect(watch.watching).toBe(false)
+    expect(watch.ended?.why).toBe('back')
+  })
+
+  it('writes down sleep, waking, power and alerts, without their details', async () => {
+    const { watch, log, state } = await setup()
+    const night = watch.start('07:30')
+    watch.power('on-battery')
+    watch.power('suspend')
+    state.now = at(3, 0, 26)
+    watch.power('resume')
+    watch.alert({ key: 'approval:s1:p1:rm -rf build', title: 'haven is waiting on you', level: 'urgent' }, true)
+    const events = await log.read(night.id)
+    // Waking is also a look: hours went by, so a heartbeat too.
+    expect(events.map((e) => e.type)).toEqual(['start', 'power', 'slept', 'woke', 'beat', 'alert'])
+    expect(JSON.stringify(events)).not.toContain('rm -rf')
+    expect(events.at(-1)).toMatchObject({ kind: 'approval', title: 'haven is waiting on you', held: true })
+  })
+
+  it('wakes up past the wake time and ends at it', async () => {
+    const { watch, state } = await setup()
+    watch.start('07:30')
+    watch.power('suspend')
+    state.now = at(9, 0, 26)
+    watch.power('resume')
+    expect(watch.ended).toEqual({ at: at(7, 30, 26), why: 'wake-time' })
+  })
+
+  it('holds alerts only while nobody is at the Mac', async () => {
+    const { watch, state } = await setup()
+    state.idle = 900
+    expect(watch.holdsAlerts()).toBe(false)
+    watch.start('07:30')
+    expect(watch.holdsAlerts()).toBe(true)
+    state.idle = 4
+    expect(watch.holdsAlerts()).toBe(false)
+  })
+
+  it('goes on after a restart, saying Steward was not running; one that ran out is closed at its end', async () => {
+    const first = await setup()
+    const night = first.watch.start('07:30')
+    first.pass(20 * MINUTE, 900)
+    const lastSeen = (await first.log.read(night.id)).at(-1)!.at
+
+    // Steward starts again at 1 AM, with the night saved and the same log folder.
+    const resumed = new OvernightWatch({ log: first.log, now: () => at(1, 0, 26), idleSeconds: () => 900, onBattery: () => false, sessionsWorking: () => 0, keepAwake: () => {}, save: () => {}, changed: () => {} }, { night, wakeTime: '07:30' })
+    await resumed.resume()
+    expect(resumed.watching).toBe(true)
+    expect((await first.log.read(night.id)).at(-1)).toEqual({ type: 'gap', at: at(1, 0, 26), from: lastSeen })
+    resumed.stop('stopped')
+
+    const late = new OvernightWatch({ log: first.log, now: () => at(10, 0, 26), idleSeconds: () => 900, onBattery: () => false, sessionsWorking: () => 0, keepAwake: () => {}, save: () => {}, changed: () => {} }, { night, wakeTime: '07:30' })
+    await late.resume()
+    expect(late.watching).toBe(false)
+    expect(late.ended).toEqual({ at: at(7, 30, 26), why: 'wake-time' })
+  })
+
+  it('remembers the wake time picked, and ignores one that does not read', async () => {
+    const { watch, saves } = await setup({ wakeTime: '06:30' })
+    expect(watch.wakeTime).toBe('06:30')
+    watch.setWakeTime('8:00')
+    expect(watch.wakeTime).toBe('06:30')
+    watch.setWakeTime('08:00')
+    expect(saves.at(-1)?.wakeTime).toBe('08:00')
   })
 })
