@@ -2046,6 +2046,20 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     await watch!.settled()
     need((await log.read(night.id)).at(-1)?.type === 'end', "the log does not end with I'm up")
     console.log("smoke: I'm up ends the night, lets the Mac sleep again, and takes the moon and the Watching face away")
+
+    // With no night going on, nothing is held however long the Mac has been idle (a CI runner is idle all the time).
+    setDock('collapsed')
+    await sleep(700)
+    smokeIdle = 600
+    raise({ key: 'approval:smoke-watch:after', level: 'urgent', title: 'A session is waiting on you' })
+    await sleep(500)
+    need(dockNow() === 'nudge' && !heldAlerts.some((a) => a.key === 'approval:smoke-watch:after'), `after the night, with the Mac idle, an alert was held (Steward is ${dockNow()})`)
+    setDock('collapsed')
+    await sleep(700)
+    smokeIdle = 0
+    // And the check leaves nothing behind for the ones after it.
+    need(!watch!.watching && watchBlocker === null && !heldAlerts.some((a) => a.key.startsWith('approval:smoke-watch')), 'the Watch check left a night, the keep-awake or a held alert behind')
+    console.log('smoke: with no night going on, an alert comes out however long the Mac has been idle, and the check leaves nothing behind')
   } finally {
     smokeIdle = 0
     watch?.stop('stopped')
@@ -3265,9 +3279,16 @@ async function checkIsland(out: string): Promise<void> {
   // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
   raise({ key: 'approval:smoke-island', level: 'urgent', title: 'A session needs you', detail: 'under the island' })
   alerts.flush()
-  await sleep(900)
-  img = await shot()
-  if (dock !== 'nudge' || !notch.state().nudge || !black(img, layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('with an alert under the notch, the island is not the chin the alert joins')
+  // With Reduce Motion (as on CI) the island fades out, changes and fades in, and a change within 130 ms starts that
+  // over, so on a slow runner the chin can take longer than a fixed wait: wait for it, up to 3 s, and say what's missing.
+  let chin = { dock: dockNow(), nudge: false, drawn: false }
+  for (const t = Date.now(); Date.now() - t < 3000; await sleep(150)) {
+    img = await shot()
+    chin = { dock: dockNow(), nudge: notch.state().nudge === true, drawn: black(img, layout.cx, layout.height + NOTCH_LIP - 4) }
+    if (chin.dock === 'nudge' && chin.nudge && chin.drawn) break
+  }
+  if (chin.dock !== 'nudge' || !chin.nudge || !chin.drawn)
+    throw new Error(`with an alert under the notch, the island is not the chin the alert joins (Steward ${chin.dock}, the notch's nudge ${chin.nudge}, the chin drawn ${chin.drawn})`)
   setDock('collapsed')
   await sleep(700)
   if (!clear(await shot(), layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('after the alert, the island did not go back into the notch')

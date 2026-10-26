@@ -273,6 +273,10 @@ describe('the Watch', () => {
     expect(watch.holdsAlerts()).toBe(true)
     state.idle = 4
     expect(watch.holdsAlerts()).toBe(false)
+    // Once the night is over, never, however idle the Mac (a CI runner is idle all the time).
+    watch.stop('up')
+    state.idle = 100_000
+    expect(watch.holdsAlerts()).toBe(false)
   })
 
   it('goes on after a restart, saying Steward was not running; one that ran out is closed at its end', async () => {
