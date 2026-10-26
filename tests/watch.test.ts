@@ -155,8 +155,11 @@ describe('the log', () => {
 
 describe('the Watch', () => {
   const dirs: string[] = []
+  const logs: WatchLog[] = []
   afterEach(async () => {
     vi.useRealTimers()
+    // A night that just ended may still be writing its last lines.
+    for (const l of logs.splice(0)) await l.settled()
     for (const d of dirs.splice(0)) await fs.rm(d, { recursive: true, force: true })
   })
 
@@ -169,6 +172,7 @@ describe('the Watch', () => {
     const saves: WatchSaved[] = []
     let changes = 0
     const log = new WatchLog(dir)
+    logs.push(log)
     const watch = new OvernightWatch(
       {
         log,

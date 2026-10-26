@@ -117,6 +117,11 @@ export class WatchLog {
     return this.writing
   }
 
+  /** Once every line asked for so far is written. */
+  settled(): Promise<void> {
+    return this.writing
+  }
+
   /** A night's log, in order. Lines that don't read as events are skipped. */
   async read(id: string): Promise<WatchEvent[]> {
     await this.writing
