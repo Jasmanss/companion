@@ -2954,8 +2954,11 @@ async function checkIsland(out: string): Promise<void> {
   const dockNow = (): DockState => dock
   const black = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha > 200 && pixel(img, x, y).light < 30
   const clear = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha < 20
-  /** Steward's body (lit, not black, not see-through) at this point, a little under where its eyes are. */
-  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 200 && pixel(img, x, y + 9).light > 40
+  /**
+   * Steward's body (lit, not black) at this point, a little under where its eyes are. At rest its standby glow breathes
+   * the body's opacity down to 0.36 (dark) or 0.58 (light), so it's there when it's well above see-through.
+   */
+  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 80 && pixel(img, x, y + 9).light > 40
   const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
   const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, said?: string) =>
     onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : { last_assistant_message: said }) } as HookPayload)
