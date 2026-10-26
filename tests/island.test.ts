@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
-import { FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
+import { alertNote, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
 import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_HOVER, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
@@ -185,6 +185,14 @@ describe('the note', () => {
     const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
     expect(islandStatus(input({ turns: { a: 1 }, note }))).toEqual({ right: 'working', since: 1, note })
     expect(islandStatus(input({ note }))).toEqual({ right: null })
+  })
+
+  it('is the catch-all for an alert with no island size: its title and one line, shown with a review waiting', () => {
+    const note = alertNote({ title: 'haven changed', detail: 'Review what Claude did?' }, 5)
+    expect(note).toEqual({ kind: 'alert', name: 'haven changed', text: 'Review what Claude did?', at: 5 })
+    expect(alertNote({ title: 'Something new' }, 6).text).toBe('')
+    const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
+    expect(islandStatus(input({ reviews: 1, note }))).toEqual({ right: 'review', note })
   })
 
   describe('settling', () => {

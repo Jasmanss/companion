@@ -10,7 +10,7 @@
 // shows for a few seconds and then settles, the island going back to compact with the status on its right. With the
 // cursor on the island it stays, and once the cursor leaves it stays a moment longer.
 import type { HookPayload } from './hook-payload'
-import type { IslandNote, IslandStatus, SessionView } from '../shared/types'
+import type { AlertView, IslandNote, IslandStatus, SessionView } from '../shared/types'
 
 /** A session that finished shows a check this long, then the island goes. */
 export const FINISHED_SHOW_MS = 20_000
@@ -91,6 +91,9 @@ export function hookNote(event: HookPayload, o: { turns: Turns; agentBusy: boole
   const others = Object.entries(o.turns).filter(([id, at]) => id !== event.session_id && o.now - at < TURN_GIVE_UP_MS).length + (o.agentBusy ? 1 : 0)
   return others ? { kind: 'started', name: o.name, text: 'started', at: o.now } : null
 }
+
+/** The catch-all note: an alert with no island size of its own shows as its title, in bold, and one line. */
+export const alertNote = (alert: Pick<AlertView, 'title' | 'detail'>, now: number): IslandNote => ({ kind: 'alert', name: alert.title, text: alert.detail ?? '', at: now })
 
 /** The island's note: shown for NOTE_SHOW_MS, kept while the cursor is on the island, then it settles. */
 export class IslandNotes {

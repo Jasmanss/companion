@@ -342,6 +342,29 @@
   font-size: 12px;
 }
 
+/* Visual Review's history under an address: what it found after the last few turns. */
+.set-history small {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.set-history ul {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.set-history time {
+  display: inline-block;
+  min-width: 7.5em;
+  color: var(--t1);
+  font-variant-numeric: tabular-nums;
+}
+
 .set-window textarea {
   display: block;
   resize: vertical;

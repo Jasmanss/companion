@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
 import type { Project } from '../src/shared/types'
-import { describeCaptureError, ReviewTracker, type Shot } from '../src/main/review'
+import { describeCaptureError, reviewAlert, ReviewTracker, sameTurnFinished, type Shot } from '../src/main/review'
 import type { Diff } from '../src/main/review-diff'
 import { REVIEW_LIMITS, ReviewStore } from '../src/main/review-store'
 
@@ -107,6 +107,41 @@ describe('ReviewTracker, a turn that changed the page', () => {
     const review = await tracker.turnStopped(stop({ last_assistant_message: '**Done.** I made the `Start` button blue and moved the logos under the hero.\n\nWant me to commit?' }))
     expect(store.get(review!.id)?.said).toBe('I made the Start button blue and moved the logos under the hero.')
     expect((await tracker.pending())[0].said).toBe('I made the Start button blue and moved the logos under the hero.')
+  })
+
+  it('counts the files the turn changed, from a look at its start, and has no count when git cannot say', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
+    dirs.push(dir)
+    const state = { page: 'old page' }
+    const calls: string[] = []
+    const make = (changed: number | null) =>
+      new ReviewTracker({
+        projects: () => [project],
+        capture: async () => shot(state.page),
+        compare: (a, b) => diff(a.toString() !== b.toString()),
+        card: (png) => png,
+        store: new ReviewStore(dir),
+        onChange: () => {},
+        gitFiles: {
+          look: async (d) => (calls.push(`look ${d}`), [{ code: ' D', path: 'old.ts' }]),
+          changed: async (d, since, start) => (calls.push(`changed ${d} ${typeof since} ${start?.length}`), changed),
+        },
+      })
+    const tracker = make(3)
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'new page'
+    const review = await tracker.turnStopped(stop())
+    expect(review?.filesChanged).toBe(3)
+    expect(calls).toEqual(['look /Users/me/site', 'changed /Users/me/site number 1'])
+    expect((await tracker.pending())[0].filesChanged).toBe(3)
+
+    const unknown = make(null)
+    unknown.turnStarted(start({ prompt_id: 'p2' }))
+    await tick()
+    state.page = 'newer page'
+    const second = await unknown.turnStopped(stop({ prompt_id: 'p2' }))
+    expect(second).not.toHaveProperty('filesChanged')
   })
 
   it('has no note when Claude said nothing worth showing', async () => {
@@ -262,6 +297,46 @@ describe('ReviewTracker, a check is never silent', () => {
   })
 })
 
+describe('ReviewTracker, the history', () => {
+  it('keeps every look after a turn, what it found, and what became of a review', async () => {
+    let page: string | Error | Shot = 'old page'
+    const { tracker, store } = await setup({ page: () => page })
+    const turn = async (id: string, now: string | Error | Shot) => {
+      tracker.turnStarted(start({ prompt_id: id }))
+      await tick()
+      page = now
+      return tracker.turnStopped(stop({ prompt_id: id }))
+    }
+    const review = await turn('1', 'new page')
+    await turn('2', 'new page') // the same
+    await turn('3', new Error('net::ERR_CONNECTION_REFUSED'))
+    page = 'new page'
+    await turn('4', { ...shot('login'), landedOn: 'http://localhost:3000/login' })
+    expect(tracker.history(project.path).map((e) => [e.found, e.text ?? '', e.decided ?? ''])).toEqual([
+      ['login', expect.stringContaining('sends you to /login'), ''],
+      ['failed', 'Nothing is answering at localhost:3000. Start the app, then try again.', ''],
+      ['same', '', ''],
+      ['review', '', 'new'],
+    ])
+    await tracker.markGood(review!.id)
+    expect(tracker.history(project.path).at(-1)).toMatchObject({ found: 'review', reviewId: review!.id, decided: 'good' })
+    // Kept on disk: a restart reads it back.
+    const again = new ReviewStore(path.dirname(path.dirname(path.dirname(store.file(review!.id, 'after')!))), REVIEW_LIMITS)
+    await again.load()
+    expect(again.history(project.path)).toHaveLength(4)
+  })
+
+  it("keeps nothing for a turn it didn't look at, and shows only the address the project has now", async () => {
+    const { tracker, store } = await setup({ projects: [{ name: 'site', path: '/Users/me/site' }] })
+    tracker.turnStarted(start())
+    expect(await tracker.turnStopped(stop())).toBeNull()
+    expect(store.history('/Users/me/site')).toEqual([])
+    await store.addLook({ projectPath: '/Users/me/site', address: 'http://localhost:3000', at: Date.now(), found: 'same' })
+    // No address now: nothing to show for it.
+    expect(tracker.history('/Users/me/site')).toEqual([])
+  })
+})
+
 describe('ReviewTracker, decisions', () => {
   it('Looks good takes it off the list', async () => {
     const { tracker, store, state, onChange } = await setup()
@@ -378,6 +453,30 @@ describe('ReviewTracker, problems the user should see', () => {
     await tick()
     expect(log.filter((m) => m.includes('busy'))).toHaveLength(2) // two more than the queue holds
     expect(tracker.problems()).toEqual([])
+  })
+})
+
+describe('the review alert', () => {
+  it('needs you: urgent, under its own key, and opens on the card', () => {
+    expect(reviewAlert({ id: '20261024-101010-abcdef12', project: 'haven', projectPath: '/Users/me/haven' })).toEqual({
+      key: 'review:20261024-101010-abcdef12',
+      level: 'urgent',
+      title: 'haven changed',
+      detail: 'Review what Claude did?',
+      scope: '/Users/me/haven',
+    })
+  })
+
+  it("takes the place of the same turn's finished alert, and no other", () => {
+    const same = sameTurnFinished({ session_id: 's1', prompt_id: 'p2' })
+    expect(same({ key: 'finished:s1:p2' })).toBe(true)
+    expect(same({ key: 'finished:s1:p1' })).toBe(false)
+    expect(same({ key: 'finished:s2:p2' })).toBe(false)
+    expect(same({ key: 'approval:s1:p2:npm test' })).toBe(false)
+    // No prompt id (sessions.ts keys it by the time then): that session's finished alerts.
+    const any = sameTurnFinished({ session_id: 's1' })
+    expect(any({ key: 'finished:s1:1729800000000' })).toBe(true)
+    expect(any({ key: 'finished:s10:1729800000000' })).toBe(false)
   })
 })
 

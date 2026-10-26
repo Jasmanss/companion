@@ -1,6 +1,7 @@
 // Visual Review: what the app and its windows share. Pure, so both can use it and the tests can reach it.
 
 import type { Rect } from './tab-place'
+import type { ReviewHistoryEntry } from './types'
 
 /** The only hosts Visual Review will load: this Mac itself. */
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
@@ -50,6 +51,27 @@ export function reviewNote(r: { project: string; address: string; note: string; 
   if (r.beforeFile) lines.push(`What it looked like before: ${r.beforeFile}`)
   return lines.join('\n')
 }
+
+/** One look in the history, in words: what Steward found when the turn ended, and what became of a review. */
+export function historyLine(e: Pick<ReviewHistoryEntry, 'found' | 'text' | 'decided'>): string {
+  switch (e.found) {
+    case 'review': {
+      const what = { new: 'a review is waiting', good: 'you marked it Looks good', 'sent-back': 'you sent it back', gone: 'the review is no longer kept' }
+      return `The page changed: ${what[e.decided ?? 'gone']}.`
+    }
+    case 'same':
+      return 'No visible change.'
+    case 'login':
+      return 'Only a login page.'
+    case 'failed': {
+      const why = e.text ?? ''
+      return `Couldn't see it${why ? `: ${/^[A-Z][a-z]/.test(why) ? why[0].toLowerCase() + why.slice(1) : why}` : '.'}`
+    }
+  }
+}
+
+/** "3 files changed": how many files the turn changed, for the card and the viewer. */
+export const filesChangedLabel = (n: number): string => `${n} ${n === 1 ? 'file' : 'files'} changed`
 
 /** The picture in the card shows the top of the page, this wide and 16:10, like the design. */
 export const CARD_SHOT = { width: 1440, height: 900 } as const
