@@ -1,6 +1,8 @@
 # Steward's main chat, redesigned
 
-Status: designed
+Status: ready
+
+Set by the front door, 2026-10-26: the user typed the go for Phase M1 into Main building directly (built as PR #39). M2 and M3 each wait for their own go.
 
 Designed 2026-10-25 on the front door's request. Four directions are drawn; the user picks one (or mixes), then it gets its go. Nothing is built.
 

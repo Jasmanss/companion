@@ -1,6 +1,8 @@
 # Overnight Watch: go rest, I've got the build
 
-Status: designed
+Status: ready
+
+Set by the front door, 2026-10-26: the user typed the go for Phase 1 into Feature building directly (built as PR #40). Phases 2 to 5 each wait for their own go.
 
 Designed 2026-10-24 on the front door's request. Not `ready`: it waits for the user's go, and the account in "What you set up" can start now because it takes days.
 
