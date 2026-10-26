@@ -732,9 +732,8 @@ export function App() {
         busy={busy}
         disabled={noKey}
         mode={settings?.commandMode}
-        onMode={(commandMode) => {
-          if (commandMode !== settings?.commandMode) api.settings.update({ commandMode }).then(setSettings, showError)
-        }}
+        // Always sent, even if it looks the same: the panel's copy of the settings can lag a click behind.
+        onMode={(commandMode) => api.settings.update({ commandMode }).then(setSettings, showError)}
         onSend={send}
         onStop={() => api.agent.cancel()}
         onTyping={(on) => {
