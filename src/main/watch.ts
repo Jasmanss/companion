@@ -280,6 +280,11 @@ export class OvernightWatch {
     if (night) void this.deps.log.append(night.id, { type: 'alert', at: this.now(), kind: alertKind(a.key), title: a.title, level: a.level, held })
   }
 
+  /** Once every line written so far is in the log. */
+  settled(): Promise<void> {
+    return this.deps.log.settled()
+  }
+
   /** On-screen alerts wait now: watching, and nobody at the Mac. */
   holdsAlerts(): boolean {
     return holdsAlerts(this.watching, this.deps.idleSeconds())

@@ -2022,6 +2022,7 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     // The Mac sleeping and waking is written down too.
     watch!.power('suspend')
     watch!.power('resume')
+    await watch!.settled()
     const events = await log.read(night.id)
     const types: string[] = events.map((e) => e.type)
     need(types[0] === 'start' && types.includes('slept') && types.includes('woke'), `the night's log is ${types.join(', ')}`)
@@ -2042,6 +2043,7 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     need(!menuBarText().includes('☾'), `after I'm up the menu bar would still show "${menuBarText()}"`)
     for (const t = Date.now(); notch.state().mood === 'watching'; await sleep(100)) if (Date.now() - t > 3000) throw new Error("after I'm up the face is still Watching")
     await until(`!document.querySelector('.card.goodnight')`, "after I'm up the card is still there")
+    await watch!.settled()
     need((await log.read(night.id)).at(-1)?.type === 'end', "the log does not end with I'm up")
     console.log("smoke: I'm up ends the night, lets the Mac sleep again, and takes the moon and the Watching face away")
   } finally {
