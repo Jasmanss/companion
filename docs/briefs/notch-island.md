@@ -135,6 +135,8 @@ The user: "the liquid glass version doesnt work in the notch. For steward." Then
 
 **Decided: build it in Phase 4.** When the look is Glass, Steward in the notch is the glass Pill. Flat and Blocky follow their own settings as today.
 
+**Decided by the user (2026-10-27, via the front door):** "The glass Steward mock with the fine edge looks good for island Phase 4." The chosen design is the third column in the Showcase card: **glass with the fine edge** (the edge only when the glass is within 2 to 1 of the bar behind it).
+
 **Designed, live in the Showcase** (`design/showcase.html#island`, the card "Glass Steward in the notch", section 7): today's flat body against the glass one, with a third column for the fix below, on a dark and a light menu bar, in Silver, Lilac and Graphite, with a switch for At rest, Leaning out and Stepping into the island. The main Peeking figure now follows the page's Glass, Flat or Blocky picker, so Glass shows there too, including the big hand-off (Steward melting into the black with its lit eyes carrying on). Tested in headless Chrome at 60 frames a second with all 18 figures live.
 
 **Readability, measured (the risk 3 check).** The ratio between the body and the menu bar behind it:
