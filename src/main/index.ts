@@ -2021,15 +2021,16 @@ async function checkReactions(out: string): Promise<void> {
   await sleep(400)
 }
 
-/**
- * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
- * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
- */
+/** The review the Watch check makes for its second night, decided before the checks after it. */
+let smokeNightReview: string | null = null
+
 /**
  * Overnight Watch, Phase 1: the goodnight card from the panel's moon button, Go rest with a wake time, the keep-awake,
  * the moon in the menu bar, the Watching face, Steward tucking away; an alert waiting while nobody is at the Mac (and
  * written down without its detail) and peeking out while someone is; sleep and waking written down; and "I'm up"
- * ending it and letting the Mac sleep again. How long the Mac has been idle is the check's own (smokeIdle).
+ * ending it and letting the Mac sleep again. Phase 2: the night's report, shown at once in the open panel, or one card
+ * after a night that ends with the panel closed and the report when the panel opens (the night's review inside it),
+ * Earlier night and Clear. How long the Mac has been idle is the check's own (smokeIdle).
  */
 async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -2118,6 +2119,65 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     need((await log.read(night.id)).at(-1)?.type === 'end', "the log does not end with I'm up")
     console.log("smoke: I'm up ends the night, lets the Mac sleep again, and takes the moon and the Watching face away")
 
+    // From the open panel, the night's report shows there at once: what needed you, and what came of it.
+    const reportText = () => wc.executeJavaScript(`document.querySelector('.card.night-report')?.textContent ?? ''`) as Promise<string>
+    await until(`document.querySelector('.card.night-report')?.textContent.includes('2 things needed you.')`, "I'm up did not show the night's report in the open panel")
+    const first = await reportText()
+    need(/A session is waiting on you\. Waited for you on screen\. You opened Steward at/.test(first) && first.includes('Showed on screen.') && !first.includes('rm -rf'), `the report says "${first}"`)
+    need(watch!.unseen === undefined, 'the report shown in the panel still counts as not seen')
+    console.log(`smoke: from the open panel, I'm up shows the night's report there ("${first.slice(0, 120)}")`)
+    await wc.executeJavaScript(`document.querySelector('.card.night-report button[aria-label="Dismiss"]').click()`)
+
+    // A night that ends with the panel closed: what waited doesn't come back one by one. One card comes out instead,
+    // and the panel shows the report, with the night's Visual Review as its card.
+    setDock('collapsed')
+    await sleep(700)
+    const second = watch!.start('07:30')
+    smokeIdle = 600
+    const page = (await wc.capturePage()).resize({ width: 720 })
+    const review = await reviewStore.save(
+      { project: 'smoke-night', projectPath: '/tmp/steward-smoke-night', url: 'http://localhost:4321', before: 'turn-start', heightBefore: page.getSize().height, heightAfter: page.getSize().height, changedPixels: 5000, minPixels: 100, said: 'Made the header green.' },
+      { before: page.toPNG(), after: page.toPNG(), beforeCard: page.toJPEG(70), afterCard: page.toJPEG(70) },
+    )
+    smokeNightReview = review.id
+    await sendReviews()
+    raise(reviewAlert(review))
+    raise({ key: 'approval:smoke-watch:night2', level: 'urgent', title: 'A session is waiting on you', detail: 'rm -rf build' })
+    await sleep(400)
+    need(dockNow() === 'collapsed' && heldAlerts.some((a) => a.key === 'approval:smoke-watch:night2'), `the second night's alert did not wait (Steward is ${dockNow()})`)
+    // I'm Up from the menu bar, with the panel closed.
+    watch!.stop('up')
+    const island = inNotch() && settings.steward().notchStyle === 'island'
+    for (const t = Date.now(); island ? islandNotes.current?.kind !== 'alert' : dockNow() !== 'nudge'; await sleep(100)) if (Date.now() - t > 3000) throw new Error(`after the night no card came out (Steward is ${dockNow()})`)
+    need(!heldAlerts.some((a) => a.key === 'approval:smoke-watch:night2' || a.key === `review:${review.id}`), 'the alerts that waited came back after the night')
+    need(watch!.unseen === second.id && menuBarText().includes('•'), `the report isn't waiting to be seen (the menu bar would show "${menuBarText()}")`)
+    const morning = island
+      ? `${islandNotes.current?.name} ${islandNotes.current?.text}`
+      : String(await wc.executeJavaScript(`[...document.querySelectorAll('.nudge-title, .nudge-detail')].map((e) => e.textContent).join(' ')`))
+    need(/^Good (morning|afternoon|evening) 1 thing needed you\. 1 thing changed\.$/.test(morning), `the morning card says "${morning}"`)
+    if (!island) await fs.writeFile(out.replace(/\.png$/, '-watch-morning-card.png'), (await wc.capturePage()).toPNG())
+    console.log(`smoke: a night that ends with the panel closed leaves one card ("${morning}") instead of the alerts that waited`)
+
+    // The card's click opens the panel: the report, the day's brief taken by it, the review inside and not again on top.
+    setDock('expanded')
+    await until(`document.querySelector('.card.night-report .card.review')`, "the panel did not open on the report, with the night's review as its card")
+    need(watch!.unseen === undefined && appState.lastBriefDate === localDate(new Date()), "the report wasn't taken as seen, or as the day's brief")
+    need((await wc.executeJavaScript(`document.querySelectorAll('.body > .card.review[aria-label="What changed in smoke-night"]').length`)) === 0, "the night's review shows twice")
+    need((await reportText()).includes('Waited for you on screen. You were up at'), `the report says "${await reportText()}"`)
+    await sleep(400)
+    await fs.writeFile(out.replace(/\.png$/, '-watch-report.png'), (await wc.capturePage()).toPNG())
+    // Looks good inside it, and the report says so.
+    await wc.executeJavaScript(`document.querySelector('.card.night-report .card.review .btn.primary').click()`)
+    await until(`document.querySelector('.card.night-report')?.textContent.includes('smoke-night changed: you marked it Looks good.')`, 'Looks good inside the report did not show in it')
+    // Earlier night steps back to the first night of this check; Clear night reports (Settings) leaves none.
+    await wc.executeJavaScript(`[...document.querySelectorAll('.card.night-report .chip')].find((b) => b.textContent === 'Earlier night').click()`)
+    await until(`document.querySelector('.card.night-report')?.textContent.includes('2 things needed you.')`, 'Earlier night did not show the first night')
+    need(/ night ·/.test(await reportText()), `an earlier night is not called by its evening ("${(await reportText()).slice(0, 60)}")`)
+    const left = await wc.executeJavaScript(`window.steward.watch.clear().then(() => window.steward.watch.nights())`)
+    need(left === 0, `after Clear night reports ${left} are kept`)
+    await wc.executeJavaScript(`document.querySelector('.card.night-report button[aria-label="Dismiss"]').click()`)
+    console.log('smoke: the card opens the panel on the report, the night\'s review is its card inside, Looks good shows in it, Earlier night steps back, and Clear leaves none')
+
     // With no night going on, nothing is held however long the Mac has been idle (a CI runner is idle all the time).
     setDock('collapsed')
     await sleep(700)
@@ -2134,9 +2194,13 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
   } finally {
     smokeIdle = 0
     watch?.stop('stopped')
+    watch?.seen()
     heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('approval:smoke-watch'))
+    if (smokeNightReview) await reviewStore.setStatus(smokeNightReview, 'good')
+    await sendReviews()
   }
 }
+
 
 /**
  * Visual Review's big viewer, opened from the card (which shows review `id`): the window grows to the review size on the
@@ -2281,6 +2345,10 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
   console.log('smoke: Send it back and Looks good work inside the viewer, and Esc in the note box only puts the note away')
 }
 
+/**
+ * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
+ * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
+ */
 async function checkReview(w: BrowserWindow, out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   // Read fresh each time (TypeScript would otherwise keep what an earlier check narrowed it to).
