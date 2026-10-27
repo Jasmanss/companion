@@ -10,7 +10,7 @@ export type ViewerKind = 'tray' | 'review'
  * What the character's face shows. Some come from real events: mad and then worried for a failed build, celebrating
  * for a deploy or merge, sleepy for the hour. The reactions follow the chats (main/reactions.ts): focused while one
  * works, juggling while several do, a nod, done or proud when one stops (by how long its turn was), confused when one
- * asks you something, hello when you're back at the Mac.
+ * asks you something, hello when you're back at the Mac. Watching is Overnight Watch: half-lidded, a slow blink.
  */
 export type Mood =
   | 'resting'
@@ -30,6 +30,7 @@ export type Mood =
   | 'nod'
   | 'proud'
   | 'hello'
+  | 'watching'
 
 /** Glass: a tinted lens. Flat: one solid color. Blocky: pixels. */
 export type PillVersion = 'glass' | 'flat' | 'blocky'
@@ -313,6 +314,35 @@ export interface ClaudeHookStatus {
   error?: string
 }
 
+/**
+ * Why a night's Watch ended: the wake time, "I'm up", Stop watching, you came back and used the Mac for a couple of
+ * minutes, or the 12-hour cap.
+ */
+export type WatchEnd = 'wake-time' | 'up' | 'stopped' | 'back' | 'cap'
+
+/** Overnight Watch, for the panel: watching or not, and what the goodnight card says Steward can watch tonight. */
+export interface WatchView {
+  watching: boolean
+  /** Watching: since when, and until when (the wake time, or the 12-hour cap). */
+  since?: number
+  until?: number
+  /** The wake time last picked, as "07:30". */
+  wakeTime: string
+  /** What there is to watch tonight. */
+  plan: {
+    /** Claude Code sessions working now, by name. */
+    working: string[]
+    /** How many sessions are waiting on you now. */
+    waiting: number
+    /** Projects whose deploys Steward can see (linked to Vercel). */
+    deploys: string[]
+  }
+  /** The Mac is on battery: it may sleep however Steward tries. */
+  onBattery: boolean
+  /** How the last Watch ended, while it's still worth saying (until the next one starts). */
+  ended?: { at: number; why: WatchEnd }
+}
+
 /** Visual Review: one finished turn whose page looks different, waiting for a decision. */
 export interface ReviewView {
   id: string
@@ -594,6 +624,19 @@ export interface StewardAPI {
     usage(): Promise<{ count: number; bytes: number }>
     /** Delete every review picture. */
     clear(): Promise<void>
+  }
+  /** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
+  watch: {
+    get(): Promise<WatchView>
+    /** Go rest, watching until this wake time ("07:30"). */
+    start(wakeTime: string): Promise<WatchView>
+    /** "I'm up", or Stop watching. */
+    stop(why: 'up' | 'stopped'): Promise<WatchView>
+    /** Remember the wake time picked on the card. */
+    setWakeTime(wakeTime: string): Promise<WatchView>
+    onChanged(cb: (view: WatchView) => void): Unsubscribe
+    /** Goodnight from the menu bar: show the goodnight card. */
+    onGoodnight(cb: () => void): Unsubscribe
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */

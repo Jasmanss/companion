@@ -298,6 +298,11 @@ describe('the menu bar', () => {
     expect(menuBarTitle(0, 3)).toBe('•')
     expect(menuBarTitle(1, 1)).toBe('1 •')
   })
+
+  it('puts a moon first while Overnight Watch is on', () => {
+    expect(menuBarTitle(0, 0, true)).toBe('☾')
+    expect(menuBarTitle(2, 1, true)).toBe('☾ 2 •')
+  })
 })
 
 describe('the first-time note', () => {

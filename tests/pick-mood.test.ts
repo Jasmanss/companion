@@ -24,6 +24,16 @@ describe('pickMood', () => {
     // A chat working shows even tucked away and late at night: the face follows the chats.
     expect(pickMood({ ...calm, eventMood: 'focused', lateNight: true })).toBe('focused')
   })
+
+  it('watches overnight with chats working or not, late or not, and still shows what needs you', () => {
+    const watching = { ...calm, watching: true }
+    expect(pickMood(watching)).toBe('watching')
+    expect(pickMood({ ...watching, lateNight: true, eventMood: 'juggling' })).toBe('watching')
+    expect(pickMood({ ...watching, eventMood: 'worried' })).toBe('watching')
+    expect(pickMood({ ...watching, waiting: true })).toBe('needs-you')
+    expect(pickMood({ ...watching, eventMood: 'mad' })).toBe('mad')
+    expect(pickMood({ ...watching, eventMood: 'done' })).toBe('done')
+  })
 })
 
 describe('isLateNight', () => {

@@ -3,16 +3,17 @@ import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem, ViewerKind } from '../../shared/types'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem, ViewerKind, WatchView } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
 import { ContextPill, ProjectSwitcher } from './ContextPill'
-import { ChevronRightIcon, GearIcon, NewChatIcon } from './icons'
+import { ChevronRightIcon, GearIcon, MoonIcon, NewChatIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
 import { ReviewCard, ReviewProblems } from './ReviewCard'
 import { ReviewViewer } from './ReviewViewer'
+import { GoodnightCard } from './GoodnightCard'
 import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
@@ -76,6 +77,9 @@ export function App() {
   const [reviews, setReviews] = useState<ReviewView[]>([])
   const [laterReviews, setLaterReviews] = useState<ReadonlySet<string>>(new Set())
   const [reviewNotice, setReviewNotice] = useState<string | null>(null)
+  // Overnight Watch: the night going on (or not), and the goodnight card, open or not.
+  const [watchView, setWatchView] = useState<WatchView | null>(null)
+  const [goodnight, setGoodnight] = useState(false)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const [switcher, setSwitcher] = useState(false)
   const switcherShown = usePresence(switcher)
@@ -237,6 +241,21 @@ export function App() {
     [],
   )
   const panelDrag = usePanelDrag()
+
+  // Overnight Watch: the night going on or not, and Goodnight from the menu bar opening the card. Closing the panel
+  // puts the card away (a night going on still shows next time).
+  useEffect(() => {
+    api.watch.get().then(setWatchView, () => {})
+    const offWatch = api.watch.onChanged(setWatchView)
+    const offGoodnight = api.watch.onGoodnight(() => setGoodnight(true))
+    return () => {
+      offWatch()
+      offGoodnight()
+    }
+  }, [])
+  useEffect(() => {
+    if (dock === 'collapsed' || dock === 'hidden') setGoodnight(false)
+  }, [dock])
 
   // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out stays and plays its way out
   // (styles.css: the panel or the viewer slides back toward its side, a nudge goes back up into the notch), and then
@@ -526,7 +545,7 @@ export function App() {
 
   // An approval is needs-you; a chat waiting for input is confused (main's reactions say so).
   const waiting = sessions.some((s) => s.state === 'needs-approval')
-  const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
+  const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden', watching: watchView?.watching }), work)
   const glint = glintFor(work)
   // Docked in the notch, the notch window shows the character: it gets the same mood.
   useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
@@ -622,6 +641,15 @@ export function App() {
           <div className="head-top">
             <span className="name">{look.name}</span>
             <div className="head-actions">
+              <button
+                className={`icon-btn ${watchView?.watching || goodnight ? 'on' : ''}`}
+                aria-label="Goodnight"
+                title={watchView?.watching ? 'Overnight Watch is on' : 'Goodnight: watch overnight'}
+                aria-pressed={goodnight || Boolean(watchView?.watching)}
+                onClick={() => setGoodnight(!goodnight)}
+              >
+                <MoonIcon />
+              </button>
               <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
                 <NewChatIcon />
               </button>
@@ -688,6 +716,7 @@ export function App() {
         onError={showError}
       />
       <div className="body">
+        {watchView && (goodnight || watchView.watching) && <GoodnightCard view={watchView} onClose={() => setGoodnight(false)} onError={setToast} />}
         {presenceNote && (
           <div className="notice" role="status">
             {presenceNote}
