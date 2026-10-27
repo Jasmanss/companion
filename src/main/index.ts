@@ -1160,12 +1160,15 @@ let nudgeWords = 0
 /** The alerts the island showed lately, by key: its buttons act on them, and a click shows one too long for it in the panel. */
 const islandAlerts = new Map<string, AlertView>()
 
-/** An alert as the island's message (Island mode): the big sizes for what waits on you, a note for the rest. */
+/**
+ * An alert as the island's message (Island mode): the big sizes for what waits on you, a note for the rest. One that
+ * can't show now (a note while something that needs you is out) waits for the panel, like the alerts held back.
+ */
 function showOnIsland(alert: AlertView): void {
   islandAlerts.delete(alert.key)
   islandAlerts.set(alert.key, alert)
   for (const key of [...islandAlerts.keys()].slice(0, Math.max(0, islandAlerts.size - MAX_HELD))) islandAlerts.delete(key)
-  islandNotes.show(alertNote(alert, Date.now()))
+  if (!islandNotes.show(alertNote(alert, Date.now()))) heldAlerts = [alert, ...heldAlerts].slice(0, MAX_HELD)
 }
 
 /**
@@ -3551,6 +3554,11 @@ async function checkIslandAlerts(out: string, { page, layout, shot, black, clear
     if (k.shot) await fs.writeFile(out.replace(/\.png$/, `-island-${k.shot}.png`), (await shot()).toPNG())
     // The buttons: Later settles a session's approval now; Deny answers Steward's own request; Open opens the panel.
     if (k.kind === 'wait') {
+      // Good news while it's out doesn't take its place: it waits for the panel (the menu bar's dot).
+      raise({ key: 'deploy-ready:dpl_during', level: 'urgent', title: 'haven deployed', detail: 'haven.vercel.app' })
+      alerts.flush()
+      await sleep(300)
+      if (notch.state().island?.note?.kind !== 'wait' || !heldAlerts.some((a) => a.key === 'deploy-ready:dpl_during')) throw new Error(`good news during an approval took its place, or was lost (${JSON.stringify(notch.state().island?.note)})`)
       await press('later')
       if (!(await waitFor(() => !notch.state().island?.note, 800))) throw new Error('Later did not settle the approval')
       if (notch.state().island?.right !== 'needs') throw new Error(`settled, the approval left no amber mark (${notch.state().island?.right})`)
