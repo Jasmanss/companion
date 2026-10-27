@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
 import { alertNote, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
-import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_HOVER, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
+import { fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
 /** The 14-inch MacBook Pro's notch. */
@@ -89,9 +89,12 @@ describe('the island shape', () => {
     expect(islandLevel({ awake: true, nudge: false, right: null })).toBe('rest')
     expect(islandLevel({ awake: true, nudge: false, right: 'needs' })).toBe('compact')
     expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true })).toBe('note')
-    // Asleep, or nothing going on, there's no note to show.
+    // Asleep, there's no note to show. With nothing else going on, a message still shows (good news, the catch-all).
     expect(islandLevel({ awake: false, nudge: false, right: 'working', note: true })).toBe('asleep')
-    expect(islandLevel({ awake: true, nudge: false, right: null, note: true })).toBe('rest')
+    expect(islandLevel({ awake: true, nudge: false, right: null, note: true })).toBe('note')
+    expect(islandLevel({ awake: true, nudge: false, right: null, note: 'long' })).toBe('long')
+    expect(islandLevel({ awake: true, nudge: false, right: 'needs', note: 'approval' })).toBe('approval')
+    expect(islandLevel({ awake: true, nudge: false, right: 'review', note: 'review' })).toBe('review')
     // The panel open at the side shows what's going on: the island steps back to Steward peeking, looking at it.
     expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true, open: true })).toBe('rest')
   })
@@ -250,5 +253,73 @@ describe('the note', () => {
       notes.drop('finished')
       expect(notes.current).toBeNull()
     })
+  })
+
+  it('grows taller for a long note, and big for an approval or a review, with Steward joined', () => {
+    const note = islandParts('note', NOTCH)
+    const long = islandParts('long', NOTCH)
+    expect(long).toMatchObject({ width: note.width, height: 32 + ISLAND_LONG_LINES, joined: false })
+    expect(long.pill).toEqual(note.pill)
+    // The design's sizes for a 185 by 32 notch: 380 by 94, 420 by 124, 440 by 172 (a point over from the notch's odd width).
+    expect([long.width, long.height]).toEqual([381, 94])
+    const approval = islandParts('approval', NOTCH)
+    const review = islandParts('review', NOTCH)
+    expect([approval.width, approval.height]).toEqual([421, 124])
+    expect([review.width, review.height]).toEqual([441, 172])
+    for (const big of [approval, review]) {
+      expect(big.joined).toBe(true)
+      // Steward's spot is inside the black's left part, below the notch; the status is at the top right.
+      expect(big.pill.x).toBe(-big.width / 2 + ISLAND_AVATAR_IN)
+      expect(big.pill.y).toBeGreaterThan(32)
+      expect(big.pill.y + 26).toBeLessThan(big.height)
+      expect(big.right!.x).toBeGreaterThan(big.width / 2 - 40)
+      expect(big.right!.y).toBe(16)
+      // With the springs' overshoot, it stays inside the window.
+      expect(big.width * 1.1).toBeLessThan(ISLAND_WINDOW.width)
+      expect(big.height * 1.1).toBeLessThan(ISLAND_WINDOW.height)
+    }
+    expect(review.pill.y).toBeLessThan(approval.pill.y + 40)
+    expect(joins('approval') && joins('review') && !joins('note') && !joins('compact')).toBe(true)
+  })
+
+  it('takes clicks anywhere on a big island', () => {
+    const layout = { cx: ISLAND_WINDOW.width / 2, ...NOTCH }
+    const review = islandParts('review', NOTCH)
+    const boxes = islandBoxes(review, 'review', layout)
+    expect(inBoxes({ x: layout.cx - review.width / 2 + 10, y: review.height - 10 }, boxes)).toBe(true)
+    expect(inBoxes({ x: layout.cx, y: review.height + 6 }, boxes)).toBe(false)
+  })
+})
+
+describe("a note's words", () => {
+  // Every letter 6 points wide, bold 7: easy to count.
+  const measure = (text: string, bold: boolean) => text.length * (bold ? 7 : 6)
+  const width = 353
+
+  it('fit on one line when the title and the detail do', () => {
+    expect(fitNote('haven', 'Claude finished · 3 files changed', width, measure)).toBe('note')
+    expect(fitNote('A title alone', '', width, measure)).toBe('note')
+  })
+
+  it('make a long note when they need two or three lines, the title on its own', () => {
+    // "companion: PR #39 merged" (24 letters, bold) and a PR title of about a line and a half.
+    const title = 'companion: PR #39 merged'
+    const pr = 'Main chat, Phase 1: take the hide button and the pin out of the header, and add the Ask | Auto switch'
+    expect(fitNote(title, pr, width, measure)).toBe('long')
+    expect(fitNote(title, 'a detail that is just too long to sit beside the title on one line', width, measure)).toBe('long')
+  })
+
+  it('are too long past three lines', () => {
+    const long = 'Main chat, Phase 1: take the hide button and the pin out of the header, add the Ask | Auto switch by the message box, round the Send button, and label commands that ran on their own'
+    expect(fitNote('companion: PR #39 merged', long, width, measure)).toBe('toolong')
+  })
+
+  it('wrap at spaces, and a word wider than a line takes the lines it fills', () => {
+    const m = (t: string) => t.length * 10
+    expect(linesFor('', 100, m)).toBe(0)
+    expect(linesFor('aaaa bbbb', 100, m)).toBe(1)
+    expect(linesFor('aaaa bbbb cccc', 100, m)).toBe(2)
+    expect(linesFor('a'.repeat(25), 100, m)).toBe(3)
+    expect(linesFor(`xx ${'a'.repeat(25)} yy`, 100, m)).toBe(4)
   })
 })
