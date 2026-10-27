@@ -78,6 +78,7 @@ import { deadPort, gitInit, startPageServer, type SmokeVersion } from './smoke-r
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
+import { describeEyeSweep, measureEyeSweep, type EyeSample, type EyeSweep } from './smoke-eyes'
 import { SettingsStore } from './settings'
 import { parseSettingsPatch } from './settings-schema'
 
@@ -94,6 +95,8 @@ const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
+/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows (CI runs it all). */
+const SMOKE_ONLY = process.env.STEWARD_SMOKE_ONLY
 /** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
 const SLIDE_MS = 700
 /** Why the window went, when the page's slide ended with no frame to draw its end (its own clock said so). */
@@ -1813,7 +1816,8 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       console.log(unseen ? 'smoke: hidden: the windows are real but nearly see-through (1%), click-through and never focused (--visible shows them)' : 'smoke: visible: the windows are on screen, and take focus')
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
       const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
-      await checkPresence(w, out)
+      if (SMOKE_ONLY === 'island') await settings.update({ steward: { presence: 'always' } })
+      else await checkPresence(w, out)
       clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
       if (!w.isVisible()) return fail('window never showed')
@@ -1826,6 +1830,14 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await fs.writeFile(out, image.toPNG())
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
+      if (SMOKE_ONLY === 'island') {
+        const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
+        setDock('collapsed')
+        if (!notchGeo) return fail('no notch: run with STEWARD_SMOKE_NOTCH=1')
+        await checkIsland(out)
+        clearTimeout(islandTimer)
+        return app.exit(0)
+      }
       if (SMOKE_DEMO) await captureDemo(w, out, SMOKE_DEMO)
       const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
       await checkReview(w, out)
@@ -3170,6 +3182,16 @@ async function checkIsland(out: string): Promise<void> {
   if (!clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx - hw - 60, 8)) throw new Error('at rest, there is an island beside the notch')
   await fs.writeFile(out.replace(/\.png$/, '-island-rest.png'), img.toPNG())
 
+  // The eyes following a cursor sweeping past: under the notch, and across the black (where the island leans out).
+  for (const mood of ['resting', 'idle'] as const) {
+    notch.setMood(mood, 'sweep')
+    await sleep(600)
+    await sweepEyes(page, geo, 'under the notch', 45)
+    await sleep(600)
+    await sweepEyes(page, geo, 'across the notch', 10)
+  }
+  await sleep(900)
+
   // A prompt sent: the compact island grows out of the notch, Steward steps into its left side, the time on its right.
   const grows = await motionLook(page, '.isl .bp', '.isl')
   smoothly(`the island growing out of the notch${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-1')))
@@ -3273,7 +3295,8 @@ async function checkIsland(out: string): Promise<void> {
     sendSessions()
   }))
   img = await shot()
-  if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx, layout.height + 6) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
+  const back = { right: notch.state().island?.right ?? null, beside: clear(img, layout.cx + hw + 30, 8), under: clear(img, layout.cx, layout.height + 6), peeking: steward(img, layout.cx - hw - 12, restPill.y) }
+  if (back.right !== null || !back.beside || !back.under || !back.peeking) throw new Error(`with nothing going on, the island did not go back into the notch with Steward peeking (${JSON.stringify({ ...back, pixel: pixel(img, layout.cx - hw - 12, restPill.y + 9), mood: notch.state().mood })})`)
   console.log('smoke: island: wider with the cursor on it, a count for two projects, a check when Claude stops, then back into the notch')
 
   // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
@@ -3329,6 +3352,34 @@ async function checkIsland(out: string): Promise<void> {
   islandNotes.drop()
   if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
   void sendReviews()
+}
+
+/**
+ * Steward's eyes following a cursor that sweeps past the notch at a steady speed (island Phase 3, the eye jitter fix),
+ * from the frames the page drew: how often the eyes moved, and how far in one frame. y: how far down the screen the
+ * cursor goes, from its top. Logged with the mood, so a before and after can be compared.
+ */
+async function sweepEyes(page: Electron.WebContents, geo: NotchGeometry, what: string, y: number, ms = 1500): Promise<EyeSweep> {
+  const sampling = page.executeJavaScript(`new Promise((resolve) => {
+    const samples = []
+    const frame = (t) => {
+      // The eyes within the body, so Steward leaning out with the cursor on it isn't counted as the eyes moving.
+      const eyes = document.querySelector('.isl-pill .open')?.getBoundingClientRect(), body = document.querySelector('.isl-pill .pv')?.getBoundingClientRect()
+      if (eyes && body) samples.push([t, eyes.left + eyes.width / 2 - (body.left + body.width / 2)])
+      requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+    setTimeout(() => resolve(samples), ${ms})
+  })`) as Promise<EyeSample[]>
+  // Across where Steward peeks (the notch's left edge), the stretch where its eyes follow the cursor.
+  const from = geo.x - 160, to = geo.x + 160, start = Date.now()
+  const move = setInterval(() => (smokeNotchCursor = { x: from + (to - from) * Math.min(1, (Date.now() - start) / ms), y: geo.y + y }), 4)
+  const samples = await sampling
+  clearInterval(move)
+  smokeNotchCursor = null
+  const sweep = measureEyeSweep(samples)
+  console.log(`smoke: eyes following a cursor sweeping ${what} (mood ${notch.state().mood}): ${describeEyeSweep(sweep)}`)
+  return sweep
 }
 
 /**
