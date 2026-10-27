@@ -140,14 +140,19 @@ export class NotchDock {
   }
 
   state(): NotchState {
-    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.hovering.hover, nudge: this.nudge, island: this.island, panel: this.panel }
+    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.grown(), nudge: this.nudge, island: this.island, panel: this.panel }
+  }
+
+  /** Grown a little with the cursor on it: hovering, where the black grows for that (Always visible). */
+  private grown(): boolean {
+    return this.hovering.hover && !!this.o.hoverable?.()
   }
 
   /** Where the black (and, for the island, Steward) is now: the only place the window takes clicks. */
   private boxes(layout: NotchLayout) {
-    if (this.o.style() !== 'island') return notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake, this.hovering.hover, this.nudge), layout)
+    if (this.o.style() !== 'island') return notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake, this.grown(), this.nudge), layout)
     const level = islandLevel({ awake: this.awake, nudge: this.nudge, right: this.island.right, note: this.island.note ? noteSize(this.island.note) : null, open: !!this.panel })
-    return islandBoxes(islandParts(level, layout, this.hovering.hover), level, layout)
+    return islandBoxes(islandParts(level, layout, this.grown()), level, layout)
   }
 
   /** The notch window's own contents, for the smoke check. */
@@ -251,8 +256,9 @@ export class NotchDock {
       const over = shaped().some((b) => inRect(p, b, SLACK))
       this.o.onCursor?.(over)
       // On the black for a moment, it grows a little; off it for a moment, it shrinks back. Grown, the cursor is over
-      // more of it, so it doesn't flicker at the edge.
-      if (this.hover(this.awake && !this.nudge && this.o.hoverable?.() ? stepHover(this.hovering, over, Date.now()) : noHover())) this.send()
+      // more of it, so it doesn't flicker at the edge. Only when needed it doesn't grow, but the hover still counts:
+      // the island's message stays while the cursor is on it.
+      if (this.hover(this.awake && !this.nudge ? stepHover(this.hovering, over, Date.now()) : noHover())) this.send()
       const inside = inBoxes(p, shaped())
       if (inside === this.ignoring) {
         this.ignoring = !inside

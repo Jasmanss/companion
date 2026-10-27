@@ -60,7 +60,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, type Turns } from './island-status'
+import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { SessionActivity } from './session-activity'
@@ -3400,9 +3400,14 @@ async function checkIsland(out: string): Promise<void> {
   img = await shot()
   if (!black(img, layout.cx, reviewSize.height - 3) || !black(img, layout.cx - reviewSize.width / 2 + 10, 6)) throw new Error('the review did not grow the island to the review size')
   await fs.writeFile(out.replace(/\.png$/, '-island-review.png'), img.toPNG())
-  await sleep(BIG_NOTE_MS + 800)
+  // The cursor on it keeps it past its nine seconds, Only when needed too (where the island doesn't grow with it).
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + reviewSize.height - 20 }
+  await sleep(BIG_NOTE_MS + 600)
+  if (notch.state().island?.note?.kind !== 'review') throw new Error('Only when needed, the cursor on the review did not keep it out')
+  smokeNotchCursor = null
+  await sleep(NOTE_AFTER_HOVER_MS + 900)
   if (notch.state().island?.note || notch.state().awake || dockNow() === 'nudge' || win!.isVisible()) throw new Error('after the review settled, the island did not go back to sleep')
-  console.log(`smoke: island: a review comes out at the review size (${reviewSize.width}x${reviewSize.height}) with Steward joined, never under the notch; asleep, the island wakes for it and sleeps after`)
+  console.log(`smoke: island: a review comes out at the review size (${reviewSize.width}x${reviewSize.height}) with Steward joined, never under the notch; asleep, the island wakes for it, the cursor on it keeps it, and it sleeps after`)
   pendingReviews = 0
 
   await settings.update({ steward: { presence: 'always', notchStyle: 'chin', alertPeek } })
