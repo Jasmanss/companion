@@ -84,12 +84,32 @@ Main building's audit of Island mode after Phase 2 (PR #36): finished and two pr
 - Hidden by hand or stepped aside: nothing comes out, as today. The first-launch note is not an alert: it ignores the choice and shows once ever, after stepping aside ends.
 - A failed build and good news each get their own mark colors (red, spark) so the compact island tells them apart from an amber wait.
 
-**Phase 3 now covers:** the approval and review sizes, **plus** the four sizes above, the red and spark marks, the "Later" settle, the catch-all note, the no-old-pill rule and its smoke check. Phase 2 and the other phases are unchanged.
+**Phase 3 now covers:** the approval and review sizes, **plus** the four sizes above, the red and spark marks, the "Later" settle, the catch-all note, the no-old-pill rule and its smoke check, **and the notch eye jitter fix (see "Plan update 3")**. Phase 2 and the other phases are unchanged.
 
 **Decided by the user (2026-10-24, via the front door):** "Accept all three island alert picks: a failed build comes out under Needs me, Nothing means only the small status marks, and chat approvals get Open and Later."
 1. **A failed build comes out under "Needs me",** as an urgent alert. (Build the failed-build alert's `peeksOut` check to count it with the waiting-on-you kinds.)
 2. **"Alerts that peek out: Nothing"** means no notes and no big sizes, only the compact status marks (spinner and time, check, amber or red). Main building's Phase 2 report says Nothing already turns the finished note off, which differs from how I read the code, so this is **Phase 3 work to check, not assume:** under Nothing, post a finished and a "second project started" event and confirm neither note shows; if either still does, fix it. Add that to the smoke check.
 3. **A session's approval (and input) has Open and Later only.** Allow and Deny are only for Steward's own requests, because the hooks do not wait for Steward's answer.
+
+### Plan update 3, 2026-10-27: the notch eye jitter fix (from the user, via the front door)
+The user: "Fold the notch eye jitter fix into island Phase 3." The bug: in the notch island, Steward's eyes jump or jitter while they follow the cursor. Nobody has watched it on screen yet, so these are likely causes read from `origin/main` (3407fdf), for Main building to confirm by measuring before changing anything.
+
+**Likely causes**
+1. **Slow redraw in the notch.** `runEyes` (`src/renderer/src/Pill.tsx`) draws the notch's eyes (`tucked: true`) 10 times a second while the mood is Resting, which is the notch's usual mood with the panel closed, and 30 times a second in other moods. The panel draws every frame. A moving cursor therefore looks steppy in the notch.
+2. **Few cursor updates.** `src/main/notch-window.ts` sends the cursor every 50 ms (`FAST`) while it is within 420 pt (`NEAR`): 20 updates a second, against a 60 or 120 Hz screen. Even a smooth redraw would only have a new aim 20 times a second.
+3. **Glances override the cursor.** In `stepEyes` (`src/renderer/src/pill/eyes.ts`), Idle glances somewhere random every 2 to 5.5 seconds even with the cursor near, and Resting does a lazy 1.5 second glance toward the middle every 8 to 12 seconds. Both pull the eyes off the cursor and back, which reads as a jump.
+4. **The island grows on hover.** It grows a little when the cursor touches it, which moves the eyes' box, so their aim shifts at once. Check this one.
+5. **A hard line for Resting (found while checking).** Resting only follows the cursor when it is "near" the eyes (`toward()` distance under 0.9, roughly 80 pt around them); past that line the eyes look down at a fixed spot, and across it the aim flips from that spot to the cursor. Crossing the line looks like a jump. A smooth blend between the two would remove it.
+
+**Definition of done (added to Phase 3):**
+- While the cursor is near the notch, the eyes draw every frame; when it leaves, they go back to the slow, cheap rate. CPU stays low when the cursor is far.
+- The cursor reaches the notch about every frame while near (or the notch page smooths between updates), and is still checked rarely when far.
+- No random or lazy glance while the cursor is near and moving; glances come back once it has been still or far for a moment.
+- No hard flip at the Resting "near" line: the aim blends across it.
+- A unit test for the pacing (near means every frame, far means the slow rate) and for the glance rule.
+- A measured before and after, at a normal frame rate in headless Chrome or a frame log (how far the eyes' aim moves per frame as the cursor sweeps past), not just "looks fine".
+
+Shared files this adds: `src/renderer/src/Pill.tsx` (`runEyes` pacing), `src/renderer/src/pill/eyes.ts` (glance rule, blend), `src/main/notch-window.ts` (cursor rate), all small. The panel's own eyes keep drawing every frame and must not change. Motion is still hand-tested on the real Mac; the measurement above is what CI-side checks can cover.
 
 ### The hand-off to the side panel
 A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. The island goes back to Steward peeking, looking toward the panel. Closing is today's close. The panel in notch mode no longer drops from the notch; that special case goes away.
@@ -110,7 +130,7 @@ Joining the notch flush with the top means every size wider than the notch sits 
 - A small spring loop on the notch page that sets only transforms, opacity and clip paths; the Showcase's `peeking.js` and `island-kit.js` are the working model (a steady 60 fps in headless Chrome). Reduce Motion fades.
 - Content: the right side from the session tracker (`SessionView` state and detail), the turn start for the timer (Visual Review's `UserPromptSubmit` hook already tracks it), the Visual Review store for the thumbnail. The approval and review contents already exist.
 - Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the size and the mascot position), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size; the panel no longer opening under the notch).
-- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, and the no-old-pill rule); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
+- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, the no-old-pill rule, and the notch eye jitter fix in "Plan update 3"); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
 
 ### Risks and open questions
 1. Matching the real notch's corners where the island starts, and hiding Steward exactly behind the notch's edge. Phase 1 checks both on the real Mac.
