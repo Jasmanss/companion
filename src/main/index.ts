@@ -3529,9 +3529,19 @@ async function checkIslandAlerts(out: string, { page, layout, shot, black, clear
     { what: 'a merged PR', kind: 'good', size: 'note', post: () => raise({ key: 'pr-merged:/tmp/haven:12', level: 'urgent', title: 'haven: PR #12 merged', detail: 'Make the button blue' }) },
     { what: 'a kind nobody has made yet', kind: 'alert', size: 'note', post: () => raise({ key: 'brand-new-kind:1', level: 'urgent', title: 'Something new', detail: 'with one line' }) },
   ]
+  const joins = await motionLook(page, '.isl-pill', '.isl')
   for (const k of kinds) {
     await settle()
-    await k.post()
+    // The first one: Steward joining the island (its body melting into the black, its eyes carrying on) is drawn frame by frame.
+    if (k.kind === 'wait')
+      smoothly(
+        `Steward joining the island${joins.label}`,
+        await watchMotion(page, joins, 900, async () => {
+          await k.post()
+          alerts.flush()
+        }),
+      )
+    else await k.post()
     alerts.flush()
     const ok = await waitFor(async () => notch.state().island?.note?.kind === k.kind && sizeNow() === k.size && (await drawnAt(k.size)), k.kind === 'agent' ? 950 : 2500)
     if (oldPill()) throw new Error(`${k.what} came out as the old pill under the notch (Steward ${dock}, the notch's nudge ${notch.state().nudge})`)

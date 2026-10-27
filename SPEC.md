@@ -62,6 +62,18 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   one for it), with one line of text. A click opens the panel (an alert's
   action is on its banner there), and it goes back up into the notch when it
   tucks away. It never covers the menu bar.
+- **The notch island (In the notch → Island):** one black shape joined to the
+  notch, sized by what's going on, with Steward peeking from the notch's left
+  edge at rest. Every alert comes out as the island, never under the notch:
+  what waits on you (a session's approval or question, Steward's own request,
+  a failed build) grows it big, with Steward's eyes on the left and Open and
+  Later (Allow and Deny for Steward's own request, "Want me to look?" for a
+  failed build); a review grows it bigger, with its pictures, Open big and
+  Looks good; anything else is a note under the notch. Words too long for one
+  line make the note taller, up to three lines, never cut off. Messages stay a
+  few seconds (9 s for the big ones), longer with the cursor on them, then
+  settle to a mark on the island's right: amber for a wait, red for a failed
+  build.
 - **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
   open panel) while an app fills the screen it's on (on for a new install), or
   while an app on your list is in front ("Add app…", or one click for Keynote,
@@ -70,7 +82,8 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   macOS's own app-switch and Space notifications, and asks macOS only when the
   Space changes, so nothing runs in between.
 - **Alerts that peek out (Settings → Steward → Presence):** only when a session
-  needs me (the default in "Only when needed"), everything switched on in
+  needs me (with Steward's own requests, reviews and failed builds; the default
+  in "Only when needed"), everything switched on in
   Notifications (the default in "Always visible"), or nothing. What doesn't peek
   out adds a dot to the menu bar and shows as a card when the panel opens.
 
