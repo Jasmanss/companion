@@ -192,9 +192,12 @@ export const islandShows = (key: string): boolean => key.startsWith('review:')
 /** The most alerts waiting for the panel. The oldest go first. */
 export const MAX_HELD = 20
 
-/** The menu bar's title: how many sessions are waiting on you, and a plain dot when a quieter alert is waiting too. */
-export function menuBarTitle(waiting: number, held: number): string {
-  return [waiting > 0 ? String(waiting) : '', held > 0 ? '•' : ''].filter(Boolean).join(' ')
+/**
+ * The menu bar's title: how many sessions are waiting on you, and a plain dot when a quieter alert is waiting too. A
+ * moon first while Overnight Watch is on.
+ */
+export function menuBarTitle(waiting: number, held: number, watching = false): string {
+  return [watching ? '☾' : '', waiting > 0 ? String(waiting) : '', held > 0 ? '•' : ''].filter(Boolean).join(' ')
 }
 
 /* ---------- The first-time note ---------- */

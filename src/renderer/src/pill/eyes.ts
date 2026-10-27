@@ -58,11 +58,12 @@ const V: Record<Mood, Target> = {
   nod: { sx: 1.2, sy: 1.05, happy: 0.6 }, // soft happy eyes
   proud: { sx: 1.4, sy: 1.2, happy: 1 },
   hello: { sx: 1.3, sy: 1.15, happy: 0.75 },
+  watching: { sy: 0.94, lid: 0.5 }, // Overnight Watch: half-lidded, awake enough to keep an eye on things
 }
 /** Seconds between blinks per mood (0: never blinks). */
 const BLINK: Record<Mood, number> = {
   idle: 3.6, listening: 4.2, thinking: 0, talking: 3.2, done: 0, celebrating: 0, 'needs-you': 4, worried: 2.4, mad: 5.5, resting: 7, sleepy: 0,
-  confused: 3, focused: 6.5, juggling: 0, nod: 0, proud: 0, hello: 0,
+  confused: 3, focused: 6.5, juggling: 0, nod: 0, proud: 0, hello: 0, watching: 6,
 }
 /** Needs you waiting this long grows impatient: the pulse quickens and the eyes look toward the panel. */
 export const IMPATIENT_S = 120
@@ -162,6 +163,7 @@ const PX: Record<Mood, [Sprite, Sprite]> = {
   done: ['happy', 'happy'], celebrating: ['happy', 'happy'], 'needs-you': ['big', 'big'], worried: ['worried', 'worried'],
   mad: ['mad', 'mad'], resting: ['heavy', 'heavy'], sleepy: ['asleep', 'asleep'],
   confused: ['big', 'short'], focused: ['short', 'short'], juggling: ['normal', 'normal'], nod: ['happy', 'happy'], proud: ['happy', 'happy'], hello: ['big', 'big'],
+  watching: ['heavy', 'heavy'],
 }
 /** Talking's pixel mouths, as [column, row] cells under the eyes (which move up a row to make room). */
 const PX_MOUTH = {

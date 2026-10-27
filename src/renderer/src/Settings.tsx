@@ -277,6 +277,7 @@ const PREVIEWS: { id: string; label: string; mood: Mood; glint?: Glint }[] = [
   { id: 'mad', label: 'Mad', mood: 'mad' },
   { id: 'resting', label: 'Resting', mood: 'resting' },
   { id: 'sleepy', label: 'Sleepy', mood: 'sleepy' },
+  { id: 'watching', label: 'Watching overnight', mood: 'watching' },
 ]
 
 /** While the preview listens, someone types to it now and then, so you can see it nod along. */

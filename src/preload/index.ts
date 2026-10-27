@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -94,6 +94,14 @@ const api: StewardAPI = {
     onHistory: (cb) => subscribe<void>('review:history', () => cb()),
     usage: () => ipcRenderer.invoke('review:usage'),
     clear: () => ipcRenderer.invoke('review:clear'),
+  },
+  watch: {
+    get: () => ipcRenderer.invoke('watch:get'),
+    start: (wakeTime) => ipcRenderer.invoke('watch:start', wakeTime),
+    stop: (why) => ipcRenderer.invoke('watch:stop', why),
+    setWakeTime: (wakeTime) => ipcRenderer.invoke('watch:setWakeTime', wakeTime),
+    onChanged: (cb) => subscribe<WatchView>('watch:changed', cb),
+    onGoodnight: (cb) => subscribe<void>('watch:goodnight', () => cb()),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
