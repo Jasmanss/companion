@@ -14,9 +14,9 @@
 // The third look, Island, is in notch-island.ts: Steward peeking beside the notch, and an island growing out of it.
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
-import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
+import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
-import type { IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
+import type { IslandNote, IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
 import { createEyes, setMood, setStyle, type EyesState } from './pill/eyes'
 import { makeView, palette, type PillKind, type PillView } from './pill/render'
@@ -95,9 +95,24 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
     if (!el) return
     if (notchStyle === 'island') {
       const lit = palette(version, { color: colorHex(color), tinted: true, light: false, mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
-      const face = buildIsland(el, { layout: { cx, width, height }, kind: version, color: colorHex(color), lit, mouth, light: !dark, reduced })
-      reshape.current = (_mood, isAwake, isHovered, nudgeOut) =>
-        face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: !!islandNow.current.note, open: !!panelNow.current }), isHovered, islandNow.current)
+      const face = buildIsland(el, {
+        layout: { cx, width, height },
+        kind: version,
+        color: colorHex(color),
+        lit,
+        mouth,
+        light: !dark,
+        reduced,
+        onAct: (what, at) => api.notch.act(what, at),
+        onFit: (at, fit) => api.notch.fit(at, fit),
+        review: (id) => api.review.list().then((list) => list.find((r) => r.id === id) ?? null),
+      })
+      // The message's size: big for what waits on you and a review; for a note, how its words fit (measured here).
+      const sizeOf = (n: IslandNote) => noteSize({ kind: n.kind, fit: noteSize({ kind: n.kind }) === 'note' ? (n.fit ?? face.fit(n)) : undefined })
+      reshape.current = (_mood, isAwake, isHovered, nudgeOut) => {
+        const n = islandNow.current.note
+        face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: n ? sizeOf(n) : null, open: !!panelNow.current }), isHovered, islandNow.current)
+      }
       reshape.current(st.mood, awakeNow.current, hoverNow.current, nudgeNow.current)
       let pointer: { x: number; y: number } | null = null
       const off = api.notch.onCursor((p) => (pointer = p))

@@ -183,11 +183,13 @@ describe('the note', () => {
     expect(hookNote(hook('UserPromptSubmit', 'b'), { ...at, turns: { a: 100_000 - TURN_GIVE_UP_MS } })).toBeNull()
   })
 
-  it('shows with the status, and on its own with nothing else going on', () => {
+  it("shows with the work's status; an alert's message shows on its own", () => {
     const note: IslandNote = { kind: 'finished', name: 'haven', text: 'Claude finished', at: 1 }
     const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
     expect(islandStatus(input({ turns: { a: 1 }, note }))).toEqual({ right: 'working', since: 1, note })
-    expect(islandStatus(input({ note }))).toEqual({ right: null, note })
+    expect(islandStatus(input({ note }))).toEqual({ right: null })
+    const alert: IslandNote = { kind: 'alert', name: 'Something new', text: '', at: 3 }
+    expect(islandStatus(input({ note: alert }))).toEqual({ right: null, note: alert })
     // Good news has no status of its own: a spark while its note shows.
     const good: IslandNote = { kind: 'good', name: 'haven deployed', text: 'haven.vercel.app', at: 2 }
     expect(islandStatus(input({ note: good }))).toEqual({ right: 'good', note: good })

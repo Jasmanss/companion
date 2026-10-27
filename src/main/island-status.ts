@@ -61,10 +61,14 @@ export function noteTurn(turns: Turns, event: HookPayload, now: number): Turns {
   return turns
 }
 
-/** The status, with the note while one shows. Good news has no status of its own: its spark shows while its note does. */
+/**
+ * The status, with the message while one shows. A note about the work (finished, started) only shows with the work's
+ * status: with nothing going on there's no island for it. An alert's message shows on its own; good news has no status
+ * of its own, so its spark shows while its note does.
+ */
 export function islandStatus(o: IslandInput): IslandStatus {
   const status = rightSide(o)
-  if (!o.note) return status
+  if (!o.note || (!status.right && (o.note.kind === 'finished' || o.note.kind === 'started'))) return status
   return { ...status, right: status.right ?? (o.note.kind === 'good' ? 'good' : null), note: o.note }
 }
 

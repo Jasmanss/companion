@@ -219,7 +219,7 @@ export function islandParts(level: IslandLevel, notch: { width: number; height: 
  */
 export type NoteFit = 'note' | 'long' | 'toolong'
 /** The note's words sit this far in from each side of the island, and on one line the detail starts this far after the title. */
-export const NOTE_PAD = 14
+export const NOTE_PAD = 22
 export const NOTE_GAP = 6
 /** The most lines a long note holds. */
 export const NOTE_LINES = 3

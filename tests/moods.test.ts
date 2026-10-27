@@ -41,4 +41,17 @@ describe('MoodBoard', () => {
     board.apply(undefined, undefined, 0)
     expect(board.current(1)).toBeNull()
   })
+
+  it('says a deploy is still in trouble while good news for another project shows on top', () => {
+    const b = new MoodBoard()
+    b.apply('mad', '/a', 0)
+    expect(b.troubled(1000)).toBe(true)
+    b.apply('celebrating', '/b', 2000)
+    expect(b.current(2500)).toBe('celebrating')
+    expect(b.troubled(2500)).toBe(true)
+    // Good news for that project ends it (once mad's own moment is over).
+    b.apply('celebrating', '/a', 7000)
+    expect(b.troubled(7000)).toBe(false)
+    expect(new MoodBoard().troubled(0)).toBe(false)
+  })
 })
