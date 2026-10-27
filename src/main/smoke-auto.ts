@@ -61,10 +61,10 @@ export async function checkAutoMode(d: AutoSmokeDeps): Promise<void> {
     await d.useProject(folder)
     if (d.commandMode() !== 'ask') fail(`the default is ${d.commandMode()}, not ask`)
 
-    // The header: new chat, Settings and tuck, and no hide button or pin (hiding is in the menu bar and its shortcut,
-    // Keep panel open in Settings). The text box has Ask | Auto, showing the setting.
+    // The header: Goodnight, new chat, Settings and tuck, and no hide button or pin (hiding is in the menu bar and its
+    // shortcut, Keep panel open in Settings). The text box has Ask | Auto, showing the setting.
     const head = (await panel.executeJavaScript(`[...document.querySelectorAll('.panel-head .head-actions button')].map((b) => b.getAttribute('aria-label'))`)) as string[]
-    if (JSON.stringify(head) !== JSON.stringify(['New chat', 'Settings', 'Tuck away'])) fail(`the header's buttons are ${JSON.stringify(head)}`)
+    if (JSON.stringify(head) !== JSON.stringify(['Goodnight', 'New chat', 'Settings', 'Tuck away'])) fail(`the header's buttons are ${JSON.stringify(head)}`)
     if ((await panel.executeJavaScript(SWITCH)) !== 'Ask') fail(`the text box's switch shows ${JSON.stringify(await panel.executeJavaScript(SWITCH))}, not Ask`)
 
     // Ask each time: the card shows, even for a safe command. Skipping it runs nothing.
