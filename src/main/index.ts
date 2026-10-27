@@ -2021,7 +2021,7 @@ async function checkReactions(out: string): Promise<void> {
   await sleep(400)
 }
 
-/** The review the Watch check makes for its second night, decided before the checks after it. */
+/** The review the Watch check makes for its second night, cleared before the checks after it. */
 let smokeNightReview: string | null = null
 
 /**
@@ -2196,8 +2196,9 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     watch?.stop('stopped')
     watch?.seen()
     heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('approval:smoke-watch'))
-    if (smokeNightReview) await reviewStore.setStatus(smokeNightReview, 'good')
-    await sendReviews()
+    // Gone, as the review check leaves the store: the next run's review check starts from none.
+    if (smokeNightReview) await reviews.clear()
+    smokeNightReview = null
   }
 }
 
