@@ -11,7 +11,7 @@
 // (in Wings too) and it doesn't grow with the cursor on it. While the panel is open at the side, it stays, and Steward
 // looks toward the panel.
 import { BrowserWindow, screen } from 'electron'
-import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_WINDOW, noHover, notchBoxes, notchShape, NOTCH_WINDOW, stepHover, type HoverState } from '../shared/notch'
+import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_WINDOW, noHover, notchBoxes, notchShape, NOTCH_WINDOW, noteSize, stepHover, type HoverState } from '../shared/notch'
 import type { IslandStatus, Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
 import { inRect } from './presence'
 
@@ -146,7 +146,7 @@ export class NotchDock {
   /** Where the black (and, for the island, Steward) is now: the only place the window takes clicks. */
   private boxes(layout: NotchLayout) {
     if (this.o.style() !== 'island') return notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake, this.hovering.hover, this.nudge), layout)
-    const level = islandLevel({ awake: this.awake, nudge: this.nudge, right: this.island.right, note: !!this.island.note, open: !!this.panel })
+    const level = islandLevel({ awake: this.awake, nudge: this.nudge, right: this.island.right, note: this.island.note ? noteSize(this.island.note) : null, open: !!this.panel })
     return islandBoxes(islandParts(level, layout, this.hovering.hover), level, layout)
   }
 

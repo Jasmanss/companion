@@ -15,7 +15,7 @@
 // line grows taller still (the long note), never cut off. For something that needs you (an approval, a question, a
 // failed build) or a review it grows big, and Steward joins it: its body melts into the black and its lit eyes sit in
 // an avatar spot on the left, like a caller's photo.
-import type { IslandRight, Mood, NotchGeometry, NotchLayout, NotchStyle } from './types'
+import type { IslandNote, IslandRight, Mood, NotchGeometry, NotchLayout, NotchStyle } from './types'
 
 /** How tall the eyes are, in points; the lip and the wings are sized from it. */
 export const NOTCH_EYE = 14
@@ -158,6 +158,13 @@ export function islandLevel(o: { awake: boolean; nudge: boolean; right: IslandRi
   if (o.open) return 'rest'
   if (o.note) return o.note === true ? 'note' : o.note
   return o.right ? 'compact' : 'rest'
+}
+
+/** The size a message grows the island to. Big for what waits on you and for a review; a note otherwise, long if its words need it. */
+export function noteSize(note: Pick<IslandNote, 'kind' | 'fit'>): IslandNoteSize {
+  if (note.kind === 'review') return 'review'
+  if (note.kind === 'wait' || note.kind === 'input' || note.kind === 'agent' || note.kind === 'failed') return 'approval'
+  return note.fit === 'long' || note.fit === 'toolong' ? 'long' : 'note'
 }
 
 /** Whether Steward joins the island at this level (the big sizes): its body melts into the black, its eyes stay lit. */

@@ -10,7 +10,7 @@ import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../sh
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, IslandNote, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SessionView, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -43,7 +43,6 @@ import {
   EDGE_FAR_DWELL_MS,
   freshPush,
   inRect,
-  islandShows,
   MAX_HELD,
   menuBarTitle,
   nextLookMs,
@@ -1138,16 +1137,78 @@ function showAlerts(list: AlertView[]): void {
   const holding = !isOpen(dock) && (watch?.holdsAlerts() ?? false)
   const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' || holding ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
   const { held } = split
-  // In the island a review comes out as the island itself (its note), never as the old alert under the notch.
-  const notes = island && !isOpen(dock) ? split.peek.filter((a) => islandShows(a.key)) : []
+  // In the island every alert comes out as the island itself (one of its sizes), never as the old alert under the notch.
+  const notes = island && !isOpen(dock) ? split.peek : []
   const peek = split.peek.filter((a) => !notes.includes(a))
-  for (const alert of notes) islandNotes.show(alertNote(alert, Date.now()))
+  for (const alert of notes) showOnIsland(alert)
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
     win?.webContents.send('alerts:show', peek)
     if (dock === 'collapsed') setDock('nudge')
   }
   updateMenuBar()
+}
+
+/** The alerts the island showed lately, by key: its buttons act on them, and a click shows one too long for it in the panel. */
+const islandAlerts = new Map<string, AlertView>()
+
+/** An alert as the island's message (Island mode): the big sizes for what waits on you, a note for the rest. */
+function showOnIsland(alert: AlertView): void {
+  islandAlerts.delete(alert.key)
+  islandAlerts.set(alert.key, alert)
+  for (const key of [...islandAlerts.keys()].slice(0, Math.max(0, islandAlerts.size - MAX_HELD))) islandAlerts.delete(key)
+  islandNotes.show(alertNote(alert, Date.now()))
+}
+
+/**
+ * A button on the island's message (at: which message, so a late press on one that's gone does nothing). Open and a
+ * click on the island open the panel (a message too long for the island shows there whole); Later settles it now; Want
+ * me to look? opens the panel and has Steward's agent read the build log; Allow and Deny answer Steward's own request;
+ * Looks good and Open big are a review's.
+ */
+function islandAct(what: unknown, at: unknown): void {
+  const note = islandNotes.current
+  if (!note || note.at !== at) return
+  const alert = note.key ? islandAlerts.get(note.key) : undefined
+  const id = note.key?.slice(note.key.indexOf(':') + 1) ?? ''
+  islandNotes.drop()
+  switch (what) {
+    case 'open':
+      setDock('expanded')
+      if (alert && note.fit === 'toolong') win?.webContents.send('alerts:show', [alert])
+      return
+    case 'look':
+      setDock('expanded')
+      if (alert?.action) win?.webContents.send('alerts:act', alert)
+      return
+    case 'allow':
+    case 'deny':
+      if (note.kind === 'agent') agent.approve(id, what === 'allow')
+      return
+    case 'good':
+      if (note.kind === 'review' && isReviewId(id)) void reviews.markGood(id)
+      return
+    case 'big':
+      if (note.kind !== 'review' || !isReviewId(id)) return
+      setDock('expanded')
+      win?.webContents.send('review:open', id)
+      return
+  }
+}
+
+/**
+ * Whether what a big message is about still waits: a session's approval or question until it moves on, Steward's own
+ * request until it's answered, a review until it's decided. A moment's grace after it shows, as the alert can come just
+ * before the state it's about.
+ */
+function stillWaits(note: IslandNote, now: number): boolean {
+  if (now - note.at < 1000) return true
+  const session = (state: SessionView['state']) => sessions.list().some((s) => s.state === state && !!note.key?.includes(`:${s.id}:`))
+  if (note.kind === 'wait') return session('needs-approval')
+  if (note.kind === 'input') return session('needs-input')
+  if (note.kind === 'agent') return agent.waitingForApproval
+  if (note.kind === 'review') return pendingReviews > 0
+  return true
 }
 
 /** The panel opened: the alerts that didn't peek out, or waited while Steward stepped aside, show now. */
@@ -1204,6 +1265,8 @@ function maybeFirstPeek(): void {
   // The note was the panel's first-time note; this shows it instead.
   void appState.update({ firstPeekShown: true, presenceNoteSeen: true })
   const { title, detail } = firstPeekNote(noteFor())
+  // In the island it's the island's own note (it stays at least 10 s, and ends once the cursor has touched it and left).
+  if (inNotch() && settings.steward().notchStyle === 'island') return void islandNotes.show({ kind: 'first', name: title, text: detail, at: Date.now(), key: 'first-peek' })
   win.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', title, detail, at: Date.now() }])
   setDock('nudge')
   firstPeek = { startedAt: Date.now(), touched: false }
@@ -1376,11 +1439,15 @@ function updateIsland(): void {
   const now = Date.now()
   if (!agent.busy) agentSince = undefined
   else agentSince ??= now
-  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
+  // A big message about something that no longer waits (answered in the terminal, say) settles now.
+  const shown = islandNotes.current
+  if (shown && !stillWaits(shown, now)) return islandNotes.drop()
+  const event = moods.current(now)
+  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, failed: event === 'mad' || event === 'worried', note: shown, now }
   notch.setIsland(islandStatus(input))
-  // An alert's note (a review) comes out even when Steward only shows when needed: the island wakes while it shows,
-  // as the tab comes out for a nudge, and goes back to sleep once it settles.
-  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || islandNotes.current?.kind === 'alert')
+  // An alert's message comes out even when Steward only shows when needed: the island wakes while it shows, as the tab
+  // comes out for a nudge, and goes back to sleep once it settles. (Finished and started are about work going on.)
+  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || (!!shown && shown.kind !== 'finished' && shown.kind !== 'started'))
   clearTimeout(islandTimer)
   const next = nextChange(input)
   if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
@@ -1526,7 +1593,12 @@ function registerIpc(): void {
   ipcMain.handle('dock:resetPanel', () => resetPanelPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
   ipcMain.handle('notch:state', () => notch.state())
-  ipcMain.on('notch:click', () => setDock('expanded'))
+  // A click on the island opens the panel, as its message's Open does.
+  ipcMain.on('notch:click', () => (islandNotes.current ? islandAct('open', islandNotes.current.at) : setDock('expanded')))
+  ipcMain.on('notch:act', (_e, what: unknown, at: unknown) => islandAct(what, at))
+  ipcMain.on('notch:fit', (_e, at: unknown, fit: unknown) => {
+    if (typeof at === 'number' && (fit === 'note' || fit === 'long' || fit === 'toolong')) islandNotes.fit(at, fit)
+  })
   ipcMain.on('notch:reportMood', (_e, mood: unknown, glint: unknown) => {
     if (MOODS.includes(mood as Mood) && GLINTS.includes(glint as PillGlint)) notch.setMood(mood as Mood, glint as PillGlint)
   })

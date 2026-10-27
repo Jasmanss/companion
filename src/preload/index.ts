@@ -75,6 +75,7 @@ const api: StewardAPI = {
   alerts: {
     onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
     onMood: (cb) => subscribe<Mood | null>('alerts:mood', cb),
+    onAct: (cb) => subscribe<AlertView>('alerts:act', cb),
   },
   deploys: {
     status: () => ipcRenderer.invoke('deploys:status'),
@@ -82,6 +83,7 @@ const api: StewardAPI = {
   review: {
     list: () => ipcRenderer.invoke('review:list'),
     onChanged: (cb) => subscribe<ReviewView[]>('review:changed', cb),
+    onOpen: (cb) => subscribe<string>('review:open', cb),
     problems: () => ipcRenderer.invoke('review:problems'),
     onProblems: (cb) => subscribe<ReviewProblem[]>('review:problems', cb),
     checks: () => ipcRenderer.invoke('review:checks'),
@@ -127,6 +129,8 @@ const api: StewardAPI = {
     onState: (cb) => subscribe<NotchState>('notch:state', cb),
     onCursor: (cb) => subscribe<{ x: number; y: number } | null>('notch:cursor', cb),
     click: () => ipcRenderer.send('notch:click'),
+    fit: (at, fit) => ipcRenderer.send('notch:fit', at, fit),
+    act: (what, at) => ipcRenderer.send('notch:act', what, at),
   },
   presence: {
     onNote: (cb) => subscribe<string>('presence:note', cb),
