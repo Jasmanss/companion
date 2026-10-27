@@ -84,7 +84,7 @@ Main building's audit of Island mode after Phase 2 (PR #36): finished and two pr
 - Hidden by hand or stepped aside: nothing comes out, as today. The first-launch note is not an alert: it ignores the choice and shows once ever, after stepping aside ends.
 - A failed build and good news each get their own mark colors (red, spark) so the compact island tells them apart from an amber wait.
 
-**Phase 3 now covers:** the approval and review sizes, **plus** the four sizes above, the red and spark marks, the "Later" settle, the catch-all note, the no-old-pill rule and its smoke check, **and the notch eye jitter fix (see "Plan update 3")**. Phase 2 and the other phases are unchanged.
+**Phase 3 now covers:** the approval and review sizes, **plus** the four sizes above, the red and spark marks, the "Later" settle, the catch-all note, the no-old-pill rule and its smoke check, **the notch eye jitter fix and alert text that is never cut off (see "Plan update 3")**. Phase 2 and the other phases are unchanged.
 
 **Decided by the user (2026-10-24, via the front door):** "Accept all three island alert picks: a failed build comes out under Needs me, Nothing means only the small status marks, and chat approvals get Open and Later."
 1. **A failed build comes out under "Needs me",** as an urgent alert. (Build the failed-build alert's `peeksOut` check to count it with the waiting-on-you kinds.)
@@ -111,6 +111,23 @@ The user: "Fold the notch eye jitter fix into island Phase 3." The bug: in the n
 
 Shared files this adds: `src/renderer/src/Pill.tsx` (`runEyes` pacing), `src/renderer/src/pill/eyes.ts` (glance rule, blend), `src/main/notch-window.ts` (cursor rate), all small. The panel's own eyes keep drawing every frame and must not change. Motion is still hand-tested on the real Mac; the measurement above is what CI-side checks can cover.
 
+#### Second item (2026-10-27): alert text is never cut off
+The user, with a screenshot of "companion: PR #39 merged · Main chat, Phase ..." under the notch: "I dont like how the text gets cut off. See how you can fix that." They also asked why the island shows for some things and not others, and whether it is waiting on phases.
+
+**What the screenshot is.** The old under-notch alert, not the island. Today in Island mode only review alerts become island notes (`islandShows` in `src/main/presence.ts`, used by `showAlerts` in `src/main/index.ts`); the merged alert (`pr-merged:`, title "<project>: PR #N merged", detail = the PR's title) still goes to the old alert. **So yes, the island is waiting on Phase 3:** Phase 3's no-old-pill rule is what moves every alert onto it. The island's own note would cut the same text off too: `.isl-note-in` in `src/renderer/src/notch.css` is one line (`white-space: nowrap`), the bold title capped at 45% of the width with an ellipsis, and the detail ellipsized after it. The old alert (`.nudge-detail` in `src/renderer/src/styles.css`) clamps the detail at 2 lines inside a fixed-size window, which is the cut the user sees.
+
+**The rule (Phase 3's definition of done):**
+- **A note wraps instead of cutting off.** If the title and detail fit on one line, it is today's note (380 by 60). If not, the title sits on its own line, the detail wraps under it, and the black grows taller to fit: the **Long note**, 380 by 94 pt, up to three lines of text in all (the title, then up to two lines of detail). No ellipsis at normal lengths; most PR titles fit.
+- **Past three lines (the rare case)** the last line ends in "…", the note stays out longer (9 s, kept while the cursor is on it, like an approval), and a click opens the whole text in the panel.
+- **The same rule for every size** that carries words: the approval-size cards (input, a session's approval, build failed) keep their two-line text but never lose a word to a one-line clip, and a chat's name is never cut so that the alert no longer says which chat it is.
+- **Tab mode** (Macs without a notch keep the old alert): `.nudge-detail` goes from 2 to 3 lines, and the nudge's window grows in height to fit instead of clipping. Main building measures the window first; the alert's window height is set in `src/main/index.ts` (`NUDGE_WIDTH` is 340).
+- **Smoke check (added to Phase 3's):** post one alert with a long title and a long detail in Island mode and fail if any text is clipped (`scrollWidth` greater than `clientWidth`, or `scrollHeight` greater than `clientHeight`, on the title and detail), except in the "more than three lines" case, where only the last line may end in "…". Run the same check for the tab alert.
+- A unit test for the line count and size choice: a pure function from the title and detail to the island size, with the three cases (one line, long note, too long).
+
+**Designed, live in the Showcase** (`design/showcase.html`, section 7): the main figure has two new states, **A long message** (the real case, "companion: PR #39 merged" with a stand-in for the PR's full title, which the screenshot cut off; the black grows taller, the title on its own line, the detail wrapped, a spark on the right) and **Too long** (the last line ends in "…"). The size ladder gains "Long note", and the alert table gains two rows. Tested in headless Chrome: the long note shows its whole text, and the too-long case clamps at two detail lines.
+
+**Defaults the front door can change:** 6.5 s on screen for a long note (longer to read), 9 s for too long, both kept while the cursor is on it. Maximum three lines. Say if the user wants more or fewer.
+
 ### The hand-off to the side panel
 A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. The island goes back to Steward peeking, looking toward the panel. Closing is today's close. The panel in notch mode no longer drops from the notch; that special case goes away.
 
@@ -130,7 +147,7 @@ Joining the notch flush with the top means every size wider than the notch sits 
 - A small spring loop on the notch page that sets only transforms, opacity and clip paths; the Showcase's `peeking.js` and `island-kit.js` are the working model (a steady 60 fps in headless Chrome). Reduce Motion fades.
 - Content: the right side from the session tracker (`SessionView` state and detail), the turn start for the timer (Visual Review's `UserPromptSubmit` hook already tracks it), the Visual Review store for the thumbnail. The approval and review contents already exist.
 - Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the size and the mascot position), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size; the panel no longer opening under the notch).
-- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, the no-old-pill rule, and the notch eye jitter fix in "Plan update 3"); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
+- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, the no-old-pill rule, the notch eye jitter fix, and never-cut-off alert text in "Plan update 3"); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
 
 ### Risks and open questions
 1. Matching the real notch's corners where the island starts, and hiding Steward exactly behind the notch's edge. Phase 1 checks both on the real Mac.

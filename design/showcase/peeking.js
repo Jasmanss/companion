@@ -26,19 +26,22 @@ export const PSTATES = [
   ['good', 'Deployed or merged', 'Good news. The note size with one line, Steward celebrating, a spark on the right. It settles away to rest after a few seconds; nothing waits.'],
   ['first', 'First launch', 'Once ever, the first time Steward hides: the note size says how to bring it out. It stays at least 10 seconds, longer while the cursor is on it, then goes back to rest.'],
   ['other', 'Anything else', 'The catch-all: any alert with no size of its own opens as a note with its title and one line. Nothing ever uses the old pill under the notch.'],
+  ['long', 'A long message', 'A message that does not fit on one line. The note never cuts it off: the title sits on its own line, the detail wraps under it, and the black grows taller to fit, up to three lines. Today it reads "companion: PR #39 merged · Main chat, Phase …" and the rest is lost.'],
+  ['toolong', 'Too long', 'The rare case: more than three lines. The last line ends in "…", the note stays out a little longer, and a click opens the whole text in the panel.'],
   ['review', 'Review ready', 'The biggest island: Steward joins it, before and after, what Claude says changed, Looks good. It settles to compact with a thumbnail.'],
   ['two', 'Two projects', 'A short note, "api started", then compact with two spinners and a count.'],
   ['quiet', 'Quiet mode', 'Asleep: Steward tucked behind the notch, no island. Resting the cursor wakes it.'],
 ]
-const CTX = { rest: 'idle', hover: 'idle', working: 'working', finished: 'finished', needs: 'needs', wait: 'needs', ask: 'ask', fail: 'fail', good: 'good', first: 'idle', other: 'idle', review: 'review', two: 'two', quiet: 'idle', open: 'idle' }
-const MOOD = { rest: ['resting'], hover: ['idle'], working: ['thinking', 'sweep'], finished: ['celebrating'], needs: ['needs-you'], wait: ['needs-you'], ask: ['confused'], fail: ['mad'], good: ['celebrating'], first: ['idle'], other: ['idle'], review: ['idle'], two: ['thinking', 'sweep'], quiet: ['resting'], open: ['idle'] }
+const CTX = { rest: 'idle', hover: 'idle', working: 'working', finished: 'finished', needs: 'needs', wait: 'needs', ask: 'ask', fail: 'fail', good: 'good', first: 'idle', other: 'idle', long: 'good', toolong: 'good', review: 'review', two: 'two', quiet: 'idle', open: 'idle' }
+const MOOD = { rest: ['resting'], hover: ['idle'], working: ['thinking', 'sweep'], finished: ['celebrating'], needs: ['needs-you'], wait: ['needs-you'], ask: ['confused'], fail: ['mad'], good: ['celebrating'], first: ['idle'], other: ['idle'], long: ['celebrating'], toolong: ['celebrating'], review: ['idle'], two: ['thinking', 'sweep'], quiet: ['resting'], open: ['idle'] }
 const LOOK_RIGHT = { x: 0.6, y: 0.08 }
 
 /** The island's size for each step, in points: width and height. The width and height are of the one black shape. */
-export const SIZES = { rest: [NOTCH.w, NOTCH.h], compact: [324, 32], note: [380, 60], approval: [420, 124], review: [440, 172] }
+export const SIZES = { rest: [NOTCH.w, NOTCH.h], compact: [324, 32], note: [380, 60], long: [380, 94], approval: [420, 124], review: [440, 172] }
 export const STEPS = [
   ['compact', 'Compact', 'Claude is running. A spinner and the time, like the call timer.'],
   ['note', 'Note', 'A short message: one line under the notch.'],
+  ['long', 'Long note', 'A message too long for one line: the title, then the detail wrapped under it, up to three lines in all. The black grows taller; nothing is cut off.'],
   ['approval', 'Approval', 'Needs you: the command, Deny and Allow, like the call card.'],
   ['review', 'Review', 'A review: before and after, what changed, Looks good, like the music player.'],
 ]
@@ -98,10 +101,11 @@ export function createPeeking(screen, o) {
     if (st === 'rest' || st === 'hover' || st === 'open' || st === 'quiet') return 'rest'
     if (!settled) {
       if (st === 'finished' || st === 'two' || st === 'good' || st === 'first' || st === 'other') return 'note'
+      if (st === 'long' || st === 'toolong') return 'long'
       if (st === 'needs' || st === 'wait' || st === 'ask' || st === 'fail') return 'approval'
       if (st === 'review') return 'review'
     }
-    if (st === 'good' || st === 'first' || st === 'other') return 'rest' // nothing waits: back to the notch
+    if (st === 'good' || st === 'first' || st === 'other' || st === 'long' || st === 'toolong') return 'rest' // nothing waits: back to the notch
     return 'compact'
   }
   function plan(st) {
@@ -127,6 +131,9 @@ export function createPeeking(screen, o) {
       const line = { two: '<b>api</b> <span class="mut">started · Running tests</span>', good: '<b>haven</b> <span class="mut">deployed · haven.vercel.app</span>', first: '<b>Rest the cursor on the notch</b> <span class="mut">or press ⌥Space</span>', other: '<b>haven</b> <span class="mut">Something happened · click to open</span>' }[st] ?? '<b>haven</b> <span class="mut">Claude finished · 3 files changed</span>'
       const html = `<div class="ic-row" style="justify-content:center">${line}</div>`
       p.contents.push({ id: 'note', html, x: -bw / 2, y: 33, w: bw, h: 27, eyes: false })
+    } else if (lv === 'long') {
+      const d = st === 'toolong' ? 'Main chat, Phase 1: take the hide button and the pin out of the header, add the Ask | Auto switch by the message box, round the Send button, and label commands that ran on their own' : 'Main chat, Phase 1: take the hide button and the pin out of the header, and add the Ask | Auto switch'
+      p.contents.push({ id: 'long', html: `<div class="pk2-long"><b>companion: PR #39 merged</b><span>${d}</span></div>`, x: -bw / 2, y: 33, w: bw, h: bh - 33, eyes: false })
     } else if (lv === 'approval') {
       const T = { wait: ['haven is waiting on you', 'Claude wants to run <code>npm install</code>', 'Open haven', 'Later'], ask: ['haven needs your input', 'Which database should the new table use?', 'Open haven', 'Later'], fail: ['haven deploy failed', 'Missing environment variable DATABASE_URL', 'Want me to look?', 'Later'] }[st]
       const html = T
@@ -194,11 +201,11 @@ export function createPeeking(screen, o) {
     if (first) { apply2(); ey.apply() }
   }
   let tSettle = 0
-  const peak = (st) => ['finished', 'two', 'needs', 'wait', 'ask', 'fail', 'good', 'first', 'other', 'review'].includes(st)
+  const peak = (st) => ['finished', 'two', 'needs', 'wait', 'ask', 'fail', 'good', 'first', 'other', 'long', 'toolong', 'review'].includes(st)
   function armSettle(ms) {
     clearTimeout(tSettle)
     if (!o.autoSettle || !peak(state) || settled) return
-    tSettle = setTimeout(() => { if (hovered) return armSettle(1500); settled = true; show(state, false) }, ms ?? (['needs', 'wait', 'ask', 'fail', 'review'].includes(state) ? 9000 : state === 'first' ? 10000 : 4500))
+    tSettle = setTimeout(() => { if (hovered) return armSettle(1500); settled = true; show(state, false) }, ms ?? (['needs', 'wait', 'ask', 'fail', 'review', 'toolong'].includes(state) ? 9000 : state === 'long' ? 6500 : state === 'first' ? 10000 : 4500))
   }
   function go(st, { first = false } = {}) {
     state = st
@@ -231,7 +238,7 @@ export function createPeeking(screen, o) {
 /* ---------------- the section ---------------- */
 const STORY = [['rest', 1800], ['hover', 1700], ['working', 2400], ['two', 3200], ['working', 1400], ['finished', 4800], ['needs', 5200], ['working', 1600], ['review', 5600], ['rest', 2400], ['quiet', 2400]]
 const staticRight = (c, mode) => `<span class="mc-demo"><span class="blk">${rightSide(c, mode).h}</span></span>`
-const COVER = { compact: 70, note: 97, approval: 118, review: 128 }
+const COVER = { compact: 70, note: 97, long: 97, approval: 118, review: 128 }
 /** Every alert and the island size it opens as. peek: which choices of "Alerts that peek out" let it come out (needs = Needs me). */
 const ALERTS = [
   { st: 'finished', name: 'A session finished', key: 'finished:', size: 'Note', steward: 'Happy, a nod or proud (by the turn)', after: 'Compact with a check, until opened', stays: '4.5 s, kept while the cursor is on it, 1.5 s after it leaves', click: 'Opens the panel', peek: 'status', sw: 'Session finished', built: 'Phase 2' },
@@ -243,6 +250,8 @@ const ALERTS = [
   { st: 'fail', name: 'A build failed', key: 'deploy-failed:', size: 'Approval-size card, with "Want me to look?"', steward: 'Mad, then worried', after: 'Compact with a red !, until a deploy for that project works (or 30 minutes)', stays: '9 s, kept while the cursor is on it', click: 'Opens the panel. "Want me to look?" also opens it and asks Steward\'s agent to read the build log, as the old card did. Later settles now', peek: 'fail', sw: 'Build failed', built: 'Phase 3' },
   { st: 'good', name: 'Deployed, or a PR merged', key: 'deploy-ready: and pr-merged:', size: 'Note', steward: 'Celebrating', after: 'Nothing waits: back to the notch', stays: '4.5 s. Several within a moment join into one note with "and 2 more"', click: 'Opens the panel (the page\'s screenshot is in the tray)', peek: 'all', sw: 'Celebrations', built: 'Phase 3' },
   { st: 'first', name: 'First launch', key: '(not an alert)', size: 'Note', steward: 'Looking at where to rest the cursor', after: 'Back to the notch', stays: 'At least 10 s; longer while the cursor is on it; ends once it has left after touching it', click: 'Opens the panel and counts as learned', peek: 'always', sw: 'none (shows once ever)', built: 'Phase 3' },
+  { st: 'long', name: 'Any message too long for one line', key: 'any key (for example pr-merged:)', size: 'Long note: taller, up to three lines', steward: 'Same as its kind', after: 'Same as its kind', stays: '6.5 s, kept while the cursor is on it', click: 'Opens the panel', peek: 'all', sw: 'its kind\'s own switch', built: 'Phase 3' },
+  { st: 'toolong', name: 'More than three lines', key: 'any key', size: 'Long note, last line ends in "…"', steward: 'Same as its kind', after: 'Same as its kind', stays: '9 s, kept while the cursor is on it', click: 'Opens the panel with the whole text', peek: 'all', sw: 'its kind\'s own switch', built: 'Phase 3' },
   { st: 'other', name: 'Anything else', key: 'any key with no size of its own', size: 'Note: its title and one line', steward: 'Idle', after: 'Back to the notch', stays: '4.5 s', click: 'Opens the panel', peek: 'all', sw: 'its own switch, if it has one', built: 'Phase 3' },
 ]
 const popsOut = (a, choice, failNeeds) => {
