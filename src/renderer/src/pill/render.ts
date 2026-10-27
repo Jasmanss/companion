@@ -278,12 +278,15 @@ function vectorView(kind: PillKind, el: HTMLElement, W: number, H: number, o: Vi
   let symKind = ''
   const f = (v: number) => v.toFixed(2)
   // One corner symbol, drawn around (0, 0) at size S.
-  const glyph = (kind: 'bang' | 'drop') => {
+  const glyph = (kind: 'bang' | 'q' | 'drop') => {
     // "!" sits in a solid badge, with the "!" in the backdrop's own color: the loudest mark, for needs-you.
     if (kind === 'bang') {
       const cut = o.lit ? '#000000' : BACKDROP(o.light)
       return `<circle cx="0" cy="0" r="${f(S * 0.52)}" fill="${pal.sym}"/><rect x="${f(-S * 0.08 * bold)}" y="${f(-S * 0.33)}" width="${f(S * 0.16 * bold)}" height="${f(S * 0.4)}" rx="${f(S * 0.08 * bold)}" fill="${cut}"/><circle cx="0" cy="${f(S * 0.24)}" r="${f(S * 0.085 * bold)}" fill="${cut}"/>`
     }
+    // "?" (confused): a stroke and a dot, no badge.
+    if (kind === 'q')
+      return `<path d="M${f(-S * 0.27)} ${f(-S * 0.2)} C${f(-S * 0.27)} ${f(-S * 0.58)} ${f(S * 0.28)} ${f(-S * 0.6)} ${f(S * 0.28)} ${f(-S * 0.24)} C${f(S * 0.28)} ${f(-S * 0.02)} 0 ${f(-S * 0.02)} 0 ${f(S * 0.16)}" fill="none" stroke="${pal.sym}" stroke-width="${f(S * 0.17 * bold * 1.2)}" stroke-linecap="round"/><circle cx="0" cy="${f(S * 0.4)}" r="${f(S * 0.12 * bold)}" fill="${pal.sym}"/>`
     return `<path d="M0 ${f(-S * 0.5)} C${f(S * 0.3)} ${f(-S * 0.1)} ${f(S * 0.34)} ${f(S * 0.08)} ${f(S * 0.34)} ${f(S * 0.2)} C${f(S * 0.34)} ${f(S * 0.42)} ${f(S * 0.16)} ${f(S * 0.54)} 0 ${f(S * 0.54)} C${f(-S * 0.16)} ${f(S * 0.54)} ${f(-S * 0.34)} ${f(S * 0.42)} ${f(-S * 0.34)} ${f(S * 0.2)} C${f(-S * 0.34)} ${f(S * 0.08)} ${f(-S * 0.3)} ${f(-S * 0.1)} 0 ${f(-S * 0.5)} Z" fill="${pal.drop}"/>`
   }
   const slide = o.cls === 'peek' ? 6 : o.cls === 'header' ? 10 : ph * 0.5
@@ -373,7 +376,7 @@ function vectorView(kind: PillKind, el: HTMLElement, W: number, H: number, o: Vi
           symKind = sym.kind
         }
         const y = symAt.y + (sym.kind === 'drop' ? sym.dy * slide : 0)
-        symG.setAttribute('transform', `translate(${f(symAt.x)} ${f(y)}) scale(${f(Math.max(0, sym.s))})`)
+        symG.setAttribute('transform', `translate(${f(symAt.x)} ${f(y)}) rotate(${f(sym.rot ?? 0)}) scale(${f(Math.max(0, sym.s))})`)
         symG.setAttribute('opacity', f(sym.a))
       }
       body.style.transform = bodyCss(st, W, H)
@@ -417,6 +420,7 @@ function blockyView(el: HTMLElement, W: number, H: number, o: ViewOptions): { up
   const cv = Object.assign(document.createElement('canvas'), { width: Math.round(W * dpr), height: Math.round(H * dpr), className: 'pv-dim' })
   cv.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px`
   const msvg = document.createElementNS(NS, 'svg')
+  msvg.setAttribute('class', 'marks')
   msvg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   msvg.setAttribute('shape-rendering', 'crispEdges')
   msvg.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;overflow:visible;pointer-events:none`

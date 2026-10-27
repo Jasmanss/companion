@@ -62,7 +62,7 @@ const STEWARD_CHOICES = {
   glass: ['tinted', 'clear'],
   personality: ['calm', 'lively'],
   edge: ['right', 'left'],
-  notchStyle: ['chin', 'wings'],
+  notchStyle: ['chin', 'wings', 'island'],
   size: ['small', 'medium'],
   tint: PANEL_TINT_IDS,
   presence: ['always', 'quiet'],

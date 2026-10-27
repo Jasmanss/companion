@@ -96,13 +96,15 @@ export interface PillProps {
   tucked?: boolean
   /** Dim when idle: faded, still, and not drawn until it wakes. */
   dimmed?: boolean
+  /** Which way the panel is from it (-1 left, 1 right; 0, the default: it's the panel's own). Needs you looks there when impatient. */
+  panelSide?: number
 }
 
 /**
  * The character, alive. Its eyes step every frame and look at the cursor while it's over the window. Tucked away
  * it draws less often (resting ten times a second), and while the page is hidden it doesn't draw at all.
  */
-export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false, dimmed = false }: PillProps) {
+export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false, dimmed = false, panelSide = 0 }: PillProps) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), now()))
   const dark = useMedia('(prefers-color-scheme: dark)')
@@ -110,7 +112,7 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
   const { version, color, glass, mouth, personality } = look
 
   useEffect(() => setMood(st, mood, glint), [st, mood, glint])
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: panelSide }), [st, mouth, personality, panelSide])
   // Read by the drawing loop, so dimming and waking don't rebuild the character.
   const dimNow = useRef(dimmed)
   useEffect(() => {

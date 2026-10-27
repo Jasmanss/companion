@@ -3,13 +3,14 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, underNotch } from '../shared/notch'
+import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
-import { clampPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
+import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp } from '../shared/types'
+import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -42,6 +43,7 @@ import {
   EDGE_FAR_DWELL_MS,
   freshPush,
   inRect,
+  islandShows,
   MAX_HELD,
   menuBarTitle,
   nextLookMs,
@@ -59,15 +61,20 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { ReviewTracker } from './review'
+import { alertNote, hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, type Turns } from './island-status'
+import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
+import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
+import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
-import { isReviewId, ReviewStore } from './review-store'
+import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
+import { filesChangedSince, lookAtFiles } from './turn-files'
+import { OvernightWatch, wakeAt, WatchLog } from './watch'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
 import { keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, smokeHidden, type Unseen } from './smoke-env'
-import { deadPort, startPageServer, type SmokeVersion } from './smoke-review'
+import { deadPort, gitInit, startPageServer, type SmokeVersion } from './smoke-review'
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
@@ -92,7 +99,10 @@ const SLIDE_MS = 700
 /** Why the window went, when the page's slide ended with no frame to draw its end (its own clock said so). */
 const SLIDE_END_UNDRAWN = "its slide's end time, with no frame drawn"
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'tray', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  { scheme: 'review', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+])
 
 /** Set when the smoke check runs hidden (the default, see smoke-env.ts): its windows are see-through and never take focus. */
 let unseen: Unseen | null = null
@@ -120,6 +130,8 @@ let registered: Partial<Record<GlobalShortcutId, string>> = {}
 /** A new shortcut is being pressed in Settings: the global ones step aside so the keys reach the window. */
 let recordingShortcut = false
 let dock: DockState = 'collapsed'
+/** What the viewing state shows: the tray's images, or a Visual Review's before and after (bigger). */
+let viewKind: ViewerKind = 'tray'
 let modalOpen = false
 let draggingOut = false
 let settings: SettingsStore
@@ -139,6 +151,13 @@ let gh: GhRunner | null = null
 const merges = new MergeTracker()
 /** Steward in the MacBook notch, and where the notch is (null: no screen has one right now). */
 let notch: NotchDock
+/** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
+let watch: OvernightWatch | null = null
+/** Its keep-awake blocker, while a night goes on. */
+let watchBlocker: number | null = null
+/** The smoke check says how long the Mac has been idle, so someone's real mouse can't change what it checks. */
+let smokeIdle = 0
+const idleSeconds = (): number => (SMOKE_OUT ? smokeIdle : powerMonitor.getSystemIdleTime())
 let notchGeo: NotchGeometry | null = null
 /** Docked in the notch: picked in Settings, and a screen has one. Otherwise it's on its edge. */
 const inNotch = (): boolean => !!settings?.steward().notch && notchGeo !== null
@@ -229,23 +248,29 @@ let sentOverhang = -1
 
 /**
  * Where the window goes in each state: against the screen edge you picked, at the height the tab was dragged to. The
- * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered. Docked in
+ * nudge is the tab grown sideways; the panel is centered on the tab, kept on screen; the viewer is centered (a review's
+ * is bigger, on the panel's screen). Docked in
  * the notch, the nudge, the panel and the viewer come down from the notch instead, on the notch's own screen. A panel
  * that was dragged somewhere opens there instead, at the edge or in the notch.
  */
 function boundsFor(state: DockState): Electron.Rectangle {
+  // A review's before and after gets nearly the whole screen the panel is on, wherever the panel was moved to.
+  if (state === 'viewing' && viewKind === 'review') return reviewViewerRect((panelSpot()?.display ?? panelHome()).workArea)
   // Dragged somewhere, the panel opens there: on the screen it was left on, inside its work area.
   const spot = state === 'expanded' ? panelSpot() : null
   if (spot) return panelRect(spot.display.workArea, panelSize(spot.display.workArea), spot.spot)
   if (state === 'nudge' && inNotch() && notchGeo) return nudgeUnderNotch(notchGeo, notchDisplay().workArea, NUDGE_WIDTH)
+  const { edge, size } = settings.steward()
+  // Docked in the notch, the panel opens at the side Settings says, on the notch's screen, near its top: never under
+  // the notch, which keeps Steward.
   if ((state === 'expanded' || state === 'viewing') && inNotch() && notchGeo) {
     const area = notchDisplay().workArea
-    if (state === 'expanded') return underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
-    const size = { width: Math.min(VIEWER_MAX_WIDTH, area.width - 120), height: area.height - 48 }
-    return { ...underNotch(notchGeo, area, size), y: area.y + Math.round((area.height - size.height) / 2) }
+    const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
+    const height = state === 'viewing' ? area.height - 48 : Math.min(760, area.height - 48)
+    const y = state === 'viewing' ? area.y + Math.round((area.height - height) / 2) : area.y + 8
+    return { x: edge === 'left' ? area.x + 8 : area.x + area.width - width - 8, y, width, height }
   }
   const area = screen.getPrimaryDisplay().workArea
-  const { edge, size } = settings.steward()
   const tab = TAB_SIZES[size].tab
   /** Left of a window this wide that sits gap points from the edge. */
   const x = (width: number, gap = 0) => (edge === 'left' ? area.x + gap : area.x + area.width - width - gap)
@@ -336,6 +361,8 @@ function dragPanel(phase: unknown, x?: unknown, y?: unknown): void {
   if (phase === 'end') {
     if (panelDrag?.moved) savePanelPlace(win.getBounds(), panelDrag.display)
     panelDrag = null
+    // Steward in the notch looks where the panel is now.
+    placeNotch()
     return
   }
   const pointer = typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null
@@ -364,7 +391,7 @@ function savePanelPlace(bounds: Rect, display: Electron.Display): void {
 
 /**
  * Double-click on the top bar, or Settings → Steward → Reset: the panel forgets where it was moved, on every screen. An
- * open one glides home (at its edge, or under the notch), and the old way in and out is back.
+ * open one glides home (at its edge, the notch's screen in the notch), and the old way in and out is back.
  */
 async function resetPanelPlace(): Promise<void> {
   panelPlaces = {}
@@ -372,6 +399,7 @@ async function resetPanelPlace(): Promise<void> {
   await appState.update({ panelPlaces, panelDisplay })
   sendPlaced()
   if (win && !win.isDestroyed() && dock === 'expanded' && win.isVisible()) win.setBounds(boundsFor('expanded'), true)
+  placeNotch()
 }
 
 /**
@@ -470,17 +498,26 @@ function hideTab(why?: string): void {
   setSlide(quiet(), false)
 }
 
-const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy']
+const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello', 'watching']
 const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
 /**
- * Steward shows in the notch while it's tucked away, and while a nudge is out under it, joined to its chin. The panel
- * opens under the notch and takes over from it. Not in the notch: the tab is back at the edge.
+ * Steward shows in the notch unless it was hidden by hand: tucked away, with a nudge out under it (joined to its chin),
+ * and while the panel is open at the side, looking toward it. Not in the notch: the tab is back at the edge.
  */
 function placeNotch(): void {
   notch?.setNudge(inNotch() && dock === 'nudge')
-  notch?.show(inNotch() && (dock === 'collapsed' || dock === 'nudge') && !steppedAside)
+  notch?.setPanel(inNotch() ? panelLook() : null)
+  notch?.show(inNotch() && dock !== 'hidden' && !steppedAside)
+}
+
+/** Which way the open panel is from the notch, for Steward to look at; null while it isn't open. */
+function panelLook(): { x: number; y: number } | null {
+  if (!isOpen(dock) || !notchGeo) return null
+  const b = boundsFor(dock)
+  const dx = b.x + b.width / 2 - (notchGeo.x + notchGeo.width / 2)
+  return { x: Math.round(Math.max(-1, Math.min(1, dx / 300)) * 80) / 100, y: 0.35 }
 }
 
 /**
@@ -843,12 +880,32 @@ function menuBarIcon(): Electron.NativeImage {
   return image
 }
 
+/**
+ * The menu bar's title. While hidden, stepping aside, or when Steward only comes out when needed, it shows how many
+ * sessions are waiting on you, and a dot when something quieter is waiting too: an alert, or a review not decided yet.
+ */
+function menuBarText(): string {
+  const waiting = sessions?.waitingCount() ?? 0
+  return menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews, watch?.watching ?? false)
+}
+
+/** "11:10 PM", for the menu bar. */
+const clockText = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
+/** The menu bar's Overnight Watch items: Goodnight, or how long it watches and the ways to end it. */
+function watchMenuItems(): Electron.MenuItemConstructorOptions[] {
+  const night = watch?.night
+  if (!night) return [{ label: 'Goodnight…', click: openGoodnight }]
+  return [
+    { label: `Watching until ${clockText(night.until)}`, enabled: false },
+    { label: "I'm Up", click: () => watch?.stop('up') },
+    { label: 'Stop Watching', click: () => watch?.stop('stopped') },
+  ]
+}
+
 function updateMenuBar(): void {
   if (!menuBar) return
-  // While hidden, stepping aside, or when Steward only comes out when needed, the menu bar shows how many sessions are
-  // waiting on you, and a dot when something quieter is waiting too.
-  const waiting = sessions?.waitingCount() ?? 0
-  menuBar.setTitle(menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length))
+  menuBar.setTitle(menuBarText())
   menuBar.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Steward', accelerator: registered.togglePanel || undefined, registerAccelerator: false, click: () => setDock('expanded') },
@@ -856,6 +913,8 @@ function updateMenuBar(): void {
         ? { label: 'Show at Screen Edge', accelerator: registered.hideFromEdge || undefined, registerAccelerator: false, click: () => setDock('collapsed') }
         : { label: 'Hide from Screen Edge', accelerator: registered.hideFromEdge || undefined, registerAccelerator: false, click: () => setDock('hidden') },
       { label: 'Settings…', accelerator: 'Command+,', registerAccelerator: false, click: () => openSettings() },
+      { type: 'separator' },
+      ...watchMenuItems(),
       { type: 'separator' },
       { label: 'Quit Steward', role: 'quit' },
     ]),
@@ -962,21 +1021,14 @@ function openSettings(section?: SettingsSection): void {
     settingsWin.focus()
     return
   }
-  const area = screen.getPrimaryDisplay().workArea
-  const { width, height } = SETTINGS_SIZE
-  // Centered, unless the open panel would cover part of it; then just clear of the panel.
-  let x = area.x + Math.round((area.width - width) / 2)
-  if (isOpen(dock)) {
-    const panel = PANEL_WIDTH + 8 + 24
-    x = settings.steward().edge === 'left' ? Math.max(x, area.x + panel) : Math.min(x, area.x + area.width - panel - width)
-  }
-  x = Math.max(area.x + 24, Math.min(x, area.x + area.width - width - 24))
+  // Centered on the open panel's screen, unless the panel would cover part of it; then beside the panel, wherever it is
+  // (at its edge, at its side in the notch, or dragged somewhere), when there's room.
+  const panel = win && !win.isDestroyed() && isOpen(dock) && win.isVisible() ? win.getBounds() : null
+  const area = (panel ? screen.getDisplayMatching(panel) : screen.getPrimaryDisplay()).workArea
+  const at = clearOfPanel(area, SETTINGS_SIZE, panel)
   const { vibrant } = settingsAppearance()
   const w = new BrowserWindow({
-    x,
-    y: area.y + Math.round((area.height - height) / 2),
-    width,
-    height,
+    ...at,
     minWidth: 640,
     minHeight: 420,
     title: 'Steward Settings',
@@ -1001,6 +1053,10 @@ function openSettings(section?: SettingsSection): void {
     w.show()
     w.focus()
   })
+  // The window in use is on top: the panel floats above normal windows, so while Settings has the keyboard it floats
+  // too, above the panel. Once it hasn't, it's a normal window again, and clicking the panel puts the panel on top.
+  w.on('focus', () => settingsOnTop(w, true))
+  w.on('blur', () => settingsOnTop(w, false))
   w.on('blur', tuckIfAway)
   w.on('closed', () => {
     settingsWin = null
@@ -1020,6 +1076,15 @@ function openSettings(section?: SettingsSection): void {
     })
   }
   loadPage(w, 'settings.html', section)
+}
+
+/** Settings above the panel (at the panel's level, and in front), or a normal window again. */
+function settingsOnTop(w: BrowserWindow, on: boolean): void {
+  if (w.isDestroyed()) return
+  if (on) {
+    w.setAlwaysOnTop(true, 'floating')
+    w.moveTop()
+  } else w.setAlwaysOnTop(false)
 }
 
 /** Open at login lives in macOS. While developing it's off limits: it would register Electron itself. */
@@ -1065,7 +1130,15 @@ function showAlerts(list: AlertView[]): void {
     asideAlerts = [...asideAlerts, ...list].slice(-MAX_HELD)
     return updateMenuBar()
   }
-  const { peek, held } = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek)
+  const island = inNotch() && settings.steward().notchStyle === 'island'
+  // Overnight Watch with nobody at the Mac: they wait for the panel (the menu bar's dot), as when Steward is hidden.
+  const holding = !isOpen(dock) && (watch?.holdsAlerts() ?? false)
+  const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' || holding ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
+  const { held } = split
+  // In the island a review comes out as the island itself (its note), never as the old alert under the notch.
+  const notes = island && !isOpen(dock) ? split.peek.filter((a) => islandShows(a.key)) : []
+  const peek = split.peek.filter((a) => !notes.includes(a))
+  for (const alert of notes) islandNotes.show(alertNote(alert, Date.now()))
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
     win?.webContents.send('alerts:show', peek)
@@ -1186,21 +1259,53 @@ async function switchProject(projectPath: string | null, before = settings.curre
  */
 function raise(input: AlertInput): void {
   if (!alerts.push(withNotificationPrefs(input, settings.notifications()))) return
+  // Overnight Watch writes it down, and whether it waits (nobody at the Mac).
+  watch?.alert(input, watch.holdsAlerts())
   moods.apply(input.mood, input.scope, Date.now())
   sendMood()
 }
 
+/** What Steward's reactions work from (main/reactions.ts): deploys and merges, the chats, and you coming back. */
+function reactionInput(now: number): ReactionInput | null {
+  if (!sessions || !agent) return null
+  return { event: moods.current(now), sessions: sessions.list(), turns: activity.turns, stops: activity.lastStops(), agentWaiting: agent.waitingForApproval, backAt, now }
+}
+
+/**
+ * The face the chats, deploys and you coming back call for goes to the panel, which puts the chat's own moods (and you
+ * typing) above it and tells the notch. A one-shot's hold running out changes it, so the next look is set for then.
+ */
 function sendMood(): void {
   const now = Date.now()
-  win?.webContents.send('alerts:mood', moods.current(now))
+  const input = reactionInput(now)
+  const reaction = input ? pickReaction(input) : { mood: moods.current(now) }
+  win?.webContents.send('alerts:mood', reaction.mood)
   clearTimeout(moodTimer)
-  const next = moods.nextChange(now)
-  if (next !== null) moodTimer = setTimeout(sendMood, next - now + 50)
+  const next = [moods.nextChange(now), input && nextReactionChange(input)].filter((t): t is number => typeof t === 'number')
+  if (next.length) moodTimer = setTimeout(sendMood, Math.min(...next) - now + 50)
+  // The island's right side follows the reactions too (a "?", proud's spark).
+  updateIsland()
 }
 
 function sendSessions(): void {
   win?.webContents.send('sessions:changed', sessions.list())
+  sendMood()
   updateMenuBar()
+}
+
+/** When you came back to the Mac after ten minutes or more away (Steward says hello), and the idle time last seen. */
+let backAt: number | null = null
+let idleSeen: number | null = null
+
+/** Look at how long the Mac has been idle: rarely, and every second once a return would count. */
+function lookAtIdle(): void {
+  const idle = powerMonitor.getSystemIdleTime()
+  if (cameBack(idleSeen, idle)) {
+    backAt = Date.now()
+    sendMood()
+  }
+  idleSeen = idle
+  setTimeout(lookAtIdle, idleLookMs(idle))
 }
 
 /**
@@ -1248,22 +1353,132 @@ async function deployLogs(projectName: string, deploymentId?: string): Promise<{
   return { deploymentId: id, log: await fetchBuildLog(id, link.orgId, token) }
 }
 
+/**
+ * What the chats have been doing (a prompt sent, until Claude stops, and how each stop went): the notch island and
+ * Steward's reactions read it. Then Steward's own agent, and the reviews waiting.
+ */
+const activity = new SessionActivity()
+let agentSince: number | undefined
+let pendingReviews = 0
+let islandTimer: ReturnType<typeof setTimeout> | undefined
+/** Its note, one line under the notch for a few seconds: a session finished, or a second project started. */
+const islandNotes = new IslandNotes({ changed: () => updateIsland() })
+
+/**
+ * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
+ * whenever something it shows from changes; a finished check goes by itself, so the next look is set for then.
+ */
+function updateIsland(): void {
+  if (!notch || !sessions || !agent) return
+  const now = Date.now()
+  if (!agent.busy) agentSince = undefined
+  else agentSince ??= now
+  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
+  notch.setIsland(islandStatus(input))
+  // An alert's note (a review) comes out even when Steward only shows when needed: the island wakes while it shows,
+  // as the tab comes out for a nudge, and goes back to sleep once it settles.
+  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || islandNotes.current?.kind === 'alert')
+  clearTimeout(islandTimer)
+  const next = nextChange(input)
+  if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
+}
+
+/**
+ * News for the island's note, from a hook event (turns: the turns going on before it). Settings → Steward → "Alerts
+ * that peek out: Nothing" means no note either, and a finished turn only gets one while Notifications says so.
+ */
+function islandNote(event: HookPayload, turns: Turns): void {
+  // A new turn in any session: the island is about the work now, not what finished before.
+  if (event.hook_event_name === 'UserPromptSubmit') islandNotes.drop('finished')
+  const session = sessions.list().find((s) => s.id === event.session_id)
+  const note = hookNote(event, { turns, agentBusy: agent.busy, name: sessions.names(event).name, detail: session?.detail, now: Date.now() })
+  if (!note || settings.steward().alertPeek === 'none' || (note.kind === 'finished' && !settings.notifications().sessionFinished)) return
+  islandNotes.show(note)
+}
+
 async function onHookEvent(event: HookPayload): Promise<void> {
+  const turns = activity.turns
+  activity.note(event, Date.now())
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
   // A prompt was sent: photograph the page now (in the background), before Claude changes it.
   if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
   const alert = await sessions.apply(event)
+  // After the session strip has it, so a note has the chat's name and a finished one what Claude said.
+  islandNote(event, turns)
   sendSessions()
   if (alert) raise(alert)
   // The turn ended: photograph it again, and keep a review if the page looks different.
-  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event)
+  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event).then((record) => record && reviewReady(record, event))
 }
 
-/** The reviews waiting for a decision go to the panel: the card at its top. */
-function sendReviews(): void {
-  void reviews.pending().then((list) => win?.webContents.send('review:changed', list))
+/**
+ * A review is ready: it comes out as an alert that needs you (in the notch island, as the island's note), and the plain
+ * "finished" alert of the same turn goes, so there's one alert, not two. One that already peeked out stays shown.
+ */
+async function reviewReady(record: ReviewRecord, event: { session_id: string; prompt_id?: string }): Promise<void> {
+  // The island and the menu bar count it first, so the note has the review's mark to settle to.
+  await sendReviews()
+  const same = sameTurnFinished(event)
+  alerts.withdraw(same)
+  heldAlerts = heldAlerts.filter((a) => !same(a))
+  asideAlerts = asideAlerts.filter((a) => !same(a))
+  raise(reviewAlert(record))
+}
+
+/** Overnight Watch keeps the Mac from sleeping when idle (the screen may still sleep) for as long as a night goes on. */
+function keepAwakeForWatch(on: boolean): void {
+  if (on && watchBlocker === null) watchBlocker = powerSaveBlocker.start('prevent-app-suspension')
+  else if (!on && watchBlocker !== null) {
+    powerSaveBlocker.stop(watchBlocker)
+    watchBlocker = null
+  }
+}
+
+/** What the goodnight card and the Watching line show: the night, and what Steward can see tonight. */
+async function watchView(): Promise<WatchView> {
+  const night = watch?.night
+  const list = sessions.list()
+  const linked = settings.vercelToken() ? (await deploys.linked()).map((l) => l.name) : []
+  return {
+    watching: Boolean(night),
+    since: night?.since,
+    until: night?.until,
+    wakeTime: watch?.wakeTime ?? '07:30',
+    plan: { working: list.filter((s) => s.state === 'working').map((s) => s.name), waiting: sessions.waitingCount(), deploys: linked },
+    onBattery: powerMonitor.isOnBatteryPower(),
+    ended: watch?.ended,
+  }
+}
+
+/** The Watch started, stopped or changed: the panel and the menu bar follow. */
+function sendWatch(): void {
+  updateMenuBar()
+  void watchView().then((view) => win?.webContents.send('watch:changed', view))
+}
+
+/** Goodnight from the menu bar: the panel opens on the goodnight card. */
+function openGoodnight(): void {
+  setDock('expanded')
+  win?.webContents.send('watch:goodnight')
+}
+
+/** The reviews waiting for a decision go to the panel (the card at its top), the island and the menu bar's dot. */
+function sendReviews(): Promise<void> {
+  return reviews.pending().then((list) => {
+    win?.webContents.send('review:changed', list)
+    pendingReviews = list.length
+    updateIsland()
+    updateMenuBar()
+    // A decision changes what the history says became of a review.
+    sendReviewHistory()
+  })
+}
+
+/** The history changed (a look after a turn, a decision, or Clear): Settings asks for it again. */
+function sendReviewHistory(): void {
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('review:history')
 }
 
 /** A check that found no visible change goes to the panel as a quiet line, so it's never silent. */
@@ -1315,7 +1530,16 @@ function registerIpc(): void {
   ipcMain.handle('dock:collapse', () => setDock('collapsed'))
   ipcMain.on('dock:intoNotchEnded', () => intoNotchEnded())
   ipcMain.handle('dock:hide', () => setDock('hidden'))
-  ipcMain.handle('dock:view', () => setDock('viewing'))
+  ipcMain.handle('dock:view', (_e, kind: unknown) => {
+    const next: ViewerKind = kind === 'review' ? 'review' : 'tray'
+    // Already viewing the other kind: only the size changes.
+    if (dock === 'viewing' && next !== viewKind && win && !win.isDestroyed()) {
+      viewKind = next
+      return win.setBounds(boundsFor('viewing'), true)
+    }
+    viewKind = next
+    setDock('viewing')
+  })
   ipcMain.handle('appearance:get', (e) => (settingsWin && e.sender === settingsWin.webContents ? settingsAppearance() : appearance()))
 
   ipcMain.handle('tray:list', () => tray.list())
@@ -1489,7 +1713,21 @@ function registerIpc(): void {
     const file = isReviewId(id) && (which === 'before' || which === 'after') ? reviewStore.file(id, which) : null
     if (file) await shell.openPath(file)
   })
+  ipcMain.handle('review:history', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.history(projectPath) : []))
   ipcMain.handle('review:usage', () => reviewStore.usage())
+  ipcMain.handle('watch:get', () => watchView())
+  ipcMain.handle('watch:start', (_e, wakeTime: unknown) => {
+    watch?.start(typeof wakeTime === 'string' ? wakeTime : (watch?.wakeTime ?? ''))
+    return watchView()
+  })
+  ipcMain.handle('watch:stop', (_e, why: unknown) => {
+    watch?.stop(why === 'up' ? 'up' : 'stopped')
+    return watchView()
+  })
+  ipcMain.handle('watch:setWakeTime', (_e, wakeTime: unknown) => {
+    if (typeof wakeTime === 'string') watch?.setWakeTime(wakeTime)
+    return watchView()
+  })
   ipcMain.handle('review:clear', () => reviews.clear())
 
   // Connecting merges Steward's hooks into ~/.claude/settings.json; the renderer shows the preview first.
@@ -1592,6 +1830,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
       await checkReview(w, out)
       clearTimeout(reviewTimer)
+      const watchTimer = setTimeout(() => fail('overnight watch timed out'), 40_000)
+      await checkWatch(w, out)
+      clearTimeout(watchTimer)
       // The Settings window is its own page, so it gets checked too.
       const settingsTimer = setTimeout(() => fail('settings window timed out'), 20_000)
       await captureSettings(out)
@@ -1602,7 +1843,13 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const panelTimer = setTimeout(() => fail('the movable panel timed out'), 60_000)
       await checkMovablePanel()
       clearTimeout(panelTimer)
-      const notchTimer = setTimeout(() => fail('notch timed out'), 110_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
+      const besideTimer = setTimeout(() => fail('Settings beside the panel timed out'), 40_000)
+      await checkSettingsClearOfPanel()
+      clearTimeout(besideTimer)
+      const reactionsTimer = setTimeout(() => fail("Steward's reactions timed out"), 60_000)
+      await checkReactions(out)
+      clearTimeout(reactionsTimer)
+      const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
       if (unseen?.focusTaken()) return fail('a window took keyboard focus in a hidden run')
@@ -1614,11 +1861,359 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
 }
 
 /**
+ * Steward's reactions, through the real hook path with made-up chats: the face the panel works out (as it tells the
+ * notch) follows them. Focused for one working, juggling for two, a nod for a short turn, proud for a long one (and the
+ * island's spark), confused for a question or a wait for input (the island's "?"), needs you for an approval, and hello
+ * when you're back at the Mac.
+ */
+async function checkReactions(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  // Nothing peeks out: this is about the face, and a nudge would move the window the next checks expect at rest.
+  const alertPeek = settings.steward().alertPeek
+  await settings.update({ steward: { alertPeek: 'none' } })
+  // The auto-mode check runs commands straight through the agent, so the panel keeps the agent's last mood (a chat turn
+  // ends with "done", which clears it). End it the same way, and start from rest.
+  if (agent.waitingForApproval) throw new Error('an approval from an earlier check is still waiting')
+  win!.webContents.send('agent:event', { type: 'done' })
+  // At rest is resting or idle, or sleepy after midnight.
+  const atRest = () => ['resting', 'idle', 'sleepy'].includes(notch.state().mood)
+  const settling = Date.now()
+  while (!atRest() && Date.now() - settling < 4000) await sleep(50)
+  if (!atRest()) throw new Error(`before the reactions, Steward's face is ${notch.state().mood} (${pickReaction(reactionInput(Date.now())!).why}), not at rest`)
+  const ids = ['react-1', 'react-2', 'react-3', 'react-4', 'react-5']
+  const clean = () => {
+    for (const id of ids) sessions.dismiss(id)
+    activity.reset()
+    islandNotes.drop()
+    backAt = null
+    sendSessions()
+  }
+  clean()
+  const hook = (hook_event_name: HookPayload['hook_event_name'], session_id: string, extra: Record<string, unknown> = {}) =>
+    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-reactions', ...extra } as HookPayload)
+  const seen: string[] = []
+  const face = async (want: Mood, what: string, within = 2000) => {
+    const started = Date.now()
+    while (notch.state().mood !== want && Date.now() - started < within) await sleep(25)
+    if (notch.state().mood !== want) throw new Error(`${what}: Steward's face is ${notch.state().mood}, not ${want}`)
+    seen.push(`${want} (${what}, ${Date.now() - started} ms)`)
+  }
+  await hook('UserPromptSubmit', 'react-1')
+  await face('focused', 'one chat working')
+  await hook('UserPromptSubmit', 'react-2')
+  await face('juggling', 'two chats working')
+  await hook('Stop', 'react-2', { last_assistant_message: 'Done, the tests pass.' })
+  await face('nod', 'a short turn ending')
+  await face('focused', 'the nod over, one chat still working', 4000)
+  // The other turn began over five minutes ago.
+  activity.turns['react-1'] = Date.now() - 301_000
+  await hook('Stop', 'react-1', { last_assistant_message: 'I rebuilt the settings page.' })
+  await face('proud', 'a long turn ending')
+  if (!notch.state().island?.spark) throw new Error(`after a long turn the island shows ${JSON.stringify(notch.state().island)}, with no spark`)
+  await hook('UserPromptSubmit', 'react-3')
+  await hook('Stop', 'react-3', { last_assistant_message: 'I found two layouts. Which one did you mean, page.tsx or layout.tsx?' })
+  await face('confused', 'a chat ending on a question')
+  if (notch.state().island?.right !== 'asks') throw new Error(`after a question the island's right side is ${notch.state().island?.right}, not a "?"`)
+  await hook('Notification', 'react-4', { message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
+  await face('confused', 'a chat waiting for input')
+  await hook('PermissionRequest', 'react-5', { tool_name: 'Bash', tool_input: { command: 'npm test' } })
+  await face('needs-you', 'a chat waiting for your OK')
+  if (notch.state().island?.right !== 'needs') throw new Error(`with an approval waiting the island's right side is ${notch.state().island?.right}, not the amber mark`)
+  clean()
+  backAt = Date.now()
+  sendMood()
+  await face('hello', "back at the Mac after a while")
+  clean()
+  // The made-up chats' alerts (the finished ones wait 20 s to be batched) go now, while nothing peeks out, and are
+  // dropped: a nudge coming out later would move the window the next checks expect at rest.
+  alerts.flush()
+  heldAlerts = []
+  updateMenuBar()
+  await settings.update({ steward: { alertPeek } })
+  console.log(`smoke: reactions: ${seen.join('; ')}`)
+
+  // The new faces, as Settings → Steward previews them: each a moment in, where it shows best.
+  openSettings('steward')
+  const sw = settingsWin!
+  if (sw.webContents.isLoading()) await new Promise<void>((resolve) => sw.webContents.once('did-finish-load', () => resolve()))
+  sw.webContents.send('settings:section', 'steward')
+  await sleep(800)
+  for (const [label, at] of [['Focusing', 1200], ['Juggling', 900], ['Quick nod', 420], ['Proud', 650], ['Confused', 800], ['Welcome back', 300]] as const) {
+    const box = (await sw.webContents.executeJavaScript(
+      `(() => { const b = [...document.querySelectorAll('.set-moods button')].find((x) => x.textContent === ${JSON.stringify(label)}); b?.click(); const r = document.querySelector('.set-preview')?.getBoundingClientRect(); return b && r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null })()`,
+    )) as Electron.Rectangle | null
+    if (!box) throw new Error(`Settings → Steward has no "${label}" in its mood preview`)
+    await sleep(at)
+    await fs.writeFile(out.replace(/\.png$/, `-face-${label.toLowerCase().replace(/ /g, '-')}.png`), (await sw.webContents.capturePage(box)).toPNG())
+  }
+  sw.close()
+  await sleep(400)
+}
+
+/**
  * Visual Review end to end: the real tracker photographs a page on this Mac before and after a change (a tiny server
  * serves two versions of it), keeps a review, and the panel shows its card; Settings shows the address and Try it now.
  */
+/**
+ * Overnight Watch, Phase 1: the goodnight card from the panel's moon button, Go rest with a wake time, the keep-awake,
+ * the moon in the menu bar, the Watching face, Steward tucking away; an alert waiting while nobody is at the Mac (and
+ * written down without its detail) and peeking out while someone is; sleep and waking written down; and "I'm up"
+ * ending it and letting the Mac sleep again. How long the Mac has been idle is the check's own (smokeIdle).
+ */
+async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const wc = w.webContents
+  const until = async (script: string, why: string, ms = 5000) => {
+    for (const started = Date.now(); Date.now() - started < ms; await sleep(100)) if (await wc.executeJavaScript(script)) return
+    throw new Error(why)
+  }
+  const dockNow = (): DockState => dock
+  const button = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.card.goodnight button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+  const log = new WatchLog(path.join(app.getPath('userData'), 'watch'))
+  try {
+    need(!watch!.watching, 'a night was going on before the check')
+    setDock('expanded')
+    await sleep(700)
+    // The moon in the panel's top bar opens the card: what Steward can see tonight, and the wake time.
+    await wc.executeJavaScript(`document.querySelector('.head-actions button[aria-label="Goodnight"]').click()`)
+    await until(`document.querySelector('.card.goodnight')?.textContent.includes("Here's what I'll watch tonight.")`, 'the moon did not open the goodnight card')
+    const card = await wc.executeJavaScript(`({
+      text: document.querySelector('.card.goodnight').textContent,
+      wake: document.querySelector('.gn-wake input').value,
+    })`)
+    need(card.wake === '07:30', `the wake time starts at ${card.wake}, not 7:30`)
+    need(/Claude Code sessions/.test(card.text) && /Deploys/.test(card.text) && /Keep the lid open/.test(card.text), `the card does not say what it watches ("${card.text}")`)
+    await wc.executeJavaScript(`(() => {
+      const input = document.querySelector('.gn-wake input')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '06:45')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+    await sleep(200)
+    await fs.writeFile(out.replace(/\.png$/, '-watch-goodnight.png'), (await wc.capturePage()).toPNG())
+
+    // Go rest: watching until 6:45, the Mac kept awake, a moon in the menu bar, the Watching face; Steward tucks away.
+    const started = Date.now()
+    await button('Go rest')
+    for (const t = Date.now(); !watch!.watching; await sleep(50)) if (Date.now() - t > 3000) throw new Error('Go rest did not start watching')
+    const night = watch!.night!
+    need(Math.abs(night.until - wakeAt(started, '06:45')) < 5000, `watching until ${new Date(night.until).toString()}, not the next 6:45`)
+    need(watchBlocker !== null && powerSaveBlocker.isStarted(watchBlocker), 'Go rest did not keep the Mac awake')
+    need(menuBarText().startsWith('☾'), `the menu bar would show "${menuBarText()}", no moon`)
+    await until(`document.querySelector('.card.goodnight')?.textContent.includes("Goodnight. I've got it.")`, 'Go rest did not say goodnight')
+    for (const t = Date.now(); notch.state().mood !== 'watching'; await sleep(100)) if (Date.now() - t > 3000) throw new Error(`watching, the face is ${notch.state().mood}`)
+    for (const t = Date.now(); dockNow() !== 'collapsed'; await sleep(100)) if (Date.now() - t > 4000) throw new Error(`after Go rest Steward is ${dockNow()}, not tucked away`)
+    console.log(`smoke: Go rest watches until ${clockText(night.until)}, keeps the Mac awake, puts a moon in the menu bar ("${menuBarText()}"), the face is Watching, and Steward tucks away`)
+
+    // Nobody at the Mac: an alert waits for the panel and is written down, without its detail.
+    smokeIdle = 600
+    raise({ key: 'approval:smoke-watch:p1:rm -rf build', level: 'urgent', title: 'A session is waiting on you', detail: 'rm -rf build' })
+    alerts.flush()
+    await sleep(500)
+    need(dockNow() === 'collapsed' && heldAlerts.some((a) => a.key === 'approval:smoke-watch:p1:rm -rf build'), `with nobody at the Mac the alert did not wait (Steward is ${dockNow()})`)
+    // Someone at the Mac late: it peeks out as usual.
+    smokeIdle = 3
+    raise({ key: 'approval:smoke-watch:p2', level: 'urgent', title: 'Another session is waiting on you' })
+    await sleep(500)
+    need(dockNow() === 'nudge', `with someone at the Mac the alert did not peek out (Steward is ${dockNow()})`)
+    setDock('collapsed')
+    // The Mac sleeping and waking is written down too.
+    watch!.power('suspend')
+    watch!.power('resume')
+    await watch!.settled()
+    const events = await log.read(night.id)
+    const types: string[] = events.map((e) => e.type)
+    need(types[0] === 'start' && types.includes('slept') && types.includes('woke'), `the night's log is ${types.join(', ')}`)
+    const alertsLogged = events.filter((e) => e.type === 'alert')
+    need(alertsLogged.length === 2 && alertsLogged[0].type === 'alert' && alertsLogged[0].held && alertsLogged[1].type === 'alert' && !alertsLogged[1].held, `the log has ${JSON.stringify(alertsLogged)}`)
+    need(!JSON.stringify(events).includes('rm -rf'), "the log kept an alert's detail")
+    console.log(`smoke: watching, an alert waits while nobody is at the Mac and peeks out while someone is; the log has ${types.join(', ')}, no details`)
+
+    // I'm up: the night ends, the Mac may sleep again, the moon goes, the face too.
+    setDock('expanded')
+    await until(`document.querySelector('.card.goodnight.watching')?.textContent.includes('Watching since')`, 'the open panel does not say it is watching')
+    await sleep(300)
+    await fs.writeFile(out.replace(/\.png$/, '-watch-watching.png'), (await wc.capturePage()).toPNG())
+    const blocker = watchBlocker!
+    await button("I'm up")
+    for (const t = Date.now(); watch!.watching; await sleep(50)) if (Date.now() - t > 3000) throw new Error("I'm up did not end the night")
+    need(watch!.ended?.why === 'up' && watchBlocker === null && !powerSaveBlocker.isStarted(blocker), "after I'm up the Mac is still kept awake")
+    need(!menuBarText().includes('☾'), `after I'm up the menu bar would still show "${menuBarText()}"`)
+    for (const t = Date.now(); notch.state().mood === 'watching'; await sleep(100)) if (Date.now() - t > 3000) throw new Error("after I'm up the face is still Watching")
+    await until(`!document.querySelector('.card.goodnight')`, "after I'm up the card is still there")
+    await watch!.settled()
+    need((await log.read(night.id)).at(-1)?.type === 'end', "the log does not end with I'm up")
+    console.log("smoke: I'm up ends the night, lets the Mac sleep again, and takes the moon and the Watching face away")
+
+    // With no night going on, nothing is held however long the Mac has been idle (a CI runner is idle all the time).
+    setDock('collapsed')
+    await sleep(700)
+    smokeIdle = 600
+    raise({ key: 'approval:smoke-watch:after', level: 'urgent', title: 'A session is waiting on you' })
+    await sleep(500)
+    need(dockNow() === 'nudge' && !heldAlerts.some((a) => a.key === 'approval:smoke-watch:after'), `after the night, with the Mac idle, an alert was held (Steward is ${dockNow()})`)
+    setDock('collapsed')
+    await sleep(700)
+    smokeIdle = 0
+    // And the check leaves nothing behind for the ones after it.
+    need(!watch!.watching && watchBlocker === null && !heldAlerts.some((a) => a.key.startsWith('approval:smoke-watch')), 'the Watch check left a night, the keep-awake or a held alert behind')
+    console.log('smoke: with no night going on, an alert comes out however long the Mac has been idle, and the check leaves nothing behind')
+  } finally {
+    smokeIdle = 0
+    watch?.stop('stopped')
+    heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('approval:smoke-watch'))
+  }
+}
+
+/**
+ * Visual Review's big viewer, opened from the card (which shows review `id`): the window grows to the review size on the
+ * panel's screen, both full-page pictures load, the note is there, the keys and a drag change what it shows, and Esc
+ * goes back to the panel, also to a panel that was moved. A moved panel's window is never animated (setDock), so it
+ * pops back rather than sliding across the screen; this can only see where it lands. Ends with Looks good inside it.
+ * Keys are sent as page events: the hidden smoke's window never has the keyboard. The drag is real mouse input.
+ */
+async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said: string, until: (wc: Electron.WebContents, script: string, why: string, ms?: number) => Promise<void>): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const wc = w.webContents
+  const same = (a: Rect, b: Rect) => JSON.stringify(a) === JSON.stringify(b)
+  // Read fresh each time (TypeScript would otherwise keep what an earlier check narrowed it to).
+  const dockNow = (): DockState => dock
+  const settled = async (want: () => Rect, why: string) => {
+    for (const started = Date.now(); !same(w.getBounds(), want()); await sleep(50)) if (Date.now() - started > 2000) throw new Error(`${why}: ${JSON.stringify(w.getBounds())}, not ${JSON.stringify(want())}`)
+  }
+  const press = (key: string, shift = false) =>
+    wc.executeJavaScript(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, shiftKey: ${shift}, bubbles: true, cancelable: true }))`)
+  const look = () =>
+    wc.executeJavaScript(`({
+      pressed: [...document.querySelectorAll('.review-viewer .rvv-seg button[aria-pressed=true]')].map((b) => b.textContent),
+      x: document.querySelector('.rvv-slide')?.style.getPropertyValue('--x') ?? null,
+      side: Boolean(document.querySelector('.rvv-sbs')),
+      flipShows: document.querySelector('.rvv-flip img:not([hidden])')?.alt ?? null,
+      zoom: document.querySelector('.rvv-zoom')?.textContent ?? '',
+    })`)
+  const openFromCard = async (how: string) => {
+    await wc.executeJavaScript(how)
+    await until(wc, 'Boolean(document.querySelector(".review-viewer .rvv-stage"))', 'Open big did not open the viewer')
+    need(dockNow() === 'viewing', `Open big left Steward ${dockNow()}`)
+  }
+  const panelArea = () => screen.getDisplayMatching(boundsFor('expanded')).workArea
+  const home = boundsFor('expanded')
+  need(same(w.getBounds(), home), 'the panel was not at its spot before the viewer opened')
+
+  // From the picture's corner button: the window grows to the screen's work area less 24 points all round.
+  await openFromCard(`document.querySelector('.card.review .rv-open').click()`)
+  await settled(() => reviewViewerRect(panelArea()), 'the viewer is not the big size')
+  const big = w.getBounds()
+  await until(
+    wc,
+    `(() => { const i = [...document.querySelectorAll('.rvv-slide img')]; return i.length === 2 && i.every((p) => p.complete && p.naturalWidth > 0) })()`,
+    'the viewer did not load both full-page pictures',
+  )
+  const pictures = await wc.executeJavaScript(`[...document.querySelectorAll('.rvv-slide img')].map((p) => [p.src, p.naturalWidth, p.naturalHeight])`)
+  need(
+    pictures[0][0] === `review://${id}/before` && pictures[1][0] === `review://${id}/after` && pictures.every((p: [string, number, number]) => p[1] === 1440),
+    `the viewer's pictures are not the page's full width (${JSON.stringify(pictures)})`,
+  )
+  const note = await wc.executeJavaScript(`document.querySelector('.rvv-note .rv-said')?.textContent ?? ''`)
+  need(note.includes(said), `the viewer does not show what Claude said ("${note}")`)
+  // The handler itself, asked from main: the page's own rules (its CSP) stop a fetch from the page before it gets there.
+  // Chromium tidies a ".." away before the handler sees the address, so a ".." can only name another file of this
+  // review (refused) or this review's own pictures.
+  const status = async (url: string) => (await net.fetch(url)).status
+  need((await status(`review://${id}/after`)) === 200, 'review:// did not serve the after picture')
+  for (const url of [`review://${id}/review.json`, `review://${id}/before-card`, `review://${id}/after/../review.json`, `review://${id}/../../after.png`, 'review://20261020-120000-deadbeef/after'])
+    need((await status(url)) === 404, `review:// served ${url}`)
+
+  // The keys: 2 and 3 pick the mode, Space flips, 1 is back to the slider, ← → move it, Z is 100%.
+  let seen = await look()
+  need(seen.pressed.includes('Slide') && seen.pressed.includes('Fit') && seen.x === '55%', `the viewer did not open on Slide and Fit (${JSON.stringify(seen)})`)
+  await press('2')
+  await until(wc, 'Boolean(document.querySelector(".rvv-sbs"))', '2 did not show the two side by side')
+  await press('3')
+  await until(wc, 'Boolean(document.querySelector(".rvv-flip"))', '3 did not pick Flip')
+  need((await look()).flipShows === 'The page now', 'Flip did not start on the page as it is now')
+  await press(' ')
+  await until(wc, `document.querySelector('.rvv-flip img:not([hidden])')?.alt === 'The page before'`, 'Space did not flip to the page before')
+  await press('1')
+  await until(wc, 'Boolean(document.querySelector(".rvv-slide"))', '1 did not go back to the slider')
+  await press('ArrowLeft')
+  await press('ArrowRight', true)
+  seen = await look()
+  need(seen.x === '70%', `← then Shift → did not move the slider to 70% (${seen.x})`)
+  await press('z')
+  await until(wc, `document.querySelector('.rvv-zoom')?.textContent.startsWith('100%')`, 'Z did not show the page at 100%')
+  await press('z')
+
+  // A drag on the picture moves the slider: real mouse input, from a fifth of the way across to four fifths.
+  const box = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rvv-slide').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width } })()`)
+  const at = (f: number) => ({ x: Math.round(box.x + box.width * f), y: Math.round(box.y + 60) })
+  const mouse = (type: 'mouseDown' | 'mouseMove' | 'mouseUp', p: { x: number; y: number }) =>
+    wc.sendInputEvent({ type, x: p.x, y: p.y, globalX: big.x + p.x, globalY: big.y + p.y, button: 'left', clickCount: 1, modifiers: type === 'mouseUp' ? [] : ['leftbuttondown'] })
+  mouse('mouseDown', at(0.2))
+  for (const f of [0.35, 0.5, 0.65, 0.8]) {
+    mouse('mouseMove', at(f))
+    await sleep(30)
+  }
+  mouse('mouseUp', at(0.8))
+  await sleep(150)
+  const dragged = parseFloat((await look()).x ?? '0')
+  need(Math.abs(dragged - 80) < 2, `dragging across the picture did not move the slider to about 80% (${dragged}%)`)
+  await press('ArrowLeft', true)
+  await sleep(300)
+  await fs.writeFile(out.replace(/\.png$/, '-review-viewer.png'), (await wc.capturePage()).toPNG())
+  await press('2')
+  await sleep(300)
+  await fs.writeFile(out.replace(/\.png$/, '-review-viewer-side.png'), (await wc.capturePage()).toPNG())
+  await press('1')
+  console.log(`smoke: Open big shows the review at ${big.width}×${big.height} (the work area less ${REVIEW_VIEWER_GAP} all round), both 1440 wide pictures, what Claude said; review:// serves only the pictures; keys and a drag change it`)
+
+  // Esc goes back to the panel, at its spot.
+  await press('Escape')
+  for (const started = Date.now(); dockNow() !== 'expanded'; await sleep(50)) if (Date.now() - started > 2000) throw new Error('Esc did not go back to the panel')
+  await settled(() => home, 'after Esc the panel is not back at its spot')
+  await until(wc, 'Boolean(document.querySelector(".card.review")) && !document.querySelector(".review-viewer")', 'after Esc the panel does not show the card')
+
+  // A moved panel: the viewer is the same, and Esc puts the panel back at its saved spot.
+  const area = panelArea()
+  const spot = clampPanel(area, { ...home, x: area.x + Math.round(area.width / 3), y: area.y + 40 })
+  savePanelPlace(spot, screen.getDisplayMatching(home))
+  w.setBounds(boundsFor('expanded'))
+  need(same(w.getBounds(), spot), 'the panel did not move for the check')
+  await openFromCard(`[...document.querySelectorAll('.card.review .rv-link')].find((b) => b.textContent === 'Open big').click()`)
+  await settled(() => big, 'with the panel moved, the viewer is not the same big size')
+  await press('Escape')
+  for (const started = Date.now(); dockNow() !== 'expanded'; await sleep(10)) if (Date.now() - started > 2000) throw new Error('Esc did not go back to the moved panel')
+  const back = w.getBounds()
+  need(same(back, spot), `the moved panel is not back at its spot (it is at ${JSON.stringify(back)}, not ${JSON.stringify(spot)})`)
+  await resetPanelPlace()
+  await settled(() => home, 'the panel did not go home after its spot was reset')
+  console.log('smoke: Esc goes back to the panel, and a moved panel is back at its saved spot')
+
+  // Send it back opens the note box inside; Esc there puts the box away, not the viewer. Then Looks good, from inside.
+  await openFromCard(`document.querySelector('.card.review .rv-open').click()`)
+  const button = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.rvv-foot button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+  await button('Send it back')
+  await until(wc, 'Boolean(document.querySelector(".rvv-foot textarea"))', 'Send it back in the viewer did not ask for a note')
+  const copied = await wc.executeJavaScript('document.querySelector(".rvv-foot .rv-out").textContent')
+  need(copied.includes(reviewStore.file(id, 'after')!), 'the note in the viewer does not point at the picture')
+  await wc.executeJavaScript(`document.querySelector('.rvv-foot textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await until(wc, '!document.querySelector(".rvv-foot textarea")', 'Esc in the note box did not put it away')
+  need(dockNow() === 'viewing', 'Esc in the note box closed the viewer')
+  await button('Looks good')
+  for (const started = Date.now(); dockNow() !== 'expanded'; await sleep(50)) if (Date.now() - started > 3000) throw new Error('Looks good in the viewer did not go back to the panel')
+  await settled(() => home, 'after Looks good the panel is not back at its spot')
+  console.log('smoke: Send it back and Looks good work inside the viewer, and Esc in the note box only puts the note away')
+}
+
 async function checkReview(w: BrowserWindow, out: string): Promise<void> {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  // Read fresh each time (TypeScript would otherwise keep what an earlier check narrowed it to).
+  const dockNow = (): DockState => dock
   const need = (ok: boolean, why: string) => {
     if (!ok) throw new Error(why)
   }
@@ -1646,16 +2241,25 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need((await reviews.turnStopped({ ...turn('same'), hook_event_name: 'Stop' })) === null, 'a page that did not change made a review')
     need(reviewStore.list().length === 0, 'a page that did not change was kept')
 
-    // A turn that changes it does, with both pictures and both card pictures.
+    // A turn that changes it does, with both pictures and both card pictures, what Claude said it did, and how many
+    // files it changed in the project's checkout (one, written during the turn).
+    await gitInit(projectDir)
     await prompt('changed')
+    await fs.writeFile(path.join(projectDir, 'page.html'), `<h1>Build faster, ship calmer</h1> ${Date.now()}`)
     server.setVersion('b')
-    const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop' })
+    const lastMessage = '**Done.** I changed the heading to `Build faster, ship calmer` and the button to Get started.\n\nWant me to commit this?'
+    const review = await reviews.turnStopped({ ...turn('changed'), hook_event_name: 'Stop', last_assistant_message: lastMessage })
     need(review !== null && review.before === 'turn-start', 'a page that changed made no review with a before picture')
     for (const which of ['before', 'after', 'before-card', 'after-card'] as const) {
       const file = reviewStore.file(review!.id, which)
       need(file !== null && (await fs.stat(file).then((s) => s.size, () => 0)) > 0, `the review has no ${which} picture`)
     }
     need(reviewStore.file(review!.id, 'after')!.startsWith(path.join(app.getPath('userData'), 'reviews')), 'a review picture is outside the Steward data folder')
+    const said = 'I changed the heading to Build faster, ship calmer and the button to Get started.'
+    need(review!.said === said, `the review did not keep what Claude said ("${review!.said}")`)
+    need(review!.filesChanged === 1, `the review counted ${review!.filesChanged} files changed, not the one written during the turn`)
+    const looks = reviews.history(projectDir).map((e) => e.found)
+    need(looks.join() === 'review,same', `the history says ${looks.join()}, not a review after the page that stayed the same`)
     console.log(`smoke: a changed page made a review (${review!.changedPixels} small pixels changed, it takes ${review!.minPixels})`)
 
     // The same page again makes none.
@@ -1673,6 +2277,27 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need(/another site/.test(away), `a page that sends the visitor elsewhere was not refused (${away})`)
     console.log('smoke: only pages on this Mac are captured, and a redirect away is refused')
 
+    // The review comes out as an alert that needs you: at the edge, the nudge. The same turn's finished alert, still
+    // waiting for its batch, is taken back, so there's one alert, not two. The menu bar's dot shows while it waits.
+    setDock('collapsed')
+    await sleep(700)
+    const finishedKey = 'finished:smoke-review:changed'
+    raise({ key: finishedKey, level: 'normal', title: 'steward-smoke-review-project finished' })
+    await reviewReady(review!, turn('changed'))
+    await until(
+      w.webContents,
+      `document.querySelector('.nudge')?.textContent.includes('steward-smoke-review-project changed') && document.querySelector('.nudge')?.textContent.includes('Review what Claude did?')`,
+      'the review did not peek out as an alert',
+    )
+    need(dockNow() === 'nudge', `the review alert left Steward ${dockNow()}, not peeking out`)
+    alerts.flush()
+    need(!heldAlerts.some((a) => a.key === finishedKey), "the turn's finished alert came as well as the review's")
+    // The smoke has no menu bar icon, so it asks what the title would be.
+    need(menuBarText().includes('•'), `the menu bar would show "${menuBarText()}", no dot for the review waiting`)
+    await sleep(400)
+    await fs.writeFile(out.replace(/\.png$/, '-review-alert.png'), (await w.webContents.capturePage()).toPNG())
+    console.log(`smoke: the review comes out as an alert ("steward-smoke-review-project changed"), the turn's finished alert is taken back, the menu bar title would be "${menuBarText()}"`)
+
     // The panel shows the card at its top.
     setDock('expanded')
     const wc = w.webContents
@@ -1689,10 +2314,12 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
         return at >= 0 && kids.slice(0, at).every((k) => k.classList.contains('review-problem'))
       })(),
       checked: document.querySelector('.review-check')?.textContent ?? '',
+      said: document.querySelector('.card.review .rv-said')?.textContent ?? '',
     })`)
     need(shown.images.length === 2 && shown.images.every((n: number) => n > 0), 'the card does not show both pictures')
     need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
     need(shown.first, 'the card is not at the top of the panel')
+    need(shown.said === `Claude says: ${said}`, `the card does not show what Claude said ("${shown.said}")`)
     // The last turn left the page as it was: the panel says it checked.
     need(/Checked steward-smoke-review-project after Claude finished: no visible change/.test(shown.checked), `the panel did not say the check found no change ("${shown.checked}")`)
     const card = await wc.executeJavaScript(`(() => { const r = document.querySelector('.card.review').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
@@ -1713,10 +2340,12 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     const copied = await wc.executeJavaScript('document.querySelector(".rv-out").textContent')
     need(copied.includes(reviewStore.file(review!.id, 'after')!) && copied.includes('please change this'), 'the note does not point at the picture')
     await click('Cancel')
-    await click('Looks good')
-    await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good did not clear the card')
+    console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}) with what Claude said, the slider moves, Send it back shows the note`)
+
+    // Open big: the review viewer, then Looks good from inside it.
+    await checkReviewViewer(w, out, review!.id, said, until)
+    await until(wc, '!document.querySelector(".card.review") && document.body.textContent.includes("Marked as reviewed.")', 'Looks good in the viewer did not clear the card')
     need(reviewStore.get(review!.id)?.status === 'good', 'Looks good was not remembered')
-    console.log(`smoke: the panel shows the card (${Math.round(card.width)}×${Math.round(card.height)}), the slider moves, Looks good clears it`)
 
     // A soft colour change counts: haven's fade from #F4E6E1 to #FBFBF8, reshaped. First the numbers behind the cutoff:
     // the same page captured twice (text, and the fade), and the reshaped fade, at several cutoffs. Logged, then judged at ours.
@@ -1742,7 +2371,12 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     server.setVersion('reshaped')
     const softReview = await reviews.turnStopped({ ...turn('soft'), hook_event_name: 'Stop' })
     need(softReview !== null, 'a soft colour change made no review')
-    await reviews.markGood(softReview!.id)
+    // No last message from Claude: the card simply has no note. Its own Looks good takes it away.
+    await until(wc, 'Boolean(document.querySelector(".card.review .rv-layer img"))', 'the soft change made no card')
+    need(!(await wc.executeJavaScript('Boolean(document.querySelector(".card.review .rv-said"))')), 'a card shows a note though Claude said nothing')
+    await click('Looks good')
+    await until(wc, '!document.querySelector(".card.review")', 'Looks good on the card did not clear it')
+    need(reviewStore.get(softReview!.id)?.status === 'good', 'Looks good on the card was not remembered')
     server.setVersion('b')
     console.log(`smoke: a reshaped soft fade makes a review (${softReview!.changedPixels} small pixels changed at a cutoff of ${CHANNEL_TOLERANCE})`)
 
@@ -2279,8 +2913,14 @@ async function checkNotch(out: string): Promise<void> {
       const page = notch.contents()!
       const dim = async () => Boolean(await page.executeJavaScript(`Boolean(document.querySelector('.notch-root.dim'))`))
       const waiting = Date.now()
-      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) await sleep(250)
-      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest`)
+      // Any change of mood starts the 20 s over: if it doesn't dim, say which moods it had and when.
+      const moodsSeen: string[] = []
+      while (!(await dim()) && Date.now() - waiting < DIM_AFTER_MS + 8000) {
+        const m = notch.state().mood
+        if (moodsSeen.at(-1)?.split(' ')[0] !== m) moodsSeen.push(`${m} at ${((Date.now() - waiting) / 1000).toFixed(1)} s`)
+        await sleep(250)
+      }
+      if (!(await dim())) throw new Error(`the notch's eyes did not dim within ${((Date.now() - waiting) / 1000).toFixed(1)} s at rest (moods: ${moodsSeen.join(', ')}; awake ${notch.state().awake})`)
       // What the notch window sends its page when the cursor comes near.
       notch.post('notch:cursor', { x: layout.cx, y: 10 })
       await sleep(300)
@@ -2318,25 +2958,26 @@ async function checkNotch(out: string): Promise<void> {
     if (notch.state().hover || (await grown())) throw new Error(`the notch (${notchStyle}) did not shrink back once the cursor left`)
     console.log(`smoke: notch ${notchStyle}: the cursor on it ${reducedNow ? 'is seen (Reduce Motion: no growth)' : 'grows it a little'}, and leaving shrinks it back`)
 
-    // A click opens the panel under the notch, on the notch's screen, its top just under the menu bar, coming down from
-    // it. Closing it brings Steward back to the notch.
+    // A click opens the panel at the side Settings says, on the notch's screen, near its top: never under the notch. It
+    // slides in from that side, and Steward stays in the notch, looking toward it. Closing it slides it back out.
     if (notchStyle === 'chin') {
       // Kept open for the check: an open panel that loses focus folds away, and someone may be using another app.
       const keptOpen = settings.keepPanelOpen()
       await settings.update({ keepPanelOpen: true })
       setDock('expanded')
       const area = notchDisplay().workArea
-      const want = underNotch(notchGeo, area, { width: PANEL_WIDTH, height: Math.min(760, area.height - 48) })
       const at = win!.getBounds()
-      if (at.x !== want.x || at.y !== area.y || at.width !== want.width || at.height !== want.height) throw new Error(`the panel opened at ${JSON.stringify(at)}, not under the notch (${JSON.stringify(want)})`)
-      if (notch.visible) throw new Error('the notch window still shows with the panel open')
+      const side = settings.steward().edge
+      const atSide = side === 'left' ? at.x === area.x + 8 : at.x + at.width === area.x + area.width - 8
+      if (!atSide || at.y !== area.y + 8 || at.width !== PANEL_WIDTH) throw new Error(`the panel opened at ${JSON.stringify(at)}, not at the ${side} side of the notch's screen (${JSON.stringify(area)})`)
+      if (!notch.visible || !notch.state().panel || Math.sign(notch.state().panel!.x) !== (side === 'left' ? -1 : 1)) throw new Error(`with the panel open, Steward is not in the notch looking toward it (${JSON.stringify(notch.state().panel)})`)
       let entrance = ''
       for (let tries = 0; tries < 12 && !entrance; tries++) {
         await sleep(50)
-        entrance = String(await win!.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-notch') ? getComputedStyle(document.querySelector('.panel') ?? document.body).animationName : 'no notch'`))
+        entrance = String(await win!.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.panel') ?? document.body).animationName`))
         if (entrance === 'none') entrance = ''
       }
-      if (entrance !== (reducedNow ? 'fadein' : 'panel-drop')) throw new Error(`the panel from the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the drop from the notch'}`)
+      if (entrance !== (reducedNow ? 'fadein' : 'panel-in')) throw new Error(`the panel in the notch came in with "${entrance}", not ${reducedNow ? 'a fade' : 'the slide from its side'}`)
       await sleep(500)
       await fs.writeFile(out.replace(/\.png$/, '-notch-panel.png'), (await win!.webContents.capturePage()).toPNG())
       const closed = Date.now()
@@ -2346,12 +2987,12 @@ async function checkNotch(out: string): Promise<void> {
       // 400 ms safety timer instead, so wait for it rather than sleep a flat 400 ms (up to 1.5 s).
       while ((win!.isVisible() || !notch.visible) && Date.now() - closed < 1500) await sleep(20)
       const backIn = Date.now() - closed
-      if (!notch.visible || win!.isVisible()) throw new Error(`closing the panel did not bring Steward back to the notch (after ${backIn} ms)`)
+      if (!notch.visible || win!.isVisible() || notch.state().panel) throw new Error(`closing the panel did not let it go, with Steward in the notch (after ${backIn} ms)`)
       console.log(
-        `smoke: notch: a click opens the panel under it (${at.width}x${at.height} at ${at.x},${at.y}), coming down from it, and closing brings it back in ${backIn} ms${backIn >= 380 ? ' (on its safety timer, not a drawn frame)' : ''}`,
+        `smoke: notch: a click opens the panel at the ${side} side (${at.width}x${at.height} at ${at.x},${at.y}), sliding in, Steward looking toward it from the notch, and closing lets it go in ${backIn} ms${backIn >= 380 ? ' (on its safety timer, not a drawn frame)' : ''}`,
       )
 
-      // Every way of closing goes back up into the notch: while the panel goes, the window stays where it is (it never
+      // Every way of closing plays the way out: while the panel goes, the window stays where it is (it never
       // takes the edge's bounds, not even for a frame), the exit plays, and then the window goes and the notch is back,
       // awake or asleep as Presence says. After Hide, Steward stays out of sight until it's brought back.
       await settings.update({ keepPanelOpen: true })
@@ -2396,12 +3037,12 @@ async function checkNotch(out: string): Promise<void> {
           await sleep(10)
         }
         if (win!.isVisible()) throw new Error(`closing with ${closer} (opened by ${opener}) did not let the window go`)
-        if (!exit || visibleFor < 100) throw new Error(`closing with ${closer} (opened by ${opener}) did not play the way back into the notch (out after ${visibleFor} ms)`)
+        if (!exit || visibleFor < 100) throw new Error(`closing with ${closer} (opened by ${opener}) did not play the way out (out after ${visibleFor} ms)`)
         const hidden = closer === 'the hide button'
         await sleep(200)
         if (notch.visible === hidden) throw new Error(hidden ? 'after the hide button, the notch still shows' : `after closing with ${closer}, the notch did not come back`)
         if (!hidden && notch.state().awake !== (presence === 'always')) throw new Error(`after closing with ${closer}, the notch is ${notch.state().awake ? 'awake' : 'asleep'} in ${presence}`)
-        console.log(`smoke: notch: opened by ${opener}, closing with ${closer} (${presence === 'always' ? 'Always visible' : 'Only when needed'}) goes back up into the notch in ${visibleFor} ms, never at the edge`)
+        console.log(`smoke: notch: opened by ${opener}, closing with ${closer} (${presence === 'always' ? 'Always visible' : 'Only when needed'}) slides it out in ${visibleFor} ms, the window staying put`)
         if (hidden) {
           setDock('collapsed')
           await sleep(300)
@@ -2443,6 +3084,7 @@ async function checkNotch(out: string): Promise<void> {
     await settings.update({ steward: { presence: 'always' } })
     presenceChanged()
   }
+  await checkIsland(out)
   const idle = Number(process.env.STEWARD_SMOKE_IDLE ?? 0)
   const measure = async (what: string) => {
     const pid = notch.pid()
@@ -2466,6 +3108,227 @@ async function checkNotch(out: string): Promise<void> {
   replaceForNotch()
   if (!win?.isVisible()) throw new Error('the tab did not come back to the edge')
   console.log('smoke: notch off, the tab is back at the edge')
+}
+
+/**
+ * The notch island (Settings → Steward → In the notch → Island), driven by the hook events Claude Code sends. At rest
+ * there's no island and Steward peeks out from behind the notch's left edge, part of it showing, the rest hidden. A
+ * prompt sent grows the compact island out of the notch: Steward steps into its left side and a spinner with the time
+ * shows on its right; a second project shows a count; the cursor on it widens it a little; Claude stopping leaves a
+ * check; with nothing going on it shrinks back into the notch and Steward peeks again. Asleep (Only when needed),
+ * Steward is tucked fully behind the notch. The growing and the stepping in are drawn frame by frame.
+ */
+async function checkIsland(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const geo = notchGeo!
+  // Every alert that got through peeks out, so the check sees a finished session not coming out under the notch.
+  const alertPeek = settings.steward().alertPeek
+  await settings.update({ steward: { notch: true, notchStyle: 'island', presence: 'always', alertPeek: 'all' } })
+  presenceChanged()
+  replaceForNotch()
+  notch.restyle()
+  // Nothing going on to start with (reviews from the Visual Review check are left out).
+  pendingReviews = 0
+  activity.reset()
+  islandNotes.drop()
+  updateIsland()
+  await sleep(1500)
+  const page = notch.contents()!
+  const layout = notch.state().layout!
+  const hw = layout.width / 2
+  if (notch.windowBounds()?.width !== ISLAND_WINDOW.width) throw new Error(`the island's window is ${notch.windowBounds()?.width} wide, not ${ISLAND_WINDOW.width}`)
+  const pixel = (img: Electron.NativeImage, x: number, y: number) => {
+    const { width, height } = img.getSize()
+    const k = width / ISLAND_WINDOW.width
+    const i = (Math.min(height - 1, Math.round(y * k)) * width + Math.min(width - 1, Math.round(x * k))) * 4
+    const b = img.toBitmap()
+    return { alpha: b[i + 3], light: Math.max(b[i], b[i + 1], b[i + 2]) }
+  }
+  const shot = async () => (await notch.capture())!
+  const dockNow = (): DockState => dock
+  const black = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha > 200 && pixel(img, x, y).light < 30
+  const clear = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha < 20
+  /**
+   * Steward's body (lit, not black) at this point, a little under where its eyes are. At rest its standby glow breathes
+   * the body's opacity down to 0.36 (dark) or 0.58 (light), so it's there when it's well above see-through.
+   */
+  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 80 && pixel(img, x, y + 9).light > 40
+  const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
+  const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, said?: string) =>
+    onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : { last_assistant_message: said }) } as HookPayload)
+  const noteLine = () => page.executeJavaScript(`(() => { const n = document.querySelector('.isl-note'); return { text: [...(n?.querySelectorAll('b, span') ?? [])].map((e) => e.textContent).join(' '), shown: Number(getComputedStyle(n).opacity) } })()`) as Promise<{ text: string; shown: number }>
+
+  // At rest: no island; Steward peeks out past the notch's left edge, and nothing is on its right.
+  const restPill = islandParts('rest', layout).pill
+  let img = await shot()
+  if (notch.state().island?.right !== null) throw new Error(`the island shows "${notch.state().island?.right}" with nothing going on`)
+  if (!steward(img, layout.cx - hw - 12, restPill.y)) {
+    const px = pixel(img, layout.cx - hw - 12, restPill.y + 9)
+    throw new Error(`at rest, Steward does not peek out past the notch's left edge (pixel ${JSON.stringify(px)}; ${JSON.stringify({ visible: notch.visible, awake: notch.state().awake, mood: notch.state().mood, hover: notch.state().hover, steppedAside, dock })})`)
+  }
+  if (!black(img, layout.cx - hw + 4, 8) || !black(img, layout.cx, 8)) throw new Error('at rest, the notch is not black where Steward hides behind it')
+  if (!clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx - hw - 60, 8)) throw new Error('at rest, there is an island beside the notch')
+  await fs.writeFile(out.replace(/\.png$/, '-island-rest.png'), img.toPNG())
+
+  // A prompt sent: the compact island grows out of the notch, Steward steps into its left side, the time on its right.
+  const grows = await motionLook(page, '.isl .bp', '.isl')
+  smoothly(`the island growing out of the notch${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-1')))
+  const compact = islandParts('compact', layout)
+  img = await shot()
+  if (notch.state().island?.right !== 'working') throw new Error(`a prompt sent did not show as working (${notch.state().island?.right})`)
+  if (!black(img, layout.cx - hw - 60, 6) || !black(img, layout.cx + hw + 60, 6)) throw new Error('the compact island did not grow out of the notch on both sides')
+  if (!clear(img, layout.cx + compact.width / 2 + 6, 6)) throw new Error('the compact island is wider than it should be')
+  if (!steward(img, layout.cx + compact.pill.x, compact.pill.y)) throw new Error("Steward did not step into the compact island's left side")
+  let side = await right()
+  if (!side.html.includes('isl-spin') || !/^\d+:\d\d$/.test(side.time) || side.shown < 0.9) throw new Error(`the island's right side shows "${side.html}" (time "${side.time}"), not a spinner and the time`)
+  await fs.writeFile(out.replace(/\.png$/, '-island-working.png'), img.toPNG())
+  console.log(`smoke: island: at rest Steward peeks from the notch; a prompt grows the compact island (${compact.width}x${compact.height}), Steward steps in, the time shows (${side.time})`)
+
+  // The cursor on it: a little wider.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 10 }
+  await sleep(700)
+  img = await shot()
+  if (!notch.state().hover || !black(img, layout.cx + compact.width / 2 + 3, 6)) throw new Error('the cursor on the island did not widen it')
+  smokeNotchCursor = null
+  await sleep(900)
+  if (notch.state().hover || !clear(await shot(), layout.cx + compact.width / 2 + 3, 6)) throw new Error('the island did not narrow again once the cursor left')
+
+  // A click on the island opens the panel at the side, never under the notch. While it's open the island steps back to
+  // Steward peeking, looking toward the panel; closing it brings the island back.
+  const keptOpen = settings.keepPanelOpen()
+  await settings.update({ keepPanelOpen: true })
+  const at = { x: layout.cx + compact.right!.x, y: layout.height / 2 }
+  page.sendInputEvent({ type: 'mouseDown', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  page.sendInputEvent({ type: 'mouseUp', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  await sleep(900)
+  const area = notchDisplay().workArea
+  const panel = win!.getBounds()
+  const edge = settings.steward().edge
+  const atSide = edge === 'left' ? panel.x === area.x + 8 : panel.x + panel.width === area.x + area.width - 8
+  if (dockNow() !== 'expanded' || !win!.isVisible() || !atSide) throw new Error(`a click on the island opened ${dockNow()} at ${JSON.stringify(panel)}, not the panel at the ${edge} side`)
+  img = await shot()
+  if (!notch.visible || Math.sign(notch.state().panel?.x ?? 0) !== (edge === 'left' ? -1 : 1)) throw new Error(`with the panel open, Steward is not in the notch looking toward it (${JSON.stringify(notch.state().panel)})`)
+  if (!clear(img, layout.cx + hw + 30, 8) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with the panel open, the island did not step back to Steward peeking')
+  await fs.writeFile(out.replace(/\.png$/, '-island-open.png'), img.toPNG())
+  await fs.writeFile(out.replace(/\.png$/, '-island-open-panel.png'), (await win!.webContents.capturePage()).toPNG())
+  setDock('collapsed')
+  await settings.update({ keepPanelOpen: keptOpen })
+  const closed = Date.now()
+  while (win!.isVisible() && Date.now() - closed < 1500) await sleep(20)
+  await sleep(800)
+  if (win!.isVisible() || notch.state().panel || !black(await shot(), layout.cx + hw + 60, 6)) throw new Error('closing the panel did not bring the island back')
+  console.log(`smoke: island: a click on it opens the panel at the ${edge} side (${panel.width}x${panel.height} at ${panel.x},${panel.y}); the island steps back to Steward peeking toward it, and comes back after`)
+
+  // A second project: the island grows into a note, "started", with a count on its right.
+  const noted = Date.now()
+  smoothly(`the island growing into a note${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-2')))
+  const note = islandParts('note', layout)
+  img = await shot()
+  side = await right()
+  let line = await noteLine()
+  if (notch.state().island?.note?.kind !== 'started' || side.count !== '2') throw new Error(`a second project starting shows ${JSON.stringify(notch.state().island)}, "${side.html}"`)
+  if (!black(img, layout.cx, layout.height + 4) || !black(img, layout.cx + note.width / 2 - 8, 6) || !black(img, layout.cx - note.width / 2 + 8, 6)) throw new Error('the island did not grow into the note size')
+  if (!clear(img, layout.cx + note.width / 2 + 6, 6) || !clear(img, layout.cx, note.height + 6)) throw new Error('the note is bigger than it should be')
+  if (!/started/.test(line.text) || line.shown < 0.9) throw new Error(`the note's line shows "${line.text}" (opacity ${line.shown}), not that a project started`)
+  await fs.writeFile(out.replace(/\.png$/, '-island-note.png'), img.toPNG())
+
+  // The cursor on it keeps the note past its time; once the cursor leaves, a moment more, then it settles to compact.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 10 }
+  await sleep(noted + NOTE_SHOW_MS + 600 - Date.now())
+  if (!notch.state().hover || !notch.state().island?.note) throw new Error('the cursor on the island did not keep its note')
+  let keptAfterLeaving = false
+  const settles = await watchMotion(page, grows, 3000, () => {
+    smokeNotchCursor = null
+    setTimeout(() => (keptAfterLeaving = !!notch.state().island?.note), 1000)
+  })
+  if (!keptAfterLeaving) throw new Error('the note went as soon as the cursor left the island')
+  smoothly(`the note settling to compact${grows.label}`, settles)
+  img = await shot()
+  side = await right()
+  line = await noteLine()
+  if (notch.state().island?.note || !clear(img, layout.cx, layout.height + 6) || line.shown > 0.1) throw new Error(`the note did not settle (line "${line.text}", opacity ${line.shown})`)
+  if (notch.state().island?.right !== 'two' || side.count !== '2' || !black(img, layout.cx + compact.width / 2 - 8, 6)) throw new Error(`settled, the island is not compact with the count (${side.html})`)
+  console.log(`smoke: island: a second project grows a note (${note.width}x${note.height}), "${line.text || 'started'}"; the cursor on it keeps it, and it settles to compact`)
+
+  // One stopping while the other works: "Claude finished" and what it said, the spinner still on the right. The other
+  // stopping too: its own note, and a check. Neither comes out under the notch as an alert as well.
+  await hook('Stop', 'smoke-island-1', 'I made the button blue.')
+  await sleep(700)
+  line = await noteLine()
+  if (notch.state().island?.right !== 'working' || notch.state().island?.note?.kind !== 'finished' || !line.text.includes('finished · I made the button blue.') || line.shown < 0.9) throw new Error(`one project finishing shows ${JSON.stringify(notch.state().island)}, line "${line.text}"`)
+  await hook('Stop', 'smoke-island-2', 'All the tests pass.')
+  await sleep(700)
+  side = await right()
+  line = await noteLine()
+  if (notch.state().island?.right !== 'finished' || !side.html.includes('isl-check')) throw new Error(`Claude stopping shows "${side.html}", not a check`)
+  if (!line.text.includes('All the tests pass.') || line.shown < 0.9) throw new Error(`the second finish did not take the note's place (line "${line.text}")`)
+  await fs.writeFile(out.replace(/\.png$/, '-island-finished.png'), (await shot()).toPNG())
+  alerts.flush()
+  await sleep(300)
+  if (dockNow() === 'nudge') throw new Error('a session finishing came out under the notch as well as in the island')
+  console.log(`smoke: island: a chat finishing shows a note ("${line.text}"), and no alert under the notch`)
+  const stepsOut = await motionLook(page, '.isl-pill', '.isl')
+  smoothly(`Steward stepping out of the island${stepsOut.label}`, await watchMotion(page, stepsOut, 900, () => {
+    for (const id of ['smoke-island-1', 'smoke-island-2']) sessions.dismiss(id)
+    sendSessions()
+  }))
+  img = await shot()
+  if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx, layout.height + 6) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
+  console.log('smoke: island: wider with the cursor on it, a count for two projects, a check when Claude stops, then back into the notch')
+
+  // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
+  raise({ key: 'approval:smoke-island', level: 'urgent', title: 'A session needs you', detail: 'under the island' })
+  alerts.flush()
+  // With Reduce Motion (as on CI) the island fades out, changes and fades in, and a change within 130 ms starts that
+  // over, so on a slow runner the chin can take longer than a fixed wait: wait for it, up to 3 s, and say what's missing.
+  let chin = { dock: dockNow(), nudge: false, drawn: false }
+  for (const t = Date.now(); Date.now() - t < 3000; await sleep(150)) {
+    img = await shot()
+    chin = { dock: dockNow(), nudge: notch.state().nudge === true, drawn: black(img, layout.cx, layout.height + NOTCH_LIP - 4) }
+    if (chin.dock === 'nudge' && chin.nudge && chin.drawn) break
+  }
+  if (chin.dock !== 'nudge' || !chin.nudge || !chin.drawn)
+    throw new Error(`with an alert under the notch, the island is not the chin the alert joins (Steward ${chin.dock}, the notch's nudge ${chin.nudge}, the chin drawn ${chin.drawn})`)
+  setDock('collapsed')
+  await sleep(700)
+  if (!clear(await shot(), layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('after the alert, the island did not go back into the notch')
+  console.log('smoke: island: an alert under the notch joins the island, grown into a chin, and it goes back after')
+
+  // Asleep: Steward tucked fully behind the notch.
+  await settings.update({ steward: { presence: 'quiet' } })
+  presenceChanged()
+  await sleep(1200)
+  img = await shot()
+  if (!clear(img, layout.cx - hw - 12, restPill.y) || !black(img, layout.cx, 8)) throw new Error('asleep, Steward is not tucked behind the notch')
+  console.log('smoke: island: asleep, Steward is tucked behind the notch')
+
+  // A Visual Review in the island comes out as the island itself: its catch-all note ("haven changed" and one line),
+  // with the review's mark on the right, never as the old alert under the notch. Asleep (Only when needed), the island
+  // wakes for it and goes back to sleep once it settles. "Only when a session needs me" lets it through.
+  await settings.update({ steward: { alertPeek: 'needs-me' } })
+  pendingReviews = 1
+  updateIsland()
+  raise(reviewAlert({ id: '20261024-120000-5a0ce111', project: 'haven', projectPath: '/tmp/steward-smoke-island' }))
+  await sleep(700)
+  line = await noteLine()
+  const reviewed = notch.state()
+  if (dockNow() === 'nudge' || reviewed.nudge || win!.isVisible()) throw new Error('a review came out as the old alert under the notch')
+  if (reviewed.island?.note?.kind !== 'alert' || reviewed.island.right !== 'review' || !reviewed.awake || !line.text.includes('haven changed') || !line.text.includes('Review what Claude did?') || line.shown < 0.9)
+    throw new Error(`a review in the island shows ${JSON.stringify(reviewed.island)} (awake: ${reviewed.awake}), line "${line.text}"`)
+  img = await shot()
+  if (!black(img, layout.cx, layout.height + 6)) throw new Error("the review's note did not grow the island")
+  await fs.writeFile(out.replace(/\.png$/, '-island-review.png'), img.toPNG())
+  await sleep(NOTE_SHOW_MS + 800)
+  if (notch.state().island?.note || notch.state().awake || dockNow() === 'nudge' || win!.isVisible()) throw new Error('after the review note settled, the island did not go back to sleep')
+  console.log(`smoke: island: a review comes out as the island's note ("${line.text}"), never under the notch; asleep, the island wakes for it and sleeps after`)
+  pendingReviews = 0
+
+  await settings.update({ steward: { presence: 'always', notchStyle: 'chin', alertPeek } })
+  presenceChanged()
+  notch.restyle()
+  islandNotes.drop()
+  if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
+  void sendReviews()
 }
 
 /**
@@ -2743,16 +3606,16 @@ async function checkMovablePanel(): Promise<void> {
   await resetPanelPlace()
   console.log("smoke: a spot for a screen that isn't connected is ignored")
 
-  // In the notch: before it's moved it drops from the notch; moved, it closes and opens where it is, not into the notch.
+  // In the notch: before it's moved it slides in at its side; moved, it closes and opens where it is.
   if (notchGeo) {
     setDock('collapsed')
     await settings.update({ steward: { notch: true } })
     replaceForNotch()
     await sleep(800)
     setDock('expanded')
-    const drop = await entrance()
+    const slide = await entrance()
     const under = w.getBounds()
-    if (drop !== (reduced ? 'fadein' : 'panel-drop')) throw new Error(`in the notch, the unmoved panel came in with "${drop}"`)
+    if (slide !== (reduced ? 'fadein' : 'panel-in') || !same(under, boundsFor('expanded'))) throw new Error(`in the notch, the unmoved panel came in with "${slide}" at ${JSON.stringify(under)}`)
     // The same messages the page sends.
     const p0 = { x: under.x + 100, y: under.y + 20 }
     dragPanel('start', p0.x, p0.y)
@@ -2762,30 +3625,135 @@ async function checkMovablePanel(): Promise<void> {
     if (same(there, under) || !placed()) throw new Error('in the notch, the panel did not move')
     const closing = Date.now()
     setDock('collapsed')
-    let rose = false
+    let slid = false
     let shrank = false
     while (w.isVisible() && Date.now() - closing < 900) {
       if (!same(w.getBounds(), there)) throw new Error(`in the notch, closing the moved panel moved the window to ${JSON.stringify(w.getBounds())}`)
       const how = await page.executeJavaScript(`document.documentElement.getAttribute('data-leaving')`)
       shrank ||= how === 'in-place'
-      rose ||= how === ''
+      slid ||= how === ''
       await sleep(10)
     }
-    if (!shrank || rose || w.isVisible()) throw new Error(`in the notch, the moved panel did not close where it is (in place ${shrank}, into the notch ${rose})`)
+    if (!shrank || slid || w.isVisible()) throw new Error(`in the notch, the moved panel did not close where it is (in place ${shrank}, out to its side ${slid})`)
     await sleep(300)
     if (!notch.visible) throw new Error('in the notch, after the moved panel closed, the notch is not back')
     setDock('expanded')
     const back = await entrance()
     if (!near(w.getBounds(), there) || back !== popIn) throw new Error(`in the notch, the moved panel opened at ${JSON.stringify(w.getBounds())} with "${back}", not at ${JSON.stringify(there)} with ${popIn}`)
     await resetPanelPlace()
-    if (!(await settles(() => same(w.getBounds(), under)))) throw new Error('in the notch, putting the panel back did not bring it under the notch')
+    if (!(await settles(() => same(w.getBounds(), under)))) throw new Error('in the notch, putting the panel back did not bring it to its side')
     setDock('collapsed')
     await sleep(500)
     await settings.update({ steward: { notch: false } })
     replaceForNotch()
     await sleep(300)
-    console.log('smoke: in the notch, the panel drops from it until it is moved, then closes and opens where it is, and putting it back brings it under the notch')
+    console.log('smoke: in the notch, the panel slides in at its side until it is moved, then closes and opens where it is, and putting it back brings it to its side')
   }
+  await settings.update({ keepPanelOpen: keptOpen })
+  setDock('collapsed')
+  await sleep(500)
+}
+
+/**
+ * Settings and the open panel. Settings opens beside the panel when there's room, wherever the panel is (dragged, or
+ * at its side in the notch), and centered when there isn't. While Settings is the window in use it floats above the panel, and
+ * once it isn't, it's a normal window again, under the panel. The panel stays open throughout, and the pin isn't
+ * touched. A hidden run has no real focus, so the check sends Settings the focus and blur macOS would.
+ */
+async function checkSettingsClearOfPanel(): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const w = win!
+  const overlap = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  const keptOpen = settings.keepPanelOpen()
+  await settings.update({ keepPanelOpen: true })
+  /** Open the panel fresh, and drag it (through the messages the page sends) so its middle is dx points from where it opened. */
+  const panelAt = async (dx: number | null) => {
+    await resetPanelPlace()
+    setDock('collapsed')
+    await sleep(500)
+    setDock('expanded')
+    await sleep(600)
+    if (dx !== null) {
+      const b = w.getBounds()
+      dragPanel('start', b.x + 100, b.y + 20)
+      dragPanel('move', b.x + 100 + dx, b.y + 20)
+      dragPanel('end')
+    }
+    if (dock !== 'expanded' || !w.isVisible()) throw new Error('the panel did not open for the Settings check')
+    return w.getBounds()
+  }
+  const openIt = async () => {
+    openSettings('steward')
+    const s = settingsWin!
+    if (s.webContents.isLoading()) await new Promise<void>((resolve) => s.webContents.once('did-finish-load', () => resolve()))
+    await sleep(300)
+    return s
+  }
+  /** Used, it floats above the panel; not used, it's a normal window, under it. The panel stays open either way. */
+  const onTopWhileUsed = (s: BrowserWindow, where: string) => {
+    s.emit('focus')
+    if (!s.isAlwaysOnTop()) throw new Error(`with the panel ${where}, Settings in use is not above it`)
+    s.emit('blur')
+    if (s.isAlwaysOnTop()) throw new Error(`with the panel ${where}, Settings stays above it after it's no longer in use`)
+    s.emit('focus')
+    if (dock !== 'expanded' || !w.isVisible() || !settings.keepPanelOpen()) throw new Error(`with the panel ${where}, using Settings closed the panel or changed the pin`)
+  }
+  /**
+   * Beside the panel when there's room on either side of it (16 points from it and 24 inside the work area, as
+   * clearOfPanel has it), exactly centered on the work area when there isn't: a small screen (the CI runner's is about
+   * 1024 points wide) has no room beside a 400-point panel anywhere. Says which, for the log.
+   */
+  const besideOrCentered = (where: string, panel: Rect, at: Rect): string => {
+    const area = screen.getDisplayMatching(panel).workArea
+    const need = SETTINGS_SIZE.width + 16 + 24
+    const room = panel.x - area.x >= need || area.x + area.width - (panel.x + panel.width) >= need
+    const centered = clearOfPanel(area, SETTINGS_SIZE, null)
+    if (room && overlap(at, panel)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}), Settings opened over it at ${JSON.stringify(at)} though there's room beside it`)
+    if (!room && JSON.stringify(at) !== JSON.stringify(centered)) throw new Error(`with the panel ${where} (${JSON.stringify(panel)}) and no room beside it, Settings opened at ${JSON.stringify(at)}, not centered at ${JSON.stringify(centered)}`)
+    return room ? `beside it (x ${at.x}; there's room on a ${area.width}-point work area)` : `centered (x ${at.x}; no room beside it on a ${area.width}-point work area)`
+  }
+  const cases: [string, number | null][] = [
+    ['dragged to the left', -5000],
+    ['dragged to the middle', null],
+  ]
+  for (const [where, dx] of cases) {
+    let panel = await panelAt(dx)
+    if (dx === null) {
+      // The middle of the screen: no room on either side for Settings on most screens.
+      const area = screen.getDisplayMatching(panel).workArea
+      const b = panel
+      dragPanel('start', b.x + 100, b.y + 20)
+      dragPanel('move', b.x + 100 + Math.round(area.x + area.width / 2 - (b.x + b.width / 2)), b.y + 20)
+      dragPanel('end')
+      panel = w.getBounds()
+    }
+    const s = await openIt()
+    const opened = besideOrCentered(where, panel, s.getBounds())
+    onTopWhileUsed(s, where)
+    console.log(`smoke: with the panel ${where} (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
+    s.close()
+    await sleep(400)
+  }
+  if (notchGeo) {
+    await resetPanelPlace()
+    setDock('collapsed')
+    await settings.update({ steward: { notch: true } })
+    replaceForNotch()
+    await sleep(600)
+    const panel = await panelAt(null)
+    if (JSON.stringify(panel) !== JSON.stringify(boundsFor('expanded'))) throw new Error('the panel did not open at its side in the notch for the Settings check')
+    const s = await openIt()
+    const opened = besideOrCentered('at its side in the notch', panel, s.getBounds())
+    onTopWhileUsed(s, 'at its side in the notch')
+    console.log(`smoke: with the panel at its side in the notch (x ${panel.x}), Settings opens ${opened}, and floats above it only while in use`)
+    s.close()
+    await sleep(400)
+    setDock('collapsed')
+    await settings.update({ steward: { notch: false } })
+    replaceForNotch()
+    await sleep(300)
+  }
+  await resetPanelPlace()
   await settings.update({ keepPanelOpen: keptOpen })
   setDock('collapsed')
   await sleep(500)
@@ -2947,12 +3915,28 @@ app.whenReady().then(async () => {
     compare: comparePictures,
     card: cardPicture,
     store: reviewStore,
-    onChange: sendReviews,
+    onChange: () => void sendReviews(),
     onProblems: sendReviewProblems,
     onChecks: sendReviewChecks,
+    onHistory: sendReviewHistory,
+    gitFiles: { look: (dir) => lookAtFiles(dir), changed: (dir, since, start) => filesChangedSince(dir, since, start) },
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })
   alerts = new AlertQueue({ show: showAlerts })
+  watch = new OvernightWatch(
+    {
+      log: new WatchLog(path.join(userData, 'watch')),
+      idleSeconds,
+      onBattery: () => powerMonitor.isOnBatteryPower(),
+      sessionsWorking: () => sessions.list().filter((s) => s.state === 'working').length,
+      keepAwake: keepAwakeForWatch,
+      save: (saved) => void appState.update({ watch: saved }),
+      changed: sendWatch,
+    },
+    // A smoke run starts with no night going on, whatever an earlier run left.
+    SMOKE_OUT ? {} : appState.watch,
+  )
+  await watch.resume()
   deploys = new DeployWatcher({ projects: () => settings.projects(), token: () => settings.vercelToken(), onChanges: onDeployChanges })
   agent = new Agent({
     apiKey: () => settings.apiKey(),
@@ -2971,6 +3955,8 @@ app.whenReady().then(async () => {
     name: () => settings.steward().name,
     emit: (event) => {
       win?.webContents.send('agent:event', event)
+      // Its asking for your OK, or getting it, changes the face and the island.
+      sendMood()
       // Peek out when the agent needs a decision; the approval card is in the panel.
       if (event.type === 'approval') raise({ key: `agent-approval:${event.id}`, level: 'urgent', title: 'Steward needs your OK', detail: event.command, mood: 'needs-you' })
     },
@@ -2981,6 +3967,12 @@ app.whenReady().then(async () => {
     const item = tray.get(new URL(request.url).hostname)
     if (!item) return new Response('Not found', { status: 404 })
     return net.fetch(pathToFileURL(item.file).toString())
+  })
+  // review://<id>/before and /after: a review's full-page pictures, for the big viewer. Only those (see pictureFor).
+  protocol.handle('review', (request) => {
+    const file = reviewStore.pictureFor(request.url)
+    if (!file) return new Response('Not found', { status: 404 })
+    return net.fetch(pathToFileURL(file).toString())
   })
 
   // Like other menu bar utilities, no Dock icon: macOS only lets accessory apps float over full-screen apps.
@@ -2993,12 +3985,14 @@ app.whenReady().then(async () => {
     load: (w) => loadPage(w, 'notch.html'),
     style: () => settings.steward().notchStyle,
     onCursor: lookAtNotch,
+    onHover: (hover) => islandNotes.hover(hover),
     cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
     // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
     hoverable: () => !quiet(),
   })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
+  updateIsland()
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
   await refreshNotch()
   win = createWindow()
@@ -3014,12 +4008,25 @@ app.whenReady().then(async () => {
     screenAsleep = asleepNow
     syncWatch()
   }
+  // Overnight Watch writes down when the Mac slept and woke, and the battery; the goodnight card says which it's on.
+  powerMonitor.on('suspend', () => watch?.power('suspend'))
+  powerMonitor.on('resume', () => watch?.power('resume'))
+  powerMonitor.on('on-battery', () => {
+    watch?.power('on-battery')
+    sendWatch()
+  })
+  powerMonitor.on('on-ac', () => {
+    watch?.power('on-ac')
+    sendWatch()
+  })
   powerMonitor.on('suspend', screenIs(true))
   powerMonitor.on('lock-screen', screenIs(true))
   powerMonitor.on('resume', screenIs(false))
   powerMonitor.on('unlock-screen', screenIs(false))
   if (SMOKE_OUT) runSmokeCheck(win, SMOKE_OUT)
   else {
+    // The smoke check says when you're back itself, so a real return during it can't change a face it checks.
+    lookAtIdle()
     menuBar = new Tray(menuBarIcon())
     menuBar.setToolTip('Steward')
     updateMenuBar()

@@ -101,6 +101,88 @@ describe('ReviewStore', () => {
       expect(again.get(id)?.note).toHaveLength(2000)
     }))
 
+  it('keeps what Claude said with the review, and a review.json with a bad one is not loaded', () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const { id } = await store.save({ ...draft(), said: 'I made the button blue.' }, files)
+      const again = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await again.load()
+      expect(again.get(id)?.said).toBe('I made the button blue.')
+
+      const json = path.join(path.dirname(store.file(id, 'after')!), 'review.json')
+      await fs.writeFile(json, JSON.stringify({ ...JSON.parse(await fs.readFile(json, 'utf8')), said: 42 }))
+      const third = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await third.load()
+      expect(third.get(id)).toBeNull()
+    }))
+
+  it('serves review://<id>/before and /after for the viewer, and nothing else', () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const { id } = await store.save(draft(), files)
+      const only = await store.save({ ...draft('/Users/me/other'), before: 'none', heightBefore: null }, { after: files.after, afterCard: files.afterCard })
+      expect(store.pictureFor(`review://${id}/before`)).toBe(store.file(id, 'before'))
+      expect(store.pictureFor(`review://${id}/after`)).toBe(store.file(id, 'after'))
+      expect(store.pictureFor(`review://${only.id}/after`)).toBe(store.file(only.id, 'after'))
+      // A review with no before picture has none to serve.
+      expect(store.pictureFor(`review://${only.id}/before`)).toBeNull()
+      for (const url of [
+        `review://${id}/review.json`,
+        `review://${id}/before-card`,
+        `review://${id}/after.png`,
+        `review://${id}/`,
+        `review://${id}/../${only.id}/after`,
+        `review://${id}/after/../../review.json`,
+        `review://${id}/%2e%2e/after`,
+        `review://${id}/after?x=1`,
+        `review://${id}/after#top`,
+        'review://20261020-120000-deadbeef/after',
+        'review://../after',
+        'review://not-an-id/after',
+        `tray://${id}/after`,
+        `file:///${store.file(id, 'after')}`,
+        'nonsense',
+      ])
+        expect([url, store.pictureFor(url)]).toEqual([url, null])
+    }))
+
+  it('keeps a history of looks: 20 a project, none too old, and Clear takes it too', () =>
+    inTemp(async (dir) => {
+      let now = NOW
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => now)
+      const look = (projectPath: string, at: number) => ({ projectPath, address: 'http://localhost:3000', at, found: 'same' as const })
+      await store.addLook(look('/a', now - 15 * DAY))
+      for (let i = 0; i < 25; i++) await store.addLook(look('/a', now + i))
+      await store.addLook(look('/b', now))
+      expect(store.history('/a')).toHaveLength(20)
+      expect(store.history('/a')[0].at).toBe(NOW + 24)
+      expect(store.history('/b')).toHaveLength(1)
+
+      // A file that was tampered with keeps only what reads as a look.
+      await fs.writeFile(path.join(dir, 'history.json'), JSON.stringify([look('/a', NOW), { projectPath: '/a', found: 'hacked' }, 'nonsense', { ...look('/a', NOW), text: 'x'.repeat(500), reviewId: '../x' }]))
+      const again = new ReviewStore(dir, REVIEW_LIMITS, () => now)
+      await again.load()
+      expect(again.history('/a')).toHaveLength(2)
+      expect(again.history('/a')[1].text).toHaveLength(300)
+      expect(again.history('/a')[1]).not.toHaveProperty('reviewId')
+      // The history file is not taken for a project's folder.
+      expect(again.list()).toEqual([])
+
+      now += 1
+      await again.clear()
+      expect(again.history('/a')).toEqual([])
+    }))
+
+  it('says what became of a review in the history, and "gone" once it is no longer kept', () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const { id } = await store.save(draft(), files)
+      await store.addLook({ projectPath: '/Users/me/site', address: 'http://localhost:3000', at: NOW, found: 'review', reviewId: id })
+      await store.addLook({ projectPath: '/Users/me/site', address: 'http://localhost:3000', at: NOW, found: 'review', reviewId: '20200101-000000-deadbeef' })
+      await store.setStatus(id, 'sent-back', 'bigger')
+      expect(store.history('/Users/me/site').map((e) => e.decided)).toEqual(['gone', 'sent-back'])
+    }))
+
   it('prunes on save, oldest first, and the project folder goes with its last review', () =>
     inTemp(async (dir) => {
       let now = NOW

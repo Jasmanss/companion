@@ -13,7 +13,8 @@ export interface AlertInput {
 
 /**
  * Which switch in Settings → Notifications an alert answers to, from its key. Steward's own requests (it needs your
- * OK to run a command) answer to none: they always peek out.
+ * OK to run a command) answer to none: they always peek out. Nor does a Visual Review (review:): giving a project an
+ * address turned it on, so "a session finished" being off doesn't hide it.
  */
 export function alertSwitch(key: string): keyof NotificationPrefs | null {
   if (key.startsWith('approval:') || key.startsWith('input:')) return 'sessionNeedsMe'
@@ -68,6 +69,20 @@ export class AlertQueue {
       this.timer ??= setTimeout(() => this.flush(), this.deps.batchMs ?? 20_000)
     }
     return true
+  }
+
+  /**
+   * Take back alerts still waiting for their batch, before they show: when something better says the same, like a
+   * review of the turn whose "finished" alert is waiting. Returns how many went. Ones already shown stay shown.
+   */
+  withdraw(match: (alert: AlertView) => boolean): number {
+    const before = this.pending.length
+    this.pending = this.pending.filter((a) => !match(a))
+    if (!this.pending.length && this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    return before - this.pending.length
   }
 
   /** Show whatever normal alerts are waiting, now. */

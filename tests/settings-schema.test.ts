@@ -95,6 +95,7 @@ describe('migrateSettings', () => {
   it('keeps the notch choice and its style, and starts files from before the notch on their edge, as a chin', () => {
     expect(migrateSettings({ steward: { edge: 'left' } }).steward).toMatchObject({ edge: 'left', notch: false, notchStyle: 'chin' })
     expect(migrateSettings({ steward: { notch: true, notchStyle: 'wings' } }).steward).toMatchObject({ notch: true, notchStyle: 'wings' })
+    expect(migrateSettings({ steward: { notch: true, notchStyle: 'island' } }).steward).toMatchObject({ notch: true, notchStyle: 'island' })
     expect(migrateSettings({ steward: { notch: 'yes', notchStyle: 'ears' } }).steward).toMatchObject({ notch: false, notchStyle: 'chin' })
   })
 
@@ -180,6 +181,7 @@ describe('parseSettingsPatch', () => {
     expect(parseSettingsPatch({ steward: { tint: 'graphite', frost: 0 } })).toEqual({ steward: { tint: 'graphite', frost: 0 } })
     expect(parseSettingsPatch({ steward: { frost: 100 } })).toEqual({ steward: { frost: 100 } })
     expect(parseSettingsPatch({ steward: { notch: true, notchStyle: 'wings' } })).toEqual({ steward: { notch: true, notchStyle: 'wings' } })
+    expect(parseSettingsPatch({ steward: { notchStyle: 'island' } })).toEqual({ steward: { notchStyle: 'island' } })
     expect(parseSettingsPatch({ steward: { presence: 'quiet', alertPeek: 'none' } })).toEqual({ steward: { presence: 'quiet', alertPeek: 'none' } })
     expect(parseSettingsPatch({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })).toEqual({ steward: { dimWhenIdle: false, hideFromScreenShare: true } })
     const apps = [{ id: 'com.apple.iWork.Keynote', name: 'Keynote' }]

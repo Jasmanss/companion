@@ -60,3 +60,217 @@
   opacity: 0.4;
   transition: opacity 1.2s ease-in-out;
 }
+
+/* The island (notch-island.ts; design/showcase, section 7, "Peeking, as one joined island"). Springs set the pieces'
+   transforms every frame, so nothing here transitions them. */
+.isl {
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: 0;
+  transition: opacity 0.18s linear;
+}
+.isl.rm-out {
+  opacity: 0;
+  transition-duration: 0.13s;
+}
+.isl .blob,
+.isl-pill,
+.isl-right {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.isl .bp {
+  position: absolute;
+  background: #000;
+}
+.isl-notch {
+  position: absolute;
+  top: 0;
+  background: #000;
+}
+.isl-right-in {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  color: #f2f3f5;
+  font: 700 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  transition: opacity 0.11s linear;
+}
+.isl-right-in.out {
+  opacity: 0;
+}
+/* The note's one line under the notch: in once the black has grown under it, out quickly before it shrinks. */
+.isl-note {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.1s linear;
+}
+.isl-note.on {
+  opacity: 1;
+  transition: opacity 0.2s linear 0.15s;
+}
+.isl-note-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 22px 2px;
+  white-space: nowrap;
+  color: rgba(242, 243, 245, 0.66);
+  font: 500 12.5px/16px -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  transition: opacity 0.11s linear;
+}
+.isl-note-in.out {
+  opacity: 0;
+}
+.isl-note-in b {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f2f3f5;
+  font-weight: 800;
+}
+.isl-note-in span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.isl-spin {
+  display: block;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  border: 2.5px solid rgba(var(--lit), 0.28);
+  border-top-color: rgb(var(--lit));
+  border-radius: 50%;
+  animation: isl-spin 0.9s linear infinite;
+}
+.isl-time {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.isl-count {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgb(var(--lit));
+  color: #101216;
+  font-size: 11px;
+}
+.isl-check {
+  display: block;
+  width: 12px;
+  height: 6px;
+  border: 2.5px solid rgb(95, 214, 142);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+.isl-ask {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(255, 179, 64);
+  color: #101216;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  animation: isl-live 1s ease-in-out infinite;
+}
+/* A chat asking you something: a "?" in the eyes' own color. */
+.isl-q {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(var(--lit));
+  color: #101216;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+/* Proud: a small spark that pops once beside the check, then fades. */
+.isl-spark {
+  position: absolute;
+  left: 9px;
+  top: -9px;
+  width: 9px;
+  height: 9px;
+  background: rgb(255, 214, 102);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+  animation: isl-spark 0.9s ease-out 0.15s forwards;
+}
+@keyframes isl-spark {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.25) rotate(40deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9) rotate(80deg);
+  }
+}
+/* While the island is out, its right side carries the mark ("!", "?", the spark): the Pill's own corner marks hide. */
+.isl[data-level='compact'] .isl-pill .marks,
+.isl[data-level='note'] .isl-pill .marks {
+  visibility: hidden;
+}
+.isl-thumb {
+  position: relative;
+  display: block;
+  width: 26px;
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f1f2f6 50%, #fff 50%);
+  box-shadow: 0 0 0 1.5px rgb(165, 139, 255);
+}
+.isl-thumb::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #111;
+}
+@keyframes isl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes isl-live {
+  50% {
+    transform: scale(0.88);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .isl-spin,
+  .isl-ask,
+  .isl-spark {
+    animation: none;
+  }
+}

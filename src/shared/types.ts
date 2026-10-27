@@ -3,12 +3,34 @@
  * expanded: the panel · viewing: the large image viewer
  */
 export type DockState = 'hidden' | 'collapsed' | 'nudge' | 'expanded' | 'viewing'
+/** What the viewing state shows: the tray's images, or a Visual Review's before and after (a bigger window). */
+export type ViewerKind = 'tray' | 'review'
 
 /**
  * What the character's face shows. Some come from real events: mad and then worried for a failed build, celebrating
- * for a deploy or merge, sleepy for the hour.
+ * for a deploy or merge, sleepy for the hour. The reactions follow the chats (main/reactions.ts): focused while one
+ * works, juggling while several do, a nod, done or proud when one stops (by how long its turn was), confused when one
+ * asks you something, hello when you're back at the Mac. Watching is Overnight Watch: half-lidded, a slow blink.
  */
-export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you' | 'worried' | 'mad' | 'celebrating' | 'sleepy'
+export type Mood =
+  | 'resting'
+  | 'idle'
+  | 'listening'
+  | 'thinking'
+  | 'talking'
+  | 'done'
+  | 'needs-you'
+  | 'worried'
+  | 'mad'
+  | 'celebrating'
+  | 'sleepy'
+  | 'confused'
+  | 'focused'
+  | 'juggling'
+  | 'nod'
+  | 'proud'
+  | 'hello'
+  | 'watching'
 
 /** Glass: a tinted lens. Flat: one solid color. Blocky: pixels. */
 export type PillVersion = 'glass' | 'flat' | 'blocky'
@@ -18,7 +40,38 @@ export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphit
 /** The color the panel's glass is tinted with. */
 export type PanelTint = 'ice' | 'lilac' | 'mint' | 'peach' | 'graphite'
 
-export type NotchStyle = 'chin' | 'wings'
+export type NotchStyle = 'chin' | 'wings' | 'island'
+
+/**
+ * What the island's right side shows (the Smart choice): Claude working (a spinner and the time), two projects working
+ * (a spinner and a count), finished (a check), needs you (an amber mark), asks you something (a "?"), a review ready (a
+ * thumbnail).
+ */
+export type IslandRight = 'working' | 'two' | 'finished' | 'needs' | 'asks' | 'review'
+export interface IslandStatus {
+  /** null: nothing going on, so no island; Steward peeks from the notch. */
+  right: IslandRight | null
+  /** Working: when the turn began, so the time counts up from it. */
+  since?: number
+  /** Two projects: how many are working. */
+  count?: number
+  /** Finished after a long turn (Steward is proud): a small spark pops once by the check. */
+  spark?: boolean
+  /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
+  note?: IslandNote
+}
+/**
+ * finished: "Main building finished", and what Claude said. started: a second project started while one works. alert:
+ * the catch-all, an alert with no island size of its own (a Visual Review, until island Phase 3), its title and one line.
+ */
+export interface IslandNote {
+  kind: 'finished' | 'started' | 'alert'
+  /** The chat's name (or the project's), in bold, then the rest. */
+  name: string
+  text: string
+  /** When it was shown: a new note, even one saying the same, is a new message. */
+  at: number
+}
 
 /** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
 export type Presence = 'always' | 'quiet'
@@ -55,6 +108,10 @@ export interface NotchState {
   hover?: boolean
   /** An alert is out under the notch, joined to the chin (Wings grows its chin for it). */
   nudge?: boolean
+  /** The island (Settings → Steward → In the notch → Island): what it shows. */
+  island?: IslandStatus
+  /** The panel is open at the side: which way it is from the notch (x and y from -1 to 1), for Steward to look at. */
+  panel?: { x: number; y: number } | null
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
@@ -189,8 +246,10 @@ export type SessionState = 'working' | 'needs-approval' | 'needs-input' | 'finis
 
 export interface SessionView {
   id: string
-  /** The matching project's name, or the folder name. */
+  /** The chat's own name in the Claude app, else the matching project's name, or the folder name. */
   name: string
+  /** With a chat name: the project or folder, as a quieter second word. */
+  place?: string
   projectPath: string | null
   cwd: string
   state: SessionState
@@ -255,6 +314,35 @@ export interface ClaudeHookStatus {
   error?: string
 }
 
+/**
+ * Why a night's Watch ended: the wake time, "I'm up", Stop watching, you came back and used the Mac for a couple of
+ * minutes, or the 12-hour cap.
+ */
+export type WatchEnd = 'wake-time' | 'up' | 'stopped' | 'back' | 'cap'
+
+/** Overnight Watch, for the panel: watching or not, and what the goodnight card says Steward can watch tonight. */
+export interface WatchView {
+  watching: boolean
+  /** Watching: since when, and until when (the wake time, or the 12-hour cap). */
+  since?: number
+  until?: number
+  /** The wake time last picked, as "07:30". */
+  wakeTime: string
+  /** What there is to watch tonight. */
+  plan: {
+    /** Claude Code sessions working now, by name. */
+    working: string[]
+    /** How many sessions are waiting on you now. */
+    waiting: number
+    /** Projects whose deploys Steward can see (linked to Vercel). */
+    deploys: string[]
+  }
+  /** The Mac is on battery: it may sleep however Steward tries. */
+  onBattery: boolean
+  /** How the last Watch ended, while it's still worth saying (until the next one starts). */
+  ended?: { at: number; why: WatchEnd }
+}
+
 /** Visual Review: one finished turn whose page looks different, waiting for a decision. */
 export interface ReviewView {
   id: string
@@ -273,6 +361,10 @@ export interface ReviewView {
   heightAfter: number
   /** The full-page pictures on disk (the note for the session points at them). */
   files: { before: string | null; after: string }
+  /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
+  said: string | null
+  /** How many files the turn changed in the project's git checkout, or null when git couldn't say. */
+  filesChanged: number | null
 }
 
 /**
@@ -290,6 +382,21 @@ export interface ReviewCheck {
   /** The address it looked at. */
   address: string
   at: number
+}
+
+/**
+ * Visual Review's history: one look at a project's page as a turn ended, and what it found, so a quiet turn can be
+ * explained. review: the page changed and made a review (decided says what became of it, gone once it isn't kept).
+ * same: it looked the same. failed: it couldn't be seen (text says why). login: all it found was a login page.
+ */
+export interface ReviewHistoryEntry {
+  projectPath: string
+  address: string
+  at: number
+  found: 'review' | 'same' | 'failed' | 'login'
+  text?: string
+  reviewId?: string
+  decided?: 'new' | 'good' | 'sent-back' | 'gone'
 }
 
 /** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
@@ -403,7 +510,7 @@ export interface StewardAPI {
     expand(): Promise<void>
     collapse(): Promise<void>
     hide(): Promise<void>
-    view(): Promise<void>
+    view(kind?: ViewerKind): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
     /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
     drag(phase: 'start' | 'move' | 'end', dy?: number): void
@@ -506,10 +613,27 @@ export interface StewardAPI {
     sendBack(id: string, note: string): Promise<string>
     /** Open the full-page picture. */
     openFull(id: string, which: 'before' | 'after'): Promise<void>
+    /** The looks after recent turns in a project, newest first. */
+    history(projectPath: string): Promise<ReviewHistoryEntry[]>
+    /** The history changed (a turn ended, a review was decided, or it was cleared): ask again. */
+    onHistory(cb: () => void): Unsubscribe
     /** How many reviews are kept and how much space they take. */
     usage(): Promise<{ count: number; bytes: number }>
     /** Delete every review picture. */
     clear(): Promise<void>
+  }
+  /** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
+  watch: {
+    get(): Promise<WatchView>
+    /** Go rest, watching until this wake time ("07:30"). */
+    start(wakeTime: string): Promise<WatchView>
+    /** "I'm up", or Stop watching. */
+    stop(why: 'up' | 'stopped'): Promise<WatchView>
+    /** Remember the wake time picked on the card. */
+    setWakeTime(wakeTime: string): Promise<WatchView>
+    onChanged(cb: (view: WatchView) => void): Unsubscribe
+    /** Goodnight from the menu bar: show the goodnight card. */
+    onGoodnight(cb: () => void): Unsubscribe
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */

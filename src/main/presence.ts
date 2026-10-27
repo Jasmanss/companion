@@ -155,13 +155,19 @@ export const nextLookMs = (s: PresenceState, i: Pick<PresenceInput, 'inZone'>): 
 
 /* ---------- Alerts that peek out ---------- */
 
-/** Steward's own request (it needs your OK to run a command) blocks work like a session waiting on you does. */
-const needsMe = (key: string): boolean => alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:')
+/**
+ * Steward's own request (it needs your OK to run a command) blocks work like a session waiting on you does. A Visual
+ * Review waits for your decision too: you turned it on by giving the project an address, so it counts the same.
+ */
+const needsMe = (key: string): boolean => alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:') || key.startsWith('review:')
 
-/** Whether an alert peeks out from where Steward sits, for the "Alerts that peek out" choice. */
-export function peeksOut(key: string, choice: AlertPeek): boolean {
+/**
+ * Whether an alert peeks out from where Steward sits, for the "Alerts that peek out" choice. island: Steward is the notch
+ * island, whose note says a session finished, so that alert doesn't come out under the notch as well.
+ */
+export function peeksOut(key: string, choice: AlertPeek, island = false): boolean {
+  if (choice === 'none' || (island && key.startsWith('finished:'))) return false
   if (choice === 'all') return true
-  if (choice === 'none') return false
   return needsMe(key)
 }
 
@@ -169,19 +175,29 @@ export function peeksOut(key: string, choice: AlertPeek): boolean {
  * Alerts that made it through the queue (Settings → Notifications has already silenced the types switched off), split
  * into the ones that peek out and the ones that wait in the menu bar until the panel opens.
  */
-export function splitAlerts(list: AlertView[], choice: AlertPeek): { peek: AlertView[]; held: AlertView[] } {
+export function splitAlerts(list: AlertView[], choice: AlertPeek, island = false): { peek: AlertView[]; held: AlertView[] } {
   const peek: AlertView[] = []
   const held: AlertView[] = []
-  for (const alert of list) (peeksOut(alert.key, choice) ? peek : held).push(alert)
+  for (const alert of list) (peeksOut(alert.key, choice, island) ? peek : held).push(alert)
   return { peek, held }
 }
+
+/**
+ * In the notch island, the alerts it shows as itself instead of under the notch: a Visual Review, as the island's
+ * catch-all note (its title and one line) until island Phase 3 gives reviews a size of their own. So the old alert
+ * under the notch never shows for one.
+ */
+export const islandShows = (key: string): boolean => key.startsWith('review:')
 
 /** The most alerts waiting for the panel. The oldest go first. */
 export const MAX_HELD = 20
 
-/** The menu bar's title: how many sessions are waiting on you, and a plain dot when a quieter alert is waiting too. */
-export function menuBarTitle(waiting: number, held: number): string {
-  return [waiting > 0 ? String(waiting) : '', held > 0 ? '•' : ''].filter(Boolean).join(' ')
+/**
+ * The menu bar's title: how many sessions are waiting on you, and a plain dot when a quieter alert is waiting too. A
+ * moon first while Overnight Watch is on.
+ */
+export function menuBarTitle(waiting: number, held: number, watching = false): string {
+  return [watching ? '☾' : '', waiting > 0 ? String(waiting) : '', held > 0 ? '•' : ''].filter(Boolean).join(' ')
 }
 
 /* ---------- The first-time note ---------- */

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -12,7 +12,7 @@ const api: StewardAPI = {
     expand: () => ipcRenderer.invoke('dock:expand'),
     collapse: () => ipcRenderer.invoke('dock:collapse'),
     hide: () => ipcRenderer.invoke('dock:hide'),
-    view: () => ipcRenderer.invoke('dock:view'),
+    view: (kind = 'tray') => ipcRenderer.invoke('dock:view', kind),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
     drag: (phase, dy) => ipcRenderer.send('dock:drag', phase, dy),
     resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),
@@ -90,8 +90,18 @@ const api: StewardAPI = {
     markGood: (id) => ipcRenderer.invoke('review:markGood', id),
     sendBack: (id, note) => ipcRenderer.invoke('review:sendBack', id, note),
     openFull: (id, which) => ipcRenderer.invoke('review:openFull', id, which),
+    history: (projectPath) => ipcRenderer.invoke('review:history', projectPath),
+    onHistory: (cb) => subscribe<void>('review:history', () => cb()),
     usage: () => ipcRenderer.invoke('review:usage'),
     clear: () => ipcRenderer.invoke('review:clear'),
+  },
+  watch: {
+    get: () => ipcRenderer.invoke('watch:get'),
+    start: (wakeTime) => ipcRenderer.invoke('watch:start', wakeTime),
+    stop: (why) => ipcRenderer.invoke('watch:stop', why),
+    setWakeTime: (wakeTime) => ipcRenderer.invoke('watch:setWakeTime', wakeTime),
+    onChanged: (cb) => subscribe<WatchView>('watch:changed', cb),
+    onGoodnight: (cb) => subscribe<void>('watch:goodnight', () => cb()),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),

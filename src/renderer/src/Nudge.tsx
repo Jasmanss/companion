@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AlertView } from '../../shared/types'
 import { CloseIcon } from './icons'
 
@@ -82,6 +82,20 @@ export function Nudge({
  * above it is the character, so there's no Pill here. A click opens the panel (an alert's action is on its banner
  * there); the cross, shown while the cursor is on it, tucks it away. Coming out and going back are in styles.css.
  */
+/**
+ * Whether the page has drawn a frame since this came. The nudge under the notch comes in a window that was hidden, and
+ * a page that isn't drawn keeps an old clock: an entrance started before its first frame would be partly over by then,
+ * or wholly. Held until that frame, it plays from its start.
+ */
+function useDrawn(): boolean {
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setDrawn(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return drawn
+}
+
 export function NotchNudge({
   alerts,
   notchWidth,
@@ -98,13 +112,14 @@ export function NotchNudge({
   onDismiss: () => void
 }) {
   const stay = useStay(alerts, onDismiss)
+  const drawn = useDrawn()
   const lead = alerts[0]
   if (!lead) return null
   const more = alerts.length - 1
   const line = lead.detail ? `${lead.title} · ${lead.detail}` : lead.title
   return (
     <div
-      className={`notch-nudge ${lead.level}`}
+      className={`notch-nudge ${lead.level}${drawn ? '' : ' wait'}`}
       data-app
       role="button"
       tabIndex={-1}

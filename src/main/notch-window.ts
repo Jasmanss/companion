@@ -8,10 +8,11 @@
 // presence rules (main/presence) whether the cursor is on the notch, and they say when to wake and when to sleep.
 //
 // While an alert is out under it (the nudge, in the main window just below), the black is joined to it: the chin shows
-// (in Wings too) and it doesn't grow with the cursor on it.
+// (in Wings too) and it doesn't grow with the cursor on it. While the panel is open at the side, it stays, and Steward
+// looks toward the panel.
 import { BrowserWindow, screen } from 'electron'
-import { inBoxes, noHover, notchBoxes, notchShape, NOTCH_WINDOW, stepHover } from '../shared/notch'
-import type { Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
+import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_WINDOW, noHover, notchBoxes, notchShape, NOTCH_WINDOW, stepHover, type HoverState } from '../shared/notch'
+import type { IslandStatus, Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
 import { inRect } from './presence'
 
 interface Options {
@@ -20,6 +21,8 @@ interface Options {
   style(): NotchStyle
   /** Every time the cursor is checked: whether it's on the notch (asleep) or on the shape (awake). */
   onCursor?(over: boolean): void
+  /** The cursor came onto the black, or left it (the island keeps its note while it's on). */
+  onHover?(hover: boolean): void
   /** Where the cursor is; null to leave the real one out (the smoke check, which feeds what it needs itself). */
   cursor?(): Electron.Point | null
   /**
@@ -45,6 +48,8 @@ export class NotchDock {
   private wanted = false
   private awake = true
   private nudge = false
+  private island: IslandStatus = { right: null }
+  private panel: { x: number; y: number } | null = null
   private hovering = noHover()
   private ignoring = true
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -97,8 +102,9 @@ export class NotchDock {
     if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload)
   }
 
-  /** The style changed in Settings: the shape it takes clicks on changes too. */
+  /** The style changed in Settings: the shape it takes clicks on changes too, and the island's window is wider. */
   restyle(): void {
+    if (this.win && !this.win.isDestroyed() && this.notch) this.win.setBounds(this.bounds(this.notch))
     this.send()
   }
 
@@ -107,7 +113,7 @@ export class NotchDock {
     if (awake === this.awake) return
     this.awake = awake
     // Hover only exists while awake.
-    this.hovering = noHover()
+    this.hover(noHover())
     this.send()
   }
 
@@ -115,12 +121,33 @@ export class NotchDock {
   setNudge(nudge: boolean): void {
     if (nudge === this.nudge) return
     this.nudge = nudge
-    this.hovering = noHover()
+    this.hover(noHover())
+    this.send()
+  }
+
+  /** The island (the Island style): what's going on, which sizes it and fills its right side. */
+  setIsland(island: IslandStatus): void {
+    if (JSON.stringify(island) === JSON.stringify(this.island)) return
+    this.island = island
+    this.send()
+  }
+
+  /** The panel opened at the side (which way it is from the notch), or closed (null). */
+  setPanel(panel: { x: number; y: number } | null): void {
+    if (JSON.stringify(panel) === JSON.stringify(this.panel)) return
+    this.panel = panel
     this.send()
   }
 
   state(): NotchState {
-    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.hovering.hover, nudge: this.nudge }
+    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.hovering.hover, nudge: this.nudge, island: this.island, panel: this.panel }
+  }
+
+  /** Where the black (and, for the island, Steward) is now: the only place the window takes clicks. */
+  private boxes(layout: NotchLayout) {
+    if (this.o.style() !== 'island') return notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake, this.hovering.hover, this.nudge), layout)
+    const level = islandLevel({ awake: this.awake, nudge: this.nudge, right: this.island.right, note: !!this.island.note, open: !!this.panel })
+    return islandBoxes(islandParts(level, layout, this.hovering.hover), level, layout)
   }
 
   /** The notch window's own contents, for the smoke check. */
@@ -144,7 +171,16 @@ export class NotchDock {
   }
 
   private bounds(n: NotchGeometry): Electron.Rectangle {
-    return { x: Math.round(n.x + n.width / 2 - NOTCH_WINDOW.width / 2), y: n.y, ...NOTCH_WINDOW }
+    const size = this.o.style() === 'island' ? ISLAND_WINDOW : NOTCH_WINDOW
+    return { x: Math.round(n.x + n.width / 2 - size.width / 2), y: n.y, ...size }
+  }
+
+  /** Hovering or not now; says so when that changed. */
+  private hover(h: HoverState): boolean {
+    const changed = h.hover !== this.hovering.hover
+    this.hovering = h
+    if (changed) this.o.onHover?.(h.hover)
+    return changed
   }
 
   private layout(): NotchLayout | null {
@@ -211,15 +247,12 @@ export class NotchDock {
       // Left out, the cursor counts as far away: not near, and not on the shape.
       const b = w.getBounds(), c = (this.o.cursor ? this.o.cursor() : screen.getCursorScreenPoint()) ?? { x: -1e6, y: -1e6 }
       const p = { x: c.x - b.x, y: c.y - b.y }
-      const shaped = () => notchBoxes(notchShape(this.o.style(), this.mood, layout, this.awake, this.hovering.hover, this.nudge), layout)
+      const shaped = () => this.boxes(layout)
       const over = shaped().some((b) => inRect(p, b, SLACK))
       this.o.onCursor?.(over)
       // On the black for a moment, it grows a little; off it for a moment, it shrinks back. Grown, the cursor is over
       // more of it, so it doesn't flicker at the edge.
-      const hovering = this.awake && !this.nudge && this.o.hoverable?.() ? stepHover(this.hovering, over, Date.now()) : noHover()
-      const changed = hovering.hover !== this.hovering.hover
-      this.hovering = hovering
-      if (changed) this.send()
+      if (this.hover(this.awake && !this.nudge && this.o.hoverable?.() ? stepHover(this.hovering, over, Date.now()) : noHover())) this.send()
       const inside = inBoxes(p, shaped())
       if (inside === this.ignoring) {
         this.ignoring = !inside

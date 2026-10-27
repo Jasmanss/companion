@@ -14,8 +14,12 @@
 //
 // Listening slides the eyes apart toward the Pill's edges, like ears turned toward you, and nods them on each key.
 // Talking gets a mouth that changes shape with a made-up speech signal: a closed line, wide open, or a round "o".
-// Outside the eyes, some moods also get one mark: "!" and a pulsing ring (needs you), confetti (celebrating),
-// a sweat drop (worried), Z's (sleepy).
+// Outside the eyes, some moods also get one mark: "!" and a pulsing ring (needs you), "?" (confused), confetti
+// (celebrating, and a small burst for proud), a sweat drop (worried), Z's (sleepy).
+//
+// The reactions to the chats (docs/briefs/steward-reactions.md, design/pill/reactions.js): focused reads along a line,
+// juggling follows a ball from hand to hand, a nod, proud hops, hello pops wide and smiles, and confused looks two ways
+// with its head rocking. Needs you grows impatient after two minutes: the pulse quickens and it looks toward the panel.
 //
 // State is plain data: createEyes(), setStyle(), setMood(), then stepEyes() every frame.
 import type { Mood } from '../../../shared/types'
@@ -34,7 +38,9 @@ const KEYS = Object.keys(BASE) as Key[]
 const SOFT = new Set<Key>(['lid', 'tilt', 'squint', 'closed', 'ox', 'oy', 'talk'])
 /** Spring stiffness and damping per value: the dots form a little slower, the listening slide is soft. */
 const SPRING = (k: Key): [number, number] => (k === 'dots' ? [170, 0.5] : k === 'gap' ? [130, 0.55] : SOFT.has(k) ? [200, 0.75] : [260, 0.5])
-const V: Record<Mood, Partial<Pose>> = {
+/** A mood's targets: for both eyes, and (confused) for one eye only. */
+type Target = Partial<Pose> & Partial<Record<Side, Partial<Pose>>>
+const V: Record<Mood, Target> = {
   idle: {},
   listening: { gap: 2, sx: 0.92, sy: 1.3 }, // the eyes slide apart toward the edges and grow taller
   thinking: { dots: 1 },
@@ -46,9 +52,94 @@ const V: Record<Mood, Partial<Pose>> = {
   mad: { sx: 1.08, sy: 0.88, lid: 0.3, tilt: 0.6, squint: 0.24 },
   resting: { sy: 0.96, lid: 0.6 },
   sleepy: { closed: 1 },
+  confused: { L: { sx: 1.12, sy: 1.2, ox: -0.6, oy: -0.55 }, R: { sx: 0.9, sy: 0.72, lid: 0.28, tilt: -0.25, ox: 0.55, oy: 0.45 } }, // looking two ways
+  focused: { sx: 0.98, sy: 0.8, lid: 0.2, tilt: 0.1, gap: 0.96 }, // narrowed, reading along a line
+  juggling: { sx: 1.02, sy: 1.14 },
+  nod: { sx: 1.2, sy: 1.05, happy: 0.6 }, // soft happy eyes
+  proud: { sx: 1.4, sy: 1.2, happy: 1 },
+  hello: { sx: 1.3, sy: 1.15, happy: 0.75 },
+  watching: { sy: 0.94, lid: 0.5 }, // Overnight Watch: half-lidded, awake enough to keep an eye on things
 }
 /** Seconds between blinks per mood (0: never blinks). */
-const BLINK: Record<Mood, number> = { idle: 3.6, listening: 4.2, thinking: 0, talking: 3.2, done: 0, celebrating: 0, 'needs-you': 4, worried: 2.4, mad: 5.5, resting: 7, sleepy: 0 }
+const BLINK: Record<Mood, number> = {
+  idle: 3.6, listening: 4.2, thinking: 0, talking: 3.2, done: 0, celebrating: 0, 'needs-you': 4, worried: 2.4, mad: 5.5, resting: 7, sleepy: 0,
+  confused: 3, focused: 6.5, juggling: 0, nod: 0, proud: 0, hello: 0, watching: 6,
+}
+/** Needs you waiting this long grows impatient: the pulse quickens and the eyes look toward the panel. */
+export const IMPATIENT_S = 120
+
+const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
+const bell = (u: number) => (u <= 0 || u >= 1 ? 0 : Math.sin(Math.PI * u))
+/** Juggling: seconds for the ball to go from one hand to the other and back. */
+const JUGGLE_S = 1.5
+/**
+ * The reactions' moves on top of their targets (design/pill/reactions.js). still: where it looks with reduced motion,
+ * which holds the targets and this; the rest only runs when motion is allowed. e scales body moves (calm is half).
+ */
+interface Moves {
+  still: [number, number]
+  look?(t: number, age: number): [number, number]
+  tweak?(tg: Pose, age: number): void
+  body?(B: EyesState['body'], t: number, age: number, e: number): void
+}
+const MOVES: Partial<Record<Mood, Moves>> = {
+  // Reads along a line, row after row, leaning in a little.
+  focused: {
+    still: [0, 0.25],
+    look: (_t, age) => {
+      const T = 1.7, u = (age % T) / T
+      return [-0.6 + 1.2 * u ** 0.85, 0.22 + 0.07 * (Math.floor(age / T) % 3)]
+    },
+    body: (B, _t, _age, e) => {
+      B.sc += 0.022 * e
+      B.ty += 0.012 * e
+    },
+  },
+  // The eyes follow a ball over to the other hand, with a small bounce.
+  juggling: {
+    still: [0, -0.2],
+    look: (t) => {
+      const f = (2 * Math.PI * t) / JUGGLE_S
+      return [0.85 * Math.sin(f), 0.2 - 0.75 * Math.cos(f) ** 2]
+    },
+    body: (B, t, _age, e) => {
+      B.ty -= 0.012 * Math.abs(Math.sin((2 * Math.PI * t) / JUGGLE_S)) * e
+    },
+  },
+  // One small nod.
+  nod: {
+    still: [0, 0],
+    look: (_t, age) => [0, -0.05 + 0.5 * bell(age / 0.9)],
+    body: (B, _t, age, e) => {
+      B.ty += 0.03 * bell(age / 0.9) * e
+    },
+  },
+  // Two hops, chest out (and a small burst of confetti, in marks).
+  proud: {
+    still: [0, -0.1],
+    look: () => [0, -0.12],
+    body: (B, _t, age, e) => {
+      const hop = (a: number) => (age > a && age < a + 0.5 ? Math.abs(Math.sin(Math.PI * ((age - a) / 0.5))) : 0)
+      B.ty -= 0.08 * (hop(0.2) + hop(0.8)) * e
+      B.sc += 0.05 * ease(age / 0.4) * (1 - ease((age - 3) / 1)) * e
+    },
+  },
+  // Eyes pop wide, then settle into a smile, with one hop.
+  hello: {
+    still: [0, 0],
+    tweak: (tg, age) => {
+      if (age < 0.55) {
+        tg.sx = 1.38
+        tg.sy = 1.28
+        tg.happy = 0
+      }
+    },
+    look: () => [0, 0],
+    body: (B, _t, age, e) => {
+      B.ty -= 0.09 * bell((age - 0.1) / 0.45) * e
+    },
+  },
+}
 
 /* ---------------- blocky eyes ---------------- */
 // Left eye sprites, 3 wide by 5 tall. On the 16 x 8 Pill grid the left eye sits on columns 4 to 6 and rows 1 to 5;
@@ -71,6 +162,8 @@ const PX: Record<Mood, [Sprite, Sprite]> = {
   idle: ['normal', 'normal'], listening: ['normal', 'normal'], thinking: ['normal', 'normal'], talking: ['normal', 'normal'],
   done: ['happy', 'happy'], celebrating: ['happy', 'happy'], 'needs-you': ['big', 'big'], worried: ['worried', 'worried'],
   mad: ['mad', 'mad'], resting: ['heavy', 'heavy'], sleepy: ['asleep', 'asleep'],
+  confused: ['big', 'short'], focused: ['short', 'short'], juggling: ['normal', 'normal'], nod: ['happy', 'happy'], proud: ['happy', 'happy'], hello: ['big', 'big'],
+  watching: ['heavy', 'heavy'],
 }
 /** Talking's pixel mouths, as [column, row] cells under the eyes (which move up a row to make room). */
 const PX_MOUTH = {
@@ -88,9 +181,11 @@ export const ZSPRITES = {
 export const MARK_SPRITES = {
   // "!" is a badge: a solid disc with the "!" cut out of it, so needs-you stands out most.
   bang: ['.###.', '##.##', '##.##', '##.##', '#####', '##.##', '.###.'],
+  q: ['###', '..#', '.##', '...', '.#.'],
   drop: ['.#.', '###', '###', '.#.'],
   bold: {
     bang: ['.###.', '##.##', '##.##', '##.##', '#####', '##.##', '.###.'],
+    q: ['####', '...#', '..##', '.##.', '....', '.##.'],
     drop: ['.#.', '###', '###', '###', '.#.'],
   },
 }
@@ -136,6 +231,10 @@ export interface EyesState {
   nextBlink: number
   double: boolean
   body: { tx: number; ty: number; sc: number; rot: number }
+  /** How fast the body's lean is changing (confused rocks on a spring). */
+  rotV: number
+  /** Which way the panel is from this Pill (-1 left, 1 right, 0 here): impatient needs-you looks toward it. */
+  toward: number
   /** When keys were pressed while listening, and how far the eyes are nodding (1: all the way down). */
   keys: number[]
   nod: number
@@ -151,7 +250,7 @@ export function createEyes(seed = 1, t = 0): EyesState {
     look: { x: 0, y: 0 }, lookV: { x: 0, y: 0 }, glance: { x: 0, y: 0, until: 0, next: t + 1.5 + (seed % 3) },
     rest: { until: 0, next: t + 4 + (seed % 4) },
     blink: 0, blinkAt: -1, nextBlink: t + 1 + (seed % 5) * 0.4, double: false,
-    body: { tx: 0, ty: 0, sc: 1, rot: 0 },
+    body: { tx: 0, ty: 0, sc: 1, rot: 0 }, rotV: 0, toward: 0,
     keys: [], nod: 0,
     say: { open: 0, round: 0, ov: 0, rv: 0, stress: 0 },
   }
@@ -163,10 +262,14 @@ export function pressKey(st: EyesState): void {
   if (st.keys.length > 8) st.keys.shift()
 }
 
-/** mouth: false makes talking bounce the eyes instead of showing a mouth. lively: false is the calm personality. */
-export function setStyle(st: EyesState, o: { mouth?: boolean; lively?: boolean }): void {
+/**
+ * mouth: false makes talking bounce the eyes instead of showing a mouth. lively: false is the calm personality.
+ * toward: which way the panel is from this Pill (-1 left, 1 right, 0 this is the panel's own).
+ */
+export function setStyle(st: EyesState, o: { mouth?: boolean; lively?: boolean; toward?: number }): void {
   if (o.mouth !== undefined) st.mouth = o.mouth
   if (o.lively !== undefined) st.lively = o.lively
+  if (o.toward !== undefined) st.toward = o.toward
 }
 
 /** Change mood. glint picks what thinking is busy with: 'sweep' (default), 'step' (reading a file) or 'search'. */
@@ -215,10 +318,19 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
   dt = Math.min(Math.max(dt, 0), 0.25)
   st.t = t
   st.rm = rm
-  const m = st.mood, age = t - st.since
+  // A frame's clock can be a few milliseconds behind the one a mood was set on (runEyes draws its first frame with
+  // performance.now(), the rest with the frame's own time), so a mood is never younger than zero.
+  const m = st.mood, age = Math.max(0, t - st.since)
   // How big its moves are: calm is half as lively.
   const e = st.lively ? 1 : 0.5
   const pre = V[m] ?? {}
+  const shared: Partial<Pose> = { ...pre }
+  delete (shared as Target).L
+  delete (shared as Target).R
+  const moves = MOVES[m]
+  // Needs you, waiting a while: the pulse comes twice as often.
+  const impatient = m === 'needs-you' && age > IMPATIENT_S
+  const pulse = (a: number) => Math.max(0, Math.sin((a - 1.2) * (impatient ? 8 : 4))) ** 8 * (a > 1.2 ? 1 : 0)
   const px = pointer ? Math.max(-1.5, Math.min(1.5, pointer.x)) : 0, py = pointer ? Math.max(-1.5, Math.min(1.5, pointer.y)) : 0
   const near = !!pointer && Math.hypot(pointer.x, pointer.y) < 0.9
   const talking = m === 'talking', mouth = talking && st.mouth
@@ -232,15 +344,20 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
   const say = !talking ? { open: 0, round: 0, stress: 0 } : rm ? { open: 0.45, round: 0, stress: 0 } : speech(t)
   st.say.stress = say.stress
 
-  const tg: Pose = { ...BASE, ...pre }
-  if (talking && !mouth) { tg.talk = 0; tg.oy = 0; tg.sy = 1 } // no mouth, so no room to make for it
-  if (!rm) {
-    if (m === 'done' && age < 0.35) tg.happy = 0 // grow first, then smile
-    if (m === 'needs-you') { const p = Math.max(0, Math.sin((age - 1.2) * 4)) ** 8 * (age > 1.2 ? 1 : 0); tg.sx += 0.07 * p; tg.sy += 0.07 * p }
-    if (m === 'listening') tg.sy *= 1 + 0.035 * Math.sin((t * Math.PI * 2) / 3.2) // slow breathing
-    if (mouth) tg.squint += 0.36 * say.stress // a small squint on stressed words
-    if (talking && !mouth) tg.sy *= 0.72 + 0.32 * st.say.open // no mouth: the eyes bounce with the words
-    if (m === 'resting' && near && !restGlance) tg.lid = 0.28 // the cursor came close: lids lift
+  const targets = {} as Record<Side, Pose>
+  for (const side of SIDES) {
+    const tg: Pose = { ...BASE, ...shared, ...(pre[side] ?? {}) }
+    if (talking && !mouth) { tg.talk = 0; tg.oy = 0; tg.sy = 1 } // no mouth, so no room to make for it
+    if (!rm) {
+      if (m === 'done' && age < 0.35) tg.happy = 0 // grow first, then smile
+      if (m === 'needs-you') { const p = pulse(age); tg.sx += 0.07 * p; tg.sy += 0.07 * p }
+      if (m === 'listening') tg.sy *= 1 + 0.035 * Math.sin((t * Math.PI * 2) / 3.2) // slow breathing
+      if (mouth) tg.squint += 0.36 * say.stress // a small squint on stressed words
+      if (talking && !mouth) tg.sy *= 0.72 + 0.32 * st.say.open // no mouth: the eyes bounce with the words
+      if (m === 'resting' && near && !restGlance) tg.lid = 0.28 // the cursor came close: lids lift
+      moves?.tweak?.(tg, age)
+    }
+    targets[side] = tg
   }
 
   // Where it looks. Calm glances less often, and not as far.
@@ -259,20 +376,29 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
     case 'thinking': lx = 0; ly = 0; break // the dots do the moving
     case 'talking': lx = px * 0.3 * e + (glancing ? g.x * 0.3 : 0); ly = 0.05; break
     case 'done': case 'celebrating': lx = 0; ly = -0.1; break
-    case 'needs-you': lx = 0; ly = 0; break // straight at you
+    case 'needs-you': lx = impatient ? 0.6 * st.toward : 0; ly = impatient ? 0.1 : 0; break // straight at you, then toward the panel
     case 'worried': lx = glancing ? g.x * 0.6 : -0.3; ly = 0.45; break
     case 'mad': lx = 0; ly = 0.12; break
     case 'resting': if (restGlance) { lx = -0.8; ly = 0.05 } else if (near && !rm) { lx = px * 0.4; ly = 0.2 + py * 0.25 } else { lx = 0.1; ly = 0.45 } break
     case 'sleepy': lx = 0; ly = 0.35; break
+    case 'confused': lx = 0; ly = 0; break // each eye has its own offset
+    default:
+      if (moves) [lx, ly] = !rm && moves.look ? moves.look(t, age) : moves.still
   }
+
+  // Confused rocks slowly from side to side, on a spring. Resting keeps still to stay cheap.
+  const B = st.body
+  const lean = m === 'confused' ? 7 * Math.sin((age * Math.PI * 2) / 3.4) * e : 0
+  const bodyFree = !rm && m !== 'resting'
 
   // Springs, in small steps so a low frame rate or a slow frame stays stable.
   const n = rm ? 1 : Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / n
   for (let i = 0; i < n; i++) {
     for (const side of SIDES) for (const k of KEYS) {
-      if (rm) { st.p[side][k] = tg[k]; st.v[side][k] = 0; continue }
+      const tgt = targets[side][k]
+      if (rm) { st.p[side][k] = tgt; st.v[side][k] = 0; continue }
       const [sk, sz] = SPRING(k)
-      ;[st.p[side][k], st.v[side][k]] = spring(st.p[side][k], st.v[side][k], tg[k], h, sk, sz)
+      ;[st.p[side][k], st.v[side][k]] = spring(st.p[side][k], st.v[side][k], tgt, h, sk, sz)
     }
     if (rm) { st.look.x = lx; st.look.y = ly; st.lookV.x = st.lookV.y = 0 }
     else {
@@ -285,6 +411,7 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
       ;[st.say.open, st.say.ov] = spring(st.say.open, st.say.ov, say.open, h, 900, 0.75)
       ;[st.say.round, st.say.rv] = spring(st.say.round, st.say.rv, say.round, h, 500, 0.8)
     }
+    if (bodyFree) [B.rot, st.rotV] = spring(B.rot, st.rotV, lean, h, 120, 0.6)
   }
 
   // Listening: each key press nods the eyes down a couple of pixels and back.
@@ -302,18 +429,18 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
     st.blink = Math.max(b((t - st.blinkAt) / dur), st.double ? b((t - st.blinkAt - dur - 0.07) / dur) : 0)
   }
 
-  // The body: breathing, plus a hop, a pop or a shake for some moods. Resting keeps still to stay cheap.
-  const B = st.body
-  B.rot = 0
-  if (rm || m === 'resting') { B.tx = 0; B.ty = 0; B.sc = 1; return st }
+  // The body: breathing, plus a hop, a pop or a shake for some moods. Resting keeps still to stay cheap; reduced
+  // motion holds confused's lean still.
+  if (!bodyFree) { B.tx = 0; B.ty = 0; B.sc = 1; B.rot = rm && m === 'confused' ? -6 : 0; st.rotV = 0; return st }
   B.sc = 1 + 0.012 * Math.sin((t * Math.PI * 2) / 4.2)
   B.tx = 0
   B.ty = 0
   if (m === 'celebrating') { const hop = Math.abs(Math.sin(t * 6.5)); B.ty = -0.09 * hop * e; B.sc += 0.035 * (1 - hop) ** 6 * e }
-  if (m === 'needs-you') B.sc += (0.09 * Math.exp(-age * 5) * Math.cos(age * 17) + 0.02 * Math.max(0, Math.sin((age - 1.2) * 4)) ** 8 * (age > 1.2 ? 1 : 0)) * e
+  if (m === 'needs-you') B.sc += (0.09 * Math.exp(-age * 5) * Math.cos(age * 17) + 0.02 * pulse(age)) * e
   if (m === 'mad') { B.tx = 0.025 * Math.sin(age * 58) * Math.exp(-age * 3.5) * e; B.ty = 0.01 }
   if (m === 'worried') B.tx = 0.005 * Math.sin(t * 41) * e
   if (m === 'sleepy') { const br = 0.5 - 0.5 * Math.cos((t * Math.PI * 2) / 4.6); B.sc = 1 + 0.03 * br; B.ty = 0.035 * br } // slow breathing
+  moves?.body?.(B, t, age, e)
   return st
 }
 
@@ -335,7 +462,7 @@ export interface Dot {
  * circling (searching the web). Reduced motion keeps the three still in a row, at medium height.
  */
 export function dotsAt(st: EyesState): Dot[] {
-  const age = st.t - st.since, row = [-1.6, 0, 1.6]
+  const age = Math.max(0, st.t - st.since), row = [-1.6, 0, 1.6]
   if (st.rm) return row.map((x) => ({ x, y: -0.25, s: 1, a: 1, orbit: 0 }))
   if (st.glint === 'step') {
     // One lit, two lit, three lit, a beat with all three, then none, and over again. A dot pops a little as it lights.
@@ -490,7 +617,8 @@ function confetti(age: number, rm: boolean, peek: boolean, lively: boolean): Con
 
 export type SizeClass = 'peek' | 'header' | 'big'
 export interface Marks {
-  symbol: { kind: 'bang' | 'drop'; s: number; dy: number; a: number } | null
+  /** rot: degrees (confused's "?" rocks). */
+  symbol: { kind: 'bang' | 'q' | 'drop'; s: number; dy: number; a: number; rot?: number } | null
   zs: { x: number; y: number; size: number; a: number }[]
   confetti: Confetti[]
   /** Capsule outlines spreading from the Pill: u is how far out (0 to 1). */
@@ -502,16 +630,25 @@ export interface Marks {
  * size (bigger and bolder in the tab at the screen edge). Only one corner symbol ever shows.
  */
 export function marks(st: EyesState, o: { cls: SizeClass; mouth: boolean; glass: boolean }): Marks {
-  const m = st.mood, age = st.t - st.since, rm = st.rm
+  const m = st.mood, age = Math.max(0, st.t - st.since), rm = st.rm
   const out: Marks = { symbol: null, zs: [], confetti: [], rings: [] }
   switch (m) {
     case 'needs-you': {
-      const ph = age - 0.4 - Math.floor((age - 0.4) / 2) * 2 // a pulse every 2 seconds
+      // A pulse every 2 seconds; impatient, every second.
+      const T = age > IMPATIENT_S ? 1 : 2
+      const ph = age - 0.4 - Math.floor((age - 0.4) / T) * T
       const bump = rm || age < 0.4 ? 0 : ph < 0.25 ? Math.sin((ph / 0.25) * Math.PI) * 0.14 : 0
       out.symbol = { kind: 'bang', s: pop(age, rm) + bump, dy: 0, a: 1 }
-      if (!rm && age > 0.4 && ph < 1.3) out.rings.push({ u: ph / 1.3, a: 1 - ph / 1.3, kind: 'call' })
+      if (!rm && age > 0.4 && ph < 1.3 * (T / 2)) out.rings.push({ u: ph / (1.3 * (T / 2)), a: 1 - ph / (1.3 * (T / 2)), kind: 'call' })
       break
     }
+    case 'confused':
+      out.symbol = { kind: 'q', s: pop(age, rm), rot: rm ? 0 : 10 * Math.sin(age * 2.2), dy: 0, a: 1 }
+      break
+    case 'proud':
+      // One small burst, and the pieces that stay fade after a few seconds.
+      out.confetti = confetti(Math.min(age, 1.25), rm, o.cls === 'peek', false).map((c) => ({ ...c, a: c.a * (rm ? 1 : Math.max(0, 1 - (age - 4) / 2)) }))
+      break
     case 'worried': {
       // Slides down, fades quickly at the bottom, and starts again: visible for most of every cycle.
       const T = 2.2, u = rm ? 0.3 : (age % T) / T
@@ -556,7 +693,7 @@ export interface Cell {
 
 /** The blocky Pill's eye cells. o.mouth adds talking's pixel mouth. */
 export function pixelEyes(st: EyesState, o: { mouth?: boolean } = {}): Cell[] {
-  const m = st.mood, age = st.t - st.since
+  const m = st.mood, age = Math.max(0, st.t - st.since)
   const dz = (st.p.L.dots + st.p.R.dots) / 2
   const talking = m === 'talking', mouth = talking && !!o.mouth && st.mouth
   let [l, r] = PX[m] ?? PX.idle
@@ -586,10 +723,14 @@ export function pixelEyes(st: EyesState, o: { mouth?: boolean } = {}): Cell[] {
   if (dz > 0.2) l = r = 'short'
   // Listening: the eyes slide out toward the edges a cell at a time, two cells in all.
   const wide = Math.max(0, Math.min(2, Math.round(((st.p.L.gap + st.p.R.gap) / 2 - 1) * 2.2)))
+  // A tilted body lowers the eye on the low side; confused's eyes look two ways.
+  const tilt = { L: st.body.rot < -3 ? 1 : 0, R: st.body.rot > 3 ? 1 : 0 }
+  const own = m === 'confused' ? { L: [-1, -1], R: [1, 0] } : { L: [0, 0], R: [0, 0] }
   for (const [name, side] of [[l, 'L'], [r, 'R']] as [Sprite, Side][]) {
+    const [ox, oy] = own[side]
     SPRITES[name].forEach((row, ry) =>
       [...row].forEach((ch, cx) => {
-        if (ch === '#') out.push({ x: (side === 'L' ? 4 + cx - wide : 11 - cx + wide) + dx, y: 1 + ry + dy })
+        if (ch === '#') out.push({ x: (side === 'L' ? 4 + cx - wide : 11 - cx + wide) + dx + ox, y: 1 + ry + dy + oy + tilt[side] })
       }),
     )
   }

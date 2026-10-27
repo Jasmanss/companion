@@ -165,3 +165,10 @@ export const BellIcon = () => (
   </svg>
 )
 
+
+/** A crescent moon: Goodnight, Overnight Watch. */
+export const MoonIcon = () => (
+  <svg {...base}>
+    <path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z" />
+  </svg>
+)

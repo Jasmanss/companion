@@ -9,17 +9,22 @@
 // shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden. With
 // the cursor on it (Always visible), the black grows a little: the chin taller, or the wings wider. With an alert out
 // under it (the main window's nudge), the chin shows in Wings too, so the two blacks join.
+//
+// The third look, Island, is in notch-island.ts: Steward peeking beside the notch, and an island growing out of it.
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
-import { NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
+import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
-import type { Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
+import type { IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
 import { createEyes, setMood, setStyle, type EyesState } from './pill/eyes'
-import { makeView, type PillKind, type PillView } from './pill/render'
+import { makeView, palette, type PillKind, type PillView } from './pill/render'
 import { useDimmed } from './dim'
+import { blob, div, px } from './notch-blob'
+import { buildIsland } from './notch-island'
 
 const api = window.steward
+const NO_ISLAND: IslandStatus = { right: null }
 
 export function NotchWindow() {
   const [state, setState] = useState<NotchState | null>(null)
@@ -39,13 +44,16 @@ export function NotchWindow() {
     return () => window.removeEventListener('click', click)
   }, [])
   if (!state?.layout) return null
-  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} prefs={prefs} />
+  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} island={state.island ?? NO_ISLAND} panel={state.panel ?? null} prefs={prefs} />
 }
 
-function NotchFace({ layout, mood, glint, awake, hover, nudge, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; prefs: StewardPrefs }) {
+type Look = { x: number; y: number }
+
+function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; island: IslandStatus; panel: Look | null; prefs: StewardPrefs }) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), performance.now() / 1000))
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
+  const dark = useMedia('(prefers-color-scheme: dark)')
   const reshape = useRef<((mood: Mood, awake: boolean, hover: boolean, nudge: boolean) => void) | null>(null)
   // The eyes only draw while awake; the shape and the eyes follow it without the face being built again.
   const awakeNow = useRef(awake)
@@ -63,64 +71,59 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, prefs }: { layout
   const { notchStyle, version, color, mouth, personality } = prefs
   const { cx, width, height } = layout
 
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
-  useEffect(() => {
-    setMood(st, mood, glint)
-    reshape.current?.(mood, awake, hover, nudge)
-  }, [st, mood, glint, awake, hover, nudge])
+  // In the notch the panel opens at the side Settings says.
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1 }), [st, mouth, personality, prefs.edge])
   const hoverNow = useRef(hover)
   const nudgeNow = useRef(nudge)
+  const islandNow = useRef(island)
+  // The panel open at the side: the eyes look toward it when the cursor isn't near.
+  const panelNow = useRef(panel)
   useEffect(() => {
     hoverNow.current = hover
     nudgeNow.current = nudge
-  }, [hover, nudge])
+    islandNow.current = island
+    panelNow.current = panel
+  }, [hover, nudge, island, panel])
+  useEffect(() => {
+    setMood(st, mood, glint)
+    reshape.current?.(mood, awake, hover, nudge)
+  }, [st, mood, glint, awake, hover, nudge, island, panel])
 
   useEffect(() => {
     const el = host.current
     if (!el) return
+    if (notchStyle === 'island') {
+      const lit = palette(version, { color: colorHex(color), tinted: true, light: false, mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
+      const face = buildIsland(el, { layout: { cx, width, height }, kind: version, color: colorHex(color), lit, mouth, light: !dark, reduced })
+      reshape.current = (_mood, isAwake, isHovered, nudgeOut) =>
+        face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: !!islandNow.current.note, open: !!panelNow.current }), isHovered, islandNow.current)
+      reshape.current(st.mood, awakeNow.current, hoverNow.current, nudgeNow.current)
+      let pointer: { x: number; y: number } | null = null
+      const off = api.notch.onCursor((p) => (pointer = p))
+      // Toward the cursor when it's near; otherwise toward the open panel, or the status while there is one.
+      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : (panelNow.current ?? face.gaze())), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+      return () => {
+        stop()
+        off()
+        face.stop()
+        reshape.current = null
+        el.replaceChildren()
+      }
+    }
     const face = build(el, st, { layout: { cx, width, height }, style: notchStyle, kind: version, color: colorHex(color), mouth, reduced, awake: awakeNow.current, hover: hoverNow.current, nudge: nudgeNow.current })
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
-    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : null), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : panelNow.current), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
     return () => {
       stop()
       off()
       reshape.current = null
       el.replaceChildren()
     }
-  }, [st, cx, width, height, notchStyle, version, color, mouth, reduced])
+  }, [st, cx, width, height, notchStyle, version, color, mouth, reduced, dark])
 
   return <div ref={host} className={dimmed ? 'notch-root dim' : 'notch-root'} aria-hidden="true" />
-}
-
-const div = (cls: string, css = ''): HTMLDivElement => {
-  const d = document.createElement('div')
-  d.className = cls
-  if (css) d.style.cssText = css
-  return d
-}
-const px = (v: number) => `${+v.toFixed(2)}px`
-
-/**
- * A black rounded box made of pieces, anchored at its top center: a band, a bottom strip and two corner circles.
- * size(w, h) slides and scales them together, so it grows without its corners squashing.
- */
-function blob(parent: HTMLElement, w0: number, h0: number, rb: number): { size(w: number, h: number): void } {
-  const el = div('blob')
-  const parts: [HTMLElement, (w: number, h: number) => string][] = []
-  const add = (css: string, origin: string, fn: (w: number, h: number) => string) => {
-    const p = div('bp', `${css};transform-origin:${origin}`)
-    el.append(p)
-    parts.push([p, fn])
-  }
-  const hm0 = h0 - rb + 0.5
-  add(`left:${px(-w0 / 2)};top:0;width:${px(w0)};height:${px(hm0)}`, '50% 0', (w, h) => `scale(${w / w0},${Math.max(0.001, (h - rb + 0.5) / hm0)})`)
-  add(`left:${px(-(w0 / 2 - rb))};top:${px(h0 - rb - 0.5)};width:${px(w0 - 2 * rb)};height:${px(rb + 0.5)}`, '50% 0', (w, h) => `translateY(${px(h - h0)}) scaleX(${Math.max(0.001, (w - 2 * rb) / (w0 - 2 * rb))})`)
-  for (const s of [-1, 1])
-    add(`left:${px(s * (w0 / 2 - rb) - rb)};top:${px(h0 - 2 * rb)};width:${px(2 * rb)};height:${px(2 * rb)};border-radius:50%`, '50% 50%', (w, h) => `translate(${px((s * (w - w0)) / 2)},${px(h - h0)})`)
-  parent.append(el)
-  return { size: (w, h) => parts.forEach(([p, fn]) => (p.style.transform = fn(w, h))) }
 }
 
 interface FaceOptions {

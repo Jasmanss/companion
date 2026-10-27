@@ -87,12 +87,13 @@ function Highlight({ text, hits }: { text: string; hits: [number, number][] }) {
 
 /**
  * The ⌘K switcher: search-as-you-type over your projects, arrow keys and Enter to switch, and "Add project…" to pick
- * a new folder. It grows out of the pill and goes back into it.
+ * a new folder. It grows out of the pill and goes back into it. A project with a Visual Review waiting has a dot.
  */
 export function ProjectSwitcher({
   settings,
   anchor,
   leaving,
+  reviewing,
   onPick,
   onAdd,
   onClose,
@@ -100,6 +101,8 @@ export function ProjectSwitcher({
   settings: SettingsView
   anchor: RefObject<HTMLElement | null>
   leaving: boolean
+  /** The projects with a review waiting for a decision. */
+  reviewing?: ReadonlySet<string>
   onPick: (project: Project) => void
   onAdd: () => void
   /** refocus: put focus back on the pill (Esc), rather than leave it where the click went. */
@@ -202,6 +205,7 @@ export function ProjectSwitcher({
             <span className="pn">
               <Highlight text={m.project.name} hits={m.hits} />
             </span>
+            {reviewing?.has(m.project.path) && <span className="sw-review" role="img" aria-label="a review is waiting" title="A review is waiting" />}
             <span className="pp">{tildify(m.project.path, settings.home)}</span>
             {m.project.path === settings.currentProject && <span className="cur">current</span>}
           </li>

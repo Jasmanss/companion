@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { spotsFrom, type PanelSpot } from '../shared/panel-place'
+import type { WatchEnd } from '../shared/types'
+import type { Night, WatchSaved } from './watch'
 
 interface State {
   /** When the panel was last open (closed, really): the start of "away". */
@@ -16,6 +18,23 @@ interface State {
   panelPlaces?: Record<string, PanelSpot>
   /** The display the panel was last left on. */
   panelDisplay?: string
+  /** Overnight Watch: the night going on (so a restart carries on with it), the wake time last picked, the last end. */
+  watch?: WatchSaved
+}
+
+const ENDS = new Set<WatchEnd>(['wake-time', 'up', 'stopped', 'back', 'cap'])
+
+/** What was saved of the Watch, as far as it still reads: a night with the wrong shape is dropped. */
+function watchFrom(saved: unknown): WatchSaved {
+  const w = (saved ?? {}) as Partial<Record<keyof WatchSaved, unknown>>
+  const n = w.night as Partial<Night> | undefined
+  const night =
+    n && typeof n.id === 'string' && /^\d{8}-\d{6}$/.test(n.id) && typeof n.since === 'number' && typeof n.until === 'number'
+      ? { id: n.id, since: n.since, until: n.until, away: n.away === true, activeSince: typeof n.activeSince === 'number' ? n.activeSince : null }
+      : undefined
+  const e = w.ended as WatchSaved['ended'] | undefined
+  const ended = e && typeof e.at === 'number' && ENDS.has(e.why) ? { at: e.at, why: e.why } : undefined
+  return { night, wakeTime: typeof w.wakeTime === 'string' ? w.wakeTime : undefined, ended }
 }
 
 /** Small bits of state that should survive restarts. */
@@ -58,6 +77,10 @@ export class AppState {
 
   get panelPlaces(): Record<string, PanelSpot> {
     return spotsFrom(this.data.panelPlaces)
+  }
+
+  get watch(): WatchSaved {
+    return watchFrom(this.data.watch)
   }
 
   get panelDisplay(): string | undefined {

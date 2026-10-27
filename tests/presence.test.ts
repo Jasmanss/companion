@@ -13,6 +13,7 @@ import {
   menuBarTitle,
   NOTCH_DWELL_MS,
   nextLookMs,
+  islandShows,
   peeksOut,
   presenceNote,
   firstPeekNote,
@@ -241,6 +242,7 @@ const KINDS: [string, string][] = [
   ['a build failed', 'deploy-failed:dpl_1'],
   ['a deploy went out', 'deploy-ready:dpl_1'],
   ['a PR was merged', 'pr-merged:/p:12'],
+  ['a Visual Review is ready', 'review:20261024-101010-abcdef12'],
 ]
 
 describe('which alerts peek out', () => {
@@ -255,6 +257,7 @@ describe('which alerts peek out', () => {
       'a build failed': false,
       'a deploy went out': false,
       'a PR was merged': false,
+      'a Visual Review is ready': true,
     })
   })
 
@@ -264,6 +267,17 @@ describe('which alerts peek out', () => {
 
   it('"Nothing, menu bar only": none', () => {
     expect(Object.values(table('none')).some(Boolean)).toBe(false)
+  })
+
+  it("in the notch island, a session finishing is the island's note, so it doesn't come out under the notch too", () => {
+    const island = (choice: AlertPeek) => Object.fromEntries(KINDS.map(([name, key]) => [name, peeksOut(key, choice, true)]))
+    expect(island('all')).toEqual({ ...table('all'), 'a session finished': false })
+    expect(island('needs-me')).toEqual(table('needs-me'))
+    expect(splitAlerts([alert('finished:a'), alert('deploy-ready:c')], 'all', true)).toEqual({ peek: [alert('deploy-ready:c')], held: [alert('finished:a')] })
+  })
+
+  it('in the notch island, a review comes out as the island itself, and nothing else does yet', () => {
+    expect(Object.fromEntries(KINDS.map(([name, key]) => [name, islandShows(key)]))).toEqual({ ...Object.fromEntries(KINDS.map(([name]) => [name, false])), 'a Visual Review is ready': true })
   })
 
   it('splits what reached it into what peeks out and what waits, in order', () => {
@@ -283,6 +297,11 @@ describe('the menu bar', () => {
     expect(menuBarTitle(2, 0)).toBe('2')
     expect(menuBarTitle(0, 3)).toBe('•')
     expect(menuBarTitle(1, 1)).toBe('1 •')
+  })
+
+  it('puts a moon first while Overnight Watch is on', () => {
+    expect(menuBarTitle(0, 0, true)).toBe('☾')
+    expect(menuBarTitle(2, 1, true)).toBe('☾ 2 •')
   })
 })
 
