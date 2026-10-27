@@ -5,7 +5,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
-import { TAB_SIZES } from '../shared/steward'
+import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
@@ -81,7 +81,6 @@ import { describeEyeSweep, measureEyeSweep, type EyeSample, type EyeSweep } from
 import { SettingsStore } from './settings'
 import { parseSettingsPatch } from './settings-schema'
 
-const NUDGE_WIDTH = 340
 const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
 const SETTINGS_SIZE = { width: 720, height: 560 }
@@ -285,6 +284,12 @@ function boundsFor(state: DockState): Electron.Rectangle {
       win.webContents.send('dock:overhang', oh)
     }
     const width = state === 'nudge' ? NUDGE_WIDTH : tab.width
+    if (state === 'nudge' && nudgeWords > tab.height) {
+      // Taller than the tab for its words: grown evenly up and down from the tab, kept inside the screen.
+      const height = Math.min(nudgeWords, area.height - 16)
+      const y = Math.round(Math.min(area.y + area.height - height - 8, Math.max(area.y + 8, top - (height - tab.height) / 2)))
+      return { x: x(width) - (edge === 'left' ? oh : 0), y, width: width + oh, height }
+    }
     return { x: x(width) - (edge === 'left' ? oh : 0), y: top, width: width + oh, height: tab.height }
   }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
@@ -1149,6 +1154,9 @@ function showAlerts(list: AlertView[]): void {
   updateMenuBar()
 }
 
+/** How tall the alert at the edge's words are (the page measures them): its window grows past the tab's height to hold them. */
+let nudgeWords = 0
+
 /** The alerts the island showed lately, by key: its buttons act on them, and a click shows one too long for it in the panel. */
 const islandAlerts = new Map<string, AlertView>()
 
@@ -1595,6 +1603,11 @@ function registerIpc(): void {
   // A click on the island opens the panel, as its message's Open does.
   ipcMain.on('notch:click', () => (islandNotes.current ? islandAct('open', islandNotes.current.at) : setDock('expanded')))
   ipcMain.on('notch:act', (_e, what: unknown, at: unknown) => islandAct(what, at))
+  ipcMain.on('dock:nudgeWords', (_e, height: unknown) => {
+    if (typeof height !== 'number' || !Number.isFinite(height)) return
+    nudgeWords = Math.ceil(height)
+    if (dock === 'nudge' && !inNotch() && win && !win.isDestroyed()) win.setBounds(boundsFor('nudge'))
+  })
   ipcMain.on('notch:fit', (_e, at: unknown, fit: unknown) => {
     if (typeof at === 'number' && (fit === 'note' || fit === 'long' || fit === 'toolong')) islandNotes.fit(at, fit)
   })
@@ -1906,6 +1919,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       console.log(`smoke: ok -> ${out}`)
       if (SMOKE_ONLY === 'island') {
         const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
+        await checkTabAlertWords(w, out)
         setDock('collapsed')
         if (!notchGeo) return fail('no notch: run with STEWARD_SMOKE_NOTCH=1')
         await checkIsland(out)
@@ -1916,6 +1930,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
       await checkReview(w, out)
       clearTimeout(reviewTimer)
+      const wordsTimer = setTimeout(() => fail("the edge alert's words timed out"), 20_000)
+      await checkTabAlertWords(w, out)
+      clearTimeout(wordsTimer)
       const watchTimer = setTimeout(() => fail('overnight watch timed out'), 40_000)
       await checkWatch(w, out)
       clearTimeout(watchTimer)
@@ -3416,6 +3433,40 @@ async function checkIsland(out: string): Promise<void> {
   islandNotes.drop()
   if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
   void sendReviews()
+}
+
+/**
+ * The alert at the screen's edge (a Mac without a notch keeps it) never cuts its words off: with a long title, a long
+ * detail, an offer and "and 1 more", every word is inside the window (the detail stops at three lines, its last ending
+ * in "…"), and the window grows taller to hold them rather than clipping. Island Phase 3, Plan update 3.
+ */
+async function checkTabAlertWords(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  setDock('collapsed')
+  await sleep(600)
+  const long: AlertView = {
+    id: 9001,
+    key: 'smoke-words:1',
+    level: 'urgent',
+    title: 'companion: PR #39 merged into main, the main chat redesign',
+    detail: 'Main chat, Phase 1: take the hide button and the pin out of the header, add the Ask | Auto switch by the message box, round the Send button, and label the commands that ran on their own, with why each one asked',
+    action: { label: 'Want me to look?', prompt: 'smoke' },
+    at: Date.now(),
+  }
+  w.webContents.send('alerts:show', [long, { ...long, id: 9002, key: 'smoke-words:2' }])
+  setDock('nudge')
+  await sleep(900)
+  const m = (await w.webContents.executeJavaScript(`(() => {
+    const box = (sel) => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), wide: e.scrollWidth > e.clientWidth + 1, tall: e.scrollHeight > e.clientHeight + 1, lines: Math.round(e.clientHeight / parseFloat(getComputedStyle(e).lineHeight)) } }
+    return { window: innerHeight, nudge: box('.nudge'), text: box('.nudge-text'), title: box('.nudge-title'), detail: box('.nudge-detail'), more: box('.nudge-more'), action: box('.nudge-action') }
+  })()`)) as { window: number } & Record<'nudge' | 'text' | 'title' | 'detail' | 'more' | 'action', { top: number; bottom: number; wide: boolean; tall: boolean; lines: number } | null>
+  const pieces = [m.title, m.detail, m.more, m.action]
+  const inside = pieces.every((p) => p && p.top >= 0 && p.bottom <= m.window)
+  console.log(`smoke: the edge alert with long words: window ${m.window} tall (the tab is ${TAB_SIZES[settings.steward().size].tab.height}), words from ${m.text?.top} to ${m.text?.bottom}, title ${m.title?.lines} lines, detail ${m.detail?.lines} lines${m.detail?.tall ? ' (clamped, "…")' : ''}`)
+  if (!inside || m.title?.wide || m.title?.tall || m.detail?.wide || (m.detail?.lines ?? 0) < 3) throw new Error(`the edge alert cuts its words off: ${JSON.stringify(m)}`)
+  await fs.writeFile(out.replace(/\.png$/, '-edge-alert.png'), (await w.webContents.capturePage()).toPNG())
+  setDock('collapsed')
+  await sleep(600)
 }
 
 /** What checkIsland lends the island's alert checks: the notch page, where the notch is, and its pixel tests. */

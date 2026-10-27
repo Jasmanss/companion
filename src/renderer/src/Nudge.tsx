@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { NUDGE_WIDTH } from '../../shared/steward'
 import type { AlertView } from '../../shared/types'
 import { CloseIcon } from './icons'
 
@@ -32,6 +33,12 @@ export function Nudge({
   children: ReactNode
 }) {
   const stay = useStay(alerts, onDismiss)
+  // Its words are never cut off: the window grows taller than the tab when they need it (with room above and below).
+  // It's laid out at its own width, so they measure the same while the window is still widening as it slides out.
+  const words = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (words.current) window.steward.dock.nudgeWords(Math.ceil(words.current.getBoundingClientRect().height) + 16)
+  }, [alerts])
   const lead = alerts[0]
 
   if (!lead) return null
@@ -39,6 +46,7 @@ export function Nudge({
   return (
     <div
       className={`nudge ${lead.level}`}
+      style={{ width: NUDGE_WIDTH }}
       data-app
       role="button"
       tabIndex={-1}
@@ -46,7 +54,7 @@ export function Nudge({
       {...stay}
     >
       {children}
-      <div className="nudge-text">
+      <div className="nudge-text" ref={words}>
         <span className="nudge-title">{lead.title}</span>
         {lead.detail && <span className="nudge-detail">{lead.detail}</span>}
         {more > 0 && <span className="nudge-more">and {more} more</span>}

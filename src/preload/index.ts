@@ -19,6 +19,7 @@ const api: StewardAPI = {
     overhang: () => ipcRenderer.invoke('dock:overhang'),
     onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
     intoNotchEnded: () => ipcRenderer.send('dock:intoNotchEnded'),
+    nudgeWords: (height) => ipcRenderer.send('dock:nudgeWords', height),
     dragPanel: (phase, x, y) => ipcRenderer.send('dock:dragPanel', phase, x, y),
     resetPanel: () => ipcRenderer.invoke('dock:resetPanel'),
     onPlaced: (cb) => subscribe<boolean>('dock:placed', cb),

@@ -538,6 +538,8 @@ export interface StewardAPI {
     onOverhang(cb: (points: number) => void): Unsubscribe
     /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
     intoNotchEnded(): void
+    /** The alert at the edge: how tall its words are, so its window grows to hold them rather than cut them off. */
+    nudgeWords(height: number): void
     /** The panel being dragged by its top bar: began, or moved, with the pointer here (screen points), or ended. */
     dragPanel(phase: 'start' | 'move' | 'end', x?: number, y?: number): void
     /** The panel back where it opens: at its edge, or under the notch (double-click on the top bar). */
