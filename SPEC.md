@@ -152,13 +152,13 @@ The tray survives restarts.
 A normal Mac window, centered on the main screen (or just clear of the panel when it's out): traffic lights, a
 sidebar frosted by macOS, and one window at a time. The gear in the panel, ⌘, in the panel and "Settings…" in the
 menu bar icon open it; ⌘W and Esc close it. Every change applies right away: the main process sends the new
-settings to the panel and the Settings window both, whichever one made the change (the pin in the panel's header
-and "Tuck the panel away when I click elsewhere" are the same setting). Going from the panel to Settings, or
+settings to the panel and the Settings window both, whichever one made the change (the Ask | Auto switch by the
+panel's text box and Settings → Running commands are the same setting). Going from the panel to Settings, or
 back, doesn't count as clicking away, so the panel stays out; clicking away from both tucks it in. Closing Settings
 hands focus back to the panel.
 
-- **General:** open at login (in the installed app; macOS keeps it, and asks first when it needs your OK), tuck the
-  panel away when I click elsewhere, and appearance (follows the Mac).
+- **General:** open at login (in the installed app; macOS keeps it, and asks first when it needs your OK), keep
+  the panel open when I click elsewhere, and appearance (follows the Mac).
 - **Steward:** a live preview of the character in any mood, next to the tab at its real size against the screen
   edge it's on, then its options: version (Glass, Flat, Blocky), color (six: Silver, Sky, Lilac, Mint, Peach and
   Graphite), glass tinted or clear, a mouth when it talks, personality (Calm or Lively), its name (shown in the panel,
@@ -193,9 +193,11 @@ only change the fields it shows.
 
 - **Every command and file edit shows an approval card** with the exact command
   or diff, unless it's on an allowlist I set (e.g. `npm test`, `git status`).
-  **Auto** (Settings → Running commands, off by default) also skips the card for
-  commands that aren't risky; risky ones, deploys, rollbacks and `git push`
-  still ask.
+  **Auto** (the Ask | Auto switch by the text box, or Settings → Running commands;
+  off by default) also skips the card for commands that aren't risky; risky ones,
+  deploys, rollbacks and `git push` still ask, and the card says why ("Auto is on,
+  but pushing always asks"). A command that ran without a card says so: "Ran
+  automatically", tagged `auto · safe`, or `on your list` for the allowlist.
 - Only works inside project folders I've added.
 - **Reading files is read-only and stays in the current project.** `read_file` and
   `list_files` need no approval, but every read shows as a step. Paths are resolved to

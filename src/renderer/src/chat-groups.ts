@@ -15,7 +15,8 @@ export type Entry =
   | { kind: 'user'; id: number; text: string }
   | { kind: 'assistant'; id: number; text: string; streaming: boolean }
   | StepEntry
-  | { kind: 'approval'; id: number; approvalId: string; command: string; cwd: string; why?: string; status: 'pending' | 'approved' | 'declined' }
+  /** reason: in Auto, why this one still asks. */
+  | { kind: 'approval'; id: number; approvalId: string; command: string; cwd: string; why?: string; reason?: string; status: 'pending' | 'approved' | 'declined' }
   | { kind: 'notice'; id: number; text: string }
   | { kind: 'error'; id: number; text: string }
 

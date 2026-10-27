@@ -8,7 +8,7 @@ import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
 import { ContextPill, ProjectSwitcher } from './ContextPill'
-import { ChevronRightIcon, GearIcon, HideIcon, MoonIcon, NewChatIcon, PinIcon } from './icons'
+import { ChevronRightIcon, GearIcon, MoonIcon, NewChatIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffCard } from './LeftOffCard'
 import { ReviewCard, ReviewProblems } from './ReviewCard'
@@ -372,7 +372,7 @@ export function App() {
       case 'approval':
         setEntries((prev) => [
           ...prev,
-          { kind: 'approval', id: nextId++, approvalId: event.id, command: event.command, cwd: event.cwd, why: event.why, status: 'pending' },
+          { kind: 'approval', id: nextId++, approvalId: event.id, command: event.command, cwd: event.cwd, why: event.why, reason: event.reason, status: 'pending' },
         ])
         break
       case 'approval-resolved':
@@ -543,8 +543,6 @@ export function App() {
     void api.agent.reset()
   }
 
-  // The pin is the "tuck away when I click elsewhere" setting, so Settings shows it too.
-  const pinned = settings?.keepPanelOpen ?? false
   // An approval is needs-you; a chat waiting for input is confused (main's reactions say so).
   const waiting = sessions.some((s) => s.state === 'needs-approval')
   const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden', watching: watchView?.watching }), work)
@@ -575,8 +573,6 @@ export function App() {
     if (noKey) return setToast('Add your Anthropic API key in Settings first.')
     send(alert.action.prompt)
   }
-  const hide = settings?.shortcuts?.hideFromEdge
-  const hideKey = hide?.active ? ` (${formatAccelerator(hide.accelerator)})` : ''
   const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
   const lastFile = project ? lastFiles[project.path] : undefined
   // Working: what it's on right now. Idle: the last file it read here.
@@ -657,20 +653,8 @@ export function App() {
               <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
                 <NewChatIcon />
               </button>
-              <button
-                className={`icon-btn ${pinned ? 'on' : ''}`}
-                aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
-                title={pinned ? 'Unpin panel' : 'Keep panel open'}
-                aria-pressed={pinned}
-                onClick={() => api.settings.update({ keepPanelOpen: !pinned }).then(setSettings, showError)}
-              >
-                <PinIcon on={pinned} />
-              </button>
               <button className="icon-btn" aria-label="Settings" title={settingsKey ? `Settings (${formatAccelerator(settingsKey)})` : 'Settings'} onClick={() => api.settings.open()}>
                 <GearIcon />
-              </button>
-              <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
-                <HideIcon />
               </button>
               <button className="icon-btn" aria-label="Tuck away" title="Tuck away (Esc)" onClick={() => api.dock.collapse()}>
                 <ChevronRightIcon />
@@ -776,6 +760,9 @@ export function App() {
       <Composer
         busy={busy}
         disabled={noKey}
+        mode={settings?.commandMode}
+        // Always sent, even if it looks the same: the panel's copy of the settings can lag a click behind.
+        onMode={(commandMode) => api.settings.update({ commandMode }).then(setSettings, showError)}
         onSend={send}
         onStop={() => api.agent.cancel()}
         onTyping={(on) => {

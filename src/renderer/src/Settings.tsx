@@ -95,10 +95,10 @@ export function GeneralSection(props: SectionProps) {
           onChange={(on) => update({ openAtLogin: on })}
         />
         <SwitchRow
-          label="Tuck the panel away when I click elsewhere"
-          note="The pin at the top of the panel turns this off and on too."
-          checked={!settings.keepPanelOpen}
-          onChange={(on) => update({ keepPanelOpen: !on })}
+          label="Keep panel open"
+          note="It stays open when you click elsewhere. Esc or the arrow at its top still tucks it away."
+          checked={settings.keepPanelOpen}
+          onChange={(on) => update({ keepPanelOpen: on })}
         />
       </Group>
       <Group>
