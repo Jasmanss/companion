@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isRisky } from '../src/main/commands'
+import { isRisky, riskReason } from '../src/main/commands'
 
 const PROJECT = '/Users/me/code/haven'
 /** Paths that exist in the pretend project: what mv, cp and npx look at. */
@@ -684,5 +684,35 @@ describe('isRisky: every part of a chain counts', () => {
     safe(['ls\n', '\nls', 'ls\n\npwd'])
     safe(['ls \\\n  -la'])
     asks(['rm \\\n  x'])
+  })
+})
+
+describe("why Auto asks, for the Run card", () => {
+  const why = (command: string) => riskReason(command, PROJECT, exists)
+
+  it('names the kind of thing that always asks', () => {
+    expect(why('git push origin main')).toBe('pushing always asks')
+    expect(why('vercel --prod')).toBe('deploying always asks')
+    expect(why('rm -rf dist')).toBe('deleting files always asks')
+    expect(why('find . -name "*.log" -delete')).toBe('deleting files always asks')
+    expect(why('mv notes src/a.ts')).toBe('moving or writing over files always asks')
+    expect(why('git reset --hard HEAD~1')).toBe('changing Git history or throwing work away always asks')
+    expect(why('npm install left-pad')).toBe('installing or changing packages always asks')
+    expect(why('npx create-something')).toBe("running a package the project doesn't have always asks")
+    expect(why('curl -o page.html https://example.com')).toBe('sending things over the network always asks')
+    expect(why('sudo ls')).toBe('changing your Mac outside the project always asks')
+    expect(why('echo hi > notes')).toBe('writing over a file always asks')
+    expect(why('cat ~/.ssh/id_rsa')).toBe('anything outside the project, or a secret file, always asks')
+    expect(why('mytool --go')).toBe("it doesn't know mytool, so it asks")
+  })
+
+  it('finds the risky part of a chain', () => {
+    expect(why('ls && rm notes')).toBe('deleting files always asks')
+    expect(why('git status; git push')).toBe('pushing always asks')
+  })
+
+  it('has a reason for every command Auto asks about', () => {
+    for (const command of ['rm a', 'git clean -fd', 'chmod +x a', 'kill 1', 'open .', 'pnpm add x', 'cp src/a.ts notes', 'python -c "print(1)"', 'brew install x', 'echo $(whoami)'])
+      if (isRisky(command, PROJECT, exists)) expect(why(command).length, command).toBeGreaterThan(8)
   })
 })

@@ -495,6 +495,50 @@ export function isRisky(command: string, projectPath: string, exists?: (absolute
   }
 }
 
+/** Why Auto asks for a known command it judged risky, by the command's name, as the Run card says it. */
+const REASONS: [RegExp, string][] = [
+  [/^(rm|rmdir|unlink|shred|trash|find)$/, 'deleting files always asks'],
+  [/^(mv|cp|rsync|ln|dd|tee|truncate|sed|sort|tree)$/, 'moving or writing over files always asks'],
+  [/^git$/, 'changing Git history or throwing work away always asks'],
+  [/^(npm|yarn|pnpm|bun|pip3?|brew|cargo|gem|go|poetry|uv|make)$/, 'installing or changing packages always asks'],
+  [/^(npx|bunx)$/, "running a package the project doesn't have always asks"],
+  [/^(curl|wget|scp|ssh|rsync|nc|ftp)$/, 'sending things over the network always asks'],
+  [/^(sudo|su|chmod|chown|kill|killall|pkill|osascript|open|launchctl|defaults|date|shutdown|reboot)$/, 'changing your Mac outside the project always asks'],
+]
+
+/**
+ * Why Auto mode asks before this command, in a few plain words for the Run card ("Auto is on, but pushing always
+ * asks"). isRisky decides; this only says why, walking the command the same way.
+ */
+export function riskReason(command: string, projectPath: string, exists?: (absolute: string) => boolean): string {
+  if (/\bgit\s+push\b/.test(normalizeCommand(command).toLowerCase())) return 'pushing always asks'
+  if (alwaysAsks(command)) return 'deploying always asks'
+  let parts: Simple[]
+  try {
+    parts = new Splitter(command).run()
+  } catch {
+    return "it can't read this command for sure, so it asks"
+  }
+  const ctx: Ctx = { root: path.resolve(projectPath), exists, cd: false }
+  for (const { words, redirects } of parts) {
+    if (redirects.some((r) => redirectRisky(r, ctx))) return 'writing over a file always asks'
+    const rest = [...words]
+    for (let m = ASSIGNMENT.exec(rest[0] ?? ''); m; m = ASSIGNMENT.exec(rest[0] ?? '')) {
+      if (!SAFE_ENV.has(m[1]) || outsideOrSecret(m[2], ctx)) return 'changing its environment always asks'
+      rest.shift()
+    }
+    const [name, ...args] = rest
+    if (name === undefined) return "it can't read this command for sure, so it asks"
+    if (args.some((a) => outsideOrSecret(a, ctx))) return 'anything outside the project, or a secret file, always asks'
+    // Some risky commands have no rule at all (rm, sudo): their kind says why before "it doesn't know" would.
+    const rule = ruleFor(name)
+    const kind = REASONS.find(([re]) => re.test(name))?.[1]
+    if (rule === undefined) return kind ?? `it doesn't know ${name}, so it asks`
+    if (rule(args, ctx)) return kind ?? `${name} like this could change things, so it asks`
+  }
+  return 'it could change things, so it asks'
+}
+
 export function stripAnsi(text: string): string {
   return text.replace(ANSI, '')
 }

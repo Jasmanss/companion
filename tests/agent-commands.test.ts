@@ -193,6 +193,46 @@ describe('run_command in Auto', () => {
   })
 })
 
+describe('what the chat says about how a command ran', () => {
+  const ranBy = () => events.flatMap((e) => (e.type === 'activity' && e.activity.kind === 'run-command' ? [e.activity.ranBy ?? 'card'] : []))
+
+  it('marks a command Auto ran by itself, and one from your list, and not one you ran from its card', async () => {
+    mode = 'auto'
+    await run('echo hi')
+    expect(ranBy()).toEqual(['auto', 'auto'])
+    events = []
+    mode = 'ask'
+    allowlist = ['echo hi']
+    await run('echo hi')
+    expect(ranBy()).toEqual(['list', 'list'])
+    events = []
+    const pending = run('echo bye')
+    await waitFor(() => approvals().length === 1)
+    agent.approve(approvals()[0].id, true)
+    await pending
+    expect(ranBy()).toEqual(['card', 'card'])
+  })
+
+  it('says on the card why Auto still asks, and gives no reason in Ask each time', async () => {
+    mode = 'auto'
+    void run('rm old.txt')
+    await waitFor(() => approvals().length === 1)
+    expect(approvals()[0].reason).toBe('deleting files always asks')
+    agent.approve(approvals()[0].id, false)
+    events = []
+    void run('git push')
+    await waitFor(() => approvals().length === 1)
+    expect(approvals()[0].reason).toBe('pushing always asks')
+    agent.approve(approvals()[0].id, false)
+    events = []
+    mode = 'ask'
+    void run('git push')
+    await waitFor(() => approvals().length === 1)
+    expect(approvals()[0].reason).toBeUndefined()
+    agent.approve(approvals()[0].id, false)
+  })
+})
+
 describe('the instructions the agent gets', () => {
   const prompt = () => (agent as unknown as { systemPrompt(): string }).systemPrompt()
 

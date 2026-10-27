@@ -8,12 +8,6 @@ export const GearIcon = () => (
   </svg>
 )
 
-export const PinIcon = ({ on }: { on: boolean }) => (
-  <svg {...base} fill={on ? 'currentColor' : 'none'}>
-    <path d="M10.5 1.8l3.7 3.7-2.3.8-2.4 2.4.3 3.1-1.3 1.3-2.4-2.4-3.6 3.6M5.9 10.3L3.5 7.9l1.3-1.3 3.1.3 2.4-2.4.2-2.7z" />
-  </svg>
-)
-
 export const ChevronRightIcon = () => (
   <svg {...base}>
     <path d="M6 3l5 5-5 5" />
@@ -35,14 +29,6 @@ export const DragIcon = () => (
 export const ChevronLeftIcon = () => (
   <svg {...base}>
     <path d="M10 3L5 8l5 5" />
-  </svg>
-)
-
-export const HideIcon = () => (
-  <svg {...base}>
-    <path d="M2 8s2.2-4.2 6-4.2S14 8 14 8s-2.2 4.2-6 4.2S2 8 2 8z" />
-    <circle cx="8" cy="8" r="1.8" />
-    <path d="M2.5 13.5l11-11" />
   </svg>
 )
 
@@ -165,6 +151,34 @@ export const BellIcon = () => (
   </svg>
 )
 
+
+/** Send: an arrow up (design/main-chat.html). */
+export const SendIcon = () => (
+  <svg {...base}>
+    <path d="M8 13V3M8 3L4 7M8 3l4 4" />
+  </svg>
+)
+
+export const StopIcon = () => (
+  <svg {...base}>
+    <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" />
+  </svg>
+)
+
+/** Auto, in the Ask | Auto switch. */
+export const ShieldIcon = () => (
+  <svg {...base}>
+    <path d="M8 1.8l5 1.8v4c0 3-2 5-5 6.6C5 12.6 3 10.6 3 7.6v-4z" />
+  </svg>
+)
+
+/** A command that ran by itself. */
+export const ShieldOkIcon = () => (
+  <svg {...base}>
+    <path d="M8 1.8l5 1.8v4c0 3-2 5-5 6.6C5 12.6 3 10.6 3 7.6v-4z" />
+    <path d="M5.6 8l1.7 1.7L10.6 6.3" />
+  </svg>
+)
 
 /** A crescent moon: Goodnight, Overnight Watch. */
 export const MoonIcon = () => (
