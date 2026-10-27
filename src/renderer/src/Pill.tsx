@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { colorHex } from '../../shared/steward'
 import type { Mood, StewardPrefs } from '../../shared/types'
-import { createEyes, pressKey, setMood, setStyle, stepEyes, type EyesState, type Glint, type SizeClass } from './pill/eyes'
+import { createEyes, eyesWait, pressKey, setMood, setStyle, stepEyes, type EyesState, type Glint, type SizeClass } from './pill/eyes'
 import { makeView, type PillView } from './pill/render'
 
 /** Typing to Steward: every Pill on the page nods once per key (it only shows while listening). */
@@ -32,13 +32,14 @@ export function toward(p: { x: number; y: number }, el: Element): { x: number; y
 }
 
 /**
- * Steps one eyes state and draws its views from it, paced: every frame while open; tucked away, resting 10 times a
- * second, sleepy 20 and the rest 30; with reduced motion 10 (nothing moves on its own). Nothing at all while the page
- * is hidden. cursor() is where the cursor is, relative to the eyes, or null. Returns a function that stops it.
+ * Steps one eyes state and draws its views from it, paced (eyesWait): every frame while open; tucked away, resting 10
+ * times a second, sleepy 20 and the rest 30, but every frame while near() says the cursor is close; with reduced motion
+ * 10 (nothing moves on its own). Nothing at all while the page is hidden. cursor() is where the cursor is, relative to
+ * the eyes, or null. Returns a function that stops it.
  */
-export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean; idle?: () => boolean }): () => void {
+export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean; idle?: () => boolean; near?: () => boolean }): () => void {
   // idle: nothing to see (the notch asleep): don't draw, and only look now and then to see if that's changed.
-  const every = () => (o.idle?.() ? 0.25 : o.reduced || st.mood === 'resting' ? 0.1 : o.tucked ? (st.mood === 'sleepy' ? 0.05 : 1 / 30) : 0)
+  const every = () => eyesWait({ mood: st.mood, reduced: o.reduced, tucked: o.tucked, near: o.near?.(), idle: o.idle?.() })
   let frame = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = now()

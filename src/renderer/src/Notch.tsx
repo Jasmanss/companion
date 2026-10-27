@@ -6,7 +6,8 @@
 // when needed, at rest), the shape shrinks to the notch's own black and the eyes are off.
 //
 // The cursor comes from the main process (the window ignores the mouse except over the shape), and a click on the
-// shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden. With
+// shape opens the panel. The eyes draw at the tab's tucked-away pace (every frame while the cursor is near), and not at
+// all while the window is hidden. With
 // the cursor on it (Always visible), the black grows a little: the chin taller, or the wings wider. With an alert out
 // under it (the main window's nudge), the chin shows in Wings too, so the two blacks join.
 //
@@ -71,8 +72,8 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
   const { notchStyle, version, color, mouth, personality } = prefs
   const { cx, width, height } = layout
 
-  // In the notch the panel opens at the side Settings says.
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1 }), [st, mouth, personality, prefs.edge])
+  // In the notch the panel opens at the side Settings says. Steady: no glance pulls the eyes off a cursor moving near.
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1, steady: true }), [st, mouth, personality, prefs.edge])
   const hoverNow = useRef(hover)
   const nudgeNow = useRef(nudge)
   const islandNow = useRef(island)
@@ -101,7 +102,8 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
       let pointer: { x: number; y: number } | null = null
       const off = api.notch.onCursor((p) => (pointer = p))
       // Toward the cursor when it's near; otherwise toward the open panel, or the status while there is one.
-      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : (panelNow.current ?? face.gaze())), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+      // While the cursor is near (main sends it within 420 points), the eyes draw every frame so they follow it smoothly.
+      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : (panelNow.current ?? face.gaze())), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current, near: () => pointer !== null })
       return () => {
         stop()
         off()
@@ -114,7 +116,7 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
-    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : panelNow.current), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : panelNow.current), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current, near: () => pointer !== null })
     return () => {
       stop()
       off()

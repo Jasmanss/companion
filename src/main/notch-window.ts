@@ -35,10 +35,10 @@ interface Options {
 /** The cursor counts as on the shape this far outside it, so the edge of the black isn't a flicker. */
 const SLACK = 3
 
-/** Within this many points of the notch, the cursor is checked 20 times a second and sent to the eyes. */
-const NEAR = 420
-const FAST = 50
-const SLOW = 250
+/** Within this many points of the notch, the cursor is checked about every frame (60 a second) and sent to the eyes. */
+export const NEAR = 420
+export const FAST = 16
+export const SLOW = 250
 
 export class NotchDock {
   private win: BrowserWindow | null = null

@@ -67,6 +67,24 @@ const BLINK: Record<Mood, number> = {
 }
 /** Needs you waiting this long grows impatient: the pulse quickens and the eyes look toward the panel. */
 export const IMPATIENT_S = 120
+/** Steady eyes (the notch): the cursor still this long counts as at rest, so the glances come back. */
+export const CURSOR_STILL_S = 1.5
+/** Resting follows the cursor near the eyes, fading in from this far (in toward() units) to fully this close. */
+export const REST_FAR = 1.1
+export const REST_NEAR = 0.7
+
+/**
+ * How long the drawing loop waits between frames, in seconds (0: every frame). In the panel, every frame. Tucked away
+ * (the tab, the notch): resting 10 times a second, sleepy 20, the rest 30, but every frame while the cursor is near, so
+ * the eyes follow it smoothly. Reduced motion, 10 (nothing moves on its own). Nothing to see (asleep, dimmed): only a
+ * look every quarter second to see if that's changed.
+ */
+export function eyesWait(o: { mood: Mood; reduced: boolean; tucked: boolean; near?: boolean; idle?: boolean }): number {
+  if (o.idle) return 0.25
+  if (o.near) return 0
+  if (o.reduced || o.mood === 'resting') return 0.1
+  return o.tucked ? (o.mood === 'sleepy' ? 0.05 : 1 / 30) : 0
+}
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
 const bell = (u: number) => (u <= 0 || u >= 1 ? 0 : Math.sin(Math.PI * u))
@@ -235,6 +253,11 @@ export interface EyesState {
   rotV: number
   /** Which way the panel is from this Pill (-1 left, 1 right, 0 here): impatient needs-you looks toward it. */
   toward: number
+  /** Steady (the notch): no glance pulls the eyes off a cursor that's moving near them. */
+  steady: boolean
+  /** The cursor as of the last step, and when it last moved. */
+  cursor: { x: number; y: number } | null
+  cursorMovedAt: number
   /** When keys were pressed while listening, and how far the eyes are nodding (1: all the way down). */
   keys: number[]
   nod: number
@@ -250,7 +273,7 @@ export function createEyes(seed = 1, t = 0): EyesState {
     look: { x: 0, y: 0 }, lookV: { x: 0, y: 0 }, glance: { x: 0, y: 0, until: 0, next: t + 1.5 + (seed % 3) },
     rest: { until: 0, next: t + 4 + (seed % 4) },
     blink: 0, blinkAt: -1, nextBlink: t + 1 + (seed % 5) * 0.4, double: false,
-    body: { tx: 0, ty: 0, sc: 1, rot: 0 }, rotV: 0, toward: 0,
+    body: { tx: 0, ty: 0, sc: 1, rot: 0 }, rotV: 0, toward: 0, steady: false, cursor: null, cursorMovedAt: -1e9,
     keys: [], nod: 0,
     say: { open: 0, round: 0, ov: 0, rv: 0, stress: 0 },
   }
@@ -266,10 +289,11 @@ export function pressKey(st: EyesState): void {
  * mouth: false makes talking bounce the eyes instead of showing a mouth. lively: false is the calm personality.
  * toward: which way the panel is from this Pill (-1 left, 1 right, 0 this is the panel's own).
  */
-export function setStyle(st: EyesState, o: { mouth?: boolean; lively?: boolean; toward?: number }): void {
+export function setStyle(st: EyesState, o: { mouth?: boolean; lively?: boolean; toward?: number; steady?: boolean }): void {
   if (o.mouth !== undefined) st.mouth = o.mouth
   if (o.lively !== undefined) st.lively = o.lively
   if (o.toward !== undefined) st.toward = o.toward
+  if (o.steady !== undefined) st.steady = o.steady
 }
 
 /** Change mood. glint picks what thinking is busy with: 'sweep' (default), 'step' (reading a file) or 'search'. */
@@ -332,11 +356,23 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
   const impatient = m === 'needs-you' && age > IMPATIENT_S
   const pulse = (a: number) => Math.max(0, Math.sin((a - 1.2) * (impatient ? 8 : 4))) ** 8 * (a > 1.2 ? 1 : 0)
   const px = pointer ? Math.max(-1.5, Math.min(1.5, pointer.x)) : 0, py = pointer ? Math.max(-1.5, Math.min(1.5, pointer.y)) : 0
-  const near = !!pointer && Math.hypot(pointer.x, pointer.y) < 0.9
+  // Resting follows the cursor near the eyes: fully this close, fading out further away, so there's no line where the
+  // aim flips from its resting spot to the cursor.
+  const d = pointer ? Math.hypot(pointer.x, pointer.y) : Infinity
+  const nearW = Math.min(1, Math.max(0, (REST_FAR - d) / (REST_FAR - REST_NEAR)))
+  const near = nearW * nearW * (3 - 2 * nearW)
   const talking = m === 'talking', mouth = talking && st.mouth
+
+  // Steady eyes (the notch): while the cursor moves near them, no glance pulls them off it; once it has been still
+  // for a moment, or gone, the glances come back.
+  const moved = !!pointer && (!st.cursor || Math.abs(pointer.x - st.cursor.x) + Math.abs(pointer.y - st.cursor.y) > 0.004)
+  if (moved) st.cursorMovedAt = t
+  st.cursor = pointer ? { ...pointer } : null
+  const following = st.steady && !!pointer && t - st.cursorMovedAt < CURSOR_STILL_S
 
   // Resting: a lazy glance toward the middle of the screen every 8 to 12 seconds.
   const R = st.rest
+  if (following) { R.until = Math.min(R.until, t); R.next = Math.max(R.next, t + 1) }
   if (m === 'resting' && !rm && t > R.next) { R.until = t + 1.5; R.next = t + 8 + st.rand() * 4 }
   const restGlance = m === 'resting' && !rm && t < R.until
 
@@ -354,7 +390,7 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
       if (m === 'listening') tg.sy *= 1 + 0.035 * Math.sin((t * Math.PI * 2) / 3.2) // slow breathing
       if (mouth) tg.squint += 0.36 * say.stress // a small squint on stressed words
       if (talking && !mouth) tg.sy *= 0.72 + 0.32 * st.say.open // no mouth: the eyes bounce with the words
-      if (m === 'resting' && near && !restGlance) tg.lid = 0.28 // the cursor came close: lids lift
+      if (m === 'resting' && !restGlance) tg.lid += (0.28 - tg.lid) * near // the cursor came close: lids lift
       moves?.tweak?.(tg, age)
     }
     targets[side] = tg
@@ -363,6 +399,7 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
   // Where it looks. Calm glances less often, and not as far.
   let lx = 0, ly = 0
   const g = st.glance
+  if (following) { g.until = Math.min(g.until, t); g.next = Math.max(g.next, t + 1) }
   if (t > g.next) {
     g.x = (st.rand() * 2 - 1) * 0.8 * (0.4 + 0.6 * e)
     g.y = (st.rand() * 2 - 1) * 0.5 * (0.4 + 0.6 * e)
@@ -379,7 +416,11 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
     case 'needs-you': lx = impatient ? 0.6 * st.toward : 0; ly = impatient ? 0.1 : 0; break // straight at you, then toward the panel
     case 'worried': lx = glancing ? g.x * 0.6 : -0.3; ly = 0.45; break
     case 'mad': lx = 0; ly = 0.12; break
-    case 'resting': if (restGlance) { lx = -0.8; ly = 0.05 } else if (near && !rm) { lx = px * 0.4; ly = 0.2 + py * 0.25 } else { lx = 0.1; ly = 0.45 } break
+    case 'resting': {
+      const w = rm ? 0 : near
+      if (restGlance) { lx = -0.8; ly = 0.05 } else { lx = 0.1 + (px * 0.4 - 0.1) * w; ly = 0.45 + (0.2 + py * 0.25 - 0.45) * w }
+      break
+    }
     case 'sleepy': lx = 0; ly = 0.35; break
     case 'confused': lx = 0; ly = 0; break // each eye has its own offset
     default:
