@@ -37,7 +37,7 @@ Where to look: `design/showcase.html`, section 7 "The notch island": Peeking as 
 The shape is one rounded rectangle, top flush with the screen, bottom corners 24 pt, so the join with the notch is just black meeting the hardware notch's edges. It grows with springs (a little overshoot), contents fade in after the shape. The notch has no pixels, so nothing is drawn inside it.
 
 ### Steward joins the island (the hero animation)
-At rest Steward is the solid Pill (glass needs something to refract, so outside the black it uses the flat body), tilted, half behind the notch's left edge, looking around. When Claude runs, the compact island grows and Steward steps into its left side. For an approval or review the island grows big and Steward **slides into the avatar spot, its body melting into the black while the lit eyes carry on from the same place** (a crossfade between two views of the same character, with the avatar disc fading in). When the island shrinks, the eyes travel back and the body re-forms as Steward peeks out again. The page has a button that plays it, and a slow-motion switch (3 times slower) to watch the hand-off.
+At rest Steward is the Pill in the chosen look (superseded: this said glass needs something to refract, so it used the flat body; see Plan update 4, glass draws in the notch), tilted, half behind the notch's left edge, looking around. When Claude runs, the compact island grows and Steward steps into its left side. For an approval or review the island grows big and Steward **slides into the avatar spot, its body melting into the black while the lit eyes carry on from the same place** (a crossfade between two views of the same character, with the avatar disc fading in). When the island shrinks, the eyes travel back and the body re-forms as Steward peeks out again. The page has a button that plays it, and a slow-motion switch (3 times slower) to watch the hand-off.
 
 ### The eight states
 | State | What shows |
@@ -128,6 +128,40 @@ The user, with a screenshot of "companion: PR #39 merged · Main chat, Phase ...
 
 **Defaults the front door can change:** 6.5 s on screen for a long note (longer to read), 9 s for too long, both kept while the cursor is on it. Maximum three lines. Say if the user wants more or fewer.
 
+### Plan update 4, 2026-10-27: the glass Steward in the notch (from the user, via the front door)
+The user: "the liquid glass version doesnt work in the notch. For steward." Then: "Have Roadmap & design mock the glass Steward in the notch now, and build it in island Phase 4." Their settings are Glass, Silver, Island, Always visible, so the notch shows a flat silver Pill with none of the glass look, and it reads as broken.
+
+**What was going on.** The island swaps glass for the flat body on purpose: in this brief ("glass needs something to refract"), in the Showcase (`kind === 'glass' ? 'flat' : kind` in `design/showcase/peeking.js`) and in the app (`src/renderer/src/notch-island.ts:115`). That reason does not hold for the app: its glass has no lens. `vectorView`'s glass branch in `src/renderer/src/pill/render.ts` draws only a tint, shading, a bright rim and a shine, over whatever is behind. That drawing works over the menu bar as well as over the panel's frost.
+
+**Decided: build it in Phase 4.** When the look is Glass, Steward in the notch is the glass Pill. Flat and Blocky follow their own settings as today.
+
+**Designed, live in the Showcase** (`design/showcase.html#island`, the card "Glass Steward in the notch", section 7): today's flat body against the glass one, with a third column for the fix below, on a dark and a light menu bar, in Silver, Lilac and Graphite, with a switch for At rest, Leaning out and Stepping into the island. The main Peeking figure now follows the page's Glass, Flat or Blocky picker, so Glass shows there too, including the big hand-off (Steward melting into the black with its lit eyes carrying on). Tested in headless Chrome at 60 frames a second with all 18 figures live.
+
+**Readability, measured (the risk 3 check).** The ratio between the body and the menu bar behind it:
+
+| | Flat | Glass |
+|---|---|---|
+| Silver, dark bar | 11.0 | 3.2 |
+| Lilac, dark bar | 10.2 | 3.0 |
+| Graphite, dark bar | 2.2 | 1.4 |
+| Silver, light bar | 1.3 | 1.2 |
+| Lilac, light bar | 1.4 | 1.3 |
+| Graphite, light bar | 6.8 | 3.5 |
+
+Glass reads on a dark bar (about 3 to 1) except Graphite, and over a light bar it nearly vanishes in Silver and Lilac: the light tint and the white rim match the bar. Flat has the same problem there, which the app already handles with a fine edge when it is within 2 to 1 of the bar (`edgeFor` in `render.ts`).
+
+**The smallest fix, shown in the third column:** the same rule for glass. When the glass body is within 2 to 1 of the bar behind it, it gets a fine edge, darker on a light bar and lighter on a dark one. Nothing else changes: same shape, tint, shading and shine, no extra tint. It applies only where the Pill sits on the bar (the notch); the panel's glass sits on its own frost and does not need it. Inside the black (compact island, big sizes) the body is on black and reads as in the panel.
+
+**Phase 4 definition of done for it:**
+- With Glass chosen, the island's peeking Steward is the glass body, drawn with no lens, in all states: at rest, leaning out, stepping into the island. The `'glass' ? 'flat'` swap in `notch-island.ts` goes away, with the comment above it.
+- The fine edge rule for glass in `render.ts` (a small additive change next to `edgeFor`): the glass face's contrast against the bar under 2 gives an edge. `light` is already passed to the island from the system theme.
+- A unit test that the island's body kind equals the look setting (glass gives glass, flat gives flat, blocky gives blocky) as a pure function, and one for the edge rule on the six rows in the table above. A smoke check that with the look set to Glass the notch page's Steward view reports glass.
+- Measured at a normal frame rate (headless Chrome or a frame log) that the glass body does not slow the notch's eyes or the island's growing; if it does, say so in the report and fall back to flat for that state only.
+- Reduce Transparency gets the flat body (as the panel's glass does), so those users never see a see-through Pill.
+- Hand-tested on the real Mac over a light and a dark menu bar and wallpaper; CI cannot see it.
+
+Shared files this adds: `src/renderer/src/notch-island.ts` and `src/renderer/src/pill/render.ts`, both small.
+
 ### The hand-off to the side panel
 A click on the island (or the hotkey) opens today's side panel on its edge, right or left, or where the user dragged it (the movable panel pops in place), with its usual entrance. The island goes back to Steward peeking, looking toward the panel. Closing is today's close. The panel in notch mode no longer drops from the notch; that special case goes away.
 
@@ -139,7 +173,7 @@ Joining the notch flush with the top means every size wider than the notch sits 
 
 ### How hard to build (in the real notch window)
 - **The joined shape: moderate.** It is one black rounded shape that grows from the notch (the black pieces the Wings and the alert under the notch already use), so the join itself is easy. The careful parts: matching the real notch's bottom corners (10 pt, not reported by macOS) at the very start of the growth, keeping the corners continuous while it springs, and growing the notch window from 360 by 96 to about 460 by 190 while staying click-through everywhere but the shape.
-- **Steward's hand-off: moderate to hard.** Two views of the same character (the Pill's body and its lit eyes) crossfade while one slides; the Showcase does it on one frame loop and the app's notch window is one window, so it is the same trick. The risks: hiding the body exactly behind the notch's edge (needs the measured 185 by 32), the glass body (so Peeking uses the flat body), and keeping the crossfade smooth on the real machine.
+- **Steward's hand-off: moderate to hard.** Two views of the same character (the Pill's body and its lit eyes) crossfade while one slides; the Showcase does it on one frame loop and the app's notch window is one window, so it is the same trick. The risks: hiding the body exactly behind the notch's edge (needs the measured 185 by 32), the glass body (see Plan update 4: it draws fine without a lens, with a fine edge on a light bar), and keeping the crossfade smooth on the real machine.
 - **Overall:** a few days of careful work, not a rewrite. Most pieces exist: the black shapes, the Pill views and eyes, the approval and review cards (3b and Visual Review), the session tracker.
 
 ### How it would be built (if picked)
@@ -147,7 +181,7 @@ Joining the notch flush with the top means every size wider than the notch sits 
 - A small spring loop on the notch page that sets only transforms, opacity and clip paths; the Showcase's `peeking.js` and `island-kit.js` are the working model (a steady 60 fps in headless Chrome). Reduce Motion fades.
 - Content: the right side from the session tracker (`SessionView` state and detail), the turn start for the timer (Visual Review's `UserPromptSubmit` hook already tracks it), the Visual Review store for the thumbnail. The approval and review contents already exist.
 - Shared files, small and additive: `src/shared/types.ts` (`NotchState` gains the size and the mascot position), `src/main/notch-window.ts`, `src/renderer/src/Notch.tsx` and `notch.css`, `src/main/index.ts` (the notch window's size; the panel no longer opening under the notch).
-- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, the no-old-pill rule, the notch eye jitter fix, and never-cut-off alert text in "Plan update 3"); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode; 5) hardening and docs.
+- Phases (the user's go between each): 1) the joined shape with compact, Steward peeking and stepping in, the right side, hover (built, PR #34); 2) the note, the settle, **chat names** and **the panel opening on the side** (see "Plan update, 2026-10-24"); 3) the approval and review sizes with Steward joining, **and the alert sizes in "Plan update 2"** (input, a session's approval, build failed, good news, first launch, the catch-all note, the no-old-pill rule, the notch eye jitter fix, and never-cut-off alert text in "Plan update 3"); 4) the rest of the hand-off to the side panel, the moved-panel rule, quiet mode, **and the glass Steward in the notch ("Plan update 4")**; 5) hardening and docs.
 
 ### Risks and open questions
 1. Matching the real notch's corners where the island starts, and hiding Steward exactly behind the notch's edge. Phase 1 checks both on the real Mac.

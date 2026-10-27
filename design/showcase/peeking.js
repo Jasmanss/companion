@@ -7,10 +7,10 @@
 // it shrinks Steward steps back out. The notch has no pixels: the join is the black meeting the notch's edges.
 // Only transforms, opacity and clip paths move. Reduced Motion fades instead.
 import { setMood } from '../pill/eyes.js'
-import { palette } from '../pill/render.js'
+import { palette, contrast } from '../pill/render.js'
 import { crop, blob, NOTCH, CX } from '../notch/notch.js'
 import { wait, demo, esc } from '../shared/activity.js'
-import { S, onChange, stage, card } from './state.js'
+import { S, onChange, stage, card, PILL_COLORS } from './state.js'
 import { HW, px, clamp, div, Spring, soft, makeLoop, makeEyes, makeContents, makePanel } from './island-kit.js'
 import { rightSide, RIGHT_MODES } from './mascot.js'
 
@@ -72,9 +72,10 @@ export function createPeeking(screen, o) {
   // the avatar spot the eyes sit in once Steward has joined the island
   const avatar = div('pk2-avatar'); root.append(avatar)
   const A = { x: loop.add(soft(-160)), y: loop.add(soft(78)), o: loop.add(soft(0)) }
-  // Steward's body, peeking: the solid Pill (glass needs something to refract)
+  // Steward's body, peeking: the page's version. Glass has no lens here (nothing behind it to bend, as in the app, where the
+  // notch window is clear): the tint, the shading, the rim and the shine over the menu bar. o.body picks another version.
   const pillHost = div('mc-pill'); root.append(pillHost)
-  const v = stage.view(g, kind === 'glass' ? 'flat' : kind, pillHost, 64, 54, { color, tinted: true, light: !o.dark, mouth: o.mouth ?? true })
+  const v = stage.view(g, o.body ?? kind, pillHost, 64, 54, { color, tinted: true, light: !o.dark, mouth: o.mouth ?? true, lens: false, tune: o.tune })
   v.el.style.position = 'absolute'; v.el.style.left = '-32px'; v.el.style.top = '-27px'
   const P = { x: loop.add(soft(-66)), y: loop.add(soft(16)), s: loop.add(soft(0.8)), r: loop.add(new Spring(0, 130, 11)), o: loop.add(soft(0)) }
   const eyes = ey.mk('main', g)
@@ -273,6 +274,10 @@ export function render(host) {
         <div class="ibar"><span class="lbl">Right side shows</span><span class="iseg" id="p-right">${RIGHT_MODES.map(([id, l], i) => `<button data-v="${id}" aria-pressed="${i === 0}">${l}</button>`).join('')}</span>
           <span class="lbl">Speed</span><span class="iseg" id="p-speed"><button data-v="1" aria-pressed="true">Normal</button><button data-v="0.3" aria-pressed="false">Slow motion</button></span></div>
         <div class="icrop pk2-fig" id="p-fig"></div>` })}
+    ${card({ id: 'p-glass', section: 7, title: 'Glass Steward in the notch', status: 'planned', from: null, cls: 'wide',
+      desc: 'Decided (2026-10-27): the notch shows the glass Steward when Glass is the chosen look, built in Phase 4. Until now the island swapped it for the flat body, so a Glass user saw a plain flat Pill. There is nothing behind it to bend (the app\'s glass has no lens: the notch window is clear), so it is the glass the panel draws: tint, shading, a bright rim and a shine. Each pair below is today\'s flat body against that glass, on a dark and a light menu bar, in Silver and a tinted color.',
+      tools: '<span class="lbl">Show</span> <span class="iseg" id="pg-state"><button data-v="rest" aria-pressed="true">At rest</button><button data-v="hover" aria-pressed="false">Leaning out</button><button data-v="working" aria-pressed="false">Stepping into the island</button></span>',
+      body: `<div class="pg-grid" id="pg-grid"></div><p class="inote" id="pg-read"></p>` })}
     ${card({ id: 'p-alerts', section: 7, title: 'Every alert opens as the island', status: 'planned', from: null, cls: 'wide',
       desc: 'Decided: in Island mode nothing ever uses the old pill that hangs under the notch (black starting under the menu bar, rounded top corners, concave ears beside the notch). Every message opens as the island: flush with the top, full width from the top edge, bottom corners only, sized by the message, Steward joining for the big ones. Click a row to see it above. Change Alerts that peek out to see which come out.',
       tools: '<span class="lbl">Alerts that peek out</span> <span class="iseg" id="p-peek"><button data-v="needs-me" aria-pressed="true">Needs me</button><button data-v="all" aria-pressed="false">Everything</button><button data-v="none" aria-pressed="false">Nothing</button></span> <label class="pk-pick"><input type="checkbox" id="p-failneeds" checked> Count a failed build as Needs me</label>',
@@ -297,7 +302,7 @@ export function render(host) {
         <tr><td>Right side</td><td>Smart</td></tr>
         <tr><td>Main chat</td><td>The side panel, left or right or dragged; never centered</td></tr></tbody></table>
         <p class="inote"><b>What it covers.</b> The price of "one shape joined to the notch" is that every size wider than the notch sits over the menu bar, because the join is flush with the top of the screen: compact covers about 70 pt each side of the notch, a note about 97, an approval about 118, a review about 128. The earlier version hung the message under the menu bar line and covered nothing, but it read as a separate pill, which is what was rejected. The mitigations: compact is slim; the big sizes only come for a message and settle after a few seconds; hovering the menu bar items is not blocked (the island is click-through except over its shape), and the bigger sizes are rare.</p>
-        <p class="inote"><b>How hard in the real notch window.</b> <b>The joined shape: moderate.</b> It is one black rounded shape that grows from the notch (the same black pieces the Wings and the alert under the notch use), so the join is straightforward; the careful part is matching the real notch's bottom corners (10 pt, not reported by macOS) where the island's first pixels start, and keeping the corners continuous while it springs. The notch window must grow from 360 by 96 to about 460 by 190 and stay click-through everywhere but the shape. <b>Steward's hand-off: moderate to hard.</b> It is two views of the same character (the Pill's body and its lit eyes) crossfading while one slides, which the Showcase does on one frame loop. In the app both live in one window, so it is the same trick; the risk is the body view (glass) over a light wallpaper, so Peeking uses the solid flat body. Hiding the body behind the notch edge needs the real notch's edge (measured 185 by 32). It is a few days of careful work, not a rewrite: most of the pieces exist (the black shapes, the Pill views, the eyes, the alert cards from 3b and Visual Review).</p>
+        <p class="inote"><b>How hard in the real notch window.</b> <b>The joined shape: moderate.</b> It is one black rounded shape that grows from the notch (the same black pieces the Wings and the alert under the notch use), so the join is straightforward; the careful part is matching the real notch's bottom corners (10 pt, not reported by macOS) where the island's first pixels start, and keeping the corners continuous while it springs. The notch window must grow from 360 by 96 to about 460 by 190 and stay click-through everywhere but the shape. <b>Steward's hand-off: moderate to hard.</b> It is two views of the same character (the Pill's body and its lit eyes) crossfading while one slides, which the Showcase does on one frame loop. In the app both live in one window, so it is the same trick; the risk is the body view (glass) over a light wallpaper: see the card "Glass Steward in the notch" above for how it reads. Hiding the body behind the notch edge needs the real notch's edge (measured 185 by 32). It is a few days of careful work, not a rewrite: most of the pieces exist (the black shapes, the Pill views, the eyes, the alert cards from 3b and Visual Review).</p>
         <p class="inote"><b>Replaces:</b> the Chin and Wings looks; the alert under the notch (3b) becomes the approval and review sizes. The panel never opens centered under the notch. Notch 3e is not needed and stays on hold.</p>` })}
   </div>`)
   const INFO = Object.fromEntries(PSTATES.map(([id, l, d]) => [id, [l, d]]))
@@ -357,6 +362,44 @@ export function render(host) {
   }, { clear: false, auto: false, once: true })
   host.querySelector('#p-hero').onclick = () => { run.cancel(); hero.replay() }
   host.querySelector('#p-states').addEventListener('click', () => hero.cancel())
+  // glass in the notch: today's flat body against the glass one, on a dark and a light menu bar, in two colors
+  const GROWS = [['dark', 'Silver'], ['dark', 'Lilac'], ['dark', 'Graphite'], ['light', 'Silver'], ['light', 'Lilac'], ['light', 'Graphite']]
+  const GCOLS = [['flat', 'Flat, today (with its edge)', true], ['glass', 'Glass, as in the panel', false], ['glass', 'Glass with an edge, for the notch', true]]
+  let gst = 'rest', gfigs = []
+  function buildGlass() {
+    stage.clear('pg'); gfigs.forEach((f) => f.remove()); gfigs = []
+    const grid = host.querySelector('#pg-grid'); grid.replaceChildren()
+    grid.style.setProperty('--n', String(GCOLS.length))
+    const zoom = clamp(((grid.clientWidth || 900) - 14 * (GCOLS.length - 1)) / GCOLS.length / 340, 0.6, 1.3)
+    let seed = 300
+    for (const [bar, cname] of GROWS) {
+      const color = PILL_COLORS.find((c) => c.name === cname).hex
+      for (const [body, label, tune] of GCOLS) {
+        const fig = document.createElement('figure'); fig.className = 'pg-f'
+        const c = document.createElement('div'); c.className = 'icrop'
+        const cap = document.createElement('figcaption'); cap.innerHTML = `<b>${label}</b> · ${cname} · ${bar} menu bar`
+        fig.append(c, cap); grid.append(fig)
+        const { screen } = crop(c, { cw: 340, ch: 92, zoom, wall: bar, busy: false })
+        gfigs.push(createPeeking(screen, { kind: S.version, body, tune, color, owner: 'pg', seed: seed++, anchor: c, mouth: S.mouth, think: S.think, rm: () => S.rm, dark: bar === 'dark', state: gst, rightMode: 'smart', autoSettle: false }))
+      }
+    }
+  }
+  // readability, measured: how far the body's own color is from the bar it sits on (3 to 1 is the usual floor for a shape)
+  const BAR = { dark: '#17181f', light: '#ece9f1' }
+  const ratio = (a, bar) => contrast(a, BAR[bar]).toFixed(1)
+  host.querySelector('#pg-read').innerHTML = `<b>Readability, measured.</b> The ratio between the body and the bar behind it, where about 3 to 1 is the floor for a shape to read:<table class="itable pg-tbl"><thead><tr><th>Color and bar</th><th>Flat</th><th>Glass</th><th>Glass with an edge</th></tr></thead><tbody>${GROWS.map(([bar, name]) => {
+    const hex = PILL_COLORS.find((c) => c.name === name).hex
+    const gl = palette('glass', { color: hex, light: bar === 'light', tinted: true }).face
+    const low = contrast(gl, BAR[bar]) < 2
+    return `<tr><td>${name}, ${bar} bar</td><td>${ratio(hex, bar)}${contrast(hex, BAR[bar]) < 2 ? ' (edge)' : ''}</td><td class="${contrast(gl, BAR[bar]) < 3 ? 'pg-bad' : ''}">${ratio(gl, bar)}</td><td>${ratio(gl, bar)}${low ? ' + edge' : ' (no edge needed)'}</td></tr>`
+  }).join('')}</tbody></table><b>What this says.</b> Glass over a dark bar reads (about 3 to 1) except Graphite, and over a light bar it nearly disappears: the light tint and white rim match the bar. The fix is small and already how the flat body works: when the glass is within 2 to 1 of the bar, it gets a fine edge, darker on a light bar and lighter on a dark one. Only the notch needs it; the panel's glass sits on its own frost. Nothing else changes: same shape, tint, shading and shine.`
+  host.querySelector('#pg-state').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-v]')
+    if (!b) return
+    host.querySelectorAll('#pg-state button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)))
+    gst = b.dataset.v; gfigs.forEach((f) => f.go(gst))
+  })
+
   const pop = () => {
     const choice = host.querySelector('#p-peek [aria-pressed=true]').dataset.v, failNeeds = host.querySelector('#p-failneeds').checked
     host.querySelectorAll('.pk-alerts tbody tr').forEach((tr, i) => { const t = popsOut(ALERTS[i], choice, failNeeds); const td = tr.querySelector('.pk-pop'); td.textContent = t; td.className = `pk-pop ${t.startsWith('Yes') ? 'y' : 'n'}` })
@@ -372,7 +415,9 @@ export function render(host) {
   host.querySelector('.pk-alerts').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('tr[data-st]')) pick(e.target) })
   pop()
   build()
+  buildGlass()
   let rt = 0
-  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 250) })
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { build(); buildGlass() }, 250) })
   onChange(['color', 'version', 'dark', 'mouth', 'think'], build)
+  onChange(['mouth', 'think'], buildGlass)
 }

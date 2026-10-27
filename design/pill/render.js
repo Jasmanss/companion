@@ -218,14 +218,17 @@ function vectorView(kind, el, W, H, o) {
   else if (glass) {
     // The filter goes in first: Chrome does not pick up a backdrop filter that is added after its element.
     const px = toPx(PATH, [vx, vy], s)
-    filterHost().insertAdjacentHTML('beforeend', `<filter id="${id}" x="0" y="0" width="${W}" height="${H}" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feImage href="${lensMap(px, W, H)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="${(GEO.H * s * 0.5).toFixed(1)}" xChannelSelector="R" yChannelSelector="G"/></filter>`)
+    // o.lens === false: the app's glass, which has nothing behind it to bend (the notch window is clear, no frost), so it is only the tint, shading, rim and shine.
+    if (o.lens !== false) filterHost().insertAdjacentHTML('beforeend', `<filter id="${id}" x="0" y="0" width="${W}" height="${H}" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feImage href="${lensMap(px, W, H)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="${(GEO.H * s * 0.5).toFixed(1)}" xChannelSelector="R" yChannelSelector="G"/></filter>`)
     const bf = `url(#${id}) blur(${Math.max(0.5, GEO.H * s * 0.01).toFixed(2)}px) saturate(1.7) brightness(${o.light ? 1.04 : 1.12})`
     const fill = o.tinted ? rgba(o.color, o.light ? 0.55 : 0.42) : (o.light ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)')
+    // o.tune (the notch): a fine edge when the glass is too close to the bar behind it, the same rule the flat body follows.
+    const edge = o.tune && contrast(pal.face, BACKDROP(o.light)) < 2 ? (o.light ? darken(pal.face, 0.4) : lighten(pal.face, 0.5)) : null
     const G = GEO
     base = `
       <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><defs><filter id="${id}b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${(G.H * 0.05).toFixed(2)}"/></filter></defs>
         <ellipse cx="${G.cx}" cy="${G.y1 + G.H * 0.04}" rx="${G.W * 0.36}" ry="${G.H * 0.07}" fill="#000" opacity="${o.light ? 0.16 : 0.35}" filter="url(#${id}b)"/></svg>
-      <div style="position:absolute;inset:0;clip-path:path('${px}');backdrop-filter:${bf};-webkit-backdrop-filter:${bf}"></div>
+      ${o.lens === false ? '' : `<div style="position:absolute;inset:0;clip-path:path('${px}');backdrop-filter:${bf};-webkit-backdrop-filter:${bf}"></div>`}
       <svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible">
         <defs>
           <clipPath id="${id}c"><path d="${PATH}"/></clipPath>
@@ -239,9 +242,11 @@ function vectorView(kind, el, W, H, o) {
           <ellipse cx="${G.x0 + G.W * 0.36}" cy="${G.y0 + G.H * 0.16}" rx="${G.W * 0.2}" ry="${G.H * 0.08}" fill="#fff" opacity="${o.light ? 0.55 : 0.4}" filter="url(#${id}b)"/>
         </g>
         <path d="${PATH}" fill="none" stroke="rgba(255,255,255,${o.light ? 0.7 : 0.35})" stroke-width="${(0.9 / s).toFixed(2)}"/>
+        ${edge ? `<path d="${PATH}" fill="none" stroke="${edge}" stroke-width="${(1.3 / s).toFixed(2)}"/>` : ''}
       </svg>`
   } else {
-    base = `<svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><path d="${PATH}" fill="${o.color}"/></svg>`
+    const edge = o.tune && contrast(o.color, BACKDROP(o.light)) < 2 ? (o.light ? darken(o.color, 0.22) : lighten(o.color, 0.22)) : null
+    base = `<svg class="pv-dim" viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><path d="${PATH}" fill="${o.color}"${edge ? ` stroke="${edge}" stroke-width="${(1.3 / s).toFixed(2)}"` : ''}/></svg>`
   }
   // Glass eyes glow when they are light. While merging, glass eyes also go through a "goo" filter (blur, then a
   // hard alpha threshold) so the two shapes join like drops of liquid instead of just overlapping.
