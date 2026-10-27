@@ -243,6 +243,7 @@ const KINDS: [string, string][] = [
   ['a deploy went out', 'deploy-ready:dpl_1'],
   ['a PR was merged', 'pr-merged:/p:12'],
   ['a Visual Review is ready', 'review:20261024-101010-abcdef12'],
+  ['the morning card after a night', 'night:20261025-231000'],
 ]
 
 describe('which alerts peek out', () => {
@@ -258,6 +259,7 @@ describe('which alerts peek out', () => {
       'a deploy went out': false,
       'a PR was merged': false,
       'a Visual Review is ready': true,
+      'the morning card after a night': true,
     })
   })
 
@@ -276,8 +278,12 @@ describe('which alerts peek out', () => {
     expect(splitAlerts([alert('finished:a'), alert('deploy-ready:c')], 'all', true)).toEqual({ peek: [alert('deploy-ready:c')], held: [alert('finished:a')] })
   })
 
-  it('in the notch island, a review comes out as the island itself, and nothing else does yet', () => {
-    expect(Object.fromEntries(KINDS.map(([name, key]) => [name, islandShows(key)]))).toEqual({ ...Object.fromEntries(KINDS.map(([name]) => [name, false])), 'a Visual Review is ready': true })
+  it('in the notch island, a review and the morning card come out as the island itself, and nothing else does yet', () => {
+    expect(Object.fromEntries(KINDS.map(([name, key]) => [name, islandShows(key)]))).toEqual({
+      ...Object.fromEntries(KINDS.map(([name]) => [name, false])),
+      'a Visual Review is ready': true,
+      'the morning card after a night': true,
+    })
   })
 
   it('splits what reached it into what peeks out and what waits, in order', () => {

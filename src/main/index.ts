@@ -10,7 +10,7 @@ import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../sh
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NightReport, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -69,7 +69,8 @@ import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PI
 import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
-import { OvernightWatch, wakeAt, WatchLog } from './watch'
+import { buildNightReport } from './night-report'
+import { OvernightWatch, wakeAt, WatchLog, type Night } from './watch'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
 import { judgeMotion, MAX_GAP_MS, measureMotion, MIN_POSITIONS, type Motion, type Sample, type Seen } from './smoke-motion'
@@ -153,6 +154,8 @@ const merges = new MergeTracker()
 let notch: NotchDock
 /** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
 let watch: OvernightWatch | null = null
+/** The nights' logs, which the night reports are built from. */
+let watchLog: WatchLog | null = null
 /** Its keep-awake blocker, while a night goes on. */
 let watchBlocker: number | null = null
 /** The smoke check says how long the Mac has been idle, so someone's real mouse can't change what it checks. */
@@ -886,7 +889,7 @@ function menuBarIcon(): Electron.NativeImage {
  */
 function menuBarText(): string {
   const waiting = sessions?.waitingCount() ?? 0
-  return menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews, watch?.watching ?? false)
+  return menuBarTitle(dock === 'hidden' || quiet() || steppedAside ? waiting : 0, heldAlerts.length + asideAlerts.length + pendingReviews + (watch?.unseen ? 1 : 0), watch?.watching ?? false)
 }
 
 /** "11:10 PM", for the menu bar. */
@@ -1134,7 +1137,8 @@ function showAlerts(list: AlertView[]): void {
   // Overnight Watch with nobody at the Mac: they wait for the panel (the menu bar's dot), as when Steward is hidden.
   const holding = !isOpen(dock) && (watch?.holdsAlerts() ?? false)
   const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' || holding ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
-  const { held } = split
+  // The morning card never waits with the others: the report it is about shows when the panel opens.
+  const held = split.held.filter((a) => !a.key.startsWith('night:'))
   // In the island a review comes out as the island itself (its note), never as the old alert under the notch.
   const notes = island && !isOpen(dock) ? split.peek.filter((a) => islandShows(a.key)) : []
   const peek = split.peek.filter((a) => !notes.includes(a))
@@ -1160,6 +1164,11 @@ function deliverHeld(): void {
 function onPanelOpened(): void {
   if (!appState) return
   showPresenceNote()
+  // Overnight Watch: someone looked. During a night the brief waits (the night's report will be it); after one, the
+  // report shows instead.
+  watch?.opened()
+  if (watch?.watching) return
+  if (watch?.unseen) return void showNightReport(watch.unseen)
   const prefs = settings.notifications()
   const today = localDate(new Date())
   if (prefs.morningBrief && appState.lastBriefDate !== today) {
@@ -1314,6 +1323,7 @@ function lookAtIdle(): void {
  */
 function onDeployChanges(changes: DeployChange[]): void {
   for (const { kind, deploy } of changes) {
+    watch?.deploy({ project: deploy.project, ok: kind === 'ready', production: deploy.target === 'production' })
     if (kind === 'failed') {
       raise({
         key: `deploy-failed:${deploy.uid}`,
@@ -1449,7 +1459,61 @@ async function watchView(): Promise<WatchView> {
     plan: { working: list.filter((s) => s.state === 'working').map((s) => s.name), waiting: sessions.waitingCount(), deploys: linked },
     onBattery: powerMonitor.isOnBatteryPower(),
     ended: watch?.ended,
+    lastNight: (await keptNights())[0],
   }
+}
+
+/** The nights with a report kept, newest first: not the one going on. */
+async function keptNights(): Promise<string[]> {
+  const going = watch?.night?.id
+  return (await watchLog?.list())?.filter((id) => id !== going) ?? []
+}
+
+/** A night's report, built now from its log and the reviews as they stand. null: not kept, or still going on. */
+async function nightReportFor(id: string): Promise<NightReport | null> {
+  const ids = await keptNights()
+  const i = ids.indexOf(id)
+  if (!watchLog || i < 0) return null
+  const events = await watchLog.read(id)
+  return buildNightReport({ id, events, review: (r) => reviewStore.get(r), now: Date.now(), latest: i === 0, earlier: ids[i + 1] ?? null, later: ids[i - 1] ?? null })
+}
+
+/** The report goes to the panel. Seen, it is also the day's morning brief. */
+async function showNightReport(id: string): Promise<void> {
+  const report = await nightReportFor(id)
+  if (watch?.unseen === id) watch.seen()
+  if (report) {
+    win?.webContents.send('watch:report', report)
+    void appState.update({ lastBriefDate: localDate(new Date()) })
+  }
+  updateMenuBar()
+}
+
+/**
+ * A night ended. What waited on screen doesn't come back one by one: it's in the report. With the panel open the report
+ * shows there at once; otherwise one card comes out (in the island, as its note), and the report shows when the panel
+ * next opens. A log without its first line (it couldn't be written) leaves the alerts as they are.
+ */
+async function nightEnded(night: Night): Promise<void> {
+  await watch?.settled()
+  const events = (await watchLog?.read(night.id)) ?? []
+  if (events[0]?.type === 'start') {
+    const before = (a: AlertView) => a.at < night.since
+    heldAlerts = heldAlerts.filter(before)
+    asideAlerts = asideAlerts.filter(before)
+  }
+  if (win && isOpen(dock)) await showNightReport(night.id)
+  else await morningCard()
+  updateMenuBar()
+}
+
+/** The one card after a night: the greeting and the report's line. A click opens the panel, where the report is. */
+async function morningCard(): Promise<void> {
+  const id = watch?.unseen
+  if (!id || !win || watch?.watching) return
+  const report = await nightReportFor(id)
+  if (!report) return watch?.seen()
+  raise({ key: `night:${id}`, level: 'urgent', title: report.title, detail: report.summary })
 }
 
 /** The Watch started, stopped or changed: the panel and the menu bar follow. */
@@ -1716,6 +1780,13 @@ function registerIpc(): void {
   ipcMain.handle('review:history', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.history(projectPath) : []))
   ipcMain.handle('review:usage', () => reviewStore.usage())
   ipcMain.handle('watch:get', () => watchView())
+  ipcMain.handle('watch:report', (_e, id: unknown) => (typeof id === 'string' ? nightReportFor(id) : null))
+  ipcMain.handle('watch:nights', async () => (await keptNights()).length)
+  ipcMain.handle('watch:clear', async () => {
+    await watchLog?.clear(watch?.night?.id)
+    watch?.seen()
+    sendWatch()
+  })
   ipcMain.handle('watch:start', (_e, wakeTime: unknown) => {
     watch?.start(typeof wakeTime === 'string' ? wakeTime : (watch?.wakeTime ?? ''))
     return watchView()
@@ -3926,15 +3997,17 @@ app.whenReady().then(async () => {
     log: (message) => console.error(`[steward] visual review: ${message}`),
   })
   alerts = new AlertQueue({ show: showAlerts })
+  watchLog = new WatchLog(path.join(userData, 'watch'))
   watch = new OvernightWatch(
     {
-      log: new WatchLog(path.join(userData, 'watch')),
+      log: watchLog,
       idleSeconds,
       onBattery: () => powerMonitor.isOnBatteryPower(),
       sessionsWorking: () => sessions.list().filter((s) => s.state === 'working').length,
       keepAwake: keepAwakeForWatch,
       save: (saved) => void appState.update({ watch: saved }),
       changed: sendWatch,
+      ended: (night) => void nightEnded(night),
     },
     // A smoke run starts with no night going on, whatever an earlier run left.
     SMOKE_OUT ? {} : appState.watch,
@@ -4005,6 +4078,9 @@ app.whenReady().then(async () => {
   // A fresh install that hides until needed comes out once, a moment after it starts, so a new user can find it.
   win.webContents.once('did-finish-load', () => {
     if (!drivenBySmoke) setTimeout(maybeFirstPeek, 1200)
+    // A night that ended while Steward wasn't running (or before it was opened again) still gets its morning card.
+    const ended = watch?.ended
+    if (!drivenBySmoke && ended && Date.now() - ended.at < 12 * 60 * 60 * 1000) setTimeout(() => void morningCard(), 1500)
   })
   // Nobody is at a sleeping or locked screen to push against the edge.
   const screenIs = (asleepNow: boolean) => () => {

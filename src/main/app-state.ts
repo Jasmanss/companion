@@ -34,7 +34,8 @@ function watchFrom(saved: unknown): WatchSaved {
       : undefined
   const e = w.ended as WatchSaved['ended'] | undefined
   const ended = e && typeof e.at === 'number' && ENDS.has(e.why) ? { at: e.at, why: e.why } : undefined
-  return { night, wakeTime: typeof w.wakeTime === 'string' ? w.wakeTime : undefined, ended }
+  const unseen = typeof w.unseen === 'string' && /^\d{8}-\d{6}$/.test(w.unseen) ? w.unseen : undefined
+  return { night, wakeTime: typeof w.wakeTime === 'string' ? w.wakeTime : undefined, ended, unseen }
 }
 
 /** Small bits of state that should survive restarts. */

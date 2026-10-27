@@ -565,6 +565,7 @@ export function ProjectsSection(props: SectionProps) {
       )}
 
       {settings.projects.length > 0 && <ReviewGroup projects={settings.projects} run={run} onError={props.onError} />}
+      <NightGroup />
 
       <Group>
         <Row label="Running commands" note="Auto runs commands without asking, except risky ones.">
@@ -856,6 +857,38 @@ function ReviewHookNotice({ onError }: { onError: (message: string) => void }) {
         </button>
       </div>
     </div>
+  )
+}
+
+/** Overnight Watch's night reports: how many are kept, and Clear, beside Visual Review's pictures. */
+function NightGroup() {
+  const [nights, setNights] = useState<number | null>(null)
+  useEffect(() => {
+    api().watch.nights().then(setNights, () => setNights(null))
+  }, [])
+  return (
+    <Group title="Overnight Watch">
+      <div className="set-row">
+        <div className="set-label">
+          <span>Night reports</span>
+          <small>{nights === null ? '' : nights ? `${nights} kept.` : 'None kept.'} The newest 14 nights, on this Mac only.</small>
+        </div>
+        <div className="set-ctl">
+          <button
+            className="btn"
+            disabled={!nights}
+            onClick={() =>
+              api()
+                .watch.clear()
+                .then(() => api().watch.nights())
+                .then(setNights)
+            }
+          >
+            Clear night reports
+          </button>
+        </div>
+      </div>
+    </Group>
   )
 }
 

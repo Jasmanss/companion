@@ -20,10 +20,10 @@ const macLine = (onBattery: boolean) =>
 
 /**
  * Overnight Watch in the panel. Not watching: the goodnight card, what Steward can see tonight, the wake time and Go
- * rest. Watching: since when, until when, and Stop watching or I'm up. Phase 1 writes the night down; calls, texts,
- * CI and the morning report come later, and the card says so.
+ * rest, and the last night's report. Watching: since when, until when, and Stop watching or I'm up. The night is written
+ * down and reported in the morning; calls, texts and CI come later, and the card says so.
  */
-export function GoodnightCard({ view, onClose, onError }: { view: WatchView; onClose: () => void; onError: (message: string) => void }) {
+export function GoodnightCard({ view, onClose, onReport, onError }: { view: WatchView; onClose: () => void; onReport: (id: string) => void; onError: (message: string) => void }) {
   const [wake, setWake] = useState(view.wakeTime)
   const [busy, setBusy] = useState(false)
   // Go rest was just pressed: "Goodnight. I've got it.", then Steward tucks away.
@@ -92,7 +92,17 @@ export function GoodnightCard({ view, onClose, onError }: { view: WatchView; onC
           <CloseIcon />
         </button>
       </header>
-      <p className="gn-sub muted small">Here's what I'll watch tonight.</p>
+      <p className="gn-sub muted small">
+        Here's what I'll watch tonight.
+        {view.lastNight && (
+          <>
+            {' '}
+            <button className="rv-link" onClick={() => onReport(view.lastNight!)}>
+              The last night's report
+            </button>
+          </>
+        )}
+      </p>
       <ul className="gn-list">
         <li>
           <TerminalIcon />
@@ -117,7 +127,7 @@ export function GoodnightCard({ view, onClose, onError }: { view: WatchView; onC
         <span>Wake me no later than</span>
         <input type="time" value={wake} required onChange={(e) => setWake(e.target.value)} onBlur={() => wake && void api().watch.setWakeTime(wake)} aria-label="Wake time" />
       </label>
-      <p className="gn-sub muted small">For now Steward writes the night down and holds alerts while you're away. Calls and texts, CI on main and a morning report come later.</p>
+      <p className="gn-sub muted small">Alerts wait while you're away, and in the morning there's a report of the night. Calls and texts, and CI on main, come later.</p>
       <div className="gn-foot">
         <span className="muted small">Nothing is ever approved for you.</span>
         <button className="btn primary" disabled={busy || !wake} onClick={() => run(api().watch.start(wake), () => setSaid(true))}>
