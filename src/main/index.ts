@@ -30,7 +30,7 @@ import {
 import { alwaysAsks } from './commands'
 import { DeployWatcher, fetchBuildLog, type DeployChange } from './deploys'
 import { downloadImage } from './fetch-image'
-import { CiTracker, dependabotPRs, findGh, ghRunner, GIT_REMOTE, isGitHubRemote, mainRuns, MergeTracker, mergedPRs, type CiChange, type GhRunner } from './github'
+import { CiTracker, dependabotPRs, findGh, GH_COMMANDS, ghRunner, GIT_REMOTE, isGitHubRemote, mainRuns, MergeTracker, mergedPRs, type CiChange, type GhRunner } from './github'
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
 import { runGit, whereYouLeftOff } from './left-off'
@@ -70,7 +70,7 @@ import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
 import { buildNightReport } from './night-report'
-import { StuckWatch, stuckAlert } from './stuck'
+import { STUCK_MS, StuckWatch, stuckAlert } from './stuck'
 import { isTranscriptPath } from './transcript'
 import { OvernightWatch, wakeAt, WatchLog, type Night } from './watch'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
@@ -1577,9 +1577,12 @@ async function checkCi(): Promise<void> {
   }
 }
 
+/** A red run is mad, then worried, like a failed deploy; green again on main ends the worry for that project. */
 function onCiChange(project: Project, { kind, run }: CiChange): void {
   watch?.ci({ project: project.name, workflow: run.workflowName, ok: kind === 'passed' })
-  if (kind === 'failed') raise({ key: `ci-failed:${project.path}:${run.databaseId}`, level: 'urgent', title: `${project.name}: CI failed on main`, detail: run.workflowName, mood: 'mad', scope: project.path })
+  if (kind === 'failed') return raise({ key: `ci-failed:${project.path}:${run.databaseId}`, level: 'urgent', title: `${project.name}: CI failed on main`, detail: run.workflowName, mood: 'mad', scope: project.path })
+  moods.clear(project.path)
+  sendMood()
 }
 
 /** Sessions working with nothing from them for 45 minutes get a word, and at 90 an urgent alert; both go in the log. */
@@ -2100,6 +2103,9 @@ async function checkReactions(out: string): Promise<void> {
 
 /** The review the Watch check makes for its second night, cleared before the checks after it. */
 let smokeNightReview: string | null = null
+/** Its CI project, and the gh it stands in for, put back after it. */
+let ciDir: string | null = null
+let realGh: GhRunner | null | undefined
 
 /**
  * Overnight Watch, Phase 1: the goodnight card from the panel's moon button, Go rest with a wake time, the keep-awake,
@@ -2134,7 +2140,7 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
       wake: document.querySelector('.gn-wake input').value,
     })`)
     need(card.wake === '07:30', `the wake time starts at ${card.wake}, not 7:30`)
-    need(/Claude Code sessions/.test(card.text) && /Deploys/.test(card.text) && /Keep the lid open/.test(card.text), `the card does not say what it watches ("${card.text}")`)
+    need(/Claude Code sessions/.test(card.text) && /Deploys/.test(card.text) && /CI on main/.test(card.text) && /Keep the lid open/.test(card.text), `the card does not say what it watches ("${card.text}")`)
     await wc.executeJavaScript(`(() => {
       const input = document.querySelector('.gn-wake input')
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '06:45')
@@ -2209,8 +2215,32 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     // and the panel shows the report, with the night's Visual Review as its card.
     setDock('collapsed')
     await sleep(700)
+    // CI on main: a project on GitHub, and gh answering only the Watch's one command. Go rest's first look takes note
+    // of the green run there; a red one after it is news.
+    ciDir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-smoke-ci-'))
+    await settings.addProject(ciDir)
+    const ciProject = path.basename(ciDir)
+    const ciRun = (id: number, conclusion: string) => ({ databaseId: id, workflowName: 'CI', status: 'completed', conclusion, updatedAt: new Date().toISOString() })
+    let runs = [ciRun(1, 'success')]
+    const asked: string[] = []
+    realGh = gh
+    gh = async (args, cwd) => {
+      asked.push(args.join(' '))
+      return args === GH_COMMANDS.ciMain && cwd === ciDir ? JSON.stringify(runs) : '[]'
+    }
     const second = watch!.start('07:30')
     smokeIdle = 600
+    await sleep(300)
+    runs = [ciRun(2, 'failure'), ciRun(1, 'success')]
+    await checkCi()
+    need(heldAlerts.some((a) => a.key === `ci-failed:${ciDir}:2`) && !heldAlerts.some((a) => a.key === `ci-failed:${ciDir}:1`), `CI going red on main did not come out once, waiting (gh was asked: ${asked.join(' | ')})`)
+    // A session working with nothing from it for 90 minutes: urgent. (The only turn going on: the check's own.)
+    activity.reset()
+    await onHookEvent({ hook_event_name: 'UserPromptSubmit', session_id: 'smoke-stuck', cwd: ciDir, prompt_id: 'p1' } as HookPayload)
+    await lookForStuck(Date.now() + STUCK_MS)
+    need(heldAlerts.some((a) => a.key.startsWith('stuck:smoke-stuck:') && a.title === `${ciProject} may be stuck`), 'a session quiet for 90 minutes did not come out as maybe stuck')
+    activity.turns = Object.fromEntries(Object.entries(activity.turns).filter(([id]) => id !== 'smoke-stuck'))
+    console.log('smoke: watching, CI going red on main comes out once (the run there at Go rest is not news), and so does a session quiet for 90 minutes')
     const page = (await wc.capturePage()).resize({ width: 720 })
     const review = await reviewStore.save(
       { project: 'smoke-night', projectPath: '/tmp/steward-smoke-night', url: 'http://localhost:4321', before: 'turn-start', heightBefore: page.getSize().height, heightAfter: page.getSize().height, changedPixels: 5000, minPixels: 100, said: 'Made the header green.' },
@@ -2231,7 +2261,7 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     const morning = island
       ? `${islandNotes.current?.name} ${islandNotes.current?.text}`
       : String(await wc.executeJavaScript(`[...document.querySelectorAll('.nudge-title, .nudge-detail')].map((e) => e.textContent).join(' ')`))
-    need(/^Good (morning|afternoon|evening) 1 thing needed you\. 1 thing changed\.$/.test(morning), `the morning card says "${morning}"`)
+    need(/^Good (morning|afternoon|evening) 3 things needed you\. 1 thing changed\.$/.test(morning), `the morning card says "${morning}"`)
     if (!island) await fs.writeFile(out.replace(/\.png$/, '-watch-morning-card.png'), (await wc.capturePage()).toPNG())
     console.log(`smoke: a night that ends with the panel closed leaves one card ("${morning}") instead of the alerts that waited`)
 
@@ -2240,7 +2270,8 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     await until(`document.querySelector('.card.night-report .card.review')`, "the panel did not open on the report, with the night's review as its card")
     need(watch!.unseen === undefined && appState.lastBriefDate === localDate(new Date()), "the report wasn't taken as seen, or as the day's brief")
     need((await wc.executeJavaScript(`document.querySelectorAll('.body > .card.review[aria-label="What changed in smoke-night"]').length`)) === 0, "the night's review shows twice")
-    need((await reportText()).includes('Waited for you on screen. You were up at'), `the report says "${await reportText()}"`)
+    const night2 = await reportText()
+    need(night2.includes('Waited for you on screen. You were up at') && /Urgent.*CI failed on main \(CI\)/.test(night2) && /Urgent.*may be stuck: nothing for 90 minutes/.test(night2) && night2.includes('CI on main: none passed, 1 failed'), `the report says "${night2}"`)
     await sleep(400)
     await fs.writeFile(out.replace(/\.png$/, '-watch-report.png'), (await wc.capturePage()).toPNG())
     // Looks good inside it, and the report says so.
@@ -2272,6 +2303,14 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     smokeIdle = 0
     watch?.stop('stopped')
     watch?.seen()
+    if (realGh !== undefined) gh = realGh
+    if (ciDir) {
+      // Its red run left Steward worried about it, as a failed deploy would.
+      moods.clear(ciDir)
+      sendMood()
+      await settings.removeProject(ciDir)
+      await fs.rm(ciDir, { recursive: true, force: true })
+    }
     heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('approval:smoke-watch'))
     // Gone, as the review check leaves the store: the next run's review check starts from none.
     if (smokeNightReview) await reviews.clear()

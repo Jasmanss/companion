@@ -107,10 +107,11 @@ describe('a session that may be stuck', () => {
     expect((await watch.look(['s1'], next + QUIET_MS, next)).map((s) => s.minutes)).toEqual([45])
   })
 
-  it('is a word at 45 and urgent at 90, by name only', () => {
+  it('says a word at 45 and "may be stuck" at 90, by name only, with no face of its own', () => {
     const at45 = stuckAlert({ id: 's1', name: 'haven', since: night, minutes: 45 })
     const at90 = stuckAlert({ id: 's1', name: 'haven', since: night, minutes: 90 })
     expect(at45).toMatchObject({ key: `stuck:s1:${night}:45`, title: 'haven has been quiet for 45 minutes' })
-    expect(at90).toMatchObject({ key: `stuck:s1:${night}:90`, level: 'urgent', title: 'haven may be stuck', mood: 'worried' })
+    expect(at90).toMatchObject({ key: `stuck:s1:${night}:90`, level: 'urgent', title: 'haven may be stuck' })
+    expect('mood' in at90).toBe(false)
   })
 })

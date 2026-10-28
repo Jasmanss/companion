@@ -76,10 +76,13 @@ export class StuckWatch {
   }
 }
 
-/** The on-screen alert for a step: a word at 45 minutes, urgent at 90. Words only: the session's name. */
-export function stuckAlert(step: StuckStep): { key: string; level: 'urgent'; title: string; detail: string; mood?: 'worried' } {
+/**
+ * The on-screen alert for a step: a word at 45 minutes, "may be stuck" at 90. Words only: the session's name. No face of
+ * its own: nothing would end the worry but time, and the Watching face says enough at night.
+ */
+export function stuckAlert(step: StuckStep): { key: string; level: 'urgent'; title: string; detail: string } {
   const key = `stuck:${step.id}:${step.since}:${step.minutes}`
   return step.minutes === 90
-    ? { key, level: 'urgent', title: `${step.name} may be stuck`, detail: 'Nothing from it for 90 minutes while it was working.', mood: 'worried' }
+    ? { key, level: 'urgent', title: `${step.name} may be stuck`, detail: 'Nothing from it for 90 minutes while it was working.' }
     : { key, level: 'urgent', title: `${step.name} has been quiet for 45 minutes`, detail: 'It may be stuck, or running something long.' }
 }

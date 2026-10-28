@@ -123,7 +123,8 @@ export function NightReportCard({
             return (
               <div key={`ci-${c.project}`} className="nr-deploys">
                 <span className="muted small">
-                  {c.project} CI on main: {plural(c.runs.length - red, 'run')} passed{red ? `, ${red} failed` : ''}
+                  {c.project} CI on main: {c.runs.length > red ? `${plural(c.runs.length - red, 'run')} passed` : 'none passed'}
+                  {red ? `, ${red} failed` : ''}
                 </span>
                 <div className="nr-strip" aria-hidden="true">
                   {c.runs.map((r) => (
