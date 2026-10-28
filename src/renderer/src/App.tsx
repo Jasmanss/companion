@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
+import { rankCards, type Card } from '../../shared/cards'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
@@ -8,9 +9,9 @@ import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
 import { ContextPill, ProjectSwitcher } from './ContextPill'
-import { ChevronRightIcon, GearIcon, MoonIcon, NewChatIcon } from './icons'
+import { BellIcon, BranchIcon, ChevronRightIcon, EyeIcon, GearIcon, ImageIcon, MoonIcon, NewChatIcon, PeopleIcon, SparkIcon, SunriseIcon, WarningIcon } from './icons'
 import { BriefCard } from './BriefCard'
-import { LeftOffCard } from './LeftOffCard'
+import { LeftOffBody, LeftOffSmall } from './LeftOffCard'
 import { ReviewCard, ReviewProblems } from './ReviewCard'
 import { ReviewViewer } from './ReviewViewer'
 import { GoodnightCard } from './GoodnightCard'
@@ -21,10 +22,10 @@ import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey } from './Pill'
 import { glintFor, workingMood } from './pill/glint'
 import { palette } from './pill/render'
-import { SessionStrip } from './SessionStrip'
 import { useTabDrag } from './tab-drag'
 import { usePanelDrag } from './panel-drag'
 import { useDimmed } from './dim'
+import { FailedBuild, NewsRows, NoteRows, SessionRows, Tile, TryChips, type Note } from './Tile'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -48,6 +49,10 @@ const canDrop = (e: globalThis.DragEvent) => ['Files', 'text/uri-list', 'text/ht
 
 /** How long after its own end time a slide out counts as over when no frame came to draw its end (see the slide below). */
 const SLIDE_END_GRACE_MS = 100
+/** The most alerts the news card keeps. */
+const MAX_NEWS = 10
+/** Alerts with a card of their own (a session's, a review's, a failed build's, the night's): the news card leaves them out. */
+const OWN_CARD = ['approval:', 'input:', 'agent-approval:', 'review:', 'finished:', 'night:', 'deploy-failed:', 'first-peek']
 
 export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
@@ -66,9 +71,10 @@ export function App() {
   const [reviewIndex, setReviewIndex] = useState(0)
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
-  const [banner, setBanner] = useState<AlertView | null>(null)
-  /** How many more alerts came with the banner's (the ones that waited for the panel to open). */
-  const [bannerMore, setBannerMore] = useState(0)
+  /** Alerts that came while the panel was open, or waited for it to open: a failed build's card, and the news card. */
+  const [held, setHeld] = useState<AlertView[]>([])
+  /** A thing to try, picked from the Try card: it goes in the box. */
+  const [draft, setDraft] = useState<{ text: string; at: number } | null>(null)
   /** The one-time note about Steward hiding until it's needed. */
   const [presenceNote, setPresenceNote] = useState<string | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
@@ -120,11 +126,8 @@ export function App() {
     const offNote = api.presence.onNote(setPresenceNote)
     const offMood = api.alerts.onMood(setEventMood)
     const offLeftOff = api.leftOff.onShow(setLeftOff)
-    // The brief already includes where you left off.
-    const offBrief = api.brief.onShow((b) => {
-      setBrief(b)
-      setLeftOff(null)
-    })
+    // The brief already says where you left off: that card waits while it shows (rankCards).
+    const offBrief = api.brief.onShow(setBrief)
     // Frosted by macOS (vibrant) or solid: the CSS draws the glass to match.
     const showAppearance = ({ vibrant }: { vibrant: boolean }) => document.documentElement.toggleAttribute('data-vibrant', vibrant)
     api.appearance.get().then(showAppearance, () => {})
@@ -154,13 +157,6 @@ export function App() {
     const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
-
-  useEffect(() => {
-    if (!banner) return
-    // Several that waited for the panel get longer to read.
-    const t = setTimeout(() => setBanner(null), bannerMore > 0 ? 12_000 : 6000)
-    return () => clearTimeout(t)
-  }, [banner, bannerMore])
 
   useEffect(() => {
     currentProject.current = settings?.currentProject ?? null
@@ -256,7 +252,7 @@ export function App() {
       setNightReport(report)
       setGoodnight(false)
       setBrief(null)
-      setBanner((b) => (b?.key.startsWith('night:') ? null : b))
+      setHeld((list) => list.filter((a) => !a.key.startsWith('night:')))
     })
     return () => {
       offWatch()
@@ -332,11 +328,10 @@ export function App() {
     if (refocus) pill.current?.focus()
   }, [])
 
-  /** Alerts the main process let through: the nudge shows them when tucked away, a banner when the panel is open. */
+  /** Alerts the main process let through: the nudge shows them when tucked away, the panel's cards when it's open. */
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
-    setBanner(list[0] ?? null)
-    setBannerMore(Math.max(0, list.length - 1))
+    setHeld((before) => [...list, ...before.filter((a) => !list.some((b) => b.key === a.key))].slice(0, MAX_NEWS))
   }
 
   const tuckAway = useCallback(() => {
@@ -594,7 +589,7 @@ export function App() {
   /** "Want me to look?" and the like: open the panel and ask the agent. */
   const runAction = (alert: AlertView) => {
     if (!alert.action) return
-    setBanner(null)
+    setHeld((list) => list.filter((a) => a.key !== alert.key))
     void api.dock.expand()
     if (noKey) return setToast('Add your Anthropic API key in Settings first.')
     send(alert.action.prompt)
@@ -616,6 +611,119 @@ export function App() {
       offOpen()
     }
   }, [])
+  // The home: every block is a tile, the most important one promoted (rankCards). Alerts that came while the panel was
+  // open: a failed build gets its own card, the rest are news.
+  const failedAlert = held.find((a) => a.key.startsWith('deploy-failed:'))
+  const news = held.filter((a) => !OWN_CARD.some((k) => a.key.startsWith(k)))
+  const dropHeld = (keep: (a: AlertView) => boolean) => setHeld((list) => list.filter(keep))
+  const notes: Note[] = [
+    presenceNote && { text: presenceNote, label: 'Got it', run: () => setPresenceNote(null) },
+    reviewNotice && { text: reviewNotice, label: 'Got it', run: () => setReviewNotice(null) },
+    noKey && { text: 'Add your Anthropic API key to start chatting.', label: 'Open settings', run: () => void api.settings.open('connections') },
+  ].filter((n): n is Note => !!n)
+  const cards = rankCards({
+    sessions,
+    reviews: topReviews.length,
+    failed: !!failedAlert,
+    news: news.length,
+    first: nightReport ? 'night' : brief ? 'brief' : null,
+    leftOff: !!leftOff,
+    tray: items.length,
+    notes: notes.length,
+    chatting: entries.length > 0,
+    now: Date.now(),
+  })
+  const tile = (card: Card) => {
+    const promoted = card.size === 'promoted'
+    switch (card.kind) {
+      case 'sessions':
+        return (
+          <Tile key={card.kind} card={card} icon={<PeopleIcon />} label={promoted && !card.urgent ? 'Sessions finished' : 'Sessions'} count={sessions.length}>
+            <SessionRows sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
+          </Tile>
+        )
+      case 'review': {
+        const top = topReviews[0]
+        return (
+          <Tile key={card.kind} card={card} icon={<EyeIcon />} label="Review" count={topReviews.length}>
+            <ReviewCard
+              key={top.id}
+              review={top}
+              more={topReviews.length - 1}
+              onOpen={() => openReview(shownReviews.indexOf(top))}
+              onLater={() => setLaterReviews(new Set(laterReviews).add(top.id))}
+              onDone={setReviewNotice}
+              onError={setToast}
+            />
+          </Tile>
+        )
+      }
+      case 'failed':
+        return (
+          <Tile key={card.kind} card={card} icon={<WarningIcon />} label="Build failed">
+            <FailedBuild alert={failedAlert!} onAction={runAction} onDismiss={() => dropHeld((a) => a.key !== failedAlert!.key)} />
+          </Tile>
+        )
+      case 'news':
+        return (
+          <Tile key={card.kind} card={card} icon={<BellIcon />} label="News" count={news.length}>
+            <NewsRows alerts={news} onClear={() => dropHeld((a) => !news.includes(a))} />
+          </Tile>
+        )
+      case 'night':
+        return (
+          <Tile key={card.kind} card={card} icon={<MoonIcon />} label="Night report">
+            <NightReportCard
+              report={nightReport!}
+              pending={reviews}
+              onStep={openNightReport}
+              onDismiss={() => setNightReport(null)}
+              onOpenReview={(id) => {
+                const i = shownReviews.findIndex((r) => r.id === id)
+                if (i >= 0) openReview(i)
+              }}
+              onReviewDone={setReviewNotice}
+              onError={setToast}
+            />
+          </Tile>
+        )
+      case 'brief':
+        return (
+          <Tile key={card.kind} card={card} icon={<SunriseIcon />} label="Morning brief">
+            <BriefCard brief={brief!} onDismiss={() => setBrief(null)} />
+          </Tile>
+        )
+      case 'leftoff':
+        return (
+          <Tile key={card.kind} card={card} icon={<BranchIcon />} label={promoted ? 'Where you left off' : 'Left off'}>
+            {promoted ? <LeftOffBody card={leftOff!} /> : <LeftOffSmall card={leftOff!} />}
+          </Tile>
+        )
+      case 'tray':
+        return (
+          <Tile key={card.kind} card={card} icon={<ImageIcon />} label="Tray" count={items.length}>
+            <Tray items={items} saveResult={saveResult} onDragOut={dragOut} onOpen={openViewer} onSave={saveToProject} onDismissSave={() => setSaveResult(null)} onError={showError} />
+          </Tile>
+        )
+      case 'try':
+        return (
+          <Tile key={card.kind} card={card} icon={<SparkIcon />} label="Try">
+            <TryChips
+              onPick={(text) => {
+                setDraft({ text, at: Date.now() })
+                composer.current?.focus()
+              }}
+            />
+          </Tile>
+        )
+      case 'note':
+        return (
+          <Tile key={card.kind} card={card} icon={<BellIcon />} label="Note">
+            <NoteRows notes={notes} />
+          </Tile>
+        )
+    }
+  }
   const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
   const lastFile = project ? lastFiles[project.path] : undefined
   // Working: what it's on right now. Idle: the last file it read here.
@@ -729,90 +837,11 @@ export function App() {
         />
       )}
 
-      <SessionStrip sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
-      {banner && (
-        <div className="banner" role="status" onClick={() => setBanner(null)}>
-          <strong>{banner.title}</strong>
-          {banner.detail && <span>{banner.detail}</span>}
-          {bannerMore > 0 && <span>and {bannerMore} more</span>}
-          {banner.action && (
-            <button
-              className="chip"
-              onClick={(e) => {
-                e.stopPropagation()
-                runAction(banner)
-              }}
-            >
-              {banner.action.label}
-            </button>
-          )}
-        </div>
-      )}
-
-      <Tray
-        items={items}
-        saveResult={saveResult}
-        onDragOut={dragOut}
-        onOpen={openViewer}
-        onSave={saveToProject}
-        onDismissSave={() => setSaveResult(null)}
-        onError={showError}
-      />
       <div className="body">
         {watchView && (goodnight || watchView.watching) && <GoodnightCard view={watchView} onClose={() => setGoodnight(false)} onReport={openNightReport} onError={setToast} />}
-        {nightReport && (
-          <NightReportCard
-            report={nightReport}
-            pending={reviews}
-            onStep={openNightReport}
-            onDismiss={() => setNightReport(null)}
-            onOpenReview={(id) => {
-              const i = shownReviews.findIndex((r) => r.id === id)
-              if (i >= 0) openReview(i)
-            }}
-            onReviewDone={setReviewNotice}
-            onError={setToast}
-          />
-        )}
-        {presenceNote && (
-          <div className="notice" role="status">
-            {presenceNote}
-            <button className="chip" onClick={() => setPresenceNote(null)}>
-              Got it
-            </button>
-          </div>
-        )}
         <ReviewProblems />
-        {reviewNotice && (
-          <div className="notice" role="status">
-            {reviewNotice}
-            <button className="chip" onClick={() => setReviewNotice(null)}>
-              Got it
-            </button>
-          </div>
-        )}
-        {topReviews[0] && (
-          <ReviewCard
-            key={topReviews[0].id}
-            review={topReviews[0]}
-            more={topReviews.length - 1}
-            onOpen={() => openReview(shownReviews.indexOf(topReviews[0]))}
-            onLater={() => setLaterReviews(new Set(laterReviews).add(topReviews[0].id))}
-            onDone={setReviewNotice}
-            onError={setToast}
-          />
-        )}
-        {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
-        {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
-        {noKey && (
-          <div className="notice">
-            Add your Anthropic API key to start chatting.
-            <button className="chip" onClick={() => api.settings.open('connections')}>
-              Open settings
-            </button>
-          </div>
-        )}
-        <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
+        {cards.length > 0 && <div className={`tiles${entries.length > 0 ? ' above' : ''}`}>{cards.map(tile)}</div>}
+        {entries.length > 0 && <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />}
       </div>
       <Composer
         busy={busy}
@@ -821,6 +850,7 @@ export function App() {
         // Always sent, even if it looks the same: the panel's copy of the settings can lag a click behind.
         onMode={(commandMode) => api.settings.update({ commandMode }).then(setSettings, showError)}
         onSend={send}
+        draft={draft}
         onStop={() => api.agent.cancel()}
         onTyping={(on) => {
           setTyping(on)

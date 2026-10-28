@@ -86,15 +86,13 @@ const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
 const SETTINGS_SIZE = { width: 720, height: 560 }
 const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'steward', 'projects', 'shortcuts', 'connections', 'notifications']
-/** Opening the panel after this long away shows where you left off. */
-const AWAY_MS = 2 * 60 * 60 * 1000
 const SMOKE_OUT = process.env.STEWARD_SMOKE_OUT
 /** Smoke check extras: force light or dark, and play the demo request, capturing the panel at these seconds. */
 const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
-/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows (CI runs it all). */
+/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows, "panel" only shows the panel (CI runs it all). */
 const SMOKE_ONLY = process.env.STEWARD_SMOKE_ONLY
 /** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
 const SLIDE_MS = 700
@@ -1236,7 +1234,10 @@ function deliverHeld(): void {
   updateMenuBar()
 }
 
-/** The first open each day shows the morning brief; coming back after a while shows where you left off. */
+/**
+ * The first open each day shows the morning brief. Where you left off is one of the panel's cards every time (the
+ * first, when nothing else is going on), so it's worked out on every open.
+ */
 function onPanelOpened(): void {
   if (!appState) return
   showPresenceNote()
@@ -1244,17 +1245,16 @@ function onPanelOpened(): void {
   // report shows instead.
   watch?.opened()
   if (watch?.watching) return
-  if (watch?.unseen) return void showNightReport(watch.unseen)
   const prefs = settings.notifications()
+  const project = settings.currentProject()
+  if (prefs.leftOff && project) showLeftOff(project)
+  if (watch?.unseen) return void showNightReport(watch.unseen)
   const today = localDate(new Date())
   if (prefs.morningBrief && appState.lastBriefDate !== today) {
     const since = briefSince(appState.lastSeenAt, Date.now())
     void appState.update({ lastBriefDate: today })
     void showBrief(since)
-    return
   }
-  const project = settings.currentProject()
-  if (prefs.leftOff && project && Date.now() - appState.lastSeenAt >= AWAY_MS) showLeftOff(project)
 }
 
 /** The first time the panel opens with Steward hiding until it's needed, a note says where to push and what to press. Once. */
@@ -1975,7 +1975,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       console.log(unseen ? 'smoke: hidden: the windows are real but nearly see-through (1%), click-through and never focused (--visible shows them)' : 'smoke: visible: the windows are on screen, and take focus')
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
       const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
-      if (SMOKE_ONLY === 'island') {
+      if (SMOKE_ONLY) {
         await settings.update({ steward: { presence: 'always' } })
         presenceChanged()
         for (const t = Date.now(); !w.isVisible() && Date.now() - t < 3000; ) await new Promise((resolve) => setTimeout(resolve, 100))
@@ -1992,6 +1992,7 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await fs.writeFile(out, image.toPNG())
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
+      if (SMOKE_ONLY === 'panel') return app.exit(0)
       if (SMOKE_ONLY === 'island') {
         const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
         await checkTabAlertWords(w, out)

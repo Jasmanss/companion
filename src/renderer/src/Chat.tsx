@@ -16,16 +16,6 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
 
   return (
     <div className="log" role="log" aria-live="polite">
-      {entries.length === 0 && (
-        <div className="hint">
-          <p>Try:</p>
-          <ul>
-            <li>“Find 4 landing pages with bento grids”</li>
-            <li>“3 dark desk-setup photos for a hero”</li>
-            <li>“Run the tests”</li>
-          </ul>
-        </div>
-      )}
       {blocks.map((block) => {
         if (block.type === 'thinking') return <ThinkingRow key={block.entry.id} />
         if (block.type === 'steps') return <StepsGroup key={block.key} steps={block.steps} />
@@ -124,6 +114,7 @@ export function Composer({
   mode,
   onMode,
   onSend,
+  draft,
   onStop,
   onTyping,
   inputRef,
@@ -134,11 +125,18 @@ export function Composer({
   mode?: CommandMode
   onMode: (mode: CommandMode) => void
   onSend: (text: string) => void
+  /** A thing to try, picked from the panel's Try card: it goes in the box, to send or change first. */
+  draft?: { text: string; at: number } | null
   onStop: () => void
   onTyping: (typing: boolean) => void
   inputRef?: Ref<HTMLTextAreaElement>
 }) {
   const [text, setText] = useState('')
+  const [drafted, setDrafted] = useState(draft)
+  if (draft !== drafted) {
+    setDrafted(draft)
+    if (draft) setText(draft.text)
+  }
   const send = () => {
     const trimmed = text.trim()
     if (!trimmed || busy || disabled) return
