@@ -89,6 +89,33 @@ describe('a short fade on a CI runner', () => {
   })
 })
 
+describe('a fade that holds at a turning point, on a CI runner', () => {
+  /**
+   * Steward joining the island with Reduce Motion on PR #43 (run 40637273962, attempt 1): out, a hold while the island
+   * changes shape (where the runner stalled 336 ms), and back. 17 frames, 7 positions, none stuck: about 10 frames held.
+   * Here the stall is not counted as held, the least the hold could have been.
+   */
+  const JOIN: Motion = { frames: 17, positions: 7, spanMs: 587, maxGapMs: 336, maxGapAtMs: 251, stuck: 0, heldMs: 170, stillGapMs: 81, drawn: 28, watchedMs: 900, visibility: 'visible' }
+
+  it('is held to the steps the runner could draw while it was changing, not while it held', () => {
+    expect(judgeMotion('Steward joining the island', JOIN, true)).toMatchObject({ result: 'smooth', line: expect.stringContaining('over 587 ms (170 ms of it held at a turning point)') })
+    // Attempt 2 of the same run.
+    expect(judgeMotion('x', { ...JOIN, spanMs: 433, maxGapMs: 182, maxGapAtMs: 252, heldMs: 167, stillGapMs: 49, drawn: 37 }, true).result).toBe('smooth')
+  })
+
+  it('judges a motion with no hold as before, and still needs a new position in every frame it drew', () => {
+    expect(judgeMotion('x', { ...JOIN, heldMs: 0 }, true)).toMatchObject({ result: 'not smooth', line: expect.stringContaining('fewer than 8 positions') })
+    expect(judgeMotion('x', { ...JOIN, heldMs: undefined }, true).result).toBe('not smooth')
+    expect(judgeMotion('x', { ...JOIN, stuck: 1 }, true).result).toBe('not smooth')
+    // Held for nearly all of it: 3 positions at least, all the same.
+    expect(judgeMotion('x', { ...JOIN, positions: 2, heldMs: 580 }, true).result).toBe('not smooth')
+  })
+
+  it('changes nothing on a Mac with a screen', () => {
+    expect(judgeMotion('x', JOIN, false).result).toBe('not smooth')
+  })
+})
+
 describe('judging a watched animation on a CI runner', () => {
   it('passes a fade with a new position in every frame the page drew, logging a long wait instead of failing on it', () => {
     expect(judgeMotion('the tab sliding in', CI_FADE, true)).toEqual({
@@ -140,7 +167,8 @@ describe('measuring what a page drew', () => {
 
   it("doesn't count holding at a turning point: the notch's fade goes out, holds while the shape changes, and comes back", () => {
     const outAndBack = [1, 1, 0.6, 0.2, 0, 0, 0, 0.3, 0.7, 1, 1]
-    expect(measureMotion(drawn(outAndBack), 1300, 'visible')).toMatchObject({ frames: 9, stuck: 0 })
+    // Two frames held at 0, 16 ms each: the time it couldn't show a new step.
+    expect(measureMotion(drawn(outAndBack), 1300, 'visible')).toMatchObject({ frames: 9, stuck: 0, heldMs: 32 })
   })
 
   it('carries what the page said about the element along', () => {

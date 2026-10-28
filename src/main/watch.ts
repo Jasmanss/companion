@@ -1,6 +1,6 @@
 // Overnight Watch: "Go rest, I've got the build." From Go rest until the wake time (or "I'm up") Steward keeps the Mac
 // awake and writes down what happens in a log, one file a night, so the morning can say what went on (night-report.ts).
-// On-screen alerts wait while nobody is at the Mac. No phone yet.
+// On-screen alerts wait while nobody is at the Mac. What each line means overnight is urgencyOf's to say. No phone yet.
 //
 // The rules are pure (a clock and the idle time are passed in), so they are tested without a Mac or a night. Words
 // only in the log: an alert's kind and title, never its detail (an approval's detail can be the command, and commands
@@ -94,6 +94,10 @@ export type WatchEvent =
   | { type: 'opened'; at: number }
   /** A deploy went out (ok) or failed: the project's name and whether it was production, nothing more. */
   | { type: 'deploy'; at: number; project: string; ok: boolean; production: boolean }
+  /** A run on main ended green (ok) or red: the project and the workflow's name. */
+  | { type: 'ci'; at: number; project: string; workflow: string; ok: boolean }
+  /** A session working with nothing from it for this many minutes (stuck.ts). */
+  | { type: 'stuck'; at: number; name: string; minutes: number }
   /** The Mac went to sleep, and woke: Steward saw nothing in between. */
   | { type: 'slept'; at: number }
   | { type: 'woke'; at: number }
@@ -101,6 +105,33 @@ export type WatchEvent =
   /** Steward wasn't running from `from` until it started again, at `at`. */
   | { type: 'gap'; at: number; from: number }
   | { type: 'beat'; at: number }
+
+/** How much an event matters overnight: urgent (Phase 4 calls), waiting on you (Phase 4 texts), or the report's only. */
+export type Urgency = 'urgent' | 'waiting' | 'report'
+
+/** Alerts that wait on you: a session wanting your OK or your input, and Steward's own requests. */
+const WAITING_KINDS = new Set(['approval', 'input', 'agent-approval'])
+
+/**
+ * How much a line of the log matters: a production deploy failing, CI going red on main and a session quiet for 90
+ * minutes are urgent; a session waiting on you, or quiet for 45, waits on you; a session finishing, a review, a branch
+ * deploy and a green run are the report's. null: not news (the Watch's own lines, and alerts whose source writes its
+ * own line, like a deploy's).
+ */
+export function urgencyOf(e: WatchEvent): Urgency | null {
+  switch (e.type) {
+    case 'alert':
+      return WAITING_KINDS.has(e.kind) ? 'waiting' : e.kind === 'finished' || e.kind === 'review' ? 'report' : null
+    case 'deploy':
+      return !e.ok && e.production ? 'urgent' : 'report'
+    case 'ci':
+      return e.ok ? 'report' : 'urgent'
+    case 'stuck':
+      return e.minutes >= 90 ? 'urgent' : 'waiting'
+    default:
+      return null
+  }
+}
 
 const isEvent = (e: unknown): e is WatchEvent => typeof e === 'object' && e !== null && typeof (e as WatchEvent).type === 'string' && typeof (e as WatchEvent).at === 'number'
 
@@ -337,6 +368,18 @@ export class OvernightWatch {
   deploy(d: { project: string; ok: boolean; production: boolean }): void {
     const night = this.current
     if (night) void this.deps.log.append(night.id, { type: 'deploy', at: this.now(), project: d.project, ok: d.ok, production: d.production })
+  }
+
+  /** A run on main ended while watching. */
+  ci(c: { project: string; workflow: string; ok: boolean }): void {
+    const night = this.current
+    if (night) void this.deps.log.append(night.id, { type: 'ci', at: this.now(), project: c.project, workflow: c.workflow, ok: c.ok })
+  }
+
+  /** A session has been quiet this long while working. */
+  stuck(s: { name: string; minutes: number }): void {
+    const night = this.current
+    if (night) void this.deps.log.append(night.id, { type: 'stuck', at: this.now(), name: s.name, minutes: s.minutes })
   }
 
   /** Once every line written so far is in the log. */

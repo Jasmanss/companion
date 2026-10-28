@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { WatchView } from '../../shared/types'
-import { CloseIcon, GlobeIcon, MoonIcon, PlugIcon, TerminalIcon } from './icons'
+import { CloseIcon, GlobeIcon, LogsIcon, MoonIcon, PlugIcon, TerminalIcon } from './icons'
 
 const api = () => window.steward
 
@@ -15,13 +15,17 @@ function sessionsLine(plan: WatchView['plan']): string {
   return plan.waiting ? `${working} · ${plan.waiting} waiting on you` : working
 }
 
+/** The words for CI on main: the projects on GitHub, or why there are none. */
+const ciLine = (ci: string[] | null) =>
+  ci === null ? "None: gh isn't installed, so Steward can't see GitHub." : ci.length ? `${ci.join(', ')} (GitHub)` : 'None: no project is on GitHub.'
+
 const macLine = (onBattery: boolean) =>
   onBattery ? 'On battery. Plug it in for the night, and keep the lid open: a closed lid sleeps it.' : 'Plugged in. Keep the lid open: a closed lid sleeps it.'
 
 /**
  * Overnight Watch in the panel. Not watching: the goodnight card, what Steward can see tonight, the wake time and Go
  * rest, and the last night's report. Watching: since when, until when, and Stop watching or I'm up. The night is written
- * down and reported in the morning; calls, texts and CI come later, and the card says so.
+ * down and reported in the morning; calls and texts come later, and the card says so.
  */
 export function GoodnightCard({ view, onClose, onReport, onError }: { view: WatchView; onClose: () => void; onReport: (id: string) => void; onError: (message: string) => void }) {
   const [wake, setWake] = useState(view.wakeTime)
@@ -116,6 +120,12 @@ export function GoodnightCard({ view, onClose, onReport, onError }: { view: Watc
             Deploys<small>{view.plan.deploys.length ? `${view.plan.deploys.join(', ')} (Vercel)` : 'None: no project is linked to Vercel.'}</small>
           </span>
         </li>
+        <li>
+          <LogsIcon />
+          <span>
+            CI on main<small>{ciLine(view.plan.ci)}</small>
+          </span>
+        </li>
         <li className={view.onBattery ? 'warn' : ''}>
           <PlugIcon />
           <span>
@@ -127,7 +137,7 @@ export function GoodnightCard({ view, onClose, onReport, onError }: { view: Watc
         <span>Wake me no later than</span>
         <input type="time" value={wake} required onChange={(e) => setWake(e.target.value)} onBlur={() => wake && void api().watch.setWakeTime(wake)} aria-label="Wake time" />
       </label>
-      <p className="gn-sub muted small">Alerts wait while you're away, and in the morning there's a report of the night. Calls and texts, and CI on main, come later.</p>
+      <p className="gn-sub muted small">Alerts wait while you're away, and in the morning there's a report of the night. Calls and texts come later.</p>
       <div className="gn-foot">
         <span className="muted small">Nothing is ever approved for you.</span>
         <button className="btn primary" disabled={busy || !wake} onClick={() => run(api().watch.start(wake), () => setSaid(true))}>

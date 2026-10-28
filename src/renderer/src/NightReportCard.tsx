@@ -15,8 +15,8 @@ const DECIDED: Record<NightReport['reviews'][number]['status'], string> = {
 
 /**
  * Overnight Watch's night report, the morning after Go rest: one line, when Steward couldn't see, what needed you and
- * what came of it, what changed (Visual Review's card for each review still waiting, a line for the rest), and the
- * deploys. Earlier night and Later night step through the nights kept.
+ * what came of it (the urgent ones marked), what changed (Visual Review's card for each review still waiting, a line for
+ * the rest), and the deploys and runs on main. Earlier night and Later night step through the nights kept.
  */
 export function NightReportCard({
   report,
@@ -59,9 +59,10 @@ export function NightReportCard({
           <h3>Needed you</h3>
           <ul className="nr-list">
             {report.needed.map((n) => (
-              <li key={`${n.at}-${n.title}`}>
+              <li key={`${n.at}-${n.title}`} className={n.urgent ? 'urgent' : undefined}>
                 <time>{clock(n.at)}</time>
                 <span>
+                  {n.urgent && <span className="nr-urgent">Urgent</span>}
                   {n.title}. {n.note && <span className="muted">{n.note}</span>}
                 </span>
               </li>
@@ -97,9 +98,9 @@ export function NightReportCard({
         </>
       )}
 
-      {report.deploys.length > 0 && (
+      {(report.deploys.length > 0 || report.ci.length > 0) && (
         <>
-          <h3>Deploys</h3>
+          <h3>{report.ci.length ? (report.deploys.length ? 'Deploys and CI' : 'CI on main') : 'Deploys'}</h3>
           {report.deploys.map((d) => {
             const failed = d.runs.filter((r) => !r.ok).length
             const out = d.runs.length - failed
@@ -112,6 +113,22 @@ export function NightReportCard({
                 <div className="nr-strip" aria-hidden="true">
                   {d.runs.map((r) => (
                     <i key={r.at} className={r.ok ? '' : 'bad'} title={`${clock(r.at)}: ${r.production ? 'production ' : ''}${r.ok ? 'went out' : 'failed'}`} />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+          {report.ci.map((c) => {
+            const red = c.runs.filter((r) => !r.ok).length
+            return (
+              <div key={`ci-${c.project}`} className="nr-deploys">
+                <span className="muted small">
+                  {c.project} CI on main: {c.runs.length > red ? `${plural(c.runs.length - red, 'run')} passed` : 'none passed'}
+                  {red ? `, ${red} failed` : ''}
+                </span>
+                <div className="nr-strip" aria-hidden="true">
+                  {c.runs.map((r) => (
+                    <i key={r.at} className={r.ok ? '' : 'bad'} title={`${clock(r.at)}: ${r.workflow} ${r.ok ? 'passed' : 'failed'}`} />
                   ))}
                 </div>
               </div>
