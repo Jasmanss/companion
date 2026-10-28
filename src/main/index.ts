@@ -2404,7 +2404,7 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     await sleep(700)
     smokeIdle = 0
     // And the check leaves nothing behind for the ones after it.
-    need(!watch!.watching && watchBlocker === null && !heldAlerts.some((a) => a.key.startsWith('approval:smoke-watch')), 'the Watch check left a night, the keep-awake or a held alert behind')
+    need(!watch!.watching && watchBlocker === null && nightTimer === undefined && !heldAlerts.some((a) => a.key.startsWith('approval:smoke-watch')), "the Watch check left a night, the keep-awake, the night's looks or a held alert behind")
     console.log('smoke: with no night going on, an alert comes out however long the Mac has been idle, and the check leaves nothing behind')
   } finally {
     smokeIdle = 0
