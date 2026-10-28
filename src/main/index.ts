@@ -3776,7 +3776,8 @@ async function checkCards(w: BrowserWindow, out: string): Promise<void> {
   await until(first('leftoff'), 'with the sessions gone, where you left off is not first again')
 
   // A failed build while the panel is open: its own card, with its offer; other news, a card of its own.
-  raise({ key: 'deploy-failed:smoke-cards', level: 'urgent', title: 'haven deploy failed', detail: 'Missing environment variable DATABASE_URL', mood: 'mad', scope: cwd, action: { label: 'Want me to look?', prompt: 'smoke' } })
+  // (No mood: a failed build's worry would show on the island's right for a while after.)
+  raise({ key: 'deploy-failed:smoke-cards', level: 'urgent', title: 'haven deploy failed', detail: 'Missing environment variable DATABASE_URL', action: { label: 'Want me to look?', prompt: 'smoke' } })
   raise({ key: 'deploy-ready:smoke-cards', level: 'urgent', title: 'site deployed', detail: 'site.vercel.app' })
   alerts.flush()
   await until(`${first('failed', true, true)} && !!document.querySelector('[data-card="news"]')`, 'a failed build and a deploy did not get their cards')
@@ -3786,8 +3787,6 @@ async function checkCards(w: BrowserWindow, out: string): Promise<void> {
   await wc.executeJavaScript(`[...document.querySelectorAll('[data-card="failed"] .chip')].find((c) => c.textContent === 'Dismiss').click()`)
   await wc.executeJavaScript(`[...document.querySelectorAll('[data-card="news"] .chip')].find((c) => c.textContent === 'Clear').click()`)
   await until(`!document.querySelector('[data-card="failed"]') && !document.querySelector('[data-card="news"]')`, 'Dismiss and Clear did not put the cards away')
-  moods.clear(cwd)
-  sendMood()
   console.log(`smoke: the panel's cards: where you left off first with a timeline and no bullets, two finished sessions promoted, a waiting one in orange, a failed build's card with its offer, a news card, and a Try chip that fills the box`)
 }
 
