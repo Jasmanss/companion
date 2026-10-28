@@ -6,16 +6,17 @@
 // when needed, at rest), the shape shrinks to the notch's own black and the eyes are off.
 //
 // The cursor comes from the main process (the window ignores the mouse except over the shape), and a click on the
-// shape opens the panel. The eyes draw at the tab's tucked-away pace, and not at all while the window is hidden. With
+// shape opens the panel. The eyes draw at the tab's tucked-away pace (every frame while the cursor is near), and not at
+// all while the window is hidden. With
 // the cursor on it (Always visible), the black grows a little: the chin taller, or the wings wider. With an alert out
 // under it (the main window's nudge), the chin shows in Wings too, so the two blacks join.
 //
 // The third look, Island, is in notch-island.ts: Steward peeking beside the notch, and an island growing out of it.
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
-import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape } from '../../shared/notch'
+import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
-import type { IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
+import type { IslandNote, IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
 import { createEyes, setMood, setStyle, type EyesState } from './pill/eyes'
 import { makeView, palette, type PillKind, type PillView } from './pill/render'
@@ -71,8 +72,8 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
   const { notchStyle, version, color, mouth, personality } = prefs
   const { cx, width, height } = layout
 
-  // In the notch the panel opens at the side Settings says.
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1 }), [st, mouth, personality, prefs.edge])
+  // In the notch the panel opens at the side Settings says. Steady: no glance pulls the eyes off a cursor moving near.
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1, steady: true }), [st, mouth, personality, prefs.edge])
   const hoverNow = useRef(hover)
   const nudgeNow = useRef(nudge)
   const islandNow = useRef(island)
@@ -94,14 +95,30 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
     if (!el) return
     if (notchStyle === 'island') {
       const lit = palette(version, { color: colorHex(color), tinted: true, light: false, mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
-      const face = buildIsland(el, { layout: { cx, width, height }, kind: version, color: colorHex(color), lit, mouth, light: !dark, reduced })
-      reshape.current = (_mood, isAwake, isHovered, nudgeOut) =>
-        face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: !!islandNow.current.note, open: !!panelNow.current }), isHovered, islandNow.current)
+      const face = buildIsland(el, {
+        layout: { cx, width, height },
+        kind: version,
+        color: colorHex(color),
+        lit,
+        mouth,
+        light: !dark,
+        reduced,
+        onAct: (what, at) => api.notch.act(what, at),
+        onFit: (at, fit) => api.notch.fit(at, fit),
+        review: (id) => api.review.list().then((list) => list.find((r) => r.id === id) ?? null),
+      })
+      // The message's size: big for what waits on you and a review; for a note, how its words fit (measured here).
+      const sizeOf = (n: IslandNote) => noteSize({ kind: n.kind, fit: noteSize({ kind: n.kind }) === 'note' ? (n.fit ?? face.fit(n)) : undefined })
+      reshape.current = (_mood, isAwake, isHovered, nudgeOut) => {
+        const n = islandNow.current.note
+        face.show(islandLevel({ awake: isAwake, nudge: nudgeOut, right: islandNow.current.right, note: n ? sizeOf(n) : null, open: !!panelNow.current }), isHovered, islandNow.current)
+      }
       reshape.current(st.mood, awakeNow.current, hoverNow.current, nudgeNow.current)
       let pointer: { x: number; y: number } | null = null
       const off = api.notch.onCursor((p) => (pointer = p))
       // Toward the cursor when it's near; otherwise toward the open panel, or the status while there is one.
-      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : (panelNow.current ?? face.gaze())), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+      // While the cursor is near (main sends it within 420 points), the eyes draw every frame so they follow it smoothly.
+      const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : (panelNow.current ?? face.gaze())), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current, near: () => pointer !== null })
       return () => {
         stop()
         off()
@@ -114,7 +131,7 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
     reshape.current = face.reshape
     let pointer: { x: number; y: number } | null = null
     const off = api.notch.onCursor((p) => (pointer = p))
-    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : panelNow.current), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current })
+    const stop = runEyes(st, face.views, { cursor: () => (pointer ? toward(pointer, face.center) : panelNow.current), reduced, tucked: true, idle: () => !awakeNow.current || dimNow.current, near: () => pointer !== null })
     return () => {
       stop()
       off()

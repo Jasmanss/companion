@@ -364,7 +364,7 @@ pre {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   color: var(--t2);
   font-size: 12px;
   word-break: break-word;
@@ -3558,4 +3558,92 @@ button.rvv-flip-tag {
   .prog .fill {
     transition: none;
   }
+}
+
+/* Overnight Watch's night report: like the brief, with room for a Visual Review card inside. */
+.card.night-report {
+  max-height: 72%;
+}
+
+.nr-summary {
+  color: var(--t1);
+  font-weight: 600;
+}
+
+/* When Steward couldn't see: said plainly, in the warm color the card's battery line uses. */
+.card .nr-gap {
+  margin: 0 0 6px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--warm);
+  border-radius: 4px;
+  background: var(--inset);
+}
+
+.card ul.nr-list {
+  list-style: none;
+  padding: 0;
+}
+
+.nr-list li {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.nr-list li:last-child {
+  border-bottom: 0;
+}
+
+.nr-list li.muted {
+  display: block;
+}
+
+.night-report time {
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  padding-top: 1px;
+}
+
+.card .nr-review {
+  margin: 4px 0;
+}
+
+/* A review card inside the report: a shape on the report's inset, not a second card. */
+.night-report .card.review {
+  margin: 6px 0 4px;
+  padding: 8px;
+  background: var(--inset);
+  animation: none;
+}
+
+.nr-deploys {
+  margin-bottom: 6px;
+}
+
+.nr-strip {
+  display: flex;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.nr-strip i {
+  flex: 1;
+  max-width: 28px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--ok);
+}
+
+.nr-strip i.bad {
+  background: var(--bad);
+}
+
+.nr-steps {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 8px;
 }

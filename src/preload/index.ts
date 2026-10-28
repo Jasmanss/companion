@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NightReport, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -19,6 +19,7 @@ const api: StewardAPI = {
     overhang: () => ipcRenderer.invoke('dock:overhang'),
     onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
     intoNotchEnded: () => ipcRenderer.send('dock:intoNotchEnded'),
+    nudgeWords: (height) => ipcRenderer.send('dock:nudgeWords', height),
     dragPanel: (phase, x, y) => ipcRenderer.send('dock:dragPanel', phase, x, y),
     resetPanel: () => ipcRenderer.invoke('dock:resetPanel'),
     onPlaced: (cb) => subscribe<boolean>('dock:placed', cb),
@@ -75,6 +76,7 @@ const api: StewardAPI = {
   alerts: {
     onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
     onMood: (cb) => subscribe<Mood | null>('alerts:mood', cb),
+    onAct: (cb) => subscribe<AlertView>('alerts:act', cb),
   },
   deploys: {
     status: () => ipcRenderer.invoke('deploys:status'),
@@ -82,6 +84,7 @@ const api: StewardAPI = {
   review: {
     list: () => ipcRenderer.invoke('review:list'),
     onChanged: (cb) => subscribe<ReviewView[]>('review:changed', cb),
+    onOpen: (cb) => subscribe<string>('review:open', cb),
     problems: () => ipcRenderer.invoke('review:problems'),
     onProblems: (cb) => subscribe<ReviewProblem[]>('review:problems', cb),
     checks: () => ipcRenderer.invoke('review:checks'),
@@ -102,6 +105,10 @@ const api: StewardAPI = {
     setWakeTime: (wakeTime) => ipcRenderer.invoke('watch:setWakeTime', wakeTime),
     onChanged: (cb) => subscribe<WatchView>('watch:changed', cb),
     onGoodnight: (cb) => subscribe<void>('watch:goodnight', () => cb()),
+    report: (id) => ipcRenderer.invoke('watch:report', id),
+    nights: () => ipcRenderer.invoke('watch:nights'),
+    clear: () => ipcRenderer.invoke('watch:clear'),
+    onReport: (cb) => subscribe<NightReport>('watch:report', cb),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
@@ -127,6 +134,8 @@ const api: StewardAPI = {
     onState: (cb) => subscribe<NotchState>('notch:state', cb),
     onCursor: (cb) => subscribe<{ x: number; y: number } | null>('notch:cursor', cb),
     click: () => ipcRenderer.send('notch:click'),
+    fit: (at, fit) => ipcRenderer.send('notch:fit', at, fit),
+    act: (what, at) => ipcRenderer.send('notch:act', what, at),
   },
   presence: {
     onNote: (cb) => subscribe<string>('presence:note', cb),

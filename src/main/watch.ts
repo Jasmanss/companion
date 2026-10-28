@@ -1,6 +1,6 @@
 // Overnight Watch: "Go rest, I've got the build." From Go rest until the wake time (or "I'm up") Steward keeps the Mac
-// awake and writes down what happens in a log, one file a night, so the morning can say what went on. On-screen alerts
-// wait while nobody is at the Mac. Phase 1: no phone and no night report yet; the log is what it keeps.
+// awake and writes down what happens in a log, one file a night, so the morning can say what went on (night-report.ts).
+// On-screen alerts wait while nobody is at the Mac. No phone yet.
 //
 // The rules are pure (a clock and the idle time are passed in), so they are tested without a Mac or a night. Words
 // only in the log: an alert's kind and title, never its detail (an approval's detail can be the command, and commands
@@ -23,6 +23,8 @@ export const WATCH_LOOK_MS = 15_000
 export const WATCH_BEAT_MS = 5 * 60_000
 /** Nights of logs kept. */
 export const NIGHTS_KEPT = 14
+/** Opening the panel more often than this is written down once. */
+export const OPENED_EVERY_MS = 60_000
 export const DEFAULT_WAKE_TIME = '07:30'
 
 /** "07:30" (24-hour, as an <input type="time"> gives it) as hours and minutes, or null. */
@@ -86,7 +88,12 @@ export const alertKind = (key: string): string => key.split(':')[0] || 'alert'
 export type WatchEvent =
   | { type: 'start'; at: number; until: number; onBattery: boolean; sessionsWorking: number }
   | { type: 'end'; at: number; why: WatchEnd }
-  | { type: 'alert'; at: number; kind: string; title: string; level: string; held: boolean }
+  /** review: a Visual Review's id, so the report can show its card. */
+  | { type: 'alert'; at: number; kind: string; title: string; level: string; held: boolean; review?: string }
+  /** The panel opened: someone looked. */
+  | { type: 'opened'; at: number }
+  /** A deploy went out (ok) or failed: the project's name and whether it was production, nothing more. */
+  | { type: 'deploy'; at: number; project: string; ok: boolean; production: boolean }
   /** The Mac went to sleep, and woke: Steward saw nothing in between. */
   | { type: 'slept'; at: number }
   | { type: 'woke'; at: number }
@@ -139,11 +146,25 @@ export class WatchLog {
     return events
   }
 
+  /** The nights kept, newest first. */
+  async list(): Promise<string[]> {
+    await this.writing
+    const names = await fs.readdir(this.dir).catch(() => [])
+    return names
+      .filter((n) => /^\d{8}-\d{6}\.jsonl$/.test(n))
+      .map((n) => n.slice(0, -'.jsonl'.length))
+      .sort()
+      .reverse()
+  }
+
   /** Keep the newest NIGHTS_KEPT logs. */
   async prune(keep = NIGHTS_KEPT): Promise<void> {
-    await this.writing
-    const names = (await fs.readdir(this.dir).catch(() => [])).filter((n) => /^\d{8}-\d{6}\.jsonl$/.test(n)).sort()
-    for (const name of names.slice(0, Math.max(0, names.length - keep))) await fs.rm(path.join(this.dir, name), { force: true })
+    for (const id of (await this.list()).slice(keep)) await fs.rm(this.file(id), { force: true })
+  }
+
+  /** "Clear night reports": every night goes, except the one named (a night going on). */
+  async clear(except?: string): Promise<void> {
+    for (const id of await this.list()) if (id !== except) await fs.rm(this.file(id), { force: true })
   }
 }
 
@@ -161,12 +182,16 @@ export interface WatchDeps {
   save(state: WatchSaved): void
   /** Watching started, stopped, or the wake time changed: tell the panel and the menu bar. */
   changed(): void
+  /** A night ended: its report is ready to be built once the log has settled. */
+  ended?(night: Night, why: WatchEnd): void
 }
 
 export interface WatchSaved {
   night?: Night
   wakeTime?: string
   ended?: { at: number; why: WatchEnd }
+  /** The night whose report hasn't been seen yet. */
+  unseen?: string
 }
 
 /**
@@ -179,6 +204,8 @@ export class OvernightWatch {
   private last: WatchSaved['ended']
   private timer: ReturnType<typeof setInterval> | undefined
   private lastBeat = 0
+  private lastOpened = 0
+  private unseenId: string | undefined
 
   constructor(
     private readonly deps: WatchDeps,
@@ -187,6 +214,7 @@ export class OvernightWatch {
     this.wake = parseWakeTime(saved.wakeTime) ? saved.wakeTime! : DEFAULT_WAKE_TIME
     this.last = saved.ended
     this.current = saved.night ?? null
+    this.unseenId = saved.unseen
   }
 
   get watching(): boolean {
@@ -203,6 +231,18 @@ export class OvernightWatch {
 
   get ended(): WatchSaved['ended'] {
     return this.last
+  }
+
+  /** The night that ended whose report hasn't been seen yet. */
+  get unseen(): string | undefined {
+    return this.unseenId
+  }
+
+  /** Its report was shown (or the reports were cleared). */
+  seen(): void {
+    if (this.unseenId === undefined) return
+    this.unseenId = undefined
+    this.save()
   }
 
   /**
@@ -232,6 +272,7 @@ export class OvernightWatch {
     const night = newNight(now, this.wake)
     this.current = night
     this.last = undefined
+    this.unseenId = undefined
     // The first line, before anything else this night writes; then the oldest nights beyond NIGHTS_KEPT go.
     void this.deps.log.append(night.id, { type: 'start', at: now, until: night.until, onBattery: this.deps.onBattery(), sessionsWorking: this.deps.sessionsWorking() })
     void this.deps.log.prune()
@@ -277,7 +318,25 @@ export class OvernightWatch {
   /** An alert came while watching: its kind and title go in the log, and whether it waited (nobody at the Mac). */
   alert(a: { key: string; title: string; level: string }, held: boolean): void {
     const night = this.current
-    if (night) void this.deps.log.append(night.id, { type: 'alert', at: this.now(), kind: alertKind(a.key), title: a.title, level: a.level, held })
+    if (!night) return
+    const kind = alertKind(a.key)
+    const review = kind === 'review' ? a.key.slice('review:'.length) : ''
+    void this.deps.log.append(night.id, { type: 'alert', at: this.now(), kind, title: a.title, level: a.level, held, ...(review ? { review } : {}) })
+  }
+
+  /** The panel opened while watching: someone looked. Written down once a minute at most. */
+  opened(): void {
+    const night = this.current
+    const at = this.now()
+    if (!night || at - this.lastOpened < OPENED_EVERY_MS) return
+    this.lastOpened = at
+    void this.deps.log.append(night.id, { type: 'opened', at })
+  }
+
+  /** A deploy went out or failed while watching. */
+  deploy(d: { project: string; ok: boolean; production: boolean }): void {
+    const night = this.current
+    if (night) void this.deps.log.append(night.id, { type: 'deploy', at: this.now(), project: d.project, ok: d.ok, production: d.production })
   }
 
   /** Once every line written so far is in the log. */
@@ -313,14 +372,16 @@ export class OvernightWatch {
     this.timer = undefined
     this.current = null
     this.last = { at, why }
+    this.unseenId = night.id
     void this.deps.log.append(night.id, { type: 'end', at, why })
     this.deps.keepAwake(false)
     this.save()
     this.deps.changed()
+    this.deps.ended?.(night, why)
   }
 
   private save(): void {
-    this.deps.save({ night: this.current ?? undefined, wakeTime: this.wake, ended: this.last })
+    this.deps.save({ night: this.current ?? undefined, wakeTime: this.wake, ended: this.last, unseen: this.unseenId })
   }
 
   private now(): number {

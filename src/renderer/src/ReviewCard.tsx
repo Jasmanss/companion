@@ -28,8 +28,8 @@ export function ReviewCard({
   more: number
   /** Open the big viewer on this review. */
   onOpen: () => void
-  /** Hide it until the panel is opened again. */
-  onLater: () => void
+  /** Hide it until the panel is opened again. Without it (inside the night report) there's no Later. */
+  onLater?: () => void
   /** A decision was made: say what happened. */
   onDone: (text: string) => void
   onError: (message: string) => void
@@ -59,9 +59,11 @@ export function ReviewCard({
         </span>
         <span className="rv-actions">
           <span className="chip">{addressLabel(review.address)}</span>
-          <button className="icon-btn" aria-label="Look at this later" title="Later: it comes back when you open the panel again" onClick={onLater}>
-            <CloseIcon />
-          </button>
+          {onLater && (
+            <button className="icon-btn" aria-label="Look at this later" title="Later: it comes back when you open the panel again" onClick={onLater}>
+              <CloseIcon />
+            </button>
+          )}
         </span>
       </header>
 

@@ -102,6 +102,9 @@ export function cleanName(raw: string): string {
   return name || DEFAULT_NAME
 }
 
+/** The alert peeking out at the screen edge is this wide (its window, less the part past the edge). */
+export const NUDGE_WIDTH = 340
+
 /** The tab at the screen edge, and the character in it, for each size. */
 export const TAB_SIZES = {
   small: { tab: { width: 56, height: 132 }, pill: { width: 50, height: 44 } },

@@ -45,9 +45,9 @@ export type NotchStyle = 'chin' | 'wings' | 'island'
 /**
  * What the island's right side shows (the Smart choice): Claude working (a spinner and the time), two projects working
  * (a spinner and a count), finished (a check), needs you (an amber mark), asks you something (a "?"), a review ready (a
- * thumbnail).
+ * thumbnail), a build failed (a red mark), good news (a spark, while its note shows).
  */
-export type IslandRight = 'working' | 'two' | 'finished' | 'needs' | 'asks' | 'review'
+export type IslandRight = 'working' | 'two' | 'finished' | 'needs' | 'asks' | 'review' | 'failed' | 'good'
 export interface IslandStatus {
   /** null: nothing going on, so no island; Steward peeks from the notch. */
   right: IslandRight | null
@@ -61,16 +61,30 @@ export interface IslandStatus {
   note?: IslandNote
 }
 /**
- * finished: "Main building finished", and what Claude said. started: a second project started while one works. alert:
- * the catch-all, an alert with no island size of its own (a Visual Review, until island Phase 3), its title and one line.
+ * A message the island grows for. The note size: finished ("Main building finished", and what Claude said), started (a
+ * second project started while one works), good (deployed, a PR merged), first (the first launch's how-to), alert (the
+ * catch-all: any other alert, its title and one line). The approval size: wait (a session waits for your OK), input (a
+ * session asks you something), agent (Steward's own request, with Allow and Deny), failed (a build failed). The review
+ * size: review.
  */
+/** The buttons on the island's messages. */
+export type IslandAct = 'open' | 'later' | 'look' | 'allow' | 'deny' | 'good' | 'big'
+export type IslandNoteKind = 'finished' | 'started' | 'good' | 'first' | 'alert' | 'wait' | 'input' | 'agent' | 'failed' | 'review'
 export interface IslandNote {
-  kind: 'finished' | 'started' | 'alert'
+  kind: IslandNoteKind
   /** The chat's name (or the project's), in bold, then the rest. */
   name: string
   text: string
   /** When it was shown: a new note, even one saying the same, is a new message. */
   at: number
+  /** The alert it came from, if any: its buttons act on it. */
+  key?: string
+  /** The alert's offer, like "Want me to look?". */
+  action?: string
+  /** Good news that came within a moment of it, joined into this note: "and 2 more". */
+  more?: number
+  /** How its words fit (the notch page measures them): on one line, the long note, or too long. */
+  fit?: 'note' | 'long' | 'toolong'
 }
 
 /** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
@@ -341,6 +355,37 @@ export interface WatchView {
   onBattery: boolean
   /** How the last Watch ended, while it's still worth saying (until the next one starts). */
   ended?: { at: number; why: WatchEnd }
+  /** The newest night with a report kept, for "Last night" on the card. */
+  lastNight?: string
+}
+
+/**
+ * Overnight Watch's night report: what happened while you rested, from the night's log and Visual Review's store. A
+ * template, no model call. Words only: an alert's title, never its detail.
+ */
+export interface NightReport {
+  id: string
+  /** "Good morning" for the newest night, "Saturday night" for an earlier one. */
+  title: string
+  /** When it was watched, as "11:10 PM to 7:02 AM". */
+  span: string
+  /** One line: "2 things needed you. 2 things changed.", or "Quiet night. Nothing needed you." */
+  summary: string
+  /** When Steward couldn't see, in words: the Mac slept, or Steward wasn't running. */
+  gaps: string[]
+  /** What needed you (a session waiting on you, a production deploy failing), and what came of it. */
+  needed: { at: number; title: string; note: string }[]
+  /** Sessions that finished. */
+  finished: { at: number; title: string }[]
+  /** Visual Reviews made during the night, and what became of each (gone: no longer kept). */
+  reviews: { id: string; at: number; title: string; said: string | null; status: 'new' | 'good' | 'sent-back' | 'gone' }[]
+  /** Deploys per project, oldest first. */
+  deploys: { project: string; runs: { at: number; ok: boolean; production: boolean }[] }[]
+  /** How many more of each there were than the lists hold. */
+  more: { needed: number; finished: number }
+  /** The nights kept before and after this one, to step through. */
+  earlier: string | null
+  later: string | null
 }
 
 /** Visual Review: one finished turn whose page looks different, waiting for a decision. */
@@ -524,6 +569,8 @@ export interface StewardAPI {
     onOverhang(cb: (points: number) => void): Unsubscribe
     /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
     intoNotchEnded(): void
+    /** The alert at the edge: how tall its words are, so its window grows to hold them rather than cut them off. */
+    nudgeWords(height: number): void
     /** The panel being dragged by its top bar: began, or moved, with the pointer here (screen points), or ended. */
     dragPanel(phase: 'start' | 'move' | 'end', x?: number, y?: number): void
     /** The panel back where it opens: at its edge, or under the notch (double-click on the top bar). */
@@ -594,6 +641,8 @@ export interface StewardAPI {
     onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
     /** The character's event mood (mad, worried, celebrating, done), or null when nothing's going on. */
     onMood(cb: (mood: Mood | null) => void): Unsubscribe
+    /** An alert's offer was taken on the notch island ("Want me to look?"): the panel runs it. */
+    onAct(cb: (alert: AlertView) => void): Unsubscribe
   }
   deploys: {
     status(): Promise<DeployStatus>
@@ -603,6 +652,8 @@ export interface StewardAPI {
     /** Reviews waiting for a decision, newest first. */
     list(): Promise<ReviewView[]>
     onChanged(cb: (reviews: ReviewView[]) => void): Unsubscribe
+    /** Open big on the notch island: the panel opens this review in its viewer. */
+    onOpen(cb: (id: string) => void): Unsubscribe
     /** Projects whose page Visual Review can't see right now, and why. */
     problems(): Promise<ReviewProblem[]>
     onProblems(cb: (problems: ReviewProblem[]) => void): Unsubscribe
@@ -637,6 +688,14 @@ export interface StewardAPI {
     onChanged(cb: (view: WatchView) => void): Unsubscribe
     /** Goodnight from the menu bar: show the goodnight card. */
     onGoodnight(cb: () => void): Unsubscribe
+    /** A night's report, or null when it isn't kept. */
+    report(id: string): Promise<NightReport | null>
+    /** How many nights' reports are kept. */
+    nights(): Promise<number>
+    /** Delete every night report (a night going on keeps its own). */
+    clear(): Promise<void>
+    /** Show this report: the night ended with the panel open, or the panel opened after it ended. */
+    onReport(cb: (report: NightReport) => void): Unsubscribe
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */
@@ -668,6 +727,10 @@ export interface StewardAPI {
     onState(cb: (state: NotchState) => void): Unsubscribe
     onCursor(cb: (p: { x: number; y: number } | null) => void): Unsubscribe
     click(): void
+    /** How the island's message's words fit (at: which message), measured on the page. */
+    fit(at: number, fit: NonNullable<IslandNote['fit']>): void
+    /** A button on the island's message (at: which message): Open, Later, Want me to look?, Allow, Deny, Looks good, Open big. */
+    act(what: IslandAct, at: number): void
   }
   /** Only when needed: a one-time note, shown in the panel the first time it opens, and the tab's slide in and out. */
   presence: {
