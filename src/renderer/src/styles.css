@@ -3647,3 +3647,18 @@ button.rvv-flip-tag {
   justify-content: flex-end;
   margin-top: 8px;
 }
+
+/* What would call you once the phone comes: a small red word before it. */
+.nr-urgent {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}

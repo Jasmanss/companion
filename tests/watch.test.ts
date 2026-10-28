@@ -12,6 +12,7 @@ import {
   newNight,
   OPENED_EVERY_MS,
   OvernightWatch,
+  urgencyOf,
   parseWakeTime,
   wakeAt,
   WATCH_LOOK_MS,
@@ -105,6 +106,30 @@ describe('a night', () => {
     expect(alertKind('approval:s1:p1:npm test')).toBe('approval')
     expect(alertKind('review:20261024-101010-abcdef12')).toBe('review')
     expect(alertKind('')).toBe('alert')
+  })
+})
+
+describe('how much a line matters overnight', () => {
+  it('is urgent for a production deploy failing, CI red on main and a session quiet for 90 minutes', () => {
+    expect(urgencyOf({ type: 'deploy', at: 1, project: 'p', ok: false, production: true })).toBe('urgent')
+    expect(urgencyOf({ type: 'ci', at: 1, project: 'p', workflow: 'CI', ok: false })).toBe('urgent')
+    expect(urgencyOf({ type: 'stuck', at: 1, name: 's', minutes: 90 })).toBe('urgent')
+  })
+
+  it('waits on you for a session wanting your OK or input, Steward asking, or 45 quiet minutes', () => {
+    for (const kind of ['approval', 'input', 'agent-approval']) expect(urgencyOf({ type: 'alert', at: 1, kind, title: 't', level: 'urgent', held: true })).toBe('waiting')
+    expect(urgencyOf({ type: 'stuck', at: 1, name: 's', minutes: 45 })).toBe('waiting')
+  })
+
+  it("is the report's for a session finishing, a review, a branch deploy and a green run; the Watch's own lines are no news", () => {
+    expect(urgencyOf({ type: 'alert', at: 1, kind: 'finished', title: 't', level: 'normal', held: false })).toBe('report')
+    expect(urgencyOf({ type: 'alert', at: 1, kind: 'review', title: 't', level: 'urgent', held: false, review: 'r' })).toBe('report')
+    expect(urgencyOf({ type: 'deploy', at: 1, project: 'p', ok: false, production: false })).toBe('report')
+    expect(urgencyOf({ type: 'deploy', at: 1, project: 'p', ok: true, production: true })).toBe('report')
+    expect(urgencyOf({ type: 'ci', at: 1, project: 'p', workflow: 'CI', ok: true })).toBe('report')
+    // These sources write their own line, so their alerts aren't counted twice.
+    for (const kind of ['deploy-failed', 'ci-failed', 'stuck', 'deploy-ready', 'pr-merged']) expect(urgencyOf({ type: 'alert', at: 1, kind, title: 't', level: 'urgent', held: true })).toBeNull()
+    for (const type of ['beat', 'opened', 'slept', 'woke'] as const) expect(urgencyOf({ type, at: 1 })).toBeNull()
   })
 })
 
@@ -325,11 +350,15 @@ describe('the Watch', () => {
     state.now += 2000
     watch.opened()
     watch.deploy({ project: 'my-site', ok: false, production: true })
+    watch.ci({ project: 'my-site', workflow: 'CI', ok: false })
+    watch.stuck({ name: 'haven', minutes: 45 })
     watch.alert({ key: 'review:20261025-231500-abcdef12', title: 'my-site changed', level: 'urgent' }, true)
     await watch.settled()
     const events = await log.read(night.id)
     expect(events.filter((e) => e.type === 'opened')).toHaveLength(2)
     expect(events.find((e) => e.type === 'deploy')).toMatchObject({ project: 'my-site', ok: false, production: true })
+    expect(events.find((e) => e.type === 'ci')).toMatchObject({ project: 'my-site', workflow: 'CI', ok: false })
+    expect(events.find((e) => e.type === 'stuck')).toMatchObject({ name: 'haven', minutes: 45 })
     expect(events.find((e) => e.type === 'alert')).toMatchObject({ kind: 'review', review: '20261025-231500-abcdef12' })
   })
 

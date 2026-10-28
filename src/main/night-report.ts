@@ -2,13 +2,11 @@
 // store. A template like the morning brief, no model call, so it costs nothing. Words only: an alert's title, never its
 // detail. It says plainly when Steward couldn't see, even when that makes the night look worse.
 import type { NightReport } from '../shared/types'
-import type { WatchEvent } from './watch'
+import { urgencyOf, type WatchEvent } from './watch'
 
 /** "3:10 AM", as the rest of Steward shows a time. */
 export const clock = (at: number): string => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
-/** Alerts that needed you: a session waiting on your OK or your input, and Steward's own requests. */
-const NEEDS_YOU = new Set(['approval', 'input', 'agent-approval'])
 /** The same thing again this soon joins the first ("… (3 times)"). */
 export const JOIN_MS = 10 * 60_000
 /** Shorter than this, Steward not seeing isn't worth a line. */
@@ -90,6 +88,22 @@ function gapLine(g: Gap): string {
   return `Steward wasn't running ${span}, so it saw nothing then.`
 }
 
+/** What a line that needed you is called in the report. */
+function neededTitle(e: WatchEvent): string {
+  switch (e.type) {
+    case 'alert':
+      return e.title
+    case 'deploy':
+      return `${e.project} production deploy failed`
+    case 'ci':
+      return `${e.project}: CI failed on main (${e.workflow})`
+    case 'stuck':
+      return e.minutes >= 90 ? `${e.name} may be stuck: nothing for ${e.minutes} minutes` : `${e.name} was quiet for ${e.minutes} minutes`
+    default:
+      return e.type
+  }
+}
+
 /** The night report, from one night's log. */
 export function buildNightReport({ id, events, review, now, latest, earlier, later }: NightInput): NightReport {
   const start = events.find((e) => e.type === 'start')
@@ -111,7 +125,8 @@ export function buildNightReport({ id, events, review, now, latest, earlier, lat
   const finished: NightReport['finished'] = []
   const reviews: NightReport['reviews'] = []
   const deploys = new Map<string, NightReport['deploys'][number]['runs']>()
-  const need = (at: number, title: string, did: string) => {
+  const ci = new Map<string, NightReport['ci'][number]['runs']>()
+  const need = (at: number, title: string, did: string, urgent: boolean) => {
     const last = needed.at(-1)
     if (last && last.base === title && at - last.last <= JOIN_MS) {
       last.times++
@@ -119,19 +134,16 @@ export function buildNightReport({ id, events, review, now, latest, earlier, lat
       last.title = `${title} (${last.times} times)`
       return
     }
-    needed.push({ at, title, note: [did, after(at)].filter(Boolean).join(' '), last: at, times: 1, base: title })
+    needed.push({ at, title, note: [did, after(at)].filter(Boolean).join(' '), urgent, last: at, times: 1, base: title })
   }
 
   for (const e of events) {
-    if (e.type === 'deploy') {
-      deploys.set(e.project, [...(deploys.get(e.project) ?? []), { at: e.at, ok: e.ok, production: e.production }])
-      if (!e.ok && e.production) need(e.at, `${e.project} production deploy failed`, '')
-      continue
-    }
-    if (e.type !== 'alert') continue
-    if (NEEDS_YOU.has(e.kind)) need(e.at, e.title, e.held ? 'Waited for you on screen.' : 'Showed on screen.')
-    else if (e.kind === 'finished') finished.push({ at: e.at, title: e.title })
-    else if (e.kind === 'review' && e.review) {
+    const urgency = urgencyOf(e)
+    if (urgency === 'urgent' || urgency === 'waiting') need(e.at, neededTitle(e), e.type === 'alert' ? (e.held ? 'Waited for you on screen.' : 'Showed on screen.') : '', urgency === 'urgent')
+    if (e.type === 'deploy') deploys.set(e.project, [...(deploys.get(e.project) ?? []), { at: e.at, ok: e.ok, production: e.production }])
+    else if (e.type === 'ci') ci.set(e.project, [...(ci.get(e.project) ?? []), { at: e.at, ok: e.ok, workflow: e.workflow }])
+    else if (e.type === 'alert' && e.kind === 'finished') finished.push({ at: e.at, title: e.title })
+    else if (e.type === 'alert' && e.kind === 'review' && e.review) {
       const r = review(e.review)
       reviews.push({ id: e.review, at: e.at, title: e.title, said: r?.said ?? null, status: r?.status ?? 'gone' })
     }
@@ -156,10 +168,11 @@ export function buildNightReport({ id, events, review, now, latest, earlier, lat
     span: `${clock(since)} to ${clock(endAt)}`,
     summary,
     gaps: gapLines,
-    needed: needed.slice(0, LIST_MAX).map(({ at, title, note }) => ({ at, title, note })),
+    needed: needed.slice(0, LIST_MAX).map(({ at, title, note, urgent }) => ({ at, title, note, urgent })),
     finished: finished.slice(0, LIST_MAX),
     reviews: reviews.slice(0, LIST_MAX),
     deploys: [...deploys].map(([project, runs]) => ({ project, runs })),
+    ci: [...ci].map(([project, runs]) => ({ project, runs })),
     more: { needed: Math.max(0, needed.length - LIST_MAX), finished: Math.max(0, finished.length - LIST_MAX) },
     earlier,
     later,

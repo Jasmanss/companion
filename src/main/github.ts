@@ -10,7 +10,15 @@ const GH_PATHS = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']
 export const GH_COMMANDS = {
   dependabot: ['pr', 'list', '--author', 'app/dependabot', '--state', 'open', '--json', 'number,title,url', '--limit', '20'],
   merged: ['pr', 'list', '--state', 'merged', '--json', 'number,title,url,mergedAt', '--limit', '5'],
+  /** Overnight Watch: the newest runs on main. Only the workflow's name and how it went; never a commit message. */
+  ciMain: ['run', 'list', '--branch', 'main', '--json', 'databaseId,workflowName,status,conclusion,updatedAt', '--limit', '10'],
 } as const
+
+/** Read-only git with fixed arguments, like the left-off commands: where a project's code lives, to tell if it's on GitHub. */
+export const GIT_REMOTE = ['remote', 'get-url', 'origin'] as const
+
+/** An origin on GitHub: https://github.com/owner/repo(.git) or git@github.com:owner/repo(.git). */
+export const isGitHubRemote = (url: string): boolean => /^(?:https:\/\/(?:[^@/\s]+@)?github\.com\/|(?:ssh:\/\/)?git@github\.com[:/])[\w.-]+\/[\w.-]+?(?:\.git)?\/?$/.test(url.trim())
 
 export type GhRunner = (args: readonly string[], cwd: string) => Promise<string>
 
@@ -52,6 +60,55 @@ export class MergeTracker {
     this.seen.set(projectPath, new Set([...(known ?? []), ...merged.map((pr) => pr.number)]))
     if (!known) return []
     return merged.filter((pr) => !known.has(pr.number)).map((pr) => pr.number)
+  }
+}
+
+const CiRun = z.object({
+  databaseId: z.number(),
+  workflowName: z.string().max(200),
+  status: z.string().max(40),
+  conclusion: z.string().max(40),
+  updatedAt: z.string(),
+})
+export type CiRun = z.infer<typeof CiRun>
+
+/** How a run on main went: red (failed, timed out, couldn't start), green, or neither (still going, cancelled, skipped). */
+export function ciResult(run: Pick<CiRun, 'status' | 'conclusion'>): 'red' | 'green' | null {
+  if (run.status !== 'completed') return null
+  if (run.conclusion === 'success') return 'green'
+  return run.conclusion === 'failure' || run.conclusion === 'timed_out' || run.conclusion === 'startup_failure' ? 'red' : null
+}
+
+/** What `gh run list` printed, as runs. Anything that doesn't read is dropped, not guessed at. */
+export function parseCiRuns(out: string): CiRun[] {
+  const list: unknown = JSON.parse(out)
+  if (!Array.isArray(list)) return []
+  return list.map((r) => CiRun.safeParse(r)).flatMap((r) => (r.success ? [r.data] : []))
+}
+
+/** The newest runs on a project's main branch on GitHub. Rejects when it isn't on GitHub, or gh can't say. */
+export async function mainRuns(project: Project, gh: GhRunner): Promise<CiRun[]> {
+  return parseCiRuns(await gh(GH_COMMANDS.ciMain, project.path))
+}
+
+export type CiChange = { kind: 'failed' | 'passed'; run: CiRun }
+
+/**
+ * Notices runs on main finishing, like DeployTracker: the first look at a project only takes note of what's there (a
+ * new one each night, so the day's runs are never news), and after that a run that ends red or green says so once.
+ */
+export class CiTracker {
+  private done = new Map<string, Set<number>>()
+
+  update(projectPath: string, runs: CiRun[]): CiChange[] {
+    const known = this.done.get(projectPath)
+    const finished = runs.filter((r) => ciResult(r) !== null)
+    this.done.set(projectPath, new Set([...(known ?? []), ...finished.map((r) => r.databaseId)]))
+    if (!known) return []
+    return finished
+      .filter((r) => !known.has(r.databaseId))
+      .reverse()
+      .map((run) => ({ kind: ciResult(run) === 'red' ? 'failed' : 'passed', run }))
   }
 }
 
