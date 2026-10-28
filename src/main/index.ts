@@ -30,10 +30,10 @@ import {
 import { alwaysAsks } from './commands'
 import { DeployWatcher, fetchBuildLog, type DeployChange } from './deploys'
 import { downloadImage } from './fetch-image'
-import { dependabotPRs, findGh, ghRunner, MergeTracker, mergedPRs, type GhRunner } from './github'
+import { CiTracker, dependabotPRs, findGh, ghRunner, GIT_REMOTE, isGitHubRemote, mainRuns, MergeTracker, mergedPRs, type CiChange, type GhRunner } from './github'
 import type { HookPayload } from './hook-payload'
 import { HookServer } from './hook-server'
-import { whereYouLeftOff } from './left-off'
+import { runGit, whereYouLeftOff } from './left-off'
 import { LEGACY_APP_NAME, markSecretsDone, migrateUserData, readLegacyKeychainPassword, secretsPending } from './migrate'
 import { MoodBoard } from './moods'
 import { findNotch, probeScreens } from './notch'
@@ -70,6 +70,8 @@ import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
 import { buildNightReport } from './night-report'
+import { StuckWatch, stuckAlert } from './stuck'
+import { isTranscriptPath } from './transcript'
 import { OvernightWatch, wakeAt, WatchLog, type Night } from './watch'
 import { appFromUserInfo, frontAfter, lookNow, readApp, shouldStepAside, withApp, type FrontApp } from './step-aside'
 import { checkAutoMode } from './smoke-auto'
@@ -156,6 +158,12 @@ let notch: NotchDock
 let watch: OvernightWatch | null = null
 /** The nights' logs, which the night reports are built from. */
 let watchLog: WatchLog | null = null
+/** What the Watch looks at besides alerts: runs on main (new each night) and sessions that may be stuck. */
+let ciTracker = new CiTracker()
+const stuck = new StuckWatch()
+let nightTimer: ReturnType<typeof setInterval> | undefined
+/** Projects whose code is on GitHub, once asked (git's origin), for the goodnight card. */
+const onGitHub = new Map<string, boolean>()
 /** Its keep-awake blocker, while a night goes on. */
 let watchBlocker: number | null = null
 /** The smoke check says how long the Mac has been idle, so someone's real mouse can't change what it checks. */
@@ -1409,6 +1417,9 @@ function islandNote(event: HookPayload, turns: Turns): void {
 async function onHookEvent(event: HookPayload): Promise<void> {
   const turns = activity.turns
   activity.note(event, Date.now())
+  // Anything from a session means it isn't stuck (Overnight Watch).
+  const transcript = event.transcript_path && isTranscriptPath(event.transcript_path) ? event.transcript_path : undefined
+  stuck.heard(event.session_id, Date.now(), { name: sessions.names(event).name, transcript })
   // A session about to push or deploy: check deploys more often for a while.
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
@@ -1451,12 +1462,13 @@ async function watchView(): Promise<WatchView> {
   const night = watch?.night
   const list = sessions.list()
   const linked = settings.vercelToken() ? (await deploys.linked()).map((l) => l.name) : []
+  const working = workingSessions()
   return {
     watching: Boolean(night),
     since: night?.since,
     until: night?.until,
     wakeTime: watch?.wakeTime ?? '07:30',
-    plan: { working: list.filter((s) => s.state === 'working').map((s) => s.name), waiting: sessions.waitingCount(), deploys: linked },
+    plan: { working: list.filter((s) => working.includes(s.id)).map((s) => s.name), waiting: sessions.waitingCount(), deploys: linked, ci: gh ? await githubProjects() : null },
     onBattery: powerMonitor.isOnBatteryPower(),
     ended: watch?.ended,
     lastNight: (await keptNights())[0],
@@ -1516,8 +1528,73 @@ async function morningCard(): Promise<void> {
   raise({ key: `night:${id}`, level: 'urgent', title: report.title, detail: report.summary })
 }
 
-/** The Watch started, stopped or changed: the panel and the menu bar follow. */
+/**
+ * The sessions with a turn going on (a prompt sent, no stop yet) that aren't waiting on you: working. The strip's own
+ * state can't say, because a prompt doesn't change it.
+ */
+function workingSessions(): string[] {
+  const waiting = new Set(sessions.list().filter((s) => s.state === 'needs-approval' || s.state === 'needs-input').map((s) => s.id))
+  return Object.keys(activity.turns).filter((id) => !waiting.has(id))
+}
+
+/** The projects on GitHub, whose runs on main the Watch can see. Asked of git once per project (read-only, fixed). */
+async function githubProjects(): Promise<string[]> {
+  const found: string[] = []
+  for (const project of settings.projects()) {
+    if (!onGitHub.has(project.path)) onGitHub.set(project.path, await runGit(GIT_REMOTE, project.path).then(isGitHubRemote, () => false))
+    if (onGitHub.get(project.path)) found.push(project.name)
+  }
+  return found
+}
+
+/**
+ * While a night goes on, the Watch looks at more than alerts: every minute for sessions that may be stuck, every two
+ * for runs on main. Each night's first look at CI only takes note, so the day's runs are never news.
+ */
+function syncNightSources(): void {
+  const night = watch?.night
+  if (night && !nightTimer) {
+    ciTracker = new CiTracker()
+    void checkCi()
+    let looks = 0
+    nightTimer = setInterval(() => {
+      void lookForStuck()
+      if (++looks % 2 === 0) void checkCi()
+    }, 60_000)
+    nightTimer.unref?.()
+  } else if (!night && nightTimer) {
+    clearInterval(nightTimer)
+    nightTimer = undefined
+  }
+}
+
+/** The runs on main of every project on GitHub: one that ends red is urgent and comes out; a green one is the report's. */
+async function checkCi(): Promise<void> {
+  if (!gh || !watch?.watching) return
+  for (const project of settings.projects()) {
+    const runs = await mainRuns(project, gh).catch(() => null)
+    if (runs) for (const change of ciTracker.update(project.path, runs)) onCiChange(project, change)
+  }
+}
+
+function onCiChange(project: Project, { kind, run }: CiChange): void {
+  watch?.ci({ project: project.name, workflow: run.workflowName, ok: kind === 'passed' })
+  if (kind === 'failed') raise({ key: `ci-failed:${project.path}:${run.databaseId}`, level: 'urgent', title: `${project.name}: CI failed on main`, detail: run.workflowName, mood: 'mad', scope: project.path })
+}
+
+/** Sessions working with nothing from them for 45 minutes get a word, and at 90 an urgent alert; both go in the log. */
+async function lookForStuck(now = Date.now()): Promise<void> {
+  const night = watch?.night
+  if (!night) return
+  for (const step of await stuck.look(workingSessions(), now, night.since)) {
+    watch?.stuck({ name: step.name, minutes: step.minutes })
+    raise(stuckAlert(step))
+  }
+}
+
+/** The Watch started, stopped or changed: the panel and the menu bar follow, and the night's looks start or stop. */
 function sendWatch(): void {
+  syncNightSources()
   updateMenuBar()
   void watchView().then((view) => win?.webContents.send('watch:changed', view))
 }
@@ -4072,7 +4149,7 @@ app.whenReady().then(async () => {
       log: watchLog,
       idleSeconds,
       onBattery: () => powerMonitor.isOnBatteryPower(),
-      sessionsWorking: () => sessions.list().filter((s) => s.state === 'working').length,
+      sessionsWorking: () => workingSessions().length,
       keepAwake: keepAwakeForWatch,
       save: (saved) => void appState.update({ watch: saved }),
       changed: sendWatch,

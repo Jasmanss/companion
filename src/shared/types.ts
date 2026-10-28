@@ -336,6 +336,8 @@ export interface WatchView {
     waiting: number
     /** Projects whose deploys Steward can see (linked to Vercel). */
     deploys: string[]
+    /** Projects on GitHub, whose runs on main it can see; null when gh isn't installed. */
+    ci: string[] | null
   }
   /** The Mac is on battery: it may sleep however Steward tries. */
   onBattery: boolean
@@ -359,14 +361,19 @@ export interface NightReport {
   summary: string
   /** When Steward couldn't see, in words: the Mac slept, or Steward wasn't running. */
   gaps: string[]
-  /** What needed you (a session waiting on you, a production deploy failing), and what came of it. */
-  needed: { at: number; title: string; note: string }[]
+  /**
+   * What needed you, and what came of it: urgent (a production deploy failing, CI red on main, a session that may be
+   * stuck) or waiting on you (a session wanting your OK or input, or quiet for 45 minutes).
+   */
+  needed: { at: number; title: string; note: string; urgent: boolean }[]
   /** Sessions that finished. */
   finished: { at: number; title: string }[]
   /** Visual Reviews made during the night, and what became of each (gone: no longer kept). */
   reviews: { id: string; at: number; title: string; said: string | null; status: 'new' | 'good' | 'sent-back' | 'gone' }[]
   /** Deploys per project, oldest first. */
   deploys: { project: string; runs: { at: number; ok: boolean; production: boolean }[] }[]
+  /** Runs on main per project, oldest first. */
+  ci: { project: string; runs: { at: number; ok: boolean; workflow: string }[] }[]
   /** How many more of each there were than the lists hold. */
   more: { needed: number; finished: number }
   /** The nights kept before and after this one, to step through. */

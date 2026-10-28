@@ -74,6 +74,37 @@ describe('the night report', () => {
     ])
   })
 
+  it('puts CI red on main and a session that may be stuck under needed you, the urgent ones marked', () => {
+    const r = report([
+      start,
+      alert(0, 40, 'approval', 'haven is waiting on you'),
+      { type: 'ci', at: at(1, 0), project: 'my-site', workflow: 'CI', ok: true },
+      { type: 'ci', at: at(2, 0), project: 'my-site', workflow: 'CI', ok: false },
+      // Its alert is in the log too; the CI line is what counts.
+      alert(2, 0, 'ci-failed', 'my-site: CI failed on main'),
+      { type: 'stuck', at: at(3, 0), name: 'Fix the header · steward-app', minutes: 45 },
+      { type: 'stuck', at: at(3, 45), name: 'Fix the header · steward-app', minutes: 90 },
+      alert(3, 45, 'stuck', 'Fix the header · steward-app may be stuck'),
+      end(7, 30),
+    ])
+    expect(r.needed.map((n) => [n.title, n.urgent])).toEqual([
+      ['haven is waiting on you', false],
+      ['my-site: CI failed on main (CI)', true],
+      ['Fix the header · steward-app was quiet for 45 minutes', false],
+      ['Fix the header · steward-app may be stuck: nothing for 90 minutes', true],
+    ])
+    expect(r.summary).toBe('4 things needed you.')
+    expect(r.ci).toEqual([
+      {
+        project: 'my-site',
+        runs: [
+          { at: at(1, 0), ok: true, workflow: 'CI' },
+          { at: at(2, 0), ok: false, workflow: 'CI' },
+        ],
+      },
+    ])
+  })
+
   it("shows the night's Visual Reviews as they stand now, and says when one is no longer kept", () => {
     const store: Record<string, { status: 'new' | 'good' | 'sent-back'; said?: string }> = {
       '20261025-235800-aaaaaaaa': { status: 'new', said: 'Made the hero green.' },
