@@ -1705,30 +1705,6 @@ pre {
   margin: 0 0 6px;
 }
 
-.leftoff-status {
-  font-weight: 600;
-}
-
-.leftoff-commits {
-  margin-bottom: 6px !important;
-}
-
-.leftoff-commits code {
-  color: var(--hi);
-  font-size: 11px;
-}
-
-.leftoff-claude {
-  margin: 6px 0 0;
-  padding: 6px 10px;
-  border-left: 2px solid rgb(var(--glow));
-  background: var(--inset);
-}
-
-.leftoff-claude p {
-  margin: 2px 0 0;
-}
-
 .notice {
   display: flex;
   align-items: center;

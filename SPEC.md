@@ -19,8 +19,18 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   default, or left), dimmed and resting. It only takes clicks on that small
   peek, never on the rest of the screen.
 - **Pull it out:** hover the peek and click, or press the hotkey (⌥ Space). It
-  slides out into a panel: the character on top, the tray in the middle, and
-  an input box at the bottom.
+  slides out into a panel: the character on top, cards in the middle, and an
+  input box at the bottom.
+- **The panel's cards:** every block is the same card (one heading style, no
+  bullet points): Sessions (a row each, with a one-line summary), Where you
+  left off, Tray, Try (chips that fill the box), and when they come, a review,
+  a failed build, the morning brief or the night's report, news and notes. The
+  most important card is promoted: full width, first, with an accent border.
+  The order is what waits on you (a session waiting, a review, a failed build:
+  orange, "Waiting on you"), then sessions that finished within a day, then
+  the night's report or the morning brief, then where you left off, so there
+  is always a first card. While a chat is going only what waits on you stays
+  above it.
 - **Drop target:** drag an image toward the edge and it wakes up, slides partway
   out, and holds out its tray. Drop the image on it.
 - **Put it back:** click away or press Esc and it slides back in.
@@ -232,7 +242,7 @@ Built in this order; each one builds on the one before.
 
 1. **Session hub.** When any Claude Code session needs approval or input, or
    finishes, Steward peeks out ("Portlkit is waiting on you") without taking
-   keyboard focus. The panel shows a strip of every session and its state,
+   keyboard focus. The panel's Sessions card shows every session and its state,
    matched to my projects by folder.
    - Claude Code hooks send the hook JSON to a local HTTP server in Steward:
      bound to 127.0.0.1, secret token (made on first run, kept in the app's data
@@ -249,9 +259,9 @@ Built in this order; each one builds on the one before.
 2. **Moods from real events.** New faces: worried (build failed), celebrating
    (deploy ready or PR merged), sleepy (after midnight), driven by alerts, not
    only by chat.
-3. **Where you left off.** On switching projects, or opening the panel after 2+
-   hours away: the last 3 commits and branch, uncommitted and unpushed changes,
-   and the last thing that project's Claude session said. Fixed, read-only git
+3. **Where you left off.** A card in the panel, worked out on every open and on
+   switching projects: the branch, the last commits, uncommitted and unpushed
+   changes, and the last thing that project's Claude session said. Fixed, read-only git
    commands run by the app itself; the model never builds them.
 4. **Deploy watcher.** Vercel projects found from `.vercel/project.json`, token in
    the keychain. Polls every minute (faster for ~10 minutes after a push). A
