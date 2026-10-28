@@ -4572,7 +4572,8 @@ app.whenReady().then(async () => {
   if (SMOKE_THEME === 'light' || SMOKE_THEME === 'dark') nativeTheme.themeSource = SMOKE_THEME
   const userData = app.getPath('userData')
   // The smoke check starts as a fresh install every time, which is quiet: its throwaway data folder is emptied first.
-  if (SMOKE_OUT) await Promise.all(['settings.json', 'state.json'].map((f) => fs.rm(path.join(userData, f), { force: true })))
+  // (Reviews too: a run that timed out mid-check never cleared its own, and the next run's review check starts from none.)
+  if (SMOKE_OUT) await Promise.all(['settings.json', 'state.json', 'reviews'].map((f) => fs.rm(path.join(userData, f), { recursive: true, force: true })))
   settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ registered, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
   await settings.load()
   // Only when needed, the window starts out of sight, with its page slid out ready to come in.
