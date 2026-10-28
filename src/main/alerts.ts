@@ -17,9 +17,9 @@ export interface AlertInput {
  * address turned it on, so "a session finished" being off doesn't hide it.
  */
 export function alertSwitch(key: string): keyof NotificationPrefs | null {
-  if (key.startsWith('approval:') || key.startsWith('input:')) return 'sessionNeedsMe'
+  if (key.startsWith('approval:') || key.startsWith('input:') || key.startsWith('stuck:')) return 'sessionNeedsMe'
   if (key.startsWith('finished:')) return 'sessionFinished'
-  if (key.startsWith('deploy-failed:')) return 'buildFailed'
+  if (key.startsWith('deploy-failed:') || key.startsWith('ci-failed:')) return 'buildFailed'
   if (key.startsWith('deploy-ready:') || key.startsWith('pr-merged:')) return 'celebrations'
   return null
 }
