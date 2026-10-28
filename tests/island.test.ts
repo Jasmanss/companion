@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
-import { alertNote, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
-import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_HOVER, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
+import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
+import { fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
 /** The 14-inch MacBook Pro's notch. */
@@ -89,9 +89,12 @@ describe('the island shape', () => {
     expect(islandLevel({ awake: true, nudge: false, right: null })).toBe('rest')
     expect(islandLevel({ awake: true, nudge: false, right: 'needs' })).toBe('compact')
     expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true })).toBe('note')
-    // Asleep, or nothing going on, there's no note to show.
+    // Asleep, there's no note to show. With nothing else going on, a message still shows (good news, the catch-all).
     expect(islandLevel({ awake: false, nudge: false, right: 'working', note: true })).toBe('asleep')
-    expect(islandLevel({ awake: true, nudge: false, right: null, note: true })).toBe('rest')
+    expect(islandLevel({ awake: true, nudge: false, right: null, note: true })).toBe('note')
+    expect(islandLevel({ awake: true, nudge: false, right: null, note: 'long' })).toBe('long')
+    expect(islandLevel({ awake: true, nudge: false, right: 'needs', note: 'approval' })).toBe('approval')
+    expect(islandLevel({ awake: true, nudge: false, right: 'review', note: 'review' })).toBe('review')
     // The panel open at the side shows what's going on: the island steps back to Steward peeking, looking at it.
     expect(islandLevel({ awake: true, nudge: false, right: 'working', note: true, open: true })).toBe('rest')
   })
@@ -180,19 +183,61 @@ describe('the note', () => {
     expect(hookNote(hook('UserPromptSubmit', 'b'), { ...at, turns: { a: 100_000 - TURN_GIVE_UP_MS } })).toBeNull()
   })
 
-  it('shows with the status, and not with nothing going on', () => {
+  it("shows with the work's status; an alert's message shows on its own", () => {
     const note: IslandNote = { kind: 'finished', name: 'haven', text: 'Claude finished', at: 1 }
     const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
     expect(islandStatus(input({ turns: { a: 1 }, note }))).toEqual({ right: 'working', since: 1, note })
     expect(islandStatus(input({ note }))).toEqual({ right: null })
+    const alert: IslandNote = { kind: 'alert', name: 'Something new', text: '', at: 3 }
+    expect(islandStatus(input({ note: alert }))).toEqual({ right: null, note: alert })
+    // Good news has no status of its own: a spark while its note shows.
+    const good: IslandNote = { kind: 'good', name: 'haven deployed', text: 'haven.vercel.app', at: 2 }
+    expect(islandStatus(input({ note: good }))).toEqual({ right: 'good', note: good })
+    expect(islandStatus(input({ note: good, turns: { a: 1 } })).right).toBe('working')
   })
 
-  it('is the catch-all for an alert with no island size: its title and one line, shown with a review waiting', () => {
-    const note = alertNote({ title: 'haven changed', detail: 'Review what Claude did?' }, 5)
-    expect(note).toEqual({ kind: 'alert', name: 'haven changed', text: 'Review what Claude did?', at: 5 })
-    expect(alertNote({ title: 'Something new' }, 6).text).toBe('')
+  it('is the catch-all for an alert with no size of its own: its title and one line', () => {
+    const note = alertNote({ key: 'something-new:1', title: 'Something new', detail: 'with a line' }, 5)
+    expect(note).toEqual({ kind: 'alert', name: 'Something new', text: 'with a line', at: 5, key: 'something-new:1' })
+    expect(alertNote({ key: 'x', title: 'Something new' }, 6).text).toBe('')
+    expect(noteSize(note)).toBe('note')
+    expect(noteShowMs(note)).toBe(NOTE_SHOW_MS)
+  })
+
+  it('opens every kind of alert as one of the island sizes', () => {
+    const size = (key: string) => noteSize(alertNote({ key, title: 't' }, 1))
+    expect(alertKind('approval:s1:p:npm install')).toBe('wait')
+    expect(alertKind('input:s1:p:which one?')).toBe('input')
+    expect(alertKind('agent-approval:7')).toBe('agent')
+    expect(alertKind('deploy-failed:dpl_1')).toBe('failed')
+    expect(alertKind('deploy-ready:dpl_2')).toBe('good')
+    expect(alertKind('pr-merged:haven:12')).toBe('good')
+    expect(alertKind('review:20261027-1')).toBe('review')
+    expect(alertKind('first-peek')).toBe('first')
+    for (const key of ['approval:s', 'input:s', 'agent-approval:1', 'deploy-failed:d']) expect(size(key)).toBe('approval')
+    expect(size('review:1')).toBe('review')
+    // The morning card after an Overnight Watch is the catch-all note: a click opens the panel, where the report is.
+    expect(alertKind('night:20261025-231000')).toBe('alert')
+    for (const key of ['deploy-ready:d', 'pr-merged:p', 'first-peek', 'finished:s:p', 'brand-new-kind:1', 'night:20261025-231000']) expect(size(key)).toBe('note')
+    // The offer comes along: "Want me to look?"
+    expect(alertNote({ key: 'deploy-failed:d', title: 'haven deploy failed', action: { label: 'Want me to look?', prompt: 'p' } }, 1).action).toBe('Want me to look?')
+  })
+
+  it('stays out longer for a long note, longer still for a big one or one too long', () => {
+    expect(noteShowMs({ kind: 'good', fit: 'note' })).toBe(NOTE_SHOW_MS)
+    expect(noteShowMs({ kind: 'good', fit: 'long' })).toBe(LONG_NOTE_MS)
+    expect(noteShowMs({ kind: 'alert', fit: 'toolong' })).toBe(BIG_NOTE_MS)
+    expect(noteSize({ kind: 'alert', fit: 'toolong' })).toBe('long')
+    expect(noteShowMs({ kind: 'wait' })).toBe(BIG_NOTE_MS)
+    expect(noteShowMs({ kind: 'review' })).toBe(BIG_NOTE_MS)
+    expect(noteShowMs({ kind: 'first' })).toBe(10_000)
+  })
+
+  it('shows a failed build as a red mark, after what waits on you and before a review', () => {
     const input = (o: Partial<IslandInput>): IslandInput => ({ sessions: [], turns: {}, agentBusy: false, agentWaiting: false, reviews: 0, now: 100_000, ...o })
-    expect(islandStatus(input({ reviews: 1, note }))).toEqual({ right: 'review', note })
+    expect(islandStatus(input({ failed: true, reviews: 1, turns: { a: 1 } })).right).toBe('failed')
+    expect(islandStatus(input({ failed: true, agentWaiting: true })).right).toBe('needs')
+    expect(islandStatus(input({ failed: true, asked: true })).right).toBe('asks')
   })
 
   describe('settling', () => {
@@ -250,5 +295,136 @@ describe('the note', () => {
       notes.drop('finished')
       expect(notes.current).toBeNull()
     })
+  })
+
+  it('grows taller for a long note, and big for an approval or a review, with Steward joined', () => {
+    const note = islandParts('note', NOTCH)
+    const long = islandParts('long', NOTCH)
+    expect(long).toMatchObject({ width: note.width, height: 32 + ISLAND_LONG_LINES, joined: false })
+    expect(long.pill).toEqual(note.pill)
+    // The design's sizes for a 185 by 32 notch: 380 by 94, 420 by 124, 440 by 172 (a point over from the notch's odd width).
+    expect([long.width, long.height]).toEqual([381, 94])
+    const approval = islandParts('approval', NOTCH)
+    const review = islandParts('review', NOTCH)
+    expect([approval.width, approval.height]).toEqual([421, 124])
+    expect([review.width, review.height]).toEqual([441, 172])
+    for (const big of [approval, review]) {
+      expect(big.joined).toBe(true)
+      // Steward's spot is inside the black's left part, below the notch; the status is at the top right.
+      expect(big.pill.x).toBe(-big.width / 2 + ISLAND_AVATAR_IN)
+      expect(big.pill.y).toBeGreaterThan(32)
+      expect(big.pill.y + 26).toBeLessThan(big.height)
+      expect(big.right!.x).toBeGreaterThan(big.width / 2 - 40)
+      expect(big.right!.y).toBe(16)
+      // With the springs' overshoot, it stays inside the window.
+      expect(big.width * 1.1).toBeLessThan(ISLAND_WINDOW.width)
+      expect(big.height * 1.1).toBeLessThan(ISLAND_WINDOW.height)
+    }
+    expect(review.pill.y).toBeLessThan(approval.pill.y + 40)
+    expect(joins('approval') && joins('review') && !joins('note') && !joins('compact')).toBe(true)
+  })
+
+  it('takes clicks anywhere on a big island', () => {
+    const layout = { cx: ISLAND_WINDOW.width / 2, ...NOTCH }
+    const review = islandParts('review', NOTCH)
+    const boxes = islandBoxes(review, 'review', layout)
+    expect(inBoxes({ x: layout.cx - review.width / 2 + 10, y: review.height - 10 }, boxes)).toBe(true)
+    expect(inBoxes({ x: layout.cx, y: review.height + 6 }, boxes)).toBe(false)
+  })
+})
+
+describe("a note's words", () => {
+  // Every letter 6 points wide, bold 7: easy to count.
+  const measure = (text: string, bold: boolean) => text.length * (bold ? 7 : 6)
+  const width = 353
+
+  it('fit on one line when the title and the detail do', () => {
+    expect(fitNote('haven', 'Claude finished · 3 files changed', width, measure)).toBe('note')
+    expect(fitNote('A title alone', '', width, measure)).toBe('note')
+  })
+
+  it('make a long note when they need two or three lines, the title on its own', () => {
+    // "companion: PR #39 merged" (24 letters, bold) and a PR title of about a line and a half.
+    const title = 'companion: PR #39 merged'
+    const pr = 'Main chat, Phase 1: take the hide button and the pin out of the header, and add the Ask | Auto switch'
+    expect(fitNote(title, pr, width, measure)).toBe('long')
+    expect(fitNote(title, 'a detail that is just too long to sit beside the title on one line', width, measure)).toBe('long')
+  })
+
+  it('are too long past three lines', () => {
+    const long = 'Main chat, Phase 1: take the hide button and the pin out of the header, add the Ask | Auto switch by the message box, round the Send button, and label commands that ran on their own'
+    expect(fitNote('companion: PR #39 merged', long, width, measure)).toBe('toolong')
+  })
+
+  it('wrap at spaces, and a word wider than a line takes the lines it fills', () => {
+    const m = (t: string) => t.length * 10
+    expect(linesFor('', 100, m)).toBe(0)
+    expect(linesFor('aaaa bbbb', 100, m)).toBe(1)
+    expect(linesFor('aaaa bbbb cccc', 100, m)).toBe(2)
+    expect(linesFor('a'.repeat(25), 100, m)).toBe(3)
+    expect(linesFor(`xx ${'a'.repeat(25)} yy`, 100, m)).toBe(4)
+  })
+})
+
+describe('big messages and good news on the island', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+  const wait: IslandNote = { kind: 'wait', name: 'haven is waiting on you', text: 'Bash: npm install', at: 1, key: 'approval:s1' }
+
+  it('keeps a big one out for nine seconds, and a small note does not take its place', () => {
+    const notes = new IslandNotes({ changed: () => {} })
+    expect(notes.show(wait)).toBe(true)
+    expect(notes.show({ kind: 'finished', name: 'api', text: 'finished', at: 2 })).toBe(false)
+    expect(notes.current).toEqual(wait)
+    vi.advanceTimersByTime(BIG_NOTE_MS - 1)
+    expect(notes.current).toEqual(wait)
+    vi.advanceTimersByTime(1)
+    expect(notes.current).toBeNull()
+    // Another big one does take its place.
+    notes.show(wait)
+    const review: IslandNote = { kind: 'review', name: 'haven changed', text: 'Review what Claude did?', at: 3, key: 'review:1' }
+    expect(notes.show(review)).toBe(true)
+    expect(notes.current).toEqual(review)
+  })
+
+  it('joins good news that comes within a moment into one note: "and 2 more"', () => {
+    const notes = new IslandNotes({ changed: () => {} })
+    const good = (at: number): IslandNote => ({ kind: 'good', name: `site ${at} deployed`, text: '', at, key: `deploy-ready:${at}` })
+    notes.show(good(1))
+    vi.advanceTimersByTime(1000)
+    notes.show(good(2))
+    notes.show(good(3))
+    expect(notes.current).toMatchObject({ name: 'site 1 deployed', more: 2 })
+    vi.advanceTimersByTime(NOTE_SHOW_MS - 1)
+    expect(notes.current).not.toBeNull()
+    vi.advanceTimersByTime(1)
+    expect(notes.current).toBeNull()
+  })
+
+  it('stays out longer once the page says its words need the long note', () => {
+    const notes = new IslandNotes({ changed: () => {} })
+    const merged: IslandNote = { kind: 'good', name: 'companion: PR #39 merged', text: 'Main chat, Phase 1: …', at: 7 }
+    notes.show(merged)
+    vi.advanceTimersByTime(200)
+    notes.fit(7, 'long')
+    expect(notes.current?.fit).toBe('long')
+    vi.advanceTimersByTime(LONG_NOTE_MS - 201)
+    expect(notes.current).not.toBeNull()
+    vi.advanceTimersByTime(1)
+    expect(notes.current).toBeNull()
+    // A fit for a message that's gone changes nothing.
+    notes.fit(7, 'toolong')
+    expect(notes.current).toBeNull()
+  })
+
+  it('ends the first launch\'s how-to once the cursor has touched it and left', () => {
+    const notes = new IslandNotes({ changed: () => {} })
+    notes.show({ kind: 'first', name: 'Rest the cursor on the notch', text: 'or press ⌥Space.', at: 1, key: 'first-peek' })
+    vi.advanceTimersByTime(2000)
+    notes.hover(true)
+    vi.advanceTimersByTime(500)
+    notes.hover(false)
+    vi.advanceTimersByTime(NOTE_AFTER_HOVER_MS)
+    expect(notes.current).toBeNull()
   })
 })

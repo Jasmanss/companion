@@ -599,6 +599,23 @@ export function App() {
     if (noKey) return setToast('Add your Anthropic API key in Settings first.')
     send(alert.action.prompt)
   }
+  // From the notch island: an alert's offer taken there, and a review's Open big.
+  const fromIsland = useRef<{ runAction(alert: AlertView): void; openReviewById(id: string): void } | null>(null)
+  fromIsland.current = {
+    runAction,
+    openReviewById: (id) => {
+      const index = shownReviews.findIndex((r) => r.id === id)
+      if (index >= 0) openReview(index)
+    },
+  }
+  useEffect(() => {
+    const offAct = api.alerts.onAct((alert) => fromIsland.current?.runAction(alert))
+    const offOpen = api.review.onOpen((id) => fromIsland.current?.openReviewById(id))
+    return () => {
+      offAct()
+      offOpen()
+    }
+  }, [])
   const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
   const lastFile = project ? lastFiles[project.path] : undefined
   // Working: what it's on right now. Idle: the last file it read here.

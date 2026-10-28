@@ -9,8 +9,15 @@
 // News gets a note, one line under the notch: a session finished, or a second project started while one works. It
 // shows for a few seconds and then settles, the island going back to compact with the status on its right. With the
 // cursor on the island it stays, and once the cursor leaves it stays a moment longer.
+//
+// In Island mode every alert comes out as the island too (island Phase 3), never as the old alert under the notch:
+// something that waits on you (an approval, a question, Steward's own request, a failed build) as the big approval
+// size, a review as the review size, and anything else as a note. A note too long for one line grows into the long
+// note and stays out longer, so its words are never cut off.
 import type { HookPayload } from './hook-payload'
-import type { AlertView, IslandNote, IslandStatus, SessionView } from '../shared/types'
+import { FIRST_PEEK_HOLD_MS } from './presence'
+import { noteSize } from '../shared/notch'
+import type { AlertView, IslandNote, IslandNoteKind, IslandStatus, SessionView } from '../shared/types'
 
 /** A session that finished shows a check this long, then the island goes. */
 export const FINISHED_SHOW_MS = 20_000
@@ -20,6 +27,9 @@ export const TURN_GIVE_UP_MS = 3 * 60 * 60 * 1000
 export const NOTE_SHOW_MS = 4500
 /** Once the cursor leaves the island, a note it kept stays this much longer, so it doesn't vanish from under the eye. */
 export const NOTE_AFTER_HOVER_MS = 1500
+/** A long note (two or three lines) stays out longer, to be read; a big one, or a note too long even for that, longer still. */
+export const LONG_NOTE_MS = 6500
+export const BIG_NOTE_MS = 9000
 
 /** The turns going on, by session id: when each began. */
 export type Turns = Record<string, number>
@@ -39,6 +49,8 @@ export interface IslandInput {
   /** A chat stopped a moment ago asking you something, or after a long turn (main/reactions.ts, recentStops). */
   asked?: boolean
   proud?: boolean
+  /** A build failed and nothing for that project has worked since (the worried face, up to 30 minutes). */
+  failed?: boolean
   now: number
 }
 
@@ -49,10 +61,15 @@ export function noteTurn(turns: Turns, event: HookPayload, now: number): Turns {
   return turns
 }
 
-/** The status, with the note while one shows. Nothing going on, there's no island, so no note either. */
+/**
+ * The status, with the message while one shows. A note about the work (finished, started) only shows with the work's
+ * status: with nothing going on there's no island for it. An alert's message shows on its own; good news has no status
+ * of its own, so its spark shows while its note does.
+ */
 export function islandStatus(o: IslandInput): IslandStatus {
   const status = rightSide(o)
-  return status.right && o.note ? { ...status, note: o.note } : status
+  if (!o.note || (!status.right && (o.note.kind === 'finished' || o.note.kind === 'started'))) return status
+  return { ...status, right: status.right ?? (o.note.kind === 'good' ? 'good' : null), note: o.note }
 }
 
 function rightSide(o: IslandInput): IslandStatus {
@@ -60,6 +77,8 @@ function rightSide(o: IslandInput): IslandStatus {
   // An approval is the amber mark; a chat asking you something (waiting for input, or ending on a question) a "?".
   if (o.agentWaiting || o.sessions.some((s) => s.state === 'needs-approval')) return { right: 'needs' }
   if (waiting.size || o.asked) return { right: 'asks' }
+  // A failed build is a red mark, so it isn't mistaken for an amber wait.
+  if (o.failed) return { right: 'failed' }
   if (o.reviews > 0) return { right: 'review' }
   const starts = Object.entries(o.turns)
     .filter(([id, at]) => !waiting.has(id) && o.now - at < TURN_GIVE_UP_MS)
@@ -92,12 +111,48 @@ export function hookNote(event: HookPayload, o: { turns: Turns; agentBusy: boole
   return others ? { kind: 'started', name: o.name, text: 'started', at: o.now } : null
 }
 
-/** The catch-all note: an alert with no island size of its own shows as its title, in bold, and one line. */
-export const alertNote = (alert: Pick<AlertView, 'title' | 'detail'>, now: number): IslandNote => ({ kind: 'alert', name: alert.title, text: alert.detail ?? '', at: now })
+/** What kind of message an alert is on the island, from its key. Anything not known is the catch-all, a note. */
+export function alertKind(key: string): IslandNoteKind {
+  if (key.startsWith('approval:')) return 'wait'
+  if (key.startsWith('input:')) return 'input'
+  if (key.startsWith('agent-approval:')) return 'agent'
+  if (key.startsWith('deploy-failed:')) return 'failed'
+  if (key.startsWith('deploy-ready:') || key.startsWith('pr-merged:')) return 'good'
+  if (key.startsWith('review:')) return 'review'
+  if (key === 'first-peek') return 'first'
+  return 'alert'
+}
 
-/** The island's note: shown for NOTE_SHOW_MS, kept while the cursor is on the island, then it settles. */
+/** An alert as the island's message: its title in bold, then its detail; its key, so its buttons act on it, and its offer. */
+export const alertNote = (alert: Pick<AlertView, 'key' | 'title' | 'detail' | 'action'>, now: number): IslandNote => ({
+  kind: alertKind(alert.key),
+  name: alert.title,
+  text: alert.detail ?? '',
+  at: now,
+  key: alert.key,
+  ...(alert.action ? { action: alert.action.label } : {}),
+})
+
+/** How long a message stays out before it settles (the cursor on the island keeps it longer). */
+export function noteShowMs(note: Pick<IslandNote, 'kind' | 'fit'>): number {
+  const size = noteSize(note)
+  if (size === 'approval' || size === 'review' || note.fit === 'toolong') return BIG_NOTE_MS
+  if (note.kind === 'first') return FIRST_PEEK_HOLD_MS
+  return size === 'long' ? LONG_NOTE_MS : NOTE_SHOW_MS
+}
+
+export { noteSize }
+
+const big = (note: IslandNote) => noteSize(note) === 'approval' || noteSize(note) === 'review'
+
+/**
+ * The island's message: shown for its time (noteShowMs), kept while the cursor is on the island, then it settles. A
+ * small note never takes the place of a big one that's still out (its mark on the right says it's still waiting), and
+ * good news within a moment of other good news joins its note ("and 2 more").
+ */
 export class IslandNotes {
   private note: IslandNote | null = null
+  private shownAt = 0
   private until = 0
   private hovered = false
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -109,17 +164,35 @@ export class IslandNotes {
     return this.note
   }
 
-  /** A new note takes the place of the one showing. */
-  show(note: IslandNote): void {
+  /** A new message takes the place of the one showing. Returns whether it shows. */
+  show(note: IslandNote): boolean {
+    const cur = this.note
+    if (cur?.kind === 'good' && note.kind === 'good') {
+      this.note = { ...cur, more: (cur.more ?? 0) + 1 }
+      this.arm(Math.max(this.until - this.now(), NOTE_SHOW_MS))
+      this.o.changed()
+      return true
+    }
+    if (cur && big(cur) && !big(note)) return false
     this.note = note
-    this.arm(NOTE_SHOW_MS)
+    this.shownAt = this.now()
+    this.arm(noteShowMs(note))
+    this.o.changed()
+    return true
+  }
+
+  /** The notch page measured the message's words (at: which message): a long one stays out longer. */
+  fit(at: number, fit: NonNullable<IslandNote['fit']>): void {
+    if (!this.note || this.note.at !== at || this.note.fit === fit) return
+    this.note = { ...this.note, fit }
+    if (!this.hovered) this.arm(Math.max(this.until - this.now(), noteShowMs(this.note) - (this.now() - this.shownAt)))
     this.o.changed()
   }
 
-  /** The cursor came onto the island, or left it. */
+  /** The cursor came onto the island, or left it. The first launch's how-to ends once it has been touched and left. */
   hover(on: boolean): void {
     this.hovered = on
-    if (!on && this.note) this.arm(Math.max(this.until - this.now(), NOTE_AFTER_HOVER_MS))
+    if (!on && this.note) this.arm(this.note.kind === 'first' ? NOTE_AFTER_HOVER_MS : Math.max(this.until - this.now(), NOTE_AFTER_HOVER_MS))
   }
 
   /** Settle now (or only if it's this kind of note). */
