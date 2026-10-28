@@ -3,14 +3,14 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch } from '../shared/notch'
+import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
-import { TAB_SIZES } from '../shared/steward'
+import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, Mood, NightReport, NotchGeometry, NotchStyle, PillGlint, Project, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
+import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, IslandAct, IslandNote, IslandNoteKind, Mood, NightReport, NotchGeometry, NotchLayout, NotchStyle, PillGlint, Project, SessionView, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -43,7 +43,6 @@ import {
   EDGE_FAR_DWELL_MS,
   freshPush,
   inRect,
-  islandShows,
   MAX_HELD,
   menuBarTitle,
   nextLookMs,
@@ -61,7 +60,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { alertNote, hookNote, IslandNotes, islandStatus, nextChange, NOTE_SHOW_MS, type Turns } from './island-status'
+import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { SessionActivity } from './session-activity'
@@ -81,10 +80,10 @@ import { deadPort, gitInit, startPageServer, type SmokeVersion } from './smoke-r
 import { extensionForMime, TrayStore } from './tray-store'
 import { saveImagesToProject } from './projects'
 import { capturePage } from './screenshot'
+import { describeEyeSweep, measureEyeSweep, type EyeSample, type EyeSweep } from './smoke-eyes'
 import { SettingsStore } from './settings'
 import { parseSettingsPatch } from './settings-schema'
 
-const NUDGE_WIDTH = 340
 const PANEL_WIDTH = 400
 const VIEWER_MAX_WIDTH = 1100
 const SETTINGS_SIZE = { width: 720, height: 560 }
@@ -97,6 +96,8 @@ const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
+/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows (CI runs it all). */
+const SMOKE_ONLY = process.env.STEWARD_SMOKE_ONLY
 /** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
 const SLIDE_MS = 700
 /** Why the window went, when the page's slide ended with no frame to draw its end (its own clock said so). */
@@ -294,6 +295,12 @@ function boundsFor(state: DockState): Electron.Rectangle {
       win.webContents.send('dock:overhang', oh)
     }
     const width = state === 'nudge' ? NUDGE_WIDTH : tab.width
+    if (state === 'nudge' && nudgeWords > tab.height) {
+      // Taller than the tab for its words: grown evenly up and down from the tab, kept inside the screen.
+      const height = Math.min(nudgeWords, area.height - 16)
+      const y = Math.round(Math.min(area.y + area.height - height - 8, Math.max(area.y + 8, top - (height - tab.height) / 2)))
+      return { x: x(width) - (edge === 'left' ? oh : 0), y, width: width + oh, height }
+    }
     return { x: x(width) - (edge === 'left' ? oh : 0), y: top, width: width + oh, height: tab.height }
   }
   const width = state === 'viewing' ? Math.min(VIEWER_MAX_WIDTH, area.width - 120) : PANEL_WIDTH
@@ -1147,16 +1154,85 @@ function showAlerts(list: AlertView[]): void {
   const split = isOpen(dock) ? { peek: list, held: [] } : dock === 'hidden' || holding ? { peek: [], held: list } : splitAlerts(list, settings.steward().alertPeek, island)
   // The morning card never waits with the others: the report it is about shows when the panel opens.
   const held = split.held.filter((a) => !a.key.startsWith('night:'))
-  // In the island a review comes out as the island itself (its note), never as the old alert under the notch.
-  const notes = island && !isOpen(dock) ? split.peek.filter((a) => islandShows(a.key)) : []
+  // In the island every alert comes out as the island itself (one of its sizes), never as the old alert under the notch.
+  const notes = island && !isOpen(dock) ? split.peek : []
   const peek = split.peek.filter((a) => !notes.includes(a))
-  for (const alert of notes) islandNotes.show(alertNote(alert, Date.now()))
+  for (const alert of notes) showOnIsland(alert)
   if (held.length) heldAlerts = [...held.toReversed(), ...heldAlerts].slice(0, MAX_HELD)
   if (peek.length) {
     win?.webContents.send('alerts:show', peek)
     if (dock === 'collapsed') setDock('nudge')
   }
   updateMenuBar()
+}
+
+/** How tall the alert at the edge's words are (the page measures them): its window grows past the tab's height to hold them. */
+let nudgeWords = 0
+
+/** The alerts the island showed lately, by key: its buttons act on them, and a click shows one too long for it in the panel. */
+const islandAlerts = new Map<string, AlertView>()
+
+/**
+ * An alert as the island's message (Island mode): the big sizes for what waits on you, a note for the rest. One that
+ * can't show now (a note while something that needs you is out) waits for the panel, like the alerts held back.
+ */
+function showOnIsland(alert: AlertView): void {
+  islandAlerts.delete(alert.key)
+  islandAlerts.set(alert.key, alert)
+  for (const key of [...islandAlerts.keys()].slice(0, Math.max(0, islandAlerts.size - MAX_HELD))) islandAlerts.delete(key)
+  // (The morning card never waits: the report it's about shows when the panel opens.)
+  if (!islandNotes.show(alertNote(alert, Date.now())) && !alert.key.startsWith('night:')) heldAlerts = [alert, ...heldAlerts].slice(0, MAX_HELD)
+}
+
+/**
+ * A button on the island's message (at: which message, so a late press on one that's gone does nothing). Open and a
+ * click on the island open the panel (a message too long for the island shows there whole); Later settles it now; Want
+ * me to look? opens the panel and has Steward's agent read the build log; Allow and Deny answer Steward's own request;
+ * Looks good and Open big are a review's.
+ */
+function islandAct(what: unknown, at: unknown): void {
+  const note = islandNotes.current
+  if (!note || note.at !== at) return
+  const alert = note.key ? islandAlerts.get(note.key) : undefined
+  const id = note.key?.slice(note.key.indexOf(':') + 1) ?? ''
+  islandNotes.drop()
+  switch (what) {
+    case 'open':
+      setDock('expanded')
+      if (alert && note.fit === 'toolong') win?.webContents.send('alerts:show', [alert])
+      return
+    case 'look':
+      setDock('expanded')
+      if (alert?.action) win?.webContents.send('alerts:act', alert)
+      return
+    case 'allow':
+    case 'deny':
+      if (note.kind === 'agent') agent.approve(id, what === 'allow')
+      return
+    case 'good':
+      if (note.kind === 'review' && isReviewId(id)) void reviews.markGood(id)
+      return
+    case 'big':
+      if (note.kind !== 'review' || !isReviewId(id)) return
+      setDock('expanded')
+      win?.webContents.send('review:open', id)
+      return
+  }
+}
+
+/**
+ * Whether what a big message is about still waits: a session's approval or question until it moves on, Steward's own
+ * request until it's answered, a review until it's decided. A moment's grace after it shows, as the alert can come just
+ * before the state it's about.
+ */
+function stillWaits(note: IslandNote, now: number): boolean {
+  if (now - note.at < 1000) return true
+  const session = (state: SessionView['state']) => sessions.list().some((s) => s.state === state && !!note.key?.includes(`:${s.id}:`))
+  if (note.kind === 'wait') return session('needs-approval')
+  if (note.kind === 'input') return session('needs-input')
+  if (note.kind === 'agent') return agent.waitingForApproval
+  if (note.kind === 'review') return pendingReviews > 0
+  return true
 }
 
 /** The panel opened: the alerts that didn't peek out, or waited while Steward stepped aside, show now. */
@@ -1218,6 +1294,8 @@ function maybeFirstPeek(): void {
   // The note was the panel's first-time note; this shows it instead.
   void appState.update({ firstPeekShown: true, presenceNoteSeen: true })
   const { title, detail } = firstPeekNote(noteFor())
+  // In the island it's the island's own note (it stays at least 10 s, and ends once the cursor has touched it and left).
+  if (inNotch() && settings.steward().notchStyle === 'island') return void islandNotes.show({ kind: 'first', name: title, text: detail, at: Date.now(), key: 'first-peek' })
   win.webContents.send('alerts:show', [{ id: 0, key: 'first-peek', level: 'normal', title, detail, at: Date.now() }])
   setDock('nudge')
   firstPeek = { startedAt: Date.now(), touched: false }
@@ -1391,11 +1469,14 @@ function updateIsland(): void {
   const now = Date.now()
   if (!agent.busy) agentSince = undefined
   else agentSince ??= now
-  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, note: islandNotes.current, now }
+  // A big message about something that no longer waits (answered in the terminal, say) settles now.
+  const shown = islandNotes.current
+  if (shown && !stillWaits(shown, now)) return islandNotes.drop()
+  const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, failed: moods.troubled(now), note: shown, now }
   notch.setIsland(islandStatus(input))
-  // An alert's note (a review) comes out even when Steward only shows when needed: the island wakes while it shows,
-  // as the tab comes out for a nudge, and goes back to sleep once it settles.
-  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || islandNotes.current?.kind === 'alert')
+  // An alert's message comes out even when Steward only shows when needed: the island wakes while it shows, as the tab
+  // comes out for a nudge, and goes back to sleep once it settles. (Finished and started are about work going on.)
+  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || (!!shown && shown.kind !== 'finished' && shown.kind !== 'started'))
   clearTimeout(islandTimer)
   const next = nextChange(input)
   if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
@@ -1667,7 +1748,17 @@ function registerIpc(): void {
   ipcMain.handle('dock:resetPanel', () => resetPanelPlace())
   ipcMain.handle('notch:geometry', () => notchGeo)
   ipcMain.handle('notch:state', () => notch.state())
-  ipcMain.on('notch:click', () => setDock('expanded'))
+  // A click on the island opens the panel, as its message's Open does.
+  ipcMain.on('notch:click', () => (islandNotes.current ? islandAct('open', islandNotes.current.at) : setDock('expanded')))
+  ipcMain.on('notch:act', (_e, what: unknown, at: unknown) => islandAct(what, at))
+  ipcMain.on('dock:nudgeWords', (_e, height: unknown) => {
+    if (typeof height !== 'number' || !Number.isFinite(height)) return
+    nudgeWords = Math.ceil(height)
+    if (dock === 'nudge' && !inNotch() && win && !win.isDestroyed()) win.setBounds(boundsFor('nudge'))
+  })
+  ipcMain.on('notch:fit', (_e, at: unknown, fit: unknown) => {
+    if (typeof at === 'number' && (fit === 'note' || fit === 'long' || fit === 'toolong')) islandNotes.fit(at, fit)
+  })
   ipcMain.on('notch:reportMood', (_e, mood: unknown, glint: unknown) => {
     if (MOODS.includes(mood as Mood) && GLINTS.includes(glint as PillGlint)) notch.setMood(mood as Mood, glint as PillGlint)
   })
@@ -1964,7 +2055,11 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       console.log(unseen ? 'smoke: hidden: the windows are real but nearly see-through (1%), click-through and never focused (--visible shows them)' : 'smoke: visible: the windows are on screen, and take focus')
       // A fresh install is quiet: the tab stays out of sight until it's needed. Then Presence goes to Always visible.
       const presenceTimer = setTimeout(() => fail('presence timed out'), 90_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 2000)
-      await checkPresence(w, out)
+      if (SMOKE_ONLY === 'island') {
+        await settings.update({ steward: { presence: 'always' } })
+        presenceChanged()
+        for (const t = Date.now(); !w.isVisible() && Date.now() - t < 3000; ) await new Promise((resolve) => setTimeout(resolve, 100))
+      } else await checkPresence(w, out)
       clearTimeout(presenceTimer)
       // The peek has to appear on its own, before anything asks for the panel.
       if (!w.isVisible()) return fail('window never showed')
@@ -1977,10 +2072,22 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await fs.writeFile(out, image.toPNG())
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
+      if (SMOKE_ONLY === 'island') {
+        const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
+        await checkTabAlertWords(w, out)
+        setDock('collapsed')
+        if (!notchGeo) return fail('no notch: run with STEWARD_SMOKE_NOTCH=1')
+        await checkIsland(out)
+        clearTimeout(islandTimer)
+        return app.exit(0)
+      }
       if (SMOKE_DEMO) await captureDemo(w, out, SMOKE_DEMO)
       const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
       await checkReview(w, out)
       clearTimeout(reviewTimer)
+      const wordsTimer = setTimeout(() => fail("the edge alert's words timed out"), 20_000)
+      await checkTabAlertWords(w, out)
+      clearTimeout(wordsTimer)
       const watchTimer = setTimeout(() => fail('overnight watch timed out'), 40_000)
       await checkWatch(w, out)
       clearTimeout(watchTimer)
@@ -3426,6 +3533,16 @@ async function checkIsland(out: string): Promise<void> {
   if (!clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx - hw - 60, 8)) throw new Error('at rest, there is an island beside the notch')
   await fs.writeFile(out.replace(/\.png$/, '-island-rest.png'), img.toPNG())
 
+  // The eyes following a cursor sweeping past: under the notch, and across the black (where the island leans out).
+  for (const mood of ['resting', 'idle'] as const) {
+    notch.setMood(mood, 'sweep')
+    await sleep(600)
+    await sweepEyes(page, geo, 'under the notch', 45)
+    await sleep(600)
+    await sweepEyes(page, geo, 'across the notch', 10)
+  }
+  await sleep(900)
+
   // A prompt sent: the compact island grows out of the notch, Steward steps into its left side, the time on its right.
   const grows = await motionLook(page, '.isl .bp', '.isl')
   smoothly(`the island growing out of the notch${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-1')))
@@ -3529,26 +3646,11 @@ async function checkIsland(out: string): Promise<void> {
     sendSessions()
   }))
   img = await shot()
-  if (notch.state().island?.right !== null || !clear(img, layout.cx + hw + 30, 8) || !clear(img, layout.cx, layout.height + 6) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with nothing going on, the island did not go back into the notch with Steward peeking')
+  const back = { right: notch.state().island?.right ?? null, beside: clear(img, layout.cx + hw + 30, 8), under: clear(img, layout.cx, layout.height + 6), peeking: steward(img, layout.cx - hw - 12, restPill.y) }
+  if (back.right !== null || !back.beside || !back.under || !back.peeking) throw new Error(`with nothing going on, the island did not go back into the notch with Steward peeking (${JSON.stringify({ ...back, pixel: pixel(img, layout.cx - hw - 12, restPill.y + 9), mood: notch.state().mood })})`)
   console.log('smoke: island: wider with the cursor on it, a count for two projects, a check when Claude stops, then back into the notch')
 
-  // An alert under the notch (until the island's own bigger sizes come): the island is the chin the alert joins.
-  raise({ key: 'approval:smoke-island', level: 'urgent', title: 'A session needs you', detail: 'under the island' })
-  alerts.flush()
-  // With Reduce Motion (as on CI) the island fades out, changes and fades in, and a change within 130 ms starts that
-  // over, so on a slow runner the chin can take longer than a fixed wait: wait for it, up to 3 s, and say what's missing.
-  let chin = { dock: dockNow(), nudge: false, drawn: false }
-  for (const t = Date.now(); Date.now() - t < 3000; await sleep(150)) {
-    img = await shot()
-    chin = { dock: dockNow(), nudge: notch.state().nudge === true, drawn: black(img, layout.cx, layout.height + NOTCH_LIP - 4) }
-    if (chin.dock === 'nudge' && chin.nudge && chin.drawn) break
-  }
-  if (chin.dock !== 'nudge' || !chin.nudge || !chin.drawn)
-    throw new Error(`with an alert under the notch, the island is not the chin the alert joins (Steward ${chin.dock}, the notch's nudge ${chin.nudge}, the chin drawn ${chin.drawn})`)
-  setDock('collapsed')
-  await sleep(700)
-  if (!clear(await shot(), layout.cx, layout.height + NOTCH_LIP - 4)) throw new Error('after the alert, the island did not go back into the notch')
-  console.log('smoke: island: an alert under the notch joins the island, grown into a chin, and it goes back after')
+  await checkIslandAlerts(out, { page, layout, shot, black, clear })
 
   // Asleep: Steward tucked fully behind the notch.
   await settings.update({ steward: { presence: 'quiet' } })
@@ -3558,25 +3660,31 @@ async function checkIsland(out: string): Promise<void> {
   if (!clear(img, layout.cx - hw - 12, restPill.y) || !black(img, layout.cx, 8)) throw new Error('asleep, Steward is not tucked behind the notch')
   console.log('smoke: island: asleep, Steward is tucked behind the notch')
 
-  // A Visual Review in the island comes out as the island itself: its catch-all note ("haven changed" and one line),
-  // with the review's mark on the right, never as the old alert under the notch. Asleep (Only when needed), the island
+  // A Visual Review in the island comes out as the island itself, at the review size with Steward joined: its title,
+  // its words and Open big and Looks good, never as the old alert under the notch. Asleep (Only when needed), the island
   // wakes for it and goes back to sleep once it settles. "Only when a session needs me" lets it through.
   await settings.update({ steward: { alertPeek: 'needs-me' } })
   pendingReviews = 1
   updateIsland()
   raise(reviewAlert({ id: '20261024-120000-5a0ce111', project: 'haven', projectPath: '/tmp/steward-smoke-island' }))
-  await sleep(700)
-  line = await noteLine()
+  await sleep(1000)
   const reviewed = notch.state()
+  const reviewCard = String(await page.executeJavaScript(`document.querySelector('.isl-card.on')?.textContent ?? ''`))
   if (dockNow() === 'nudge' || reviewed.nudge || win!.isVisible()) throw new Error('a review came out as the old alert under the notch')
-  if (reviewed.island?.note?.kind !== 'alert' || reviewed.island.right !== 'review' || !reviewed.awake || !line.text.includes('haven changed') || !line.text.includes('Review what Claude did?') || line.shown < 0.9)
-    throw new Error(`a review in the island shows ${JSON.stringify(reviewed.island)} (awake: ${reviewed.awake}), line "${line.text}"`)
+  if (reviewed.island?.note?.kind !== 'review' || reviewed.island.right !== 'review' || !reviewed.awake || !reviewCard.includes('haven changed') || !reviewCard.includes('Open big') || !reviewCard.includes('Looks good'))
+    throw new Error(`a review in the island shows ${JSON.stringify(reviewed.island)} (awake: ${reviewed.awake}), card "${reviewCard}"`)
+  const reviewSize = islandParts('review', layout)
   img = await shot()
-  if (!black(img, layout.cx, layout.height + 6)) throw new Error("the review's note did not grow the island")
+  if (!black(img, layout.cx, reviewSize.height - 3) || !black(img, layout.cx - reviewSize.width / 2 + 10, 6)) throw new Error('the review did not grow the island to the review size')
   await fs.writeFile(out.replace(/\.png$/, '-island-review.png'), img.toPNG())
-  await sleep(NOTE_SHOW_MS + 800)
-  if (notch.state().island?.note || notch.state().awake || dockNow() === 'nudge' || win!.isVisible()) throw new Error('after the review note settled, the island did not go back to sleep')
-  console.log(`smoke: island: a review comes out as the island's note ("${line.text}"), never under the notch; asleep, the island wakes for it and sleeps after`)
+  // The cursor on it keeps it past its nine seconds, Only when needed too (where the island doesn't grow with it).
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + reviewSize.height - 20 }
+  await sleep(BIG_NOTE_MS + 600)
+  if (notch.state().island?.note?.kind !== 'review') throw new Error('Only when needed, the cursor on the review did not keep it out')
+  smokeNotchCursor = null
+  await sleep(NOTE_AFTER_HOVER_MS + 900)
+  if (notch.state().island?.note || notch.state().awake || dockNow() === 'nudge' || win!.isVisible()) throw new Error('after the review settled, the island did not go back to sleep')
+  console.log(`smoke: island: a review comes out at the review size (${reviewSize.width}x${reviewSize.height}) with Steward joined, never under the notch; asleep, the island wakes for it, the cursor on it keeps it, and it sleeps after`)
   pendingReviews = 0
 
   await settings.update({ steward: { presence: 'always', notchStyle: 'chin', alertPeek } })
@@ -3585,6 +3693,229 @@ async function checkIsland(out: string): Promise<void> {
   islandNotes.drop()
   if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
   void sendReviews()
+}
+
+/**
+ * The alert at the screen's edge (a Mac without a notch keeps it) never cuts its words off: with a long title, a long
+ * detail, an offer and "and 1 more", every word is inside the window (the detail stops at three lines, its last ending
+ * in "…"), and the window grows taller to hold them rather than clipping. Island Phase 3, Plan update 3.
+ */
+async function checkTabAlertWords(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  setDock('collapsed')
+  await sleep(600)
+  const long: AlertView = {
+    id: 9001,
+    key: 'smoke-words:1',
+    level: 'urgent',
+    title: 'companion: PR #39 merged into main, the main chat redesign',
+    detail: 'Main chat, Phase 1: take the hide button and the pin out of the header, add the Ask | Auto switch by the message box, round the Send button, and label the commands that ran on their own, with why each one asked',
+    action: { label: 'Want me to look?', prompt: 'smoke' },
+    at: Date.now(),
+  }
+  w.webContents.send('alerts:show', [long, { ...long, id: 9002, key: 'smoke-words:2' }])
+  setDock('nudge')
+  await sleep(900)
+  const m = (await w.webContents.executeJavaScript(`(() => {
+    const box = (sel) => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), wide: e.scrollWidth > e.clientWidth + 1, tall: e.scrollHeight > e.clientHeight + 1, lines: Math.round(e.clientHeight / parseFloat(getComputedStyle(e).lineHeight)) } }
+    return { window: innerHeight, nudge: box('.nudge'), text: box('.nudge-text'), title: box('.nudge-title'), detail: box('.nudge-detail'), more: box('.nudge-more'), action: box('.nudge-action') }
+  })()`)) as { window: number } & Record<'nudge' | 'text' | 'title' | 'detail' | 'more' | 'action', { top: number; bottom: number; wide: boolean; tall: boolean; lines: number } | null>
+  const pieces = [m.title, m.detail, m.more, m.action]
+  const inside = pieces.every((p) => p && p.top >= 0 && p.bottom <= m.window)
+  console.log(`smoke: the edge alert with long words: window ${m.window} tall (the tab is ${TAB_SIZES[settings.steward().size].tab.height}), words from ${m.text?.top} to ${m.text?.bottom}, title ${m.title?.lines} lines, detail ${m.detail?.lines} lines${m.detail?.tall ? ' (clamped, "…")' : ''}`)
+  if (!inside || m.title?.wide || m.title?.tall || m.detail?.wide || (m.detail?.lines ?? 0) < 3) throw new Error(`the edge alert cuts its words off: ${JSON.stringify(m)}`)
+  await fs.writeFile(out.replace(/\.png$/, '-edge-alert.png'), (await w.webContents.capturePage()).toPNG())
+  setDock('collapsed')
+  await sleep(600)
+}
+
+/** What checkIsland lends the island's alert checks: the notch page, where the notch is, and its pixel tests. */
+interface IslandProbe {
+  page: Electron.WebContents
+  layout: NotchLayout
+  shot(): Promise<Electron.NativeImage>
+  black(img: Electron.NativeImage, x: number, y: number): boolean
+  clear(img: Electron.NativeImage, x: number, y: number): boolean
+}
+
+/**
+ * Island Phase 3: in Island mode every alert comes out as the island, never as the old pill under the notch. One of
+ * every kind (a session's approval and question through the real hooks, Steward's own request, a failed build, good
+ * news, a merged PR, a kind nobody has made yet), each at its size; the buttons (Later, Open, Deny); good news in a
+ * moment joining one note; a long message never cut off, and one too long for three lines ending in "…"; and "Alerts
+ * that peek out: Nothing" leaving only the status marks.
+ */
+async function checkIslandAlerts(out: string, { page, layout, shot, black, clear }: IslandProbe): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const alertPeek = settings.steward().alertPeek
+  await settings.update({ steward: { alertPeek: 'all' } })
+  const oldPill = () => dock === 'nudge' || notch.state().nudge === true || win!.isVisible()
+  const sizeNow = () => {
+    const n = notch.state().island?.note
+    return n ? noteSize(n) : null
+  }
+  const drawnAt = async (size: IslandNoteSize) => {
+    const p = islandParts(size, layout)
+    const img = await shot()
+    return black(img, layout.cx, p.height - 3) && clear(img, layout.cx, p.height + 6) && black(img, layout.cx + p.width / 2 - 10, 6) && clear(img, layout.cx + p.width / 2 + 6, 6)
+  }
+  const waitFor = async (ok: () => boolean | Promise<boolean>, ms = 2500) => {
+    for (const t = Date.now(); Date.now() - t < ms; await sleep(100)) if (await ok()) return true
+    return false
+  }
+  /** The words showing, and whether any of them is cut: wider or taller than its box. */
+  const words = (sel: string) =>
+    page.executeJavaScript(`[...document.querySelectorAll(${JSON.stringify(sel)})].map((e) => ({ text: e.textContent, wide: e.scrollWidth > e.clientWidth + 1, tall: e.scrollHeight > e.clientHeight + 1, lines: Math.round(e.clientHeight / 16) }))`) as Promise<{ text: string; wide: boolean; tall: boolean; lines: number }[]>
+  const press = async (act: IslandAct) => {
+    const at = (await page.executeJavaScript(`(() => { const b = document.querySelector('.isl-card.on [data-act="${act}"]'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)) as { x: number; y: number } | null
+    if (!at) throw new Error(`the island's card has no ${act} button`)
+    page.sendInputEvent({ type: 'mouseDown', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+    page.sendInputEvent({ type: 'mouseUp', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  }
+  const settle = async () => {
+    islandNotes.drop()
+    await sleep(700)
+  }
+  const cwd = '/tmp/steward-smoke-island'
+  const hook = (event: Record<string, unknown>) => onHookEvent({ session_id: 'smoke-island-3', cwd, ...event } as unknown as HookPayload)
+
+  // One of every kind. A session's approval and question come through the hooks, so the session really waits.
+  const kinds: { what: string; kind: IslandNoteKind; size: IslandNoteSize; post(): void | Promise<void>; shot?: string }[] = [
+    { what: "a session's approval", kind: 'wait', size: 'approval', post: () => hook({ hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm install' } }), shot: 'approval' },
+    { what: 'a question', kind: 'input', size: 'approval', post: () => hook({ hook_event_name: 'Notification', message: 'Which database should the new table use?' }) },
+    { what: "Steward's own request", kind: 'agent', size: 'approval', post: () => raise({ key: 'agent-approval:smoke-1', level: 'urgent', title: 'Steward needs your OK', detail: 'npm install', mood: 'needs-you' }), shot: 'agent' },
+    { what: 'a failed build', kind: 'failed', size: 'approval', post: () => raise({ key: 'deploy-failed:dpl_smoke', level: 'urgent', title: 'haven deploy failed', detail: 'Missing environment variable DATABASE_URL', mood: 'mad', scope: cwd, action: { label: 'Want me to look?', prompt: 'smoke' } }), shot: 'failed' },
+    { what: 'a deploy', kind: 'good', size: 'note', post: () => raise({ key: 'deploy-ready:dpl_smoke', level: 'urgent', title: 'haven deployed', detail: 'haven.vercel.app', scope: cwd }) },
+    { what: 'a merged PR', kind: 'good', size: 'note', post: () => raise({ key: 'pr-merged:/tmp/haven:12', level: 'urgent', title: 'haven: PR #12 merged', detail: 'Make the button blue' }) },
+    { what: 'a kind nobody has made yet', kind: 'alert', size: 'note', post: () => raise({ key: 'brand-new-kind:1', level: 'urgent', title: 'Something new', detail: 'with one line' }) },
+  ]
+  const joins = await motionLook(page, '.isl-pill', '.isl')
+  for (const k of kinds) {
+    await settle()
+    // The first one: Steward joining the island (its body melting into the black, its eyes carrying on) is drawn frame by frame.
+    if (k.kind === 'wait')
+      smoothly(
+        `Steward joining the island${joins.label}`,
+        await watchMotion(page, joins, 900, async () => {
+          await k.post()
+          alerts.flush()
+        }),
+      )
+    else await k.post()
+    alerts.flush()
+    const ok = await waitFor(async () => notch.state().island?.note?.kind === k.kind && sizeNow() === k.size && (await drawnAt(k.size)), k.kind === 'agent' ? 950 : 2500)
+    if (oldPill()) throw new Error(`${k.what} came out as the old pill under the notch (Steward ${dock}, the notch's nudge ${notch.state().nudge})`)
+    if (!ok) throw new Error(`${k.what} did not open as the island's ${k.size} size (${JSON.stringify(notch.state().island)}, drawn: ${await drawnAt(k.size)})`)
+    const cut = (await words(k.size === 'note' ? '.isl-note-in, .isl-note-in b, .isl-note-in span' : '.isl-card.on .isl-ct-t b, .isl-card.on .isl-ct-t p')).filter((w) => w.wide || w.tall)
+    if (cut.length) throw new Error(`${k.what}: words are cut off on the island (${JSON.stringify(cut)})`)
+    if (k.shot) await fs.writeFile(out.replace(/\.png$/, `-island-${k.shot}.png`), (await shot()).toPNG())
+    // The buttons: Later settles a session's approval now; Deny answers Steward's own request; Open opens the panel.
+    if (k.kind === 'wait') {
+      // Good news while it's out doesn't take its place: it waits for the panel (the menu bar's dot).
+      raise({ key: 'deploy-ready:dpl_during', level: 'urgent', title: 'haven deployed', detail: 'haven.vercel.app' })
+      alerts.flush()
+      await sleep(300)
+      if (notch.state().island?.note?.kind !== 'wait' || !heldAlerts.some((a) => a.key === 'deploy-ready:dpl_during')) throw new Error(`good news during an approval took its place, or was lost (${JSON.stringify(notch.state().island?.note)})`)
+      await press('later')
+      if (!(await waitFor(() => !notch.state().island?.note, 800))) throw new Error('Later did not settle the approval')
+      if (notch.state().island?.right !== 'needs') throw new Error(`settled, the approval left no amber mark (${notch.state().island?.right})`)
+    }
+    if (k.kind === 'agent') {
+      await press('deny')
+      if (!(await waitFor(() => !notch.state().island?.note, 800))) throw new Error("Deny did not answer Steward's own request")
+    }
+    if (k.kind === 'input') {
+      await press('open')
+      if (!(await waitFor(() => dock === 'expanded', 1500))) throw new Error(`Open on a question did not open the panel (${dock})`)
+      setDock('collapsed')
+      // The session moving on (here, gone) takes its "?" away, so the next kinds show their own marks.
+      sessions.dismiss('smoke-island-3')
+      sendSessions()
+      await sleep(900)
+    }
+    if (k.kind === 'failed' && notch.state().island?.right !== 'failed') throw new Error(`a failed build shows "${notch.state().island?.right}" on the right, not the red mark`)
+    console.log(`smoke: island: ${k.what} opens as the ${k.size} size (${notch.state().island?.note ? 'out' : 'settled by its button'}), never the old pill`)
+  }
+  moods.clear(cwd)
+  sendMood()
+
+  // Good news within a moment joins one note.
+  await settle()
+  for (const n of [1, 2, 3]) raise({ key: `deploy-ready:dpl_join${n}`, level: 'urgent', title: `site ${n} deployed`, detail: `site${n}.vercel.app` })
+  alerts.flush()
+  await sleep(700)
+  const joined = notch.state().island?.note
+  const joinedText = (await words('.isl-note-in span'))[0]?.text ?? ''
+  if (joined?.kind !== 'good' || joined.more !== 2 || !joinedText.includes('and 2 more')) throw new Error(`three deploys did not join one note (${JSON.stringify(joined)}, "${joinedText}")`)
+  console.log(`smoke: island: three deploys in a moment join one note ("${joined.name} ${joinedText}")`)
+
+  // A long message is never cut off: the title on its own line, the rest wrapped, the black taller. Too long for three
+  // lines, only the last line ends in "…" (it's clamped), and it stays out longer.
+  const pr = 'Main chat, Phase 1: take the hide button and the pin out of the header, and add the Ask | Auto switch'
+  const tooLong = `${pr} by the message box, round the Send button, and label the commands that ran on their own, with why each one asked`
+  for (const [what, detail, fit] of [['a long message', pr, 'long'], ['a message too long for three lines', tooLong, 'toolong']] as const) {
+    await settle()
+    raise({ key: `pr-merged:/tmp/companion:${fit}`, level: 'urgent', title: 'companion: PR #39 merged', detail })
+    alerts.flush()
+    const ok = await waitFor(async () => notch.state().island?.note?.fit === fit && sizeNow() === 'long' && (await drawnAt('long')))
+    if (!ok) throw new Error(`${what} did not grow the long note (${JSON.stringify(notch.state().island?.note)})`)
+    const lines = await words('.isl-note-in.long b, .isl-note-in.long span')
+    const [title, rest] = lines
+    if (!title || !rest || title.wide || title.tall || rest.wide || (fit === 'long' && rest.tall) || (fit === 'toolong' && (!rest.tall || title.lines + rest.lines !== NOTE_LINES)))
+      throw new Error(`${what}: the words are cut wrongly (${JSON.stringify(lines)})`)
+    await fs.writeFile(out.replace(/\.png$/, `-island-${fit}.png`), (await shot()).toPNG())
+    console.log(`smoke: island: ${what} grows the long note (${islandParts('long', layout).width}x${islandParts('long', layout).height}), ${title.lines} line for the title and ${rest.lines} for the rest${fit === 'toolong' ? ', the last one ending in "…"' : ', nothing cut off'}`)
+  }
+  await settle()
+
+  // "Alerts that peek out: Nothing": no notes and no big sizes, only the status marks.
+  await settings.update({ steward: { alertPeek: 'none' } })
+  const quietHook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string) => onHookEvent({ hook_event_name, session_id, cwd, ...(hook_event_name === 'Stop' ? { last_assistant_message: 'Done.' } : { prompt: 'go' }) } as HookPayload)
+  await quietHook('UserPromptSubmit', 'smoke-quiet-1')
+  await quietHook('UserPromptSubmit', 'smoke-quiet-2')
+  await sleep(500)
+  const started = notch.state().island
+  await quietHook('Stop', 'smoke-quiet-1')
+  raise({ key: 'approval:smoke-quiet-2:p:npm test', level: 'urgent', title: 'quiet is waiting on you', detail: 'npm test' })
+  alerts.flush()
+  await sleep(700)
+  const finished = notch.state().island
+  if (started?.note || finished?.note || started?.right !== 'two' || finished?.right !== 'working' || oldPill()) throw new Error(`with Nothing, a note still showed (${JSON.stringify({ started, finished })})`)
+  await quietHook('Stop', 'smoke-quiet-2')
+  for (const id of ['smoke-quiet-1', 'smoke-quiet-2']) sessions.dismiss(id)
+  sendSessions()
+  console.log('smoke: island: with Alerts that peek out: Nothing, no "started" or "finished" note and no big size, only the status marks')
+
+  await settings.update({ steward: { alertPeek } })
+  await settle()
+}
+
+/**
+ * Steward's eyes following a cursor that sweeps past the notch at a steady speed (island Phase 3, the eye jitter fix),
+ * from the frames the page drew: how often the eyes moved, and how far in one frame. y: how far down the screen the
+ * cursor goes, from its top. Logged with the mood, so a before and after can be compared.
+ */
+async function sweepEyes(page: Electron.WebContents, geo: NotchGeometry, what: string, y: number, ms = 1500): Promise<EyeSweep> {
+  const sampling = page.executeJavaScript(`new Promise((resolve) => {
+    const samples = []
+    const frame = (t) => {
+      // The eyes within the body, so Steward leaning out with the cursor on it isn't counted as the eyes moving.
+      const eyes = document.querySelector('.isl-body .open')?.getBoundingClientRect(), body = document.querySelector('.isl-body .pv')?.getBoundingClientRect()
+      if (eyes && body) samples.push([t, eyes.left + eyes.width / 2 - (body.left + body.width / 2)])
+      requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+    setTimeout(() => resolve(samples), ${ms})
+  })`) as Promise<EyeSample[]>
+  // Across where Steward peeks (the notch's left edge), the stretch where its eyes follow the cursor.
+  const from = geo.x - 160, to = geo.x + 160, start = Date.now()
+  const move = setInterval(() => (smokeNotchCursor = { x: from + (to - from) * Math.min(1, (Date.now() - start) / ms), y: geo.y + y }), 4)
+  const samples = await sampling
+  clearInterval(move)
+  smokeNotchCursor = null
+  const sweep = measureEyeSweep(samples)
+  console.log(`smoke: eyes following a cursor sweeping ${what} (mood ${notch.state().mood}): ${describeEyeSweep(sweep)}`)
+  return sweep
 }
 
 /**

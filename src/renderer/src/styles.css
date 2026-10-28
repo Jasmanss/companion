@@ -364,7 +364,7 @@ pre {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   color: var(--t2);
   font-size: 12px;
   word-break: break-word;

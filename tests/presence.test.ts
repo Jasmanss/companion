@@ -13,7 +13,6 @@ import {
   menuBarTitle,
   NOTCH_DWELL_MS,
   nextLookMs,
-  islandShows,
   peeksOut,
   presenceNote,
   firstPeekNote,
@@ -249,13 +248,13 @@ const KINDS: [string, string][] = [
 describe('which alerts peek out', () => {
   const table = (choice: AlertPeek) => Object.fromEntries(KINDS.map(([name, key]) => [name, peeksOut(key, choice)]))
 
-  it('"Only when a session needs me": the sessions waiting on me, and Steward asking for its own OK', () => {
+  it('"Only when a session needs me": the sessions waiting on me, Steward asking for its own OK, a review, the morning card and a failed build', () => {
     expect(table('needs-me')).toEqual({
       'a session needs me (approval)': true,
       'a session needs me (input)': true,
       'Steward needs your OK': true,
       'a session finished': false,
-      'a build failed': false,
+      'a build failed': true,
       'a deploy went out': false,
       'a PR was merged': false,
       'a Visual Review is ready': true,
@@ -276,14 +275,6 @@ describe('which alerts peek out', () => {
     expect(island('all')).toEqual({ ...table('all'), 'a session finished': false })
     expect(island('needs-me')).toEqual(table('needs-me'))
     expect(splitAlerts([alert('finished:a'), alert('deploy-ready:c')], 'all', true)).toEqual({ peek: [alert('deploy-ready:c')], held: [alert('finished:a')] })
-  })
-
-  it('in the notch island, a review and the morning card come out as the island itself, and nothing else does yet', () => {
-    expect(Object.fromEntries(KINDS.map(([name, key]) => [name, islandShows(key)]))).toEqual({
-      ...Object.fromEntries(KINDS.map(([name]) => [name, false])),
-      'a Visual Review is ready': true,
-      'the morning card after a night': true,
-    })
   })
 
   it('splits what reached it into what peeks out and what waits, in order', () => {
