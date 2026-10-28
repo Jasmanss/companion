@@ -26,6 +26,11 @@ export interface Motion {
   visibility: string
   /** What the page said about the watched element itself (absent when the caller didn't ask). */
   seen?: Seen
+  /**
+   * A fade (one number, an opacity): how many times it turned (out and back is one), and whether it started and ended
+   * at the ends of its range (fully shown or hidden, not stopped part of the way).
+   */
+  fade?: { turns: number; restsAtEnds: boolean }
 }
 
 /**
@@ -75,6 +80,7 @@ export function measureMotion(samples: Sample[], watchedMs: number, visibility: 
   const heldMs = moving.reduce((sum, _, i) => (repeats(i) && !midMotion(values[i]) ? sum + gaps[i - 1] : sum), 0)
   const stillGaps = [longestGap(samples.slice(0, from + 1)), longestGap(samples.slice(to))].filter((g): g is number => g !== null)
   return {
+    ...(values.every((v) => v.length === 1) ? { fade: fadeShape(values.map((v) => v[0])) } : {}),
     frames: moving.length,
     positions: new Set(moving.map((s) => s[1])).size,
     spanMs: Math.round(moving.at(-1)![0] - moving[0][0]),
@@ -85,6 +91,21 @@ export function measureMotion(samples: Sample[], watchedMs: number, visibility: 
     stillGapMs: stillGaps.length ? Math.round(Math.max(...stillGaps)) : null,
     ...seen,
   }
+}
+
+/** A fade's turns (direction changes, holds left out) and whether it starts and ends at the ends of its range. */
+function fadeShape(v: number[]): { turns: number; restsAtEnds: boolean } {
+  const lo = Math.min(...v), hi = Math.max(...v)
+  const atEnd = (x: number) => Math.abs(x - lo) < 0.001 || Math.abs(x - hi) < 0.001
+  let turns = 0
+  let way = 0
+  for (let i = 1; i < v.length; i++) {
+    const d = Math.sign(v[i] - v[i - 1])
+    if (!d) continue
+    if (way && d !== way) turns++
+    way = d
+  }
+  return { turns, restsAtEnds: atEnd(v[0]) && atEnd(v.at(-1)!) }
 }
 
 /** Fewer frames than this in a watch means the page wasn't being drawn: a screen draws 40 or more in that time. */
@@ -104,7 +125,9 @@ export interface MotionVerdict {
  * every frame the page drew mid-motion has to show a new position, at MIN_POSITIONS positions at least; the waits, while
  * it moved and while it was still, are logged next to each other so a stutter of the app's own still shows. A fade too
  * short for the runner to draw MIN_POSITIONS steps in is held to what it could draw (at least 3, and a new one in every frame),
- * counted over the time it was changing: while it holds at a turning point it can't show a new step.
+ * counted over the time it was changing: while it holds at a turning point it can't show a new step. A fade (an opacity,
+ * with Reduce Motion on) is judged on CI by its shape instead: it starts and ends at rest, turns at most once, never
+ * sticks mid-fade, and shows at least 3 positions.
  */
 export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdict {
   const drew = `the page drew ${m.drawn} frames in ${m.watchedMs} ms (${m.visibility})`
@@ -132,6 +155,18 @@ export function judgeMotion(what: string, m: Motion, onCI: boolean): MotionVerdi
     return { result: 'smooth', line }
   }
   if (m.stuck > 0) return { result: 'not smooth', line: `${line}; ${m.stuck} of those frames showed no new position mid-motion; ${drew}` }
+  // A fade (Reduce Motion is on on the runners) is judged by its shape, not by how many steps the runner drew: one
+  // stall of the runner's can take most of a short fade's frames. It must start and end fully shown or hidden, move
+  // one way (out and back turns once), and show a few steps on its way.
+  if (m.fade) {
+    const why = [
+      !m.fade.restsAtEnds && 'it stopped part of the way',
+      m.fade.turns > 1 && `it turned ${m.fade.turns} times (out and back is once)`,
+      m.positions < 3 && 'fewer than 3 positions',
+    ].filter(Boolean)
+    if (why.length) return { result: 'not smooth', line: `${line}; ${why.join(', ')}; ${drew}` }
+    return { result: 'smooth', line: `${line}; a fade that starts and ends at rest, turns at most once and never sticks mid-fade (on CI its steps and waits are logged, not counted); ${drew}` }
+  }
   // A short fade can only show as many steps as the runner drew in it: a 200 ms fade at 40 frames a second is 8 at most.
   // A fade that goes out, holds and comes back is counted over the time it was changing, not the time it held.
   const changingMs = m.spanMs - (m.heldMs ?? 0)

@@ -116,6 +116,8 @@ if (SMOKE_OUT) {
   // It watches animations frame by frame. On a CI runner nobody is looking at the screen, and Chromium may count the
   // windows as covered or in the background and stop drawing them; these keep a test run drawing, as browser test tools do.
   for (const s of ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']) app.commandLine.appendSwitch(s)
+  // STEWARD_SMOKE_REDUCED=1: Reduce Motion on, as on the CI runners, to check the fades on this Mac.
+  if (process.env.STEWARD_SMOKE_REDUCED) app.commandLine.appendSwitch('force-prefers-reduced-motion')
 } else {
   // Electron names the data folder after the app, so the rename gave Steward a new one. Copy the old folder
   // (LEGACY_APP_NAME) across once, before anything (the instance lock included) creates the new one; the old one stays as a backup.
