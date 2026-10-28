@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NightReport, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -102,6 +102,10 @@ const api: StewardAPI = {
     setWakeTime: (wakeTime) => ipcRenderer.invoke('watch:setWakeTime', wakeTime),
     onChanged: (cb) => subscribe<WatchView>('watch:changed', cb),
     onGoodnight: (cb) => subscribe<void>('watch:goodnight', () => cb()),
+    report: (id) => ipcRenderer.invoke('watch:report', id),
+    nights: () => ipcRenderer.invoke('watch:nights'),
+    clear: () => ipcRenderer.invoke('watch:clear'),
+    onReport: (cb) => subscribe<NightReport>('watch:report', cb),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),

@@ -157,9 +157,10 @@ export const nextLookMs = (s: PresenceState, i: Pick<PresenceInput, 'inZone'>): 
 
 /**
  * Steward's own request (it needs your OK to run a command) blocks work like a session waiting on you does. A Visual
- * Review waits for your decision too: you turned it on by giving the project an address, so it counts the same.
+ * Review waits for your decision too: you turned it on by giving the project an address, so it counts the same. So does
+ * the one card after an Overnight Watch: the night's report waits for you.
  */
-const needsMe = (key: string): boolean => alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:') || key.startsWith('review:')
+const needsMe = (key: string): boolean => alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:') || key.startsWith('review:') || key.startsWith('night:')
 
 /**
  * Whether an alert peeks out from where Steward sits, for the "Alerts that peek out" choice. island: Steward is the notch
@@ -183,11 +184,11 @@ export function splitAlerts(list: AlertView[], choice: AlertPeek, island = false
 }
 
 /**
- * In the notch island, the alerts it shows as itself instead of under the notch: a Visual Review, as the island's
- * catch-all note (its title and one line) until island Phase 3 gives reviews a size of their own. So the old alert
- * under the notch never shows for one.
+ * In the notch island, the alerts it shows as itself instead of under the notch: a Visual Review, and the morning card
+ * after an Overnight Watch, as the island's catch-all note (its title and one line) until island Phase 3 gives them a
+ * size of their own. So the old alert under the notch never shows for one.
  */
-export const islandShows = (key: string): boolean => key.startsWith('review:')
+export const islandShows = (key: string): boolean => key.startsWith('review:') || key.startsWith('night:')
 
 /** The most alerts waiting for the panel. The oldest go first. */
 export const MAX_HELD = 20

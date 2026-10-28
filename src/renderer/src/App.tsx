@@ -3,7 +3,7 @@ import { touchOf, type Touch } from '../../shared/activity'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem, ViewerKind, WatchView } from '../../shared/types'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NightReport, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem, ViewerKind, WatchView } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
@@ -14,6 +14,7 @@ import { LeftOffCard } from './LeftOffCard'
 import { ReviewCard, ReviewProblems } from './ReviewCard'
 import { ReviewViewer } from './ReviewViewer'
 import { GoodnightCard } from './GoodnightCard'
+import { NightReportCard } from './NightReportCard'
 import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
@@ -80,6 +81,8 @@ export function App() {
   // Overnight Watch: the night going on (or not), and the goodnight card, open or not.
   const [watchView, setWatchView] = useState<WatchView | null>(null)
   const [goodnight, setGoodnight] = useState(false)
+  // The night report showing, if one is: after a night, or opened from the card.
+  const [nightReport, setNightReport] = useState<NightReport | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const [switcher, setSwitcher] = useState(false)
   const switcherShown = usePresence(switcher)
@@ -248,11 +251,31 @@ export function App() {
     api.watch.get().then(setWatchView, () => {})
     const offWatch = api.watch.onChanged(setWatchView)
     const offGoodnight = api.watch.onGoodnight(() => setGoodnight(true))
+    // The report is the morning's brief, and its card's click is what opened the panel: neither shows as well.
+    const offReport = api.watch.onReport((report) => {
+      setNightReport(report)
+      setGoodnight(false)
+      setBrief(null)
+      setBanner((b) => (b?.key.startsWith('night:') ? null : b))
+    })
     return () => {
       offWatch()
       offGoodnight()
+      offReport()
     }
   }, [])
+  const openNightReport = (id: string) =>
+    api.watch.report(id).then((report) => {
+      if (report) {
+        setNightReport(report)
+        setGoodnight(false)
+      }
+    }, showError)
+  // A review decided inside the report changes what the report says about it.
+  useEffect(() => {
+    if (nightReport) void api.watch.report(nightReport.id).then((r) => r && setNightReport(r), () => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviews])
   useEffect(() => {
     if (dock === 'collapsed' || dock === 'hidden') setGoodnight(false)
   }, [dock])
@@ -560,6 +583,9 @@ export function App() {
   const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
   const shownReviews = reviews.filter((r) => !laterReviews.has(r.id))
+  // The night report shows its night's reviews itself, so the card at the top is for the others.
+  const inReport = new Set(nightReport?.reviews.map((r) => r.id))
+  const topReviews = shownReviews.filter((r) => !inReport.has(r.id))
   const noReviewToView = dock === 'viewing' && viewKind === 'review' && shownReviews.length === 0
   useEffect(() => {
     if (noReviewToView) void api.dock.expand()
@@ -716,7 +742,21 @@ export function App() {
         onError={showError}
       />
       <div className="body">
-        {watchView && (goodnight || watchView.watching) && <GoodnightCard view={watchView} onClose={() => setGoodnight(false)} onError={setToast} />}
+        {watchView && (goodnight || watchView.watching) && <GoodnightCard view={watchView} onClose={() => setGoodnight(false)} onReport={openNightReport} onError={setToast} />}
+        {nightReport && (
+          <NightReportCard
+            report={nightReport}
+            pending={reviews}
+            onStep={openNightReport}
+            onDismiss={() => setNightReport(null)}
+            onOpenReview={(id) => {
+              const i = shownReviews.findIndex((r) => r.id === id)
+              if (i >= 0) openReview(i)
+            }}
+            onReviewDone={setReviewNotice}
+            onError={setToast}
+          />
+        )}
         {presenceNote && (
           <div className="notice" role="status">
             {presenceNote}
@@ -734,13 +774,13 @@ export function App() {
             </button>
           </div>
         )}
-        {shownReviews[0] && (
+        {topReviews[0] && (
           <ReviewCard
-            key={shownReviews[0].id}
-            review={shownReviews[0]}
-            more={shownReviews.length - 1}
-            onOpen={() => openReview(0)}
-            onLater={() => setLaterReviews(new Set(laterReviews).add(shownReviews[0].id))}
+            key={topReviews[0].id}
+            review={topReviews[0]}
+            more={topReviews.length - 1}
+            onOpen={() => openReview(shownReviews.indexOf(topReviews[0]))}
+            onLater={() => setLaterReviews(new Set(laterReviews).add(topReviews[0].id))}
             onDone={setReviewNotice}
             onError={setToast}
           />

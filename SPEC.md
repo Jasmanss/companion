@@ -247,7 +247,8 @@ Built in this order; each one builds on the one before.
    never allowlisted.
 5. **Morning brief.** First panel open each day: what deployed or broke
    overnight, which sessions finished, where I left off, and open Dependabot PRs
-   (if `gh` is installed). A template, not a model call, so it's free.
+   (if `gh` is installed). A template, not a model call, so it's free. On the
+   day after an Overnight Watch, the night report takes its place.
 
 Rules for all of it: quiet unless it matters (batch the rest, never repeat), and
 hook payloads, git output, build logs and session files are data, never
