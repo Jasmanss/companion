@@ -355,6 +355,37 @@ export interface WatchView {
   onBattery: boolean
   /** How the last Watch ended, while it's still worth saying (until the next one starts). */
   ended?: { at: number; why: WatchEnd }
+  /** The newest night with a report kept, for "Last night" on the card. */
+  lastNight?: string
+}
+
+/**
+ * Overnight Watch's night report: what happened while you rested, from the night's log and Visual Review's store. A
+ * template, no model call. Words only: an alert's title, never its detail.
+ */
+export interface NightReport {
+  id: string
+  /** "Good morning" for the newest night, "Saturday night" for an earlier one. */
+  title: string
+  /** When it was watched, as "11:10 PM to 7:02 AM". */
+  span: string
+  /** One line: "2 things needed you. 2 things changed.", or "Quiet night. Nothing needed you." */
+  summary: string
+  /** When Steward couldn't see, in words: the Mac slept, or Steward wasn't running. */
+  gaps: string[]
+  /** What needed you (a session waiting on you, a production deploy failing), and what came of it. */
+  needed: { at: number; title: string; note: string }[]
+  /** Sessions that finished. */
+  finished: { at: number; title: string }[]
+  /** Visual Reviews made during the night, and what became of each (gone: no longer kept). */
+  reviews: { id: string; at: number; title: string; said: string | null; status: 'new' | 'good' | 'sent-back' | 'gone' }[]
+  /** Deploys per project, oldest first. */
+  deploys: { project: string; runs: { at: number; ok: boolean; production: boolean }[] }[]
+  /** How many more of each there were than the lists hold. */
+  more: { needed: number; finished: number }
+  /** The nights kept before and after this one, to step through. */
+  earlier: string | null
+  later: string | null
 }
 
 /** Visual Review: one finished turn whose page looks different, waiting for a decision. */
@@ -657,6 +688,14 @@ export interface StewardAPI {
     onChanged(cb: (view: WatchView) => void): Unsubscribe
     /** Goodnight from the menu bar: show the goodnight card. */
     onGoodnight(cb: () => void): Unsubscribe
+    /** A night's report, or null when it isn't kept. */
+    report(id: string): Promise<NightReport | null>
+    /** How many nights' reports are kept. */
+    nights(): Promise<number>
+    /** Delete every night report (a night going on keeps its own). */
+    clear(): Promise<void>
+    /** Show this report: the night ended with the panel open, or the panel opened after it ended. */
+    onReport(cb: (report: NightReport) => void): Unsubscribe
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */

@@ -242,12 +242,13 @@ const KINDS: [string, string][] = [
   ['a deploy went out', 'deploy-ready:dpl_1'],
   ['a PR was merged', 'pr-merged:/p:12'],
   ['a Visual Review is ready', 'review:20261024-101010-abcdef12'],
+  ['the morning card after a night', 'night:20261025-231000'],
 ]
 
 describe('which alerts peek out', () => {
   const table = (choice: AlertPeek) => Object.fromEntries(KINDS.map(([name, key]) => [name, peeksOut(key, choice)]))
 
-  it('"Only when a session needs me": the sessions waiting on me, Steward asking for its own OK, and a failed build', () => {
+  it('"Only when a session needs me": the sessions waiting on me, Steward asking for its own OK, a review, the morning card and a failed build', () => {
     expect(table('needs-me')).toEqual({
       'a session needs me (approval)': true,
       'a session needs me (input)': true,
@@ -257,6 +258,7 @@ describe('which alerts peek out', () => {
       'a deploy went out': false,
       'a PR was merged': false,
       'a Visual Review is ready': true,
+      'the morning card after a night': true,
     })
   })
 

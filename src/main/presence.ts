@@ -157,10 +157,12 @@ export const nextLookMs = (s: PresenceState, i: Pick<PresenceInput, 'inZone'>): 
 
 /**
  * Steward's own request (it needs your OK to run a command) blocks work like a session waiting on you does. A Visual
- * Review waits for your decision too: you turned it on by giving the project an address, so it counts the same. A
- * failed build is urgent as well (the user's pick, island Phase 3): it comes out with the waiting-on-you kinds.
+ * Review waits for your decision too: you turned it on by giving the project an address, so it counts the same. So does
+ * the one card after an Overnight Watch: the night's report waits for you. A failed build is urgent as well (the user's
+ * pick, island Phase 3): it comes out with the waiting-on-you kinds.
  */
-const needsMe = (key: string): boolean => alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:') || key.startsWith('review:') || key.startsWith('deploy-failed:')
+const needsMe = (key: string): boolean =>
+  alertSwitch(key) === 'sessionNeedsMe' || key.startsWith('agent-approval:') || key.startsWith('review:') || key.startsWith('night:') || key.startsWith('deploy-failed:')
 
 /**
  * Whether an alert peeks out from where Steward sits, for the "Alerts that peek out" choice. island: Steward is the notch

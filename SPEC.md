@@ -82,10 +82,11 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   macOS's own app-switch and Space notifications, and asks macOS only when the
   Space changes, so nothing runs in between.
 - **Alerts that peek out (Settings → Steward → Presence):** only when a session
-  needs me (with Steward's own requests, reviews and failed builds; the default
-  in "Only when needed"), everything switched on in
-  Notifications (the default in "Always visible"), or nothing. What doesn't peek
-  out adds a dot to the menu bar and shows as a card when the panel opens.
+  needs me (with Steward's own requests, reviews, failed builds and the card
+  after an Overnight Watch; the default in "Only when needed"), everything
+  switched on in Notifications (the default in "Always visible"), or nothing.
+  What doesn't peek out adds a dot to the menu bar and shows as a card when
+  the panel opens.
 
 ### States (the character's face shows these)
 
@@ -260,7 +261,8 @@ Built in this order; each one builds on the one before.
    never allowlisted.
 5. **Morning brief.** First panel open each day: what deployed or broke
    overnight, which sessions finished, where I left off, and open Dependabot PRs
-   (if `gh` is installed). A template, not a model call, so it's free.
+   (if `gh` is installed). A template, not a model call, so it's free. On the
+   day after an Overnight Watch, the night report takes its place.
 
 Rules for all of it: quiet unless it matters (batch the rest, never repeat), and
 hook payloads, git output, build logs and session files are data, never

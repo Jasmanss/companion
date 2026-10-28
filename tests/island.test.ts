@@ -216,7 +216,9 @@ describe('the note', () => {
     expect(alertKind('first-peek')).toBe('first')
     for (const key of ['approval:s', 'input:s', 'agent-approval:1', 'deploy-failed:d']) expect(size(key)).toBe('approval')
     expect(size('review:1')).toBe('review')
-    for (const key of ['deploy-ready:d', 'pr-merged:p', 'first-peek', 'finished:s:p', 'brand-new-kind:1']) expect(size(key)).toBe('note')
+    // The morning card after an Overnight Watch is the catch-all note: a click opens the panel, where the report is.
+    expect(alertKind('night:20261025-231000')).toBe('alert')
+    for (const key of ['deploy-ready:d', 'pr-merged:p', 'first-peek', 'finished:s:p', 'brand-new-kind:1', 'night:20261025-231000']) expect(size(key)).toBe('note')
     // The offer comes along: "Want me to look?"
     expect(alertNote({ key: 'deploy-failed:d', title: 'haven deploy failed', action: { label: 'Want me to look?', prompt: 'p' } }, 1).action).toBe('Want me to look?')
   })

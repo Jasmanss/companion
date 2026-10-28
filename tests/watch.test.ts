@@ -10,6 +10,7 @@ import {
   holdsAlerts,
   lookAt,
   newNight,
+  OPENED_EVERY_MS,
   OvernightWatch,
   parseWakeTime,
   wakeAt,
@@ -146,6 +147,20 @@ describe('the log', () => {
     expect(left).toContain('notes.txt')
   })
 
+  it('lists the nights newest first, and clears all but the one going on', async () => {
+    const dir = await temp()
+    const log = new WatchLog(dir)
+    for (const id of ['20261023-230000', '20261025-231000', '20261024-220000']) await log.append(id, { type: 'beat', at: 1 })
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'not a night')
+    expect(await log.list()).toEqual(['20261025-231000', '20261024-220000', '20261023-230000'])
+    await log.clear('20261025-231000')
+    expect(await log.list()).toEqual(['20261025-231000'])
+    await log.clear()
+    expect(await log.list()).toEqual([])
+    expect(await fs.readdir(dir)).toEqual(['notes.txt'])
+    expect(await new WatchLog(path.join(dir, 'never')).list()).toEqual([])
+  })
+
   it("never keeps an alert's detail: only its kind and title", async () => {
     const log = new WatchLog(await temp())
     await log.append('n', { type: 'alert', at: 1, kind: 'approval', title: 'haven is waiting on you', level: 'urgent', held: false })
@@ -170,6 +185,7 @@ describe('the Watch', () => {
     const state = { now: start, idle: 2, battery: false }
     const awake: boolean[] = []
     const saves: WatchSaved[] = []
+    const ends: [string, string][] = []
     let changes = 0
     const log = new WatchLog(dir)
     logs.push(log)
@@ -183,6 +199,7 @@ describe('the Watch', () => {
         keepAwake: (on) => awake.push(on),
         save: (s) => saves.push(s),
         changed: () => changes++,
+        ended: (n, why) => ends.push([n.id, why]),
       },
       saved,
     )
@@ -194,7 +211,7 @@ describe('the Watch', () => {
         vi.advanceTimersByTime(WATCH_LOOK_MS)
       }
     }
-    return { watch, log, state, awake, saves, pass, changes: () => changes }
+    return { watch, log, state, awake, saves, ends, pass, changes: () => changes }
   }
 
   it('starts at Go rest, keeps the Mac awake, and writes the first line', async () => {
@@ -218,7 +235,7 @@ describe('the Watch', () => {
     expect(watch.watching).toBe(false)
     expect(watch.ended).toEqual({ at: at(7, 30, 26), why: 'wake-time' })
     expect(awake).toEqual([true, false])
-    expect(saves.at(-1)).toEqual({ night: undefined, wakeTime: '07:30', ended: { at: at(7, 30, 26), why: 'wake-time' } })
+    expect(saves.at(-1)).toEqual({ night: undefined, wakeTime: '07:30', ended: { at: at(7, 30, 26), why: 'wake-time' }, unseen: night.id })
     const events = await log.read(night.id)
     expect(events.at(-1)).toEqual({ type: 'end', at: at(7, 30, 26), why: 'wake-time' })
     // A heartbeat every 5 minutes, so a gap can be told later.
@@ -296,6 +313,42 @@ describe('the Watch', () => {
     await late.resume()
     expect(late.watching).toBe(false)
     expect(late.ended).toEqual({ at: at(7, 30, 26), why: 'wake-time' })
+  })
+
+  it('writes down the panel opening (once a minute at most), deploys, and which review an alert is about', async () => {
+    const { watch, log, state } = await setup()
+    watch.opened()
+    const night = watch.start('07:30')
+    watch.opened()
+    state.now += OPENED_EVERY_MS - 1000
+    watch.opened()
+    state.now += 2000
+    watch.opened()
+    watch.deploy({ project: 'my-site', ok: false, production: true })
+    watch.alert({ key: 'review:20261025-231500-abcdef12', title: 'my-site changed', level: 'urgent' }, true)
+    await watch.settled()
+    const events = await log.read(night.id)
+    expect(events.filter((e) => e.type === 'opened')).toHaveLength(2)
+    expect(events.find((e) => e.type === 'deploy')).toMatchObject({ project: 'my-site', ok: false, production: true })
+    expect(events.find((e) => e.type === 'alert')).toMatchObject({ kind: 'review', review: '20261025-231500-abcdef12' })
+  })
+
+  it("says when a night ended, and keeps its report as not seen yet until it's shown", async () => {
+    const { watch, saves, ends } = await setup()
+    const night = watch.start('07:30')
+    expect(watch.unseen).toBeUndefined()
+    watch.stop('up')
+    expect(ends).toEqual([[night.id, 'up']])
+    expect(watch.unseen).toBe(night.id)
+    expect(saves.at(-1)?.unseen).toBe(night.id)
+    watch.seen()
+    expect(watch.unseen).toBeUndefined()
+    expect(saves.at(-1)?.unseen).toBeUndefined()
+    // Kept across a restart; Go rest again moves on to the new night (the old report is still kept).
+    const restarted = await setup({ unseen: '20261025-231000' })
+    expect(restarted.watch.unseen).toBe('20261025-231000')
+    restarted.watch.start('07:30')
+    expect(restarted.watch.unseen).toBeUndefined()
   })
 
   it('remembers the wake time picked, and ignores one that does not read', async () => {
