@@ -1992,6 +1992,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await fs.writeFile(out, image.toPNG())
       clearTimeout(timer)
       console.log(`smoke: ok -> ${out}`)
+      const cardsTimer = setTimeout(() => fail("the panel's cards timed out"), 40_000)
+      await checkCards(w, out)
+      clearTimeout(cardsTimer)
       if (SMOKE_ONLY === 'panel') return app.exit(0)
       if (SMOKE_ONLY === 'island') {
         const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
@@ -2270,7 +2273,7 @@ async function checkWatch(w: BrowserWindow, out: string): Promise<void> {
     setDock('expanded')
     await until(`document.querySelector('.card.night-report .card.review')`, "the panel did not open on the report, with the night's review as its card")
     need(watch!.unseen === undefined && appState.lastBriefDate === localDate(new Date()), "the report wasn't taken as seen, or as the day's brief")
-    need((await wc.executeJavaScript(`document.querySelectorAll('.body > .card.review[aria-label="What changed in smoke-night"]').length`)) === 0, "the night's review shows twice")
+    need((await wc.executeJavaScript(`document.querySelectorAll('.tiles > [data-card="review"] .card.review[aria-label="What changed in smoke-night"]').length`)) === 0, "the night's review shows twice")
     need((await reportText()).includes('Waited for you on screen. You were up at'), `the report says "${await reportText()}"`)
     await sleep(400)
     await fs.writeFile(out.replace(/\.png$/, '-watch-report.png'), (await wc.capturePage()).toPNG())
@@ -2555,18 +2558,17 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
       images: [...document.querySelectorAll('.card.review .rv-layer img')].map((i) => i.naturalWidth),
       buttons: [...document.querySelectorAll('.card.review button')].map((b) => b.textContent),
       slider: Boolean(document.querySelector('.card.review input[type=range]')),
-      // At the top of the panel: only Visual Review's own quiet lines may come before it.
+      // The first card, promoted, waiting on you (panel cards: rankCards).
       first: (() => {
-        const kids = [...(document.querySelector('.body')?.children ?? [])]
-        const at = kids.findIndex((k) => k.classList.contains('review'))
-        return at >= 0 && kids.slice(0, at).every((k) => k.classList.contains('review-problem'))
+        const t = document.querySelector('.tiles > .tile')
+        return t?.dataset.card === 'review' && t.classList.contains('promoted') && t.classList.contains('urgent') && /Waiting on you/i.test(t.querySelector('.tile-head')?.textContent ?? '') && !!t.querySelector('.card.review')
       })(),
       checked: document.querySelector('.review-check')?.textContent ?? '',
       said: document.querySelector('.card.review .rv-said')?.textContent ?? '',
     })`)
     need(shown.images.length === 2 && shown.images.every((n: number) => n > 0), 'the card does not show both pictures')
     need(shown.buttons.includes('Looks good') && shown.buttons.includes('Send it back') && shown.slider, 'the card is missing its slider or buttons')
-    need(shown.first, 'the card is not at the top of the panel')
+    need(shown.first, 'the review is not the first card, promoted and waiting on you')
     need(shown.said === `Claude says: ${said}`, `the card does not show what Claude said ("${shown.said}")`)
     // The last turn left the page as it was: the panel says it checked.
     need(/Checked steward-smoke-review-project after Claude finished: no visible change/.test(shown.checked), `the panel did not say the check found no change ("${shown.checked}")`)
@@ -3578,6 +3580,97 @@ async function checkIsland(out: string): Promise<void> {
   islandNotes.drop()
   if (notch.windowBounds()?.width !== NOTCH_WINDOW.width) throw new Error(`back to the chin, the notch window is ${notch.windowBounds()?.width} wide, not ${NOTCH_WINDOW.width}`)
   void sendReviews()
+}
+
+/**
+ * The panel's home as cards, one promoted (main chat Phase M2): with nothing going on, where you left off is the first
+ * card, its commits a timeline, and no bullet points anywhere; two finished sessions take its place; a session waiting
+ * on you is promoted in orange; a failed build gets its own card with its offer, and other news a card of its own; a
+ * Try chip puts its words in the box without sending them. (The review's card is checked in checkReview.)
+ */
+async function checkCards(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const wc = w.webContents
+  const until = async (script: string, why: string, ms = 4000) => {
+    for (const t = Date.now(); Date.now() - t < ms; await sleep(150)) if (await wc.executeJavaScript(script)) return
+    throw new Error(`${why}: ${await tilesNow()}`)
+  }
+  const tilesNow = async () => JSON.stringify(await wc.executeJavaScript(`[...document.querySelectorAll('.tiles > .tile')].map((t) => t.dataset.card + ':' + t.className.replace('tile ', '') + ':' + (t.querySelector('.tile-head')?.textContent ?? ''))`))
+  const first = (card: string, promoted = true, urgent = false) =>
+    `(() => { const t = document.querySelector('.tiles > .tile'); return !!t && t.dataset.card === '${card}' && t.classList.contains('promoted') === ${promoted} && t.classList.contains('urgent') === ${urgent} })()`
+  const bullets = `[...document.querySelectorAll('.panel *')].filter((e) => getComputedStyle(e).display === 'list-item' && getComputedStyle(e).listStyleType !== 'none').length`
+  // A moment first: a new tile's entrance plays, and a hidden window draws its next frame a little later.
+  const shot = async (name: string) => {
+    await sleep(700)
+    await fs.writeFile(out.replace(/\.png$/, `-cards-${name}.png`), (await wc.capturePage()).toPNG())
+  }
+  setDock('expanded')
+  await sleep(600)
+
+  // Nothing going on: where you left off is promoted (the day's brief, if it came, is put away first).
+  await wc.executeJavaScript(`document.querySelector('[data-card="brief"] .card-head .icon-btn')?.click()`)
+  const now = Date.now()
+  wc.send('leftoff:show', {
+    project: 'haven',
+    path: '/tmp/steward-smoke-cards',
+    isGit: true,
+    branch: 'main',
+    commits: [
+      { hash: 'a1b2c3d', subject: 'Make the Start button blue', when: '2 hours ago' },
+      { hash: 'e4f5a6b', subject: 'Add a row of logos', when: 'yesterday' },
+    ],
+    uncommitted: { count: 0, files: [] },
+    unpushed: 0,
+    claude: { text: 'I made the Start button blue and added a row of logos.', at: now - 3_600_000 },
+  })
+  await until(first('leftoff'), 'with nothing going on, where you left off is not the first card, promoted')
+  const home = await wc.executeJavaScript(`({ text: document.querySelector('[data-card="leftoff"]').textContent, steps: document.querySelectorAll('[data-card="leftoff"] .tl-item').length, bullets: ${bullets}, log: !!document.querySelector('.log') })`)
+  if (!/On main, pushed\./.test(home.text) || home.steps !== 2 || !home.text.includes('Claude said')) throw new Error(`where you left off shows "${home.text}" (${home.steps} steps)`)
+  if (home.bullets > 0) throw new Error(`the panel shows ${home.bullets} bullet points`)
+  await shot('home')
+
+  // A Try chip puts its words in the box, and sends nothing.
+  await wc.executeJavaScript(`document.querySelector('[data-card="try"] .chip').click()`)
+  await sleep(200)
+  const box = await wc.executeJavaScript(`({ value: document.querySelector('.composer textarea').value, chip: document.querySelector('[data-card="try"] .chip').textContent, log: !!document.querySelector('.log') })`)
+  if (box.value !== box.chip || box.log) throw new Error(`a Try chip put "${box.value}" in the box (chip "${box.chip}", chat started: ${box.log})`)
+  await wc.executeJavaScript(`(() => { const ta = document.querySelector('.composer textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, ''); ta.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+
+  // Two sessions finished: the sessions card is promoted, a row for each.
+  const cwd = '/tmp/steward-smoke-cards'
+  for (const [id, said] of [['smoke-cards-1', 'All the tests pass.'], ['smoke-cards-2', 'I fixed the header.']])
+    await onHookEvent({ hook_event_name: 'Stop', session_id: id, cwd, last_assistant_message: said } as HookPayload)
+  sendSessions()
+  await until(first('sessions'), 'two finished sessions are not the first card, promoted')
+  const finished = await wc.executeJavaScript(`({ head: document.querySelector('[data-card="sessions"] .tile-head').textContent, rows: document.querySelectorAll('[data-card="sessions"] .srow').length })`)
+  if (!/Sessions finished/i.test(finished.head) || finished.rows !== 2) throw new Error(`two finished sessions show "${finished.head}" with ${finished.rows} rows`)
+  await shot('finished')
+
+  // A session waiting on you: promoted, in orange, "Waiting on you".
+  await onHookEvent({ hook_event_name: 'PermissionRequest', session_id: 'smoke-cards-3', cwd, tool_name: 'Bash', tool_input: { command: 'npm install' } } as HookPayload)
+  sendSessions()
+  await until(first('sessions', true, true), 'a session waiting on you is not the first card, promoted and urgent')
+  const waiting = String(await wc.executeJavaScript(`document.querySelector('[data-card="sessions"] .tile-head').textContent`))
+  if (!/Waiting on you/i.test(waiting)) throw new Error(`a session waiting on you shows "${waiting}"`)
+  await shot('waiting')
+  for (const id of ['smoke-cards-1', 'smoke-cards-2', 'smoke-cards-3']) sessions.dismiss(id)
+  sendSessions()
+  await until(first('leftoff'), 'with the sessions gone, where you left off is not first again')
+
+  // A failed build while the panel is open: its own card, with its offer; other news, a card of its own.
+  raise({ key: 'deploy-failed:smoke-cards', level: 'urgent', title: 'haven deploy failed', detail: 'Missing environment variable DATABASE_URL', mood: 'mad', scope: cwd, action: { label: 'Want me to look?', prompt: 'smoke' } })
+  raise({ key: 'deploy-ready:smoke-cards', level: 'urgent', title: 'site deployed', detail: 'site.vercel.app' })
+  alerts.flush()
+  await until(`${first('failed', true, true)} && !!document.querySelector('[data-card="news"]')`, 'a failed build and a deploy did not get their cards')
+  const failedCard = String(await wc.executeJavaScript(`document.querySelector('[data-card="failed"]').textContent`))
+  if (!failedCard.includes('haven deploy failed') || !failedCard.includes('Want me to look?')) throw new Error(`the failed build's card shows "${failedCard}"`)
+  await shot('failed')
+  await wc.executeJavaScript(`[...document.querySelectorAll('[data-card="failed"] .chip')].find((c) => c.textContent === 'Dismiss').click()`)
+  await wc.executeJavaScript(`[...document.querySelectorAll('[data-card="news"] .chip')].find((c) => c.textContent === 'Clear').click()`)
+  await until(`!document.querySelector('[data-card="failed"]') && !document.querySelector('[data-card="news"]')`, 'Dismiss and Clear did not put the cards away')
+  moods.clear(cwd)
+  sendMood()
+  console.log(`smoke: the panel's cards: where you left off first with a timeline and no bullets, two finished sessions promoted, a waiting one in orange, a failed build's card with its offer, a news card, and a Try chip that fills the box`)
 }
 
 /**
