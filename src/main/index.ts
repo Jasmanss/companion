@@ -65,7 +65,7 @@ import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, ty
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
-import { hasPicture, isReviewId, ReviewStore, type ReviewRecord } from './review-store'
+import { hasPicture, isReviewId, looksChanged, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
 import { buildNightReport } from './night-report'
@@ -2520,6 +2520,27 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
   await until(wc, `document.querySelector('.rvv-zoom')?.textContent.startsWith('100%')`, 'Z did not show the page at 100%')
   await press('z')
 
+  // Show changes (C): each changed area kept with the review is outlined, "1 of N"; N goes to the next one; side by side
+  // both pictures are outlined; C again takes them away.
+  const areas = reviewStore.get(id)?.regions ?? []
+  need(areas.length >= 1, `the review kept no changed areas (${JSON.stringify(areas)})`)
+  const counted = () => wc.executeJavaScript(`document.querySelector('.rvv-changes .rvv-count span')?.textContent ?? ''`) as Promise<string>
+  await press('c')
+  await until(wc, `document.querySelectorAll('.rvv-slide .rvv-mark').length === ${areas.length}`, `C did not outline the ${areas.length} changed areas`)
+  need((await counted()) === `1 of ${areas.length}`, `Show changes says "${await counted()}", not 1 of ${areas.length}`)
+  await sleep(500)
+  await fs.writeFile(out.replace(/\.png$/, '-review-changes.png'), (await wc.capturePage()).toPNG())
+  await press('n')
+  const next = (1 % areas.length) + 1
+  await until(wc, `document.querySelector('.rvv-mark.on')?.dataset.i === '${next - 1}'`, `N did not go to change ${next}`)
+  need((await counted()) === `${next} of ${areas.length}`, `after N, Show changes says "${await counted()}"`)
+  await press('2')
+  await until(wc, `document.querySelectorAll('.rvv-sbs .rvv-mark').length === ${areas.length * 2}`, 'side by side, both pictures are not outlined')
+  await press('1')
+  await press('c')
+  await until(wc, `!document.querySelector('.rvv-mark')`, 'C again did not take the outlines away')
+  console.log(`smoke: Show changes outlines the ${areas.length} changed ${areas.length === 1 ? 'area' : 'areas'} (${areas.map((r) => `${r.width}x${r.height} at ${r.x},${r.y}`).join('; ')}), N goes to the next, side by side outlines both`)
+
   // A drag on the picture moves the slider: real mouse input, from a fifth of the way across to four fifths.
   const box = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rvv-slide').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width } })()`)
   const at = (f: number) => ({ x: Math.round(box.x + box.width * f), y: Math.round(box.y + 60) })
@@ -2754,6 +2775,38 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     server.setVersion('b')
     console.log(`smoke: a reshaped soft fade makes a review (${softReview!.changedPixels} small pixels changed at a cutoff of ${CHANNEL_TOLERANCE})`)
 
+    // At a phone's width too: a turn that only changes the narrow layout makes a review that says so, and the viewer
+    // opens on the phone's pictures, 390 wide, with the change outlined. The turn's start loads the page twice (once per
+    // width), so the page changes only once both have asked for it.
+    await settings.setProjectPhone(projectDir, true)
+    const hitsAtPrompt = server.hits()
+    reviews.turnStarted({ ...turn('phone'), hook_event_name: 'UserPromptSubmit' })
+    for (const started = Date.now(); server.hits() < hitsAtPrompt + 2; await sleep(50)) if (Date.now() - started > 30_000) throw new Error("the phone's before picture never asked for the page")
+    server.setVersion('narrow')
+    const phoneReview = await reviews.turnStopped({ ...turn('phone'), hook_event_name: 'Stop' })
+    need(phoneReview?.phone !== undefined && looksChanged(phoneReview.phone) && !looksChanged(phoneReview), `a change only at a phone's width made no review that says so (${JSON.stringify(phoneReview?.phone)})`)
+    for (const which of ['before-phone', 'after-phone'] as const) need((await reviewStore.read(phoneReview!.id, which))?.length !== undefined, `the review has no ${which} picture`)
+    await until(wc, `document.querySelector('.card.review')?.textContent.includes("Only a phone's width looks different")`, "the card does not say only a phone's width changed")
+    await wc.executeJavaScript(`document.querySelector('.card.review .rv-open').click()`)
+    await until(
+      wc,
+      `(() => { const p = [...document.querySelectorAll('.rvv-slide img')]; return [...document.querySelectorAll('.rvv-seg button[aria-pressed=true]')].some((b) => b.textContent === 'Phone') && p.length === 2 && p.every((i) => i.complete && i.naturalWidth === ${PHONE_SHOT.width}) })()`,
+      "the viewer did not open on the phone's pictures, 390 wide",
+    )
+    const phoneAreas = phoneReview!.phone!.regions ?? []
+    await wc.executeJavaScript(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true, cancelable: true }))`)
+    await until(wc, `document.querySelectorAll('.rvv-slide .rvv-mark').length === ${phoneAreas.length} && ${phoneAreas.length} > 0`, "Show changes did not outline the change at a phone's width")
+    await sleep(500)
+    await fs.writeFile(out.replace(/\.png$/, '-review-phone.png'), (await wc.capturePage()).toPNG())
+    await wc.executeJavaScript(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true, cancelable: true }))`)
+    await until(wc, `[...document.querySelectorAll('.rvv-slide img')].every((i) => i.complete && i.naturalWidth === 1440)`, "P did not switch to the desktop's pictures")
+    await wc.executeJavaScript(`document.querySelector('.review-viewer button[aria-label="Back to the panel"]').click()`)
+    await until(wc, '!document.querySelector(".review-viewer")', 'the viewer did not close')
+    await reviews.markGood(phoneReview!.id)
+    await settings.setProjectPhone(projectDir, false)
+    server.setVersion('b')
+    console.log(`smoke: a change only at a phone's width makes a review that says so (${phoneReview!.phone!.changedPixels} small pixels changed there, ${phoneAreas.length} outlined), and the viewer opens on the phone's pictures, P switching to the desktop's`)
+
     // A capture that fails says why, quietly, where the card would be. No alert.
     const dead = await deadPort()
     await settings.setProjectUrl(projectDir, `localhost:${dead}`)
@@ -2786,6 +2839,13 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     })
     const field = 'input.set-address'
     await until(sw.webContents, `Boolean(document.querySelector(${JSON.stringify(field)}))`, 'Settings has no App address field')
+    // The phone's width, under the address: off, then on with a click, then off.
+    const phoneSwitch = '.set-phone input[role=switch]'
+    need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)})?.checked`)) === false, "Settings has no phone's width switch, or it is on")
+    await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)}).click()`)
+    for (const started = Date.now(); !settings.projects().find((p) => p.path === projectDir)?.phone; await sleep(100)) if (Date.now() - started > 3000) throw new Error("the phone's width switch did not turn it on")
+    await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)}).click()`)
+    for (const started = Date.now(); settings.projects().find((p) => p.path === projectDir)?.phone; await sleep(100)) if (Date.now() - started > 3000) throw new Error("the phone's width switch did not turn it off")
     need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}/private`, 'the field does not show the saved address')
     await until(sw.webContents, `[...document.querySelectorAll('.set-problem')].some((n) => n.textContent.includes('sends you to /login'))`, 'Settings does not say the address is a login')
     await sw.webContents.executeJavaScript(`[...document.querySelectorAll('.set-row button')].find((b) => b.textContent === 'Try it now')?.click()`)
