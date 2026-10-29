@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changedRegions, CHANNEL_TOLERANCE, diffBitmaps, GATE_MIN_PIXELS, GATE_WIDTH, MAX_REGIONS, type Bitmap } from '../src/main/review-diff'
+import { changedRegions, CHANNEL_TOLERANCE, diffBitmaps, GATE_MIN_PIXELS, GATE_WIDTH, gateMinPixels, MAX_REGIONS, type Bitmap } from '../src/main/review-diff'
 import { areasChangedLabel, noChangesReason } from '../src/shared/review'
 
 /** A page at the gate's width: this many rows, one colour (blue, green, red), alpha opaque. */
@@ -105,6 +105,17 @@ describe('soft colour changes (the haven gradient)', () => {
 
   it('says the same fade drawn twice is the same', () => {
     expect(diffBitmaps(fade(100, WASH, SURFACE), fade(100, WASH, SURFACE))).toMatchObject({ changed: false, changedPixels: 0 })
+  })
+})
+
+describe("the gate at a phone's width", () => {
+  it('cuts every picture to a quarter, so a pixel is a 4 by 4 block at either width, and asks 0.3% of one screen', () => {
+    expect(GATE_WIDTH).toBe(360)
+    expect(GATE_MIN_PIXELS).toBe(243)
+    // A phone's screen, 390 by 844, is 98 by 212 at the gate: 62 pixels are 0.3% of it.
+    expect(gateMinPixels({ width: 390, height: 844 })).toBe(62)
+    // So a button-sized change counts at either width: 128 by 32 of the page is 32 by 8 at the gate (256 pixels).
+    expect(32 * 8).toBeGreaterThan(gateMinPixels({ width: 1440, height: 900 }))
   })
 })
 

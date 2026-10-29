@@ -26,7 +26,8 @@ export interface ReviewDeps {
   projects(): Project[]
   /** Capture the page at this address and width (an address on this Mac, settled and with animations off). Throws when it can't. */
   capture(url: string, size: PageSize): Promise<Shot>
-  compare(before: Buffer, after: Buffer): Promise<Diff> | Diff
+  /** Compare two pictures taken at this width. */
+  compare(before: Buffer, after: Buffer, size: PageSize): Promise<Diff> | Diff
   /** The top of a full-page picture, small, for the card. */
   card(png: Buffer): Buffer
   store: ReviewStore
@@ -178,7 +179,7 @@ export class ReviewTracker {
         await this.keepLook(project, address, 'login', { text: landing.text })
         return this.skip(`${project.name}: ${landing.text}`)
       }
-      const diff = before ? await this.deps.compare(before.png, after.png) : null
+      const diff = before ? await this.deps.compare(before.png, after.png, 'desktop') : null
       const phone = project.phone ? await this.phoneLook(project, address, turn) : null
       // Nothing to compare with shows the page as it is. A page that looks the same (at both widths) makes no card, but a
       // quiet note.
@@ -479,7 +480,7 @@ export class ReviewTracker {
       return null
     }
     this.remember(project.path, after, 'phone')
-    return { before, from, after, diff: before ? await this.deps.compare(before.png, after.png) : null }
+    return { before, from, after, diff: before ? await this.deps.compare(before.png, after.png, 'phone') : null }
   }
 
   /** Capture, after any capture already running. Refused when too many are waiting. */

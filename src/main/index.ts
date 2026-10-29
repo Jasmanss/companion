@@ -2779,9 +2779,16 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     // opens on the phone's pictures, 390 wide, with the change outlined. The turn's start loads the page twice (once per
     // width), so the page changes only once both have asked for it.
     await settings.setProjectPhone(projectDir, true)
-    const hitsAtPrompt = server.hits()
-    reviews.turnStarted({ ...turn('phone'), hook_event_name: 'UserPromptSubmit' })
-    for (const started = Date.now(); server.hits() < hitsAtPrompt + 2; await sleep(50)) if (Date.now() - started > 30_000) throw new Error("the phone's before picture never asked for the page")
+    /** A prompt with the phone's width on: the page changes only once both before pictures have asked for it. */
+    const bothLook = async (id: string) => {
+      const hitsAtPrompt = server.hits()
+      reviews.turnStarted({ ...turn(id), hook_event_name: 'UserPromptSubmit' })
+      for (const started = Date.now(); server.hits() < hitsAtPrompt + 2; await sleep(50)) if (Date.now() - started > 30_000) throw new Error("the phone's before picture never asked for the page")
+    }
+    // The same page at both widths makes no review: text edges and a spinner drawn twice are not a change.
+    await bothLook('phone-same')
+    need((await reviews.turnStopped({ ...turn('phone-same'), hook_event_name: 'Stop' })) === null, "the same page made a review with the phone's width on")
+    await bothLook('phone')
     server.setVersion('narrow')
     const phoneReview = await reviews.turnStopped({ ...turn('phone'), hook_event_name: 'Stop' })
     need(phoneReview?.phone !== undefined && looksChanged(phoneReview.phone) && !looksChanged(phoneReview), `a change only at a phone's width made no review that says so (${JSON.stringify(phoneReview?.phone)})`)
@@ -4666,7 +4673,7 @@ app.whenReady().then(async () => {
   reviews = new ReviewTracker({
     projects: () => settings.projects(),
     capture: (url, size) => capturePage(url, { review: { settleMs: 10_000 }, ...(size === 'phone' ? { viewport: PHONE_SHOT } : {}) }),
-    compare: comparePictures,
+    compare: (before, after, size) => comparePictures(before, after, size === 'phone' ? PHONE_SHOT : undefined),
     card: cardPicture,
     store: reviewStore,
     onChange: () => void sendReviews(),

@@ -3,12 +3,12 @@ import { CARD_SHOT } from '../shared/review'
 import type { ReviewRegion } from '../shared/types'
 
 /**
- * The change gate: do two pictures of the page look different? Both are cut down to this width first (plain nativeImage
- * resize), so a pixel here is a 4 by 4 block of the real page, and compared pixel by pixel.
+ * The change gate: do two pictures of the page look different? Both are cut down to a quarter of their width first (plain
+ * nativeImage resize), so a pixel here is a 4 by 4 block of the real page at either width, and compared pixel by pixel.
  */
-export const GATE_WIDTH = 360
-/** A screen of the page at that width is this tall. */
-const GATE_SCREEN_ROWS = Math.round((GATE_WIDTH * CARD_SHOT.height) / CARD_SHOT.width)
+export const GATE_FACTOR = 4
+/** The desktop's pictures (1,440 wide) at the gate. */
+export const GATE_WIDTH = CARD_SHOT.width / GATE_FACTOR
 /**
  * A pixel counts as changed when any colour is off by more than this (out of 255). Low, so a pale tint or a reshaped
  * gradient counts: haven's fade from #F4E6E1 to #FBFBF8 differs by at most 23 on any colour, and a reshaped fade by
@@ -19,11 +19,19 @@ const GATE_SCREEN_ROWS = Math.round((GATE_WIDTH * CARD_SHOT.height) / CARD_SHOT.
  */
 export const CHANNEL_TOLERANCE = 6
 /**
- * The page "looks different" when about 0.3% of a screen's pixels changed (a 128 by 32 pixel button, about). It is a share of
- * one screen, not of the whole page, so a button that changed on a long page still counts. Tuned on real pages later.
+ * The page "looks different" when about 0.3% of a screen's pixels changed (a 128 by 32 pixel button, about, at the
+ * desktop's width). It is a share of one screen, not of the whole page, so a button that changed on a long page still
+ * counts. Tuned on real pages later.
  */
 export const GATE_SHARE = 0.003
-export const GATE_MIN_PIXELS = Math.round(GATE_WIDTH * GATE_SCREEN_ROWS * GATE_SHARE)
+
+/** How many of the gate's pixels must change for a page photographed in a window this size (CSS pixels) to look different. */
+export function gateMinPixels(screen: { width: number; height: number }): number {
+  const width = Math.round(screen.width / GATE_FACTOR)
+  return Math.round(width * Math.round((width * screen.height) / screen.width) * GATE_SHARE)
+}
+/** The desktop's: 243. */
+export const GATE_MIN_PIXELS = gateMinPixels(CARD_SHOT)
 
 /** Raw pixels, four bytes each (blue, green, red, alpha), as nativeImage.toBitmap gives them. */
 export interface Bitmap {
@@ -154,15 +162,18 @@ export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tol
 function small(png: Buffer): Bitmap & { scale: number } {
   const image = nativeImage.createFromBuffer(png)
   const { width } = image.getSize()
-  const reduced = width > GATE_WIDTH ? image.resize({ width: GATE_WIDTH, quality: 'good' }) : image
+  const reduced = image.resize({ width: Math.max(1, Math.round(width / GATE_FACTOR)), quality: 'good' })
   const size = reduced.getSize()
   return { width: size.width, height: size.height, data: reduced.toBitmap(), scale: width / size.width }
 }
 
-/** Does the page look different between two full-page pictures (PNG), and where? */
-export function comparePictures(before: Buffer, after: Buffer): Diff {
+/**
+ * Does the page look different between two full-page pictures (PNG), and where? `screen` is the window they were
+ * photographed in (the desktop's unless said), for how much must change.
+ */
+export function comparePictures(before: Buffer, after: Buffer, screen: { width: number; height: number } = CARD_SHOT): Diff {
   const [a, b] = [small(before), small(after)]
-  const diff = diffBitmaps(a, b)
+  const diff = diffBitmaps(a, b, gateMinPixels(screen))
   return { ...diff, regions: diff.changed ? changedRegions(a, b, b.scale) : [] }
 }
 
