@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
-import { addressLabel, CARD_SHOT, filesChangedLabel, reviewNote, reviewPictureUrl } from '../../shared/review'
-import type { ReviewView } from '../../shared/types'
+import { addressLabel, CARD_SHOT, filesChangedLabel, noChangesReason, reviewNote, reviewPictureUrl } from '../../shared/review'
+import type { ReviewRegion, ReviewView } from '../../shared/types'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons'
 
 const api = () => window.steward
@@ -25,6 +25,24 @@ const STEP = 5
 const BIG_STEP = 20
 
 const clampX = (x: number) => Math.max(5, Math.min(95, x))
+/** The outline sits this far outside the change, so the change itself stays in view. */
+const MARK_PAD = 4
+
+/** The changed areas, outlined over a picture shown at `scale`. The one being looked at is stronger. */
+function Marks({ regions, scale, at }: { regions: ReviewRegion[]; scale: number; at: number }) {
+  return (
+    <div className="rvv-marks" aria-hidden="true">
+      {regions.map((r, i) => (
+        <div
+          key={i}
+          className={`rvv-mark${i === at ? ' on' : ''}`}
+          data-i={i}
+          style={{ left: r.x * scale - MARK_PAD, top: r.y * scale - MARK_PAD, width: r.width * scale + 2 * MARK_PAD, height: r.height * scale + 2 * MARK_PAD }}
+        />
+      ))}
+    </div>
+  )
+}
 
 /**
  * Visual Review, big: the whole page before and after in nearly the whole screen. Slide, side by side or flip; fit to the
@@ -49,6 +67,11 @@ export function ReviewViewer({
   const [real, setReal] = useState(false)
   const [x, setX] = useState(55)
   const [showing, setShowing] = useState<'before' | 'after'>('after')
+  // Show changes: the changed areas outlined, and which one is being looked at.
+  const [marked, setMarked] = useState(false)
+  const [at, setAt] = useState(0)
+  const regions = review.regions ?? []
+  const cannotMark = noChangesReason(review)
   const scroller = useRef<HTMLDivElement>(null)
   const [room, setRoom] = useState(0)
   const go = (next: number) => onIndex(Math.max(0, Math.min(reviews.length - 1, next)))
@@ -65,13 +88,32 @@ export function ReviewViewer({
     return () => watch.disconnect()
   }, [])
 
-  // Another review starts at its top, showing the page as it is now.
+  // Another review starts at its top, showing the page as it is now, with nothing outlined.
   useEffect(() => {
     scroller.current?.scrollTo(0, 0)
     setShowing('after')
+    setMarked(false)
+    setAt(0)
     // Arrow keys up and down scroll the page from the start.
     scroller.current?.focus({ preventScroll: true })
   }, [review.id])
+
+  // Showing changes brings the one being looked at into view (side by side, the left one; both scroll together).
+  useEffect(() => {
+    if (!marked) return
+    const mark = scroller.current?.querySelector(`.rvv-mark[data-i="${at}"]`)
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    mark?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: still ? 'auto' : 'smooth' })
+  }, [marked, at, mode, real, review.id])
+
+  /** The next changed area (or the one before), outlining them all if they weren't. */
+  const step = (by: number) => {
+    if (cannotMark) return
+    if (!marked) {
+      setMarked(true)
+      setAt(by < 0 ? regions.length - 1 : 0)
+    } else setAt((now) => (now + by + regions.length) % regions.length)
+  }
 
   // Keys, before the panel's own (which takes Esc back to the panel). Typing a note is left alone.
   useEffect(() => {
@@ -101,6 +143,12 @@ export function ReviewViewer({
       } else if (e.key === '[' || e.key === ']') {
         take()
         go(index + (e.key === '[' ? -1 : 1))
+      } else if (e.key === 'c' || e.key === 'C') {
+        take()
+        if (!cannotMark) setMarked((now) => !now)
+      } else if (e.key === 'n' || e.key === 'N') {
+        take()
+        step(e.shiftKey ? -1 : 1)
       }
     }
     window.addEventListener('keydown', onKey, true)
@@ -150,6 +198,26 @@ export function ReviewViewer({
             </button>
           ))}
         </span>
+        <span className="rvv-changes">
+          <span className="rvv-seg">
+            <button aria-pressed={marked} disabled={Boolean(cannotMark)} title={cannotMark ?? 'Outline what changed (C), and go from one change to the next (N)'} onClick={() => setMarked(!marked)}>
+              Show changes
+            </button>
+          </span>
+          {marked && (
+            <span className="rvv-count" aria-live="polite">
+              <button className="icon-btn" aria-label="Previous change" title="Previous change (Shift N)" onClick={() => step(-1)}>
+                <ChevronLeftIcon />
+              </button>
+              <span>
+                {at + 1} of {regions.length}
+              </span>
+              <button className="icon-btn" aria-label="Next change" title="Next change (N)" onClick={() => step(1)}>
+                <ChevronRightIcon />
+              </button>
+            </span>
+          )}
+        </span>
         <span className="rvv-seg" role="group" aria-label="Size">
           <button aria-pressed={!real} title="Fit to the width (Z)" onClick={() => setReal(false)}>
             Fit
@@ -192,6 +260,7 @@ export function ReviewViewer({
           >
             <img className="rvv-pic" src={before} width={width} alt="The page before" draggable={false} />
             <img className="rvv-pic rvv-after" src={after} width={width} alt="The page now" draggable={false} />
+            {marked && <Marks regions={regions} scale={scale} at={at} />}
             <span className="rv-tag b">Before</span>
             <span className="rv-tag a">After</span>
             <div className="rvv-bar">
@@ -212,11 +281,17 @@ export function ReviewViewer({
           <div className="rvv-sbs" style={{ gap: GAP }}>
             <figure>
               <figcaption>Before</figcaption>
-              <img className="rvv-box" src={before} width={width} alt="The page before" draggable={false} />
+              <div className="rvv-box" style={{ width }}>
+                <img className="rvv-pic" src={before} width={width} alt="The page before" draggable={false} />
+                {marked && <Marks regions={regions} scale={scale} at={at} />}
+              </div>
             </figure>
             <figure>
               <figcaption>After</figcaption>
-              <img className="rvv-box" src={after} width={width} alt="The page now" draggable={false} />
+              <div className="rvv-box" style={{ width }}>
+                <img className="rvv-pic" src={after} width={width} alt="The page now" draggable={false} />
+                {marked && <Marks regions={regions} scale={scale} at={at} />}
+              </div>
             </figure>
           </div>
         )}
@@ -225,6 +300,7 @@ export function ReviewViewer({
             {/* Both stay loaded, so a flip is instant; only one shows. */}
             {hasBefore && <img className="rvv-pic" src={before} width={width} alt="The page before" draggable={false} hidden={!flipped} />}
             <img className="rvv-pic" src={after} width={width} alt="The page now" draggable={false} hidden={flipped} />
+            {marked && <Marks regions={regions} scale={scale} at={at} />}
             {hasBefore ? (
               <button
                 className={`rv-tag ${flipped ? 'b' : 'a'} rvv-flip-tag`}
@@ -246,7 +322,8 @@ export function ReviewViewer({
 
       <p className="rvv-keys">
         <kbd>Esc</kbd> back · <kbd>←</kbd> <kbd>→</kbd> move the slider (<kbd>Shift</kbd> for more) · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Slide, Side by side, Flip ·{' '}
-        <kbd>Space</kbd> flip · <kbd>Z</kbd> Fit or 100%{reviews.length > 1 && <> · <kbd>[</kbd> <kbd>]</kbd> other reviews</>} · scroll or <kbd>↑</kbd> <kbd>↓</kbd> for the rest of the page
+        <kbd>Space</kbd> flip · <kbd>Z</kbd> Fit or 100%{!cannotMark && <> · <kbd>C</kbd> show changes, <kbd>N</kbd> the next one</>}
+        {reviews.length > 1 && <> · <kbd>[</kbd> <kbd>]</kbd> other reviews</>} · scroll or <kbd>↑</kbd> <kbd>↓</kbd> for the rest of the page
       </p>
     </div>
   )

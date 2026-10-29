@@ -116,6 +116,23 @@ describe('ReviewStore', () => {
       expect(third.get(id)).toBeNull()
     }))
 
+  it('keeps where the page changed with the review, and drops areas that do not read (the review stays)', () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const regions = [{ x: 160, y: 480, width: 128, height: 32 }]
+      const { id } = await store.save({ ...draft(), regions }, files)
+      const again = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await again.load()
+      expect(again.get(id)?.regions).toEqual(regions)
+
+      const json = path.join(path.dirname(store.file(id, 'after')!), 'review.json')
+      await fs.writeFile(json, JSON.stringify({ ...JSON.parse(await fs.readFile(json, 'utf8')), regions: [{ x: -1, y: 'top' }] }))
+      const third = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await third.load()
+      expect(third.get(id)).not.toBeNull()
+      expect(third.get(id)?.regions).toBeUndefined()
+    }))
+
   it('serves review://<id>/before and /after for the viewer, and nothing else', () =>
     inTemp(async (dir) => {
       const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)

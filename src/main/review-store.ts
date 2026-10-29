@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { ReviewHistoryEntry } from '../shared/types'
+import type { ReviewHistoryEntry, ReviewRegion } from '../shared/types'
 
 /** What Visual Review keeps: the newest reviews per project, nothing older than 14 days, and about 300 MB in all. */
 export interface ReviewLimits {
@@ -34,6 +34,8 @@ export interface ReviewRecord {
   said?: string
   /** How many files the turn changed in the project's git checkout (turn-files.ts), when git could say. */
   filesChanged?: number
+  /** Where the page changed, in its own pixels, top to bottom (review-diff.ts). Absent: no earlier picture, or an older review. */
+  regions?: ReviewRegion[]
 }
 
 /** The files of one review, besides review.json. The card pictures are small JPEGs of the top of the page. */
@@ -298,10 +300,22 @@ function parseRecord(text: string): ReviewRecord | null {
       (r.status === 'new' || r.status === 'good' || r.status === 'sent-back') &&
       (r.said === undefined || typeof r.said === 'string') &&
       (r.filesChanged === undefined || (typeof r.filesChanged === 'number' && Number.isInteger(r.filesChanged) && r.filesChanged >= 0))
-    return ok ? (r as ReviewRecord) : null
+    if (!ok) return null
+    // Areas that don't read are dropped, not the review: it still shows, without "Show changes".
+    const { regions, ...rest } = r as ReviewRecord
+    return regions === undefined || isRegions(regions) ? (r as ReviewRecord) : rest
   } catch {
     return null
   }
+}
+
+/** A list of changed areas as review.json should have it: whole numbers, inside a page Steward could have photographed. */
+export function isRegions(list: unknown): list is ReviewRegion[] {
+  return (
+    Array.isArray(list) &&
+    list.length <= 50 &&
+    list.every((g: Partial<ReviewRegion> | null) => g !== null && typeof g === 'object' && [g.x, g.y, g.width, g.height].every((n) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 100_000))
+  )
 }
 
 async function writeRecord(dir: string, record: ReviewRecord): Promise<void> {

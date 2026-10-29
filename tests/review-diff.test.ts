@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CHANNEL_TOLERANCE, diffBitmaps, GATE_MIN_PIXELS, GATE_WIDTH, type Bitmap } from '../src/main/review-diff'
+import { changedRegions, CHANNEL_TOLERANCE, diffBitmaps, GATE_MIN_PIXELS, GATE_WIDTH, MAX_REGIONS, type Bitmap } from '../src/main/review-diff'
+import { areasChangedLabel, noChangesReason } from '../src/shared/review'
 
 /** A page at the gate's width: this many rows, one colour (blue, green, red), alpha opaque. */
 function page(rows: number, [b, g, r]: [number, number, number] = [250, 250, 250]): Bitmap {
@@ -104,5 +105,59 @@ describe('soft colour changes (the haven gradient)', () => {
 
   it('says the same fade drawn twice is the same', () => {
     expect(diffBitmaps(fade(100, WASH, SURFACE), fade(100, WASH, SURFACE))).toMatchObject({ changed: false, changedPixels: 0 })
+  })
+})
+
+describe('where the page changed (Show changes)', () => {
+  const ORANGE: [number, number, number] = [47, 111, 235]
+
+  it('finds a button that changed, in the page\'s own pixels (four to one of the gate\'s)', () => {
+    const regions = changedRegions(page(225), paint(page(225), 40, 120, 32, 8, ORANGE), 4)
+    expect(regions).toEqual([{ x: 160, y: 480, width: 128, height: 32 }])
+  })
+
+  it('makes one area of changes close together, and two of changes apart, top to bottom', () => {
+    // A label and the border under it, 4 small pixels apart: one change.
+    const label = paint(paint(page(225), 40, 100, 30, 4, ORANGE), 40, 108, 30, 2, ORANGE)
+    expect(changedRegions(page(225), label, 4)).toHaveLength(1)
+    // A heading at the top and a card far below: two, the heading first. Outlines keep to a grid of 16 page pixels.
+    const two = paint(paint(page(225), 200, 180, 40, 20, ORANGE), 20, 10, 100, 12, ORANGE)
+    expect(changedRegions(page(225), two, 4).map((r) => r.y)).toEqual([32, 720])
+  })
+
+  it('leaves out a lone speck, and finds nothing on the same page', () => {
+    expect(changedRegions(page(225), paint(page(225), 100, 100, 1, 1, ORANGE), 4)).toEqual([])
+    expect(changedRegions(page(225), page(225), 4)).toEqual([])
+    // A hair of difference in colour is within the cutoff, as for the gate.
+    expect(changedRegions(page(225), page(225, [250 - CHANNEL_TOLERANCE, 250, 250]), 4)).toEqual([])
+  })
+
+  it('counts the rows a taller page added as changed all the way across', () => {
+    expect(changedRegions(page(200), page(225), 4)).toEqual([{ x: 0, y: 800, width: 1440, height: 100 }])
+  })
+
+  it('makes the whole page one area when the widths differ', () => {
+    const narrow: Bitmap = { width: 100, height: 50, data: Buffer.alloc(100 * 50 * 4) }
+    expect(changedRegions(narrow, page(225), 4)).toEqual([{ x: 0, y: 0, width: 1440, height: 900 }])
+  })
+
+  it('keeps the biggest changes when there are too many, still top to bottom', () => {
+    let many = page(1000)
+    // Twenty little changes far apart, and one big one at the bottom.
+    for (let i = 0; i < 20; i++) many = paint(many, 10 + (i % 4) * 90, 20 + Math.floor(i / 4) * 150, 4, 4, ORANGE)
+    many = paint(many, 10, 900, 300, 60, ORANGE)
+    const regions = changedRegions(page(1000), many, 4)
+    expect(regions).toHaveLength(MAX_REGIONS)
+    expect(regions.at(-1)).toMatchObject({ y: 3600, height: 240 })
+    expect(regions.map((r) => r.y)).toEqual([...regions.map((r) => r.y)].sort((a, b) => a - b))
+  })
+
+  it('says it in words, and why there is nothing to show', () => {
+    expect(areasChangedLabel(1)).toBe('1 area changed')
+    expect(areasChangedLabel(3)).toBe('3 areas changed')
+    expect(noChangesReason({ beforeFrom: 'turn-start', regions: [{}] })).toBeNull()
+    expect(noChangesReason({ beforeFrom: 'none', regions: null })).toMatch(/no earlier picture/)
+    expect(noChangesReason({ beforeFrom: 'last-look', regions: null })).toMatch(/older than "Show changes"/)
+    expect(noChangesReason({ beforeFrom: 'turn-start', regions: [] })).toMatch(/No changed area/)
   })
 })

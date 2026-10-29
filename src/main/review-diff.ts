@@ -1,5 +1,6 @@
 import { nativeImage } from 'electron'
 import { CARD_SHOT } from '../shared/review'
+import type { ReviewRegion } from '../shared/types'
 
 /**
  * The change gate: do two pictures of the page look different? Both are cut down to this width first (plain nativeImage
@@ -39,6 +40,8 @@ export interface Diff {
   minPixels: number
   /** The pictures' heights, in the gate's small pixels. */
   heights: [number, number]
+  /** Where it changed, in the page's own pixels, top to bottom (comparePictures finds them). */
+  regions?: ReviewRegion[]
 }
 
 /**
@@ -66,17 +69,96 @@ export function diffBitmaps(before: Bitmap, after: Bitmap, minPixels = GATE_MIN_
   return { changed: changedPixels >= minPixels, changedPixels, minPixels, heights }
 }
 
-function small(png: Buffer): Bitmap {
+/** Changed pixels are grouped on a grid of cells this many small pixels wide (16 of the page's at desktop width). */
+const CELL = 4
+/** A cell with fewer changed pixels than this is a speck, not a change. */
+const CELL_MIN_PIXELS = 2
+/** Changed cells this close (in cells, any way) are one area: a button's label and its border are one change. */
+const JOIN_CELLS = 2
+/** The most areas kept: the biggest changes, shown top to bottom. */
+export const MAX_REGIONS = 12
+
+/**
+ * Where two small bitmaps of the same width differ, as rectangles in the page's own pixels (`scale` page pixels to a
+ * small one). Rows only one of them has (the page got taller or shorter) are changed all the way across. Different
+ * widths can't be lined up: the whole page is one area.
+ */
+export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tolerance = CHANNEL_TOLERANCE): ReviewRegion[] {
+  const height = Math.max(before.height, after.height)
+  const page = (x: number, y: number, w: number, h: number): ReviewRegion => ({ x: Math.round(x * scale), y: Math.round(y * scale), width: Math.round(w * scale), height: Math.round(h * scale) })
+  if (before.width !== after.width) return [page(0, 0, Math.max(before.width, after.width), height)]
+  const { width } = before
+  const shared = Math.min(before.height, after.height)
+  const cols = Math.ceil(width / CELL)
+  const rows = Math.ceil(height / CELL)
+  const counts = new Uint32Array(cols * rows)
+  for (let y = 0; y < height; y++) {
+    const row = Math.floor(y / CELL) * cols
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      const differs =
+        y >= shared ||
+        Math.abs(before.data[i] - after.data[i]) > tolerance ||
+        Math.abs(before.data[i + 1] - after.data[i + 1]) > tolerance ||
+        Math.abs(before.data[i + 2] - after.data[i + 2]) > tolerance
+      if (differs) counts[row + Math.floor(x / CELL)]++
+    }
+  }
+  // Group the changed cells: each group's bounds, and how many pixels changed in it.
+  const seen = new Uint8Array(cols * rows)
+  const groups: { c0: number; r0: number; c1: number; r1: number; pixels: number }[] = []
+  for (let start = 0; start < counts.length; start++) {
+    if (seen[start] || counts[start] < CELL_MIN_PIXELS) continue
+    const group = { c0: cols, r0: rows, c1: -1, r1: -1, pixels: 0 }
+    const stack = [start]
+    seen[start] = 1
+    while (stack.length) {
+      const cell = stack.pop()!
+      const c = cell % cols
+      const r = Math.floor(cell / cols)
+      group.c0 = Math.min(group.c0, c)
+      group.c1 = Math.max(group.c1, c)
+      group.r0 = Math.min(group.r0, r)
+      group.r1 = Math.max(group.r1, r)
+      group.pixels += counts[cell]
+      for (let dr = -JOIN_CELLS; dr <= JOIN_CELLS; dr++)
+        for (let dc = -JOIN_CELLS; dc <= JOIN_CELLS; dc++) {
+          const nc = c + dc
+          const nr = r + dr
+          if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue
+          const next = nr * cols + nc
+          if (!seen[next] && counts[next] >= CELL_MIN_PIXELS) {
+            seen[next] = 1
+            stack.push(next)
+          }
+        }
+    }
+    groups.push(group)
+  }
+  return groups
+    .sort((a, b) => b.pixels - a.pixels)
+    .slice(0, MAX_REGIONS)
+    .map((g) => {
+      const x = g.c0 * CELL
+      const y = g.r0 * CELL
+      return page(x, y, Math.min(width, (g.c1 + 1) * CELL) - x, Math.min(height, (g.r1 + 1) * CELL) - y)
+    })
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+}
+
+function small(png: Buffer): Bitmap & { scale: number } {
   const image = nativeImage.createFromBuffer(png)
   const { width } = image.getSize()
   const reduced = width > GATE_WIDTH ? image.resize({ width: GATE_WIDTH, quality: 'good' }) : image
   const size = reduced.getSize()
-  return { width: size.width, height: size.height, data: reduced.toBitmap() }
+  return { width: size.width, height: size.height, data: reduced.toBitmap(), scale: width / size.width }
 }
 
-/** Does the page look different between two full-page pictures (PNG)? */
+/** Does the page look different between two full-page pictures (PNG), and where? */
 export function comparePictures(before: Buffer, after: Buffer): Diff {
-  return diffBitmaps(small(before), small(after))
+  const [a, b] = [small(before), small(after)]
+  const diff = diffBitmaps(a, b)
+  return { ...diff, regions: diff.changed ? changedRegions(a, b, b.scale) : [] }
 }
 
 /** How many small pixels differ at each of these cutoffs: for the smoke check to log where the noise is. */

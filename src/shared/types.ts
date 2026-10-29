@@ -395,6 +395,14 @@ export interface NightReport {
   later: string | null
 }
 
+/** A part of the page that changed, in the page's own pixels as photographed (1,440 wide at desktop). */
+export interface ReviewRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /** Visual Review: one finished turn whose page looks different, waiting for a decision. */
 export interface ReviewView {
   id: string
@@ -417,6 +425,8 @@ export interface ReviewView {
   said: string | null
   /** How many files the turn changed in the project's git checkout, or null when git couldn't say. */
   filesChanged: number | null
+  /** Where the page changed, top to bottom; null when it wasn't measured (no earlier picture, or an older review). */
+  regions: ReviewRegion[] | null
 }
 
 /**

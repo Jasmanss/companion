@@ -194,6 +194,7 @@ export class ReviewTracker {
         {
           ...(said ? { said } : {}),
           ...(filesChanged !== null ? { filesChanged } : {}),
+          ...(diff?.regions ? { regions: diff.regions } : {}),
           project: project.name,
           projectPath: project.path,
           url: address,
@@ -279,6 +280,7 @@ export class ReviewTracker {
         files: { before: r.before === 'none' ? null : store.file(r.id, 'before'), after },
         said: r.said ?? null,
         filesChanged: r.filesChanged ?? null,
+        regions: r.regions ?? null,
       })
       if (views.length >= MAX_CARDS) break
     }

@@ -3851,3 +3851,30 @@ button.rvv-flip-tag {
   text-transform: uppercase;
   vertical-align: 1px;
 }
+
+/* Visual Review, Show changes: the changed areas outlined over the pictures, the one being looked at stronger. */
+.rvv-changes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Over the pictures, under the tags and the slider's bar (they come after it in the page). */
+.rvv-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rvv-mark {
+  position: absolute;
+  border: 2px solid rgba(255, 90, 90, 0.75);
+  border-radius: 6px;
+}
+
+.rvv-mark.on {
+  border-color: rgb(255, 70, 70);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.8),
+    0 0 0 5px rgba(255, 90, 90, 0.25);
+}

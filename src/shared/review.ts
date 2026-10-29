@@ -73,6 +73,19 @@ export function historyLine(e: Pick<ReviewHistoryEntry, 'found' | 'text' | 'deci
 /** "3 files changed": how many files the turn changed, for the card and the viewer. */
 export const filesChangedLabel = (n: number): string => `${n} ${n === 1 ? 'file' : 'files'} changed`
 
+/** "2 areas changed": how many parts of the page look different, for the card. */
+export const areasChangedLabel = (n: number): string => `${n} ${n === 1 ? 'area' : 'areas'} changed`
+
+/**
+ * Why "Show changes" can't outline anything for a review, or null when it can: no earlier picture to compare with, a
+ * review made before Steward looked for where pages change, or nothing found.
+ */
+export function noChangesReason(r: { beforeFrom: 'turn-start' | 'last-look' | 'none'; regions: unknown[] | null }): string | null {
+  if (r.beforeFrom === 'none') return "There's no earlier picture to compare with."
+  if (r.regions === null) return 'This review is older than "Show changes", so where it changed was not measured.'
+  return r.regions.length ? null : 'No changed area was found.'
+}
+
 /** The picture in the card shows the top of the page, this wide and 16:10, like the design. */
 export const CARD_SHOT = { width: 1440, height: 900 } as const
 
