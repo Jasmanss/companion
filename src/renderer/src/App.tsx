@@ -19,7 +19,8 @@ import { NightReportCard } from './NightReportCard'
 import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
-import { Pill, pillKey } from './Pill'
+import { Pill, pillKey, useMedia } from './Pill'
+import { useIdleMove } from './idle-loop'
 import { glintFor, workingMood } from './pill/glint'
 import { palette } from './pill/render'
 import { useTabDrag } from './tab-drag'
@@ -563,8 +564,18 @@ export function App() {
 
   // An approval is needs-you; a chat waiting for input is confused (main's reactions say so).
   const waiting = sessions.some((s) => s.state === 'needs-approval')
-  const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden', watching: watchView?.watching }), work)
+  const tucked = dock === 'collapsed' || dock === 'hidden'
+  const calm = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked, watching: watchView?.watching }), work)
   const glint = glintFor(work)
+  // Dim when idle: the tab's eyes fade after a while at rest, until something happens or the cursor comes near.
+  const [near, setNear] = useState(false)
+  useEffect(() => api.presence.onNear(setNear), [])
+  const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), calm)
+  // The idle loop: now and then a small move while nothing is going on (shared/idle-loop). Not on dimmed eyes, nor
+  // tucked away with the cursor near (they follow it), nor with an alert out. The notch checks its own eyes too.
+  const reduced = useMedia('(prefers-reduced-motion: reduce)')
+  const move = useIdleMove({ liveliness: look.liveliness, mood: calm, spot: tucked ? 'peek' : 'panel', reduced, dimmed: tucked && (tabDimmed || near), alertOut: dock === 'nudge' })
+  const mood = move ?? calm
   // Docked in the notch, the notch window shows the character: it gets the same mood.
   useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
@@ -572,10 +583,6 @@ export function App() {
   const inward = look.edge === 'right' ? -1 : 1
   // The tab can be dragged up or down its edge; a plain click still opens the panel.
   const tabDrag = useTabDrag(() => void api.dock.expand())
-  // Dim when idle: the tab's eyes fade after a while at rest, until something happens or the cursor comes near.
-  const [near, setNear] = useState(false)
-  useEffect(() => api.presence.onNear(setNear), [])
-  const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), mood)
   const noKey = settings?.apiKeySource === 'none'
   const shownReviews = reviews.filter((r) => !laterReviews.has(r.id))
   // The night report shows its night's reviews itself, so the card at the top is for the others.
