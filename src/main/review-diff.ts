@@ -69,12 +69,15 @@ export function diffBitmaps(before: Bitmap, after: Bitmap, minPixels = GATE_MIN_
   return { changed: changedPixels >= minPixels, changedPixels, minPixels, heights }
 }
 
-/** Changed pixels are grouped on a grid of cells this many small pixels wide (16 of the page's at desktop width). */
-const CELL = 4
+/**
+ * Changed pixels are grouped on a grid of cells this many of the page's own pixels wide, at either width (a small pixel is
+ * 4 of the page's at the desktop's width, and about 1 at a phone's).
+ */
+const CELL_PX = 16
 /** A cell with fewer changed pixels than this is a speck, not a change. */
 const CELL_MIN_PIXELS = 2
-/** Changed cells this close (in cells, any way) are one area: a button's label and its border are one change. */
-const JOIN_CELLS = 2
+/** Changes this close (in the page's pixels, any way) are one area: a button's label and its border are one change. */
+const JOIN_PX = 32
 /** The most areas kept: the biggest changes, shown top to bottom. */
 export const MAX_REGIONS = 12
 
@@ -89,11 +92,13 @@ export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tol
   if (before.width !== after.width) return [page(0, 0, Math.max(before.width, after.width), height)]
   const { width } = before
   const shared = Math.min(before.height, after.height)
-  const cols = Math.ceil(width / CELL)
-  const rows = Math.ceil(height / CELL)
+  const cell = Math.max(1, Math.round(CELL_PX / scale))
+  const joinCells = Math.max(1, Math.ceil(JOIN_PX / (cell * scale)))
+  const cols = Math.ceil(width / cell)
+  const rows = Math.ceil(height / cell)
   const counts = new Uint32Array(cols * rows)
   for (let y = 0; y < height; y++) {
-    const row = Math.floor(y / CELL) * cols
+    const row = Math.floor(y / cell) * cols
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4
       const differs =
@@ -101,7 +106,7 @@ export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tol
         Math.abs(before.data[i] - after.data[i]) > tolerance ||
         Math.abs(before.data[i + 1] - after.data[i + 1]) > tolerance ||
         Math.abs(before.data[i + 2] - after.data[i + 2]) > tolerance
-      if (differs) counts[row + Math.floor(x / CELL)]++
+      if (differs) counts[row + Math.floor(x / cell)]++
     }
   }
   // Group the changed cells: each group's bounds, and how many pixels changed in it.
@@ -113,16 +118,16 @@ export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tol
     const stack = [start]
     seen[start] = 1
     while (stack.length) {
-      const cell = stack.pop()!
-      const c = cell % cols
-      const r = Math.floor(cell / cols)
+      const at = stack.pop()!
+      const c = at % cols
+      const r = Math.floor(at / cols)
       group.c0 = Math.min(group.c0, c)
       group.c1 = Math.max(group.c1, c)
       group.r0 = Math.min(group.r0, r)
       group.r1 = Math.max(group.r1, r)
-      group.pixels += counts[cell]
-      for (let dr = -JOIN_CELLS; dr <= JOIN_CELLS; dr++)
-        for (let dc = -JOIN_CELLS; dc <= JOIN_CELLS; dc++) {
+      group.pixels += counts[at]
+      for (let dr = -joinCells; dr <= joinCells; dr++)
+        for (let dc = -joinCells; dc <= joinCells; dc++) {
           const nc = c + dc
           const nr = r + dr
           if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue
@@ -139,9 +144,9 @@ export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tol
     .sort((a, b) => b.pixels - a.pixels)
     .slice(0, MAX_REGIONS)
     .map((g) => {
-      const x = g.c0 * CELL
-      const y = g.r0 * CELL
-      return page(x, y, Math.min(width, (g.c1 + 1) * CELL) - x, Math.min(height, (g.r1 + 1) * CELL) - y)
+      const x = g.c0 * cell
+      const y = g.r0 * cell
+      return page(x, y, Math.min(width, (g.c1 + 1) * cell) - x, Math.min(height, (g.r1 + 1) * cell) - y)
     })
     .sort((a, b) => a.y - b.y || a.x - b.x)
 }

@@ -2844,6 +2844,8 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)})?.checked`)) === false, "Settings has no phone's width switch, or it is on")
     await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)}).click()`)
     for (const started = Date.now(); !settings.projects().find((p) => p.path === projectDir)?.phone; await sleep(100)) if (Date.now() - started > 3000) throw new Error("the phone's width switch did not turn it on")
+    // The window shows it on before it is clicked again (a click before that would only turn it on again).
+    await until(sw.webContents, `document.querySelector(${JSON.stringify(phoneSwitch)})?.checked === true`, "Settings did not show the phone's width as on")
     await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)}).click()`)
     for (const started = Date.now(); settings.projects().find((p) => p.path === projectDir)?.phone; await sleep(100)) if (Date.now() - started > 3000) throw new Error("the phone's width switch did not turn it off")
     need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}/private`, 'the field does not show the saved address')

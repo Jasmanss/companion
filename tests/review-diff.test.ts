@@ -125,6 +125,17 @@ describe('where the page changed (Show changes)', () => {
     expect(changedRegions(page(225), two, 4).map((r) => r.y)).toEqual([32, 720])
   })
 
+  it("groups in the page's own pixels at a phone's width too, so a layout change is not cut into pieces", () => {
+    // A phone's page (390 wide) reduced to 360: a small pixel is about 1.08 of the page's. Two parts 16 small pixels
+    // apart (17 page pixels) are one change, as they would be at the desktop's width.
+    const scale = 390 / 360
+    const pieces = paint(paint(page(800), 20, 100, 300, 40, ORANGE), 20, 156, 300, 40, ORANGE)
+    expect(changedRegions(page(800), pieces, scale)).toHaveLength(1)
+    // Far apart (100 page pixels) they stay two.
+    const apart = paint(paint(page(800), 20, 100, 300, 40, ORANGE), 20, 240, 300, 40, ORANGE)
+    expect(changedRegions(page(800), apart, scale)).toHaveLength(2)
+  })
+
   it('leaves out a lone speck, and finds nothing on the same page', () => {
     expect(changedRegions(page(225), paint(page(225), 100, 100, 1, 1, ORANGE), 4)).toEqual([])
     expect(changedRegions(page(225), page(225), 4)).toEqual([])

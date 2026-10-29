@@ -227,7 +227,8 @@ export class ReviewTracker {
         },
       )
       const atPhone = phone?.diff ? `; at a phone's width ${phone.diff.changed ? 'it changed' : 'the same'} (${phone.diff.changedPixels})` : ''
-      this.log(`a review of ${project.name}: ${diff ? `the page changed (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})` : 'no earlier picture, so only how it looks now'}${atPhone}`)
+      const atDesktop = !diff ? 'no earlier picture, so only how it looks now' : `the page ${diff.changed ? 'changed' : "looks the same at the desktop's width"} (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})`
+      this.log(`a review of ${project.name}: ${atDesktop}${atPhone}`)
       this.clearCheck(project.path)
       await this.keepLook(project, address, 'review', { reviewId: record.id })
       this.deps.onChange()
