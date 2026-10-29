@@ -741,6 +741,22 @@ function ReviewAddressRow({ project, problem, run }: { project: Project; problem
           {trying ? 'Looking…' : 'Try it now'}
         </button>
       </div>
+      {saved && (
+        <label className="set-phone">
+          <input
+            type="checkbox"
+            role="switch"
+            className="set-switch"
+            checked={Boolean(project.phone)}
+            onChange={(e) => void run(api().settings.setProjectPhone(project.path, e.target.checked))}
+            aria-label={`Also look at ${project.name} at a phone's width`}
+          />
+          <span>
+            Also at a phone's width (390 px)
+            <small>Each look takes about twice as long.</small>
+          </span>
+        </label>
+      )}
       {result && (result.ok ? (
         <figure className="set-shot">
           <img src={result.image} alt={`${project.name} as Steward sees it`} />

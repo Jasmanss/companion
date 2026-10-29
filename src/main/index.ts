@@ -9,7 +9,7 @@ import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
-import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
+import { PHONE_SHOT, REVIEW_PICTURES, REVIEW_VIEWER_GAP, reviewViewerRect, type ReviewPicture } from '../shared/review'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, IslandAct, IslandNote, IslandNoteKind, Mood, NightReport, NotchGeometry, NotchLayout, NotchStyle, PillGlint, Project, SessionView, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -65,7 +65,7 @@ import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, ty
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
-import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
+import { hasPicture, isReviewId, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
 import { buildNightReport } from './night-report'
@@ -1839,6 +1839,11 @@ function registerIpc(): void {
     sendReviewProblems()
     return settings.view()
   })
+  ipcMain.handle('settings:setProjectPhone', async (_e, projectPath: unknown, on: unknown) => {
+    if (typeof projectPath !== 'string' || typeof on !== 'boolean') throw new Error('Bad request')
+    await settings.setProjectPhone(projectPath, on)
+    return settings.view()
+  })
   ipcMain.handle('settings:setApiKey', async (_e, key: string) => {
     await settings.setSecret('anthropic', key)
     return settings.view()
@@ -1947,7 +1952,8 @@ function registerIpc(): void {
     return text
   })
   ipcMain.handle('review:openFull', async (_e, id: unknown, which: unknown) => {
-    const file = isReviewId(id) && (which === 'before' || which === 'after') ? reviewStore.file(id, which) : null
+    const record = isReviewId(id) ? reviewStore.get(id) : null
+    const file = record && REVIEW_PICTURES.includes(which as ReviewPicture) && hasPicture(record, which as ReviewPicture) ? reviewStore.file(record.id, which as ReviewPicture) : null
     if (file) await shell.openPath(file)
   })
   ipcMain.handle('review:history', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.history(projectPath) : []))
@@ -4597,7 +4603,7 @@ app.whenReady().then(async () => {
   await reviewStore.load()
   reviews = new ReviewTracker({
     projects: () => settings.projects(),
-    capture: (url) => capturePage(url, { review: { settleMs: 10_000 } }),
+    capture: (url, size) => capturePage(url, { review: { settleMs: 10_000 }, ...(size === 'phone' ? { viewport: PHONE_SHOT } : {}) }),
     compare: comparePictures,
     card: cardPicture,
     store: reviewStore,

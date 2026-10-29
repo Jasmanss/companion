@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
-import { addressLabel, CARD_SHOT, filesChangedLabel, noChangesReason, reviewNote, reviewPictureUrl } from '../../shared/review'
+import { addressLabel, CARD_SHOT, filesChangedLabel, noChangesReason, PHONE_SHOT, reviewNote, reviewPictureUrl } from '../../shared/review'
 import type { ReviewRegion, ReviewView } from '../../shared/types'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons'
 
@@ -15,7 +15,7 @@ const MODES: { mode: CompareMode; label: string }[] = [
   { mode: 'flip', label: 'Flip' },
 ]
 
-/** Pages are photographed this wide, so at 100% a picture is the page's real size. */
+/** Pages are photographed this wide (or a phone's width), so at 100% a picture is the page's real size. */
 const PAGE_WIDTH = CARD_SHOT.width
 /** The space around the pictures, and between them side by side. */
 const PAD = 14
@@ -62,7 +62,13 @@ export function ReviewViewer({
   onDone: (text: string) => void
 }) {
   const review = reviews[index]
-  const hasBefore = review.before !== null
+  // Desktop or a phone's width (when the project asks for it): it opens on the phone's when only that changed.
+  const [size, setSize] = useState<'desktop' | 'phone'>(review.phone?.only ? 'phone' : 'desktop')
+  const phone = size === 'phone' ? review.phone : null
+  const page = phone
+    ? { width: PHONE_SHOT.width, heightBefore: phone.heightBefore, heightAfter: phone.heightAfter, beforeFrom: phone.beforeFrom, regions: phone.regions }
+    : { width: PAGE_WIDTH, heightBefore: review.heightBefore, heightAfter: review.heightAfter, beforeFrom: review.beforeFrom, regions: review.regions }
+  const hasBefore = page.beforeFrom !== 'none'
   const [mode, setMode] = useState<CompareMode>('slide')
   const [real, setReal] = useState(false)
   const [x, setX] = useState(55)
@@ -70,8 +76,8 @@ export function ReviewViewer({
   // Show changes: the changed areas outlined, and which one is being looked at.
   const [marked, setMarked] = useState(false)
   const [at, setAt] = useState(0)
-  const regions = review.regions ?? []
-  const cannotMark = noChangesReason(review)
+  const regions = page.regions ?? []
+  const cannotMark = noChangesReason(page)
   const scroller = useRef<HTMLDivElement>(null)
   const [room, setRoom] = useState(0)
   const go = (next: number) => onIndex(Math.max(0, Math.min(reviews.length - 1, next)))
@@ -90,13 +96,17 @@ export function ReviewViewer({
 
   // Another review starts at its top, showing the page as it is now, with nothing outlined.
   useEffect(() => {
+    setSize(review.phone?.only ? 'phone' : 'desktop')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [review.id])
+  useEffect(() => {
     scroller.current?.scrollTo(0, 0)
     setShowing('after')
     setMarked(false)
     setAt(0)
     // Arrow keys up and down scroll the page from the start.
     scroller.current?.focus({ preventScroll: true })
-  }, [review.id])
+  }, [review.id, size])
 
   // Showing changes brings the one being looked at into view (side by side, the left one; both scroll together).
   useEffect(() => {
@@ -104,7 +114,7 @@ export function ReviewViewer({
     const mark = scroller.current?.querySelector(`.rvv-mark[data-i="${at}"]`)
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     mark?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: still ? 'auto' : 'smooth' })
-  }, [marked, at, mode, real, review.id])
+  }, [marked, at, mode, real, review.id, size])
 
   /** The next changed area (or the one before), outlining them all if they weren't. */
   const step = (by: number) => {
@@ -143,6 +153,9 @@ export function ReviewViewer({
       } else if (e.key === '[' || e.key === ']') {
         take()
         go(index + (e.key === '[' ? -1 : 1))
+      } else if ((e.key === 'p' || e.key === 'P') && review.phone) {
+        take()
+        setSize((now) => (now === 'phone' ? 'desktop' : 'phone'))
       } else if (e.key === 'c' || e.key === 'C') {
         take()
         if (!cannotMark) setMarked((now) => !now)
@@ -156,11 +169,11 @@ export function ReviewViewer({
   })
 
   const side = shown === 'side'
-  const scale = real ? 1 : Math.min(1, Math.max(0.1, (side ? (room - GAP) / 2 : room) / PAGE_WIDTH))
-  const width = Math.round(PAGE_WIDTH * scale)
+  const scale = real ? 1 : Math.min(1, Math.max(0.1, (side ? (room - GAP) / 2 : room) / page.width))
+  const width = Math.round(page.width * scale)
   const tall = (h: number | null) => Math.round((h ?? 0) * scale)
-  const before = reviewPictureUrl(review.id, 'before')
-  const after = reviewPictureUrl(review.id, 'after')
+  const before = reviewPictureUrl(review.id, phone ? 'before-phone' : 'before')
+  const after = reviewPictureUrl(review.id, phone ? 'after-phone' : 'after')
   const flipped = hasBefore && showing === 'before'
 
   // Slide: press anywhere on the picture and drag.
@@ -198,6 +211,16 @@ export function ReviewViewer({
             </button>
           ))}
         </span>
+        {review.phone && (
+          <span className="rvv-seg" role="group" aria-label="Width">
+            <button aria-pressed={size === 'desktop'} title="The desktop's width (P)" onClick={() => setSize('desktop')}>
+              Desktop
+            </button>
+            <button aria-pressed={size === 'phone'} title={`A phone's width, 390 px (P)${review.phone.changed ? '' : ': it looks the same there'}`} onClick={() => setSize('phone')}>
+              Phone
+            </button>
+          </span>
+        )}
         <span className="rvv-changes">
           <span className="rvv-seg">
             <button aria-pressed={marked} disabled={Boolean(cannotMark)} title={cannotMark ?? 'Outline what changed (C), and go from one change to the next (N)'} onClick={() => setMarked(!marked)}>
@@ -231,15 +254,16 @@ export function ReviewViewer({
         </button>
       </header>
 
-      {(review.said || review.beforeFrom !== 'turn-start') && (
+      {(review.said || page.beforeFrom !== 'turn-start' || review.phone?.only) && (
         <div className="rvv-note">
           {review.said && (
             <p className="rv-said">
               <b>Claude says:</b> {review.said} <span className="rv-said-src">from Claude's reply</span>
             </p>
           )}
-          {review.beforeFrom === 'none' && <p className="muted small">There is no earlier picture of this page, so only how it looks now is shown.</p>}
-          {review.beforeFrom === 'last-look' && <p className="muted small">The before picture is from the last time Steward looked, not from when you sent the prompt.</p>}
+          {review.phone?.only && <p className="muted small">Only a phone's width looks different: at the desktop's, the page looks the same.</p>}
+          {page.beforeFrom === 'none' && <p className="muted small">There is no earlier picture of this page{phone ? " at a phone's width" : ''}, so only how it looks now is shown.</p>}
+          {page.beforeFrom === 'last-look' && <p className="muted small">The before picture is from the last time Steward looked, not from when you sent the prompt.</p>}
         </div>
       )}
 
@@ -247,7 +271,7 @@ export function ReviewViewer({
         {shown === 'slide' && (
           <div
             className="rvv-box rvv-slide"
-            style={{ width, height: Math.max(tall(review.heightBefore), tall(review.heightAfter)), '--x': `${x}%` } as CSSProperties}
+            style={{ width, height: Math.max(tall(page.heightBefore), tall(page.heightAfter)), '--x': `${x}%` } as CSSProperties}
             onPointerDown={(e) => {
               if (e.button !== 0) return
               dragging.current = true
@@ -318,11 +342,12 @@ export function ReviewViewer({
         )}
       </div>
 
-      <Decide key={review.id} review={review} scale={scale} side={side} onDone={onDone} />
+      <Decide key={review.id} review={review} atPhone={Boolean(phone)} scale={scale} side={side} onDone={onDone} />
 
       <p className="rvv-keys">
         <kbd>Esc</kbd> back · <kbd>←</kbd> <kbd>→</kbd> move the slider (<kbd>Shift</kbd> for more) · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Slide, Side by side, Flip ·{' '}
-        <kbd>Space</kbd> flip · <kbd>Z</kbd> Fit or 100%{!cannotMark && <> · <kbd>C</kbd> show changes, <kbd>N</kbd> the next one</>}
+        <kbd>Space</kbd> flip · <kbd>Z</kbd> Fit or 100%{review.phone && <> · <kbd>P</kbd> phone or desktop</>}
+        {!cannotMark && <> · <kbd>C</kbd> show changes, <kbd>N</kbd> the next one</>}
         {reviews.length > 1 && <> · <kbd>[</kbd> <kbd>]</kbd> other reviews</>} · scroll or <kbd>↑</kbd> <kbd>↓</kbd> for the rest of the page
       </p>
     </div>
@@ -333,7 +358,7 @@ export function ReviewViewer({
  * The bottom bar: Looks good, Send it back (the note box), Open in Preview, and how big the pictures are shown. What
  * goes wrong is said here: the panel's own messages aren't drawn while the viewer is.
  */
-function Decide({ review, scale, side, onDone }: { review: ReviewView; scale: number; side: boolean; onDone: (text: string) => void }) {
+function Decide({ review, atPhone, scale, side, onDone }: { review: ReviewView; atPhone: boolean; scale: number; side: boolean; onDone: (text: string) => void }) {
   const [asking, setAsking] = useState(false)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -375,7 +400,9 @@ function Decide({ review, scale, side, onDone }: { review: ReviewView; scale: nu
           autoFocus
           aria-label="What should change?"
         />
-        <pre className="rv-out">{reviewNote({ project: review.project, address: review.address, note, afterFile: review.files.after, beforeFile: review.files.before })}</pre>
+        <pre className="rv-out">
+          {reviewNote({ project: review.project, address: review.address, note, afterFile: review.files.after, beforeFile: review.files.before, phoneFile: review.files.phoneAfter })}
+        </pre>
         <div className="rv-buttons">
           <button className="btn primary" disabled={busy} onClick={() => decide(api().review.sendBack(review.id, note), 'Copied. Paste it into the session; the picture is saved at the path in the note.')}>
             Copy note for the session
@@ -396,7 +423,7 @@ function Decide({ review, scale, side, onDone }: { review: ReviewView; scale: nu
       <button className="btn" disabled={busy} onClick={() => setAsking(true)}>
         Send it back
       </button>
-      <button className="btn rvv-preview" onClick={() => api().review.openFull(review.id, 'after').catch((err: unknown) => onError(message(err)))}>
+      <button className="btn rvv-preview" onClick={() => api().review.openFull(review.id, atPhone ? 'after-phone' : 'after').catch((err: unknown) => onError(message(err)))}>
         Open in Preview
       </button>
       <span className="rvv-zoom muted small">

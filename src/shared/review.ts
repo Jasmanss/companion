@@ -46,8 +46,9 @@ export function isLoopbackUrl(url: string): boolean {
 export const addressLabel = (url: string): string => url.replace(/^http:\/\//, '')
 
 /** What "Send it back" copies, ready to paste into the Claude Code session: the user's words, and where the pictures are. */
-export function reviewNote(r: { project: string; address: string; note: string; afterFile: string; beforeFile: string | null }): string {
+export function reviewNote(r: { project: string; address: string; note: string; afterFile: string; beforeFile: string | null; phoneFile?: string | null }): string {
   const lines = [`Visual Review of ${r.project} (${addressLabel(r.address)}): please change this.`, r.note.trim() || '(no note)', `What I saw: ${r.afterFile}`]
+  if (r.phoneFile) lines.push(`At a phone's width (390 px): ${r.phoneFile}`)
   if (r.beforeFile) lines.push(`What it looked like before: ${r.beforeFile}`)
   return lines.join('\n')
 }
@@ -88,6 +89,8 @@ export function noChangesReason(r: { beforeFrom: 'turn-start' | 'last-look' | 'n
 
 /** The picture in the card shows the top of the page, this wide and 16:10, like the design. */
 export const CARD_SHOT = { width: 1440, height: 900 } as const
+/** Visual Review's phone width: an iPhone's screen, in CSS pixels. */
+export const PHONE_SHOT = { width: 390, height: 844 } as const
 
 /** A path that is a login page: /login, /sign-in, /auth/callback, /api/auth/signin, #/login and the like. */
 const LOGIN_PATH = /log-?in|log_in|sign-?in|sign_in|\bauth\b|\boauth|\bsso\b/i
@@ -203,5 +206,9 @@ export function reviewViewerRect(area: Rect): Rect {
   return { x: area.x + gap, y: area.y + gap, width: Math.max(0, area.width - 2 * gap), height: Math.max(0, area.height - 2 * gap) }
 }
 
+/** Which of a review's full-page pictures: before and after, at desktop or phone width. */
+export type ReviewPicture = 'before' | 'after' | 'before-phone' | 'after-phone'
+export const REVIEW_PICTURES: readonly ReviewPicture[] = ['before', 'after', 'before-phone', 'after-phone']
+
 /** The full-page pictures of a review, for the viewer: served by main from the review store only. */
-export const reviewPictureUrl = (id: string, which: 'before' | 'after'): string => `review://${id}/${which}`
+export const reviewPictureUrl = (id: string, which: ReviewPicture): string => `review://${id}/${which}`

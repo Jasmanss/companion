@@ -57,6 +57,7 @@ const api: StewardAPI = {
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
     setProjectUrl: (path, url) => ipcRenderer.invoke('settings:setProjectUrl', path, url),
+    setProjectPhone: (path, on) => ipcRenderer.invoke('settings:setProjectPhone', path, on),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),

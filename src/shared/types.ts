@@ -190,6 +190,8 @@ export interface Project {
   path: string
   /** Where the project's app runs on this Mac (Visual Review). Empty means Visual Review is off for the project. */
   url?: string
+  /** Visual Review looks at the page at a phone's width (390 px) too. Only with an address. */
+  phone?: boolean
 }
 
 /** Which alerts peek out from the screen edge, and which cards the panel shows. All on by default. */
@@ -420,13 +422,27 @@ export interface ReviewView {
   heightBefore: number | null
   heightAfter: number
   /** The full-page pictures on disk (the note for the session points at them). */
-  files: { before: string | null; after: string }
+  files: { before: string | null; after: string; phoneAfter?: string | null }
   /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
   said: string | null
   /** How many files the turn changed in the project's git checkout, or null when git couldn't say. */
   filesChanged: number | null
   /** Where the page changed, top to bottom; null when it wasn't measured (no earlier picture, or an older review). */
   regions: ReviewRegion[] | null
+  /** The page at a phone's width (390 px), when the project asks for it: the same facts, and whether it changed. */
+  phone: ReviewPhone | null
+}
+
+/** Visual Review at a phone's width: the pictures are served as review://<id>/before-phone and /after-phone. */
+export interface ReviewPhone {
+  beforeFrom: 'turn-start' | 'last-look' | 'none'
+  heightBefore: number | null
+  heightAfter: number
+  regions: ReviewRegion[] | null
+  /** It looks different at this width. */
+  changed: boolean
+  /** Only at this width: the desktop page looks the same, so the card's pictures show no change. */
+  only: boolean
 }
 
 /**
@@ -632,6 +648,8 @@ export interface StewardAPI {
     removeProject(path: string): Promise<SettingsView>
     /** Visual Review's address for a project: an address on this Mac, or '' to turn it off. Throws when it isn't one. */
     setProjectUrl(path: string, url: string): Promise<SettingsView>
+    /** Visual Review at a phone's width too, for a project with an address. */
+    setProjectPhone(path: string, on: boolean): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
@@ -683,7 +701,7 @@ export interface StewardAPI {
     /** Marks it sent back and copies the note for the session; resolves to what was copied. */
     sendBack(id: string, note: string): Promise<string>
     /** Open the full-page picture. */
-    openFull(id: string, which: 'before' | 'after'): Promise<void>
+    openFull(id: string, which: 'before' | 'after' | 'before-phone' | 'after-phone'): Promise<void>
     /** The looks after recent turns in a project, newest first. */
     history(projectPath: string): Promise<ReviewHistoryEntry[]>
     /** The history changed (a turn ended, a review was decided, or it was cleared): ask again. */

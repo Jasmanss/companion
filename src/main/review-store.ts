@@ -36,7 +36,22 @@ export interface ReviewRecord {
   filesChanged?: number
   /** Where the page changed, in its own pixels, top to bottom (review-diff.ts). Absent: no earlier picture, or an older review. */
   regions?: ReviewRegion[]
+  /** The same at a phone's width (390 px), when the project asked for it and the phone pictures were taken. */
+  phone?: ReviewPhoneRecord
 }
+
+/** Visual Review at a phone's width, in review.json. */
+export interface ReviewPhoneRecord {
+  before: 'turn-start' | 'last-look' | 'none'
+  heightBefore: number | null
+  heightAfter: number
+  changedPixels: number
+  minPixels: number
+  regions?: ReviewRegion[]
+}
+
+/** A width looks different when it had an earlier picture and enough of it changed. */
+export const looksChanged = (r: { before: ReviewRecord['before']; changedPixels: number; minPixels: number }): boolean => r.before !== 'none' && r.changedPixels >= r.minPixels
 
 /** The files of one review, besides review.json. The card pictures are small JPEGs of the top of the page. */
 export interface ReviewFiles {
@@ -44,10 +59,19 @@ export interface ReviewFiles {
   after: Buffer
   beforeCard?: Buffer
   afterCard: Buffer
+  beforePhone?: Buffer
+  afterPhone?: Buffer
 }
 
-export type ReviewFile = 'before' | 'after' | 'before-card' | 'after-card'
-const FILE_NAMES: Record<ReviewFile, string> = { before: 'before.png', after: 'after.png', 'before-card': 'before-card.jpg', 'after-card': 'after-card.jpg' }
+export type ReviewFile = 'before' | 'after' | 'before-card' | 'after-card' | 'before-phone' | 'after-phone'
+const FILE_NAMES: Record<ReviewFile, string> = {
+  before: 'before.png',
+  after: 'after.png',
+  'before-card': 'before-card.jpg',
+  'after-card': 'after-card.jpg',
+  'before-phone': 'before-phone.png',
+  'after-phone': 'after-phone.png',
+}
 
 export interface Kept {
   id: string
@@ -174,8 +198,8 @@ export class ReviewStore {
   }
 
   /**
-   * What review://<id>/before and review://<id>/after load, for the big viewer: the full-page picture of a review that is
-   * in the store, and nothing else. Any other id, file name or path gives null.
+   * What review://<id>/before and review://<id>/after load (and /before-phone and /after-phone), for the big viewer: the
+   * full-page picture of a review that is in the store, and nothing else. Any other id, file name or path gives null.
    */
   pictureFor(url: string): string | null {
     // The URL parser would resolve a "..", which could only reach this review's own pictures; refused all the same.
@@ -186,9 +210,9 @@ export class ReviewStore {
     } catch {
       return null
     }
-    const which = u.pathname === '/before' ? 'before' : u.pathname === '/after' ? 'after' : null
+    const which = PICTURE_PATHS[u.pathname]
     const record = u.protocol === 'review:' && isReviewId(u.hostname) ? this.get(u.hostname) : null
-    if (!which || !record || u.search || u.hash || (which === 'before' && record.before === 'none')) return null
+    if (!which || !record || u.search || u.hash || !hasPicture(record, which)) return null
     return this.file(record.id, which)
   }
 
@@ -210,7 +234,14 @@ export class ReviewStore {
     const dir = path.join(this.root, projectFolder(record.project, record.projectPath), record.id)
     await fs.mkdir(dir, { recursive: true })
     const write = (which: ReviewFile, data: Buffer | undefined) => (data ? fs.writeFile(path.join(dir, FILE_NAMES[which]), data) : undefined)
-    await Promise.all([write('before', files.before), write('after', files.after), write('before-card', files.beforeCard), write('after-card', files.afterCard)])
+    await Promise.all([
+      write('before', files.before),
+      write('after', files.after),
+      write('before-card', files.beforeCard),
+      write('after-card', files.afterCard),
+      write('before-phone', files.beforePhone),
+      write('after-phone', files.afterPhone),
+    ])
     // review.json goes last: a review without it is a save that was cut off, and is cleaned up on the next start.
     await writeRecord(dir, record)
     this.entries.set(record.id, { dir, record, bytes: await sizeOf(dir) })
@@ -301,12 +332,38 @@ function parseRecord(text: string): ReviewRecord | null {
       (r.said === undefined || typeof r.said === 'string') &&
       (r.filesChanged === undefined || (typeof r.filesChanged === 'number' && Number.isInteger(r.filesChanged) && r.filesChanged >= 0))
     if (!ok) return null
-    // Areas that don't read are dropped, not the review: it still shows, without "Show changes".
-    const { regions, ...rest } = r as ReviewRecord
-    return regions === undefined || isRegions(regions) ? (r as ReviewRecord) : rest
+    // Areas that don't read are dropped, not the review: it still shows, without "Show changes". Phone facts that don't
+    // read go too: the review shows at desktop width.
+    const { regions, phone, ...rest } = r as ReviewRecord
+    return { ...rest, ...(regions !== undefined && isRegions(regions) ? { regions } : {}), ...(isPhoneRecord(phone) ? { phone } : {}) }
   } catch {
     return null
   }
+}
+
+function isPhoneRecord(p: unknown): p is ReviewPhoneRecord {
+  const r = p as Partial<ReviewPhoneRecord> | null | undefined
+  return (
+    !!r &&
+    typeof r === 'object' &&
+    (r.before === 'turn-start' || r.before === 'last-look' || r.before === 'none') &&
+    (r.heightBefore === null || typeof r.heightBefore === 'number') &&
+    typeof r.heightAfter === 'number' &&
+    typeof r.changedPixels === 'number' &&
+    typeof r.minPixels === 'number' &&
+    (r.regions === undefined || isRegions(r.regions))
+  )
+}
+
+/** The paths review:// serves, and which file each is. */
+const PICTURE_PATHS: Record<string, ReviewFile | undefined> = { '/before': 'before', '/after': 'after', '/before-phone': 'before-phone', '/after-phone': 'after-phone' }
+
+/** Whether a review has that picture: a before only when there was an earlier picture, phone ones only when it was taken. */
+export function hasPicture(record: Pick<ReviewRecord, 'before' | 'phone'>, which: ReviewFile): boolean {
+  if (which === 'before') return record.before !== 'none'
+  if (which === 'after-phone') return !!record.phone
+  if (which === 'before-phone') return !!record.phone && record.phone.before !== 'none'
+  return which === 'after'
 }
 
 /** A list of changed areas as review.json should have it: whole numbers, inside a page Steward could have photographed. */

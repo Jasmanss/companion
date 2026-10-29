@@ -3,12 +3,15 @@ import { addressLabel, landingNote, reviewNote, sayFrom } from '../shared/review
 import type { AlertInput } from './alerts'
 import type { HookPayload } from './hook-payload'
 import type { Diff } from './review-diff'
-import type { ReviewRecord, ReviewStore } from './review-store'
+import { looksChanged, type ReviewRecord, type ReviewStore } from './review-store'
 import { matchProject } from './sessions'
 import type { StatusEntry } from './turn-files'
 
 type TurnStart = Extract<HookPayload, { hook_event_name: 'UserPromptSubmit' }>
 type TurnStop = Extract<HookPayload, { hook_event_name: 'Stop' }>
+
+/** The widths Visual Review looks at: the desktop's, and a phone's (390 px) when the project asks for it. */
+export type PageSize = 'desktop' | 'phone'
 
 /** One picture of the page: the whole of it, as a PNG. */
 export interface Shot {
@@ -21,8 +24,8 @@ export interface Shot {
 
 export interface ReviewDeps {
   projects(): Project[]
-  /** Capture the page at this address (an address on this Mac, settled and with animations off). Throws when it can't. */
-  capture(url: string): Promise<Shot>
+  /** Capture the page at this address and width (an address on this Mac, settled and with animations off). Throws when it can't. */
+  capture(url: string, size: PageSize): Promise<Shot>
   compare(before: Buffer, after: Buffer): Promise<Diff> | Diff
   /** The top of a full-page picture, small, for the card. */
   card(png: Buffer): Buffer
@@ -48,8 +51,8 @@ export interface ReviewDeps {
 const BEFORE_WAIT_MS = 15_000
 /** A picture from an earlier look is only a stand-in for "before" for this long. */
 const LAST_LOOK_MAX_AGE_MS = 6 * 60 * 60 * 1000
-/** How many captures may wait their turn. More than this are skipped: they'd be late anyway. */
-const MAX_QUEUED = 4
+/** How many captures may wait their turn (two a look, with the phone's). More than this are skipped: they'd be late anyway. */
+const MAX_QUEUED = 8
 /** A turn that never ended (Claude Code was closed) is forgotten after this long. */
 const TURN_MAX_AGE_MS = 6 * 60 * 60 * 1000
 /** How many unreviewed cards the panel gets. */
@@ -63,6 +66,8 @@ interface Turn {
   startedAt: number
   /** The page as the prompt was sent, or null when it couldn't be captured. */
   before: Promise<Look | null>
+  /** The same at a phone's width, when the project asks for it. */
+  phoneBefore: Promise<Look | null> | null
   /** What git listed as changed as the prompt was sent, for the file count. */
   files: Promise<StatusEntry[] | null>
 }
@@ -71,6 +76,8 @@ interface Turn {
 const BUSY = 'Steward is busy looking at other pages'
 
 const turnKey = (event: { session_id: string; prompt_id?: string }) => `${event.session_id}:${event.prompt_id ?? ''}`
+/** The last look at a project's page is kept per width. */
+const lookKey = (projectPath: string, size: PageSize) => (size === 'phone' ? `phone:${projectPath}` : projectPath)
 const dataUrl = (jpeg: Buffer) => `data:image/jpeg;base64,${jpeg.toString('base64')}`
 
 /**
@@ -128,19 +135,10 @@ export class ReviewTracker {
     for (const [key, turn] of this.turns) if (now - turn.startedAt > TURN_MAX_AGE_MS) this.turns.delete(key)
     if (!project?.url) return
     const address = project.url
-    const before = this.capture(address).then(
-      (shot) => {
-        this.remember(project.path, shot)
-        this.looked(project, address, shot)
-        return shot
-      },
-      (err) => {
-        this.failed(project, address, err, 'no before picture')
-        return null
-      },
-    )
+    const before = this.lookNow(project, address, 'desktop')
+    const phoneBefore = project.phone ? this.lookNow(project, address, 'phone') : null
     const files = this.deps.gitFiles?.look(project.path).catch(() => null) ?? Promise.resolve(null)
-    this.turns.set(turnKey(event), { projectPath: project.path, startedAt: now, before, files })
+    this.turns.set(turnKey(event), { projectPath: project.path, startedAt: now, before, phoneBefore, files })
   }
 
   /**
@@ -162,18 +160,18 @@ export class ReviewTracker {
       let before = turn ? await withTimeout(turn.before, BEFORE_WAIT_MS) : null
       let from: ReviewRecord['before'] = 'turn-start'
       if (!before) {
-        before = await this.lastLook(project.path)
+        before = await this.lastLook(project.path, 'desktop')
         from = before ? 'last-look' : 'none'
       }
       let after: Shot
       try {
-        after = await this.capture(address)
+        after = await this.capture(address, 'desktop')
       } catch (err) {
         this.failed(project, address, err, 'no after picture')
         await this.keepLook(project, address, 'failed', { text: describeCaptureError(err, address) })
         return null
       }
-      this.remember(project.path, after)
+      this.remember(project.path, after, 'desktop')
       // A login page is all Steward would ever see there: say so, and make no card of it.
       const landing = this.looked(project, address, after)
       if (landing?.login) {
@@ -181,11 +179,14 @@ export class ReviewTracker {
         return this.skip(`${project.name}: ${landing.text}`)
       }
       const diff = before ? await this.deps.compare(before.png, after.png) : null
-      // Nothing to compare with shows the page as it is. A page that looks the same makes no card, but a quiet note.
-      if (diff && !diff.changed) {
+      const phone = project.phone ? await this.phoneLook(project, address, turn) : null
+      // Nothing to compare with shows the page as it is. A page that looks the same (at both widths) makes no card, but a
+      // quiet note.
+      if (diff && !diff.changed && !phone?.diff?.changed) {
         this.checkedSame(project, address)
         await this.keepLook(project, address, 'same')
-        return this.skip(`${project.name}: the page looks the same (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})`)
+        const atPhone = phone?.diff ? `; at a phone's width ${phone.diff.changedPixels}` : ''
+        return this.skip(`${project.name}: the page looks the same (${diff.changedPixels} small pixels changed${atPhone}, it takes ${diff.minPixels})`)
       }
       // What Claude said it did, from the Stop hook itself: nothing else is read, and nothing leaves the Mac.
       const said = sayFrom(event.last_assistant_message)
@@ -195,6 +196,18 @@ export class ReviewTracker {
           ...(said ? { said } : {}),
           ...(filesChanged !== null ? { filesChanged } : {}),
           ...(diff?.regions ? { regions: diff.regions } : {}),
+          ...(phone
+            ? {
+                phone: {
+                  before: phone.from,
+                  heightBefore: phone.before?.height ?? null,
+                  heightAfter: phone.after.height,
+                  changedPixels: phone.diff?.changedPixels ?? 0,
+                  minPixels: phone.diff?.minPixels ?? 0,
+                  ...(phone.diff?.regions ? { regions: phone.diff.regions } : {}),
+                },
+              }
+            : {}),
           project: project.name,
           projectPath: project.path,
           url: address,
@@ -209,9 +222,12 @@ export class ReviewTracker {
           after: after.png,
           beforeCard: before ? this.deps.card(before.png) : undefined,
           afterCard: this.deps.card(after.png),
+          beforePhone: phone?.before?.png,
+          afterPhone: phone?.after.png,
         },
       )
-      this.log(`a review of ${project.name}: ${diff ? `the page changed (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})` : 'no earlier picture, so only how it looks now'}`)
+      const atPhone = phone?.diff ? `; at a phone's width ${phone.diff.changed ? 'it changed' : 'the same'} (${phone.diff.changedPixels})` : ''
+      this.log(`a review of ${project.name}: ${diff ? `the page changed (${diff.changedPixels} small pixels changed, it takes ${diff.minPixels})` : 'no earlier picture, so only how it looks now'}${atPhone}`)
       this.clearCheck(project.path)
       await this.keepLook(project, address, 'review', { reviewId: record.id })
       this.deps.onChange()
@@ -228,8 +244,8 @@ export class ReviewTracker {
     if (!project?.url) return { ok: false, error: 'Add an address first.' }
     const started = this.now()
     try {
-      const shot = await this.capture(project.url)
-      this.remember(project.path, shot)
+      const shot = await this.capture(project.url, 'desktop')
+      this.remember(project.path, shot, 'desktop')
       const landing = this.looked(project, project.url, shot)
       return {
         ok: true,
@@ -277,10 +293,20 @@ export class ReviewTracker {
         beforeFrom: r.before,
         heightBefore: r.heightBefore,
         heightAfter: r.heightAfter,
-        files: { before: r.before === 'none' ? null : store.file(r.id, 'before'), after },
+        files: { before: r.before === 'none' ? null : store.file(r.id, 'before'), after, ...(r.phone ? { phoneAfter: store.file(r.id, 'after-phone') } : {}) },
         said: r.said ?? null,
         filesChanged: r.filesChanged ?? null,
         regions: r.regions ?? null,
+        phone: r.phone
+          ? {
+              beforeFrom: r.phone.before,
+              heightBefore: r.phone.heightBefore,
+              heightAfter: r.phone.heightAfter,
+              regions: r.phone.regions ?? null,
+              changed: looksChanged(r.phone),
+              only: looksChanged(r.phone) && r.before !== 'none' && !looksChanged(r),
+            }
+          : null,
       })
       if (views.length >= MAX_CARDS) break
     }
@@ -297,7 +323,14 @@ export class ReviewTracker {
     const record = store.get(id)
     const after = store.file(id, 'after')
     if (!record || !after) throw new Error("That review isn't there any more.")
-    const text = reviewNote({ project: record.project, address: record.url, note, afterFile: after, beforeFile: record.before === 'none' ? null : store.file(id, 'before') })
+    const text = reviewNote({
+      project: record.project,
+      address: record.url,
+      note,
+      afterFile: after,
+      beforeFile: record.before === 'none' ? null : store.file(id, 'before'),
+      phoneFile: record.phone ? store.file(id, 'after-phone') : null,
+    })
     await store.setStatus(id, 'sent-back', note)
     this.deps.onChange()
     return text
@@ -389,25 +422,70 @@ export class ReviewTracker {
     if (this.troubles.delete(projectPath)) this.deps.onProblems?.()
   }
 
-  private remember(projectPath: string, shot: Look): void {
-    this.lastLooks.set(projectPath, { shot, at: this.now() })
+  private remember(projectPath: string, shot: Look, size: PageSize): void {
+    this.lastLooks.set(lookKey(projectPath, size), { shot, at: this.now() })
   }
 
-  /** The last picture of a project's page, if it's recent: from this run, or else the newest review's after picture (Steward restarted since). */
-  private async lastLook(projectPath: string): Promise<Look | null> {
-    const look = this.lastLooks.get(projectPath)
+  /**
+   * The last picture of a project's page at a width, if it's recent: from this run, or else the newest review's after
+   * picture (Steward restarted since).
+   */
+  private async lastLook(projectPath: string, size: PageSize): Promise<Look | null> {
+    const look = this.lastLooks.get(lookKey(projectPath, size))
     if (look && this.now() - look.at < LAST_LOOK_MAX_AGE_MS) return look.shot
     const newest = this.deps.store.latest(projectPath)
     if (!newest || this.now() - newest.createdAt >= LAST_LOOK_MAX_AGE_MS) return null
+    if (size === 'phone') {
+      const png = newest.phone ? await this.deps.store.read(newest.id, 'after-phone') : null
+      return png && newest.phone ? { png, height: newest.phone.heightAfter } : null
+    }
     const png = await this.deps.store.read(newest.id, 'after')
     return png ? { png, height: newest.heightAfter } : null
   }
 
+  /**
+   * Photograph the page now, at a width, and remember it; null when it can't. Only the desktop's look says when the
+   * page can't be seen: a phone picture that fails is in the log, and the review goes on at the desktop's width.
+   */
+  private lookNow(project: Project, address: string, size: PageSize): Promise<Look | null> {
+    return this.capture(address, size).then(
+      (shot) => {
+        this.remember(project.path, shot, size)
+        if (size === 'desktop') this.looked(project, address, shot)
+        return shot
+      },
+      (err) => {
+        if (size === 'desktop') this.failed(project, address, err, 'no before picture')
+        else this.log(`no phone before picture of ${project.name}: ${describeCaptureError(err, address)}`)
+        return null
+      },
+    )
+  }
+
+  /** The page at a phone's width as the turn ends, and what it was before; null when the phone picture can't be taken. */
+  private async phoneLook(project: Project, address: string, turn: Turn | undefined): Promise<{ before: Look | null; from: ReviewRecord['before']; after: Shot; diff: Diff | null } | null> {
+    let before = turn?.phoneBefore ? await withTimeout(turn.phoneBefore, BEFORE_WAIT_MS) : null
+    let from: ReviewRecord['before'] = 'turn-start'
+    if (!before) {
+      before = await this.lastLook(project.path, 'phone')
+      from = before ? 'last-look' : 'none'
+    }
+    let after: Shot
+    try {
+      after = await this.capture(address, 'phone')
+    } catch (err) {
+      this.log(`no phone picture of ${project.name}: ${describeCaptureError(err, address)}`)
+      return null
+    }
+    this.remember(project.path, after, 'phone')
+    return { before, from, after, diff: before ? await this.deps.compare(before.png, after.png) : null }
+  }
+
   /** Capture, after any capture already running. Refused when too many are waiting. */
-  private capture(address: string): Promise<Shot> {
+  private capture(address: string, size: PageSize): Promise<Shot> {
     if (this.queued >= MAX_QUEUED) return Promise.reject(new Error(BUSY))
     this.queued++
-    const run = this.tail.then(() => this.deps.capture(address))
+    const run = this.tail.then(() => this.deps.capture(address, size))
     // The next capture waits for this one, whether it worked or not. The caller gets the failure.
     this.tail = run
       .catch(() => undefined)

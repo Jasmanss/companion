@@ -19,6 +19,13 @@ describe('project addresses (Visual Review)', () => {
       expect(project(url)).toEqual({ name: 'haven', path: '/Users/me/haven' })
     }
   })
+
+  it("keeps the phone's width only when on, and only alongside an address", () => {
+    const withPhone = (url: unknown, phone: unknown) => migrateSettings({ projects: [{ name: 'haven', path: '/Users/me/haven', url, phone }] }).projects[0]
+    expect(withPhone('localhost:3000', true)).toEqual({ name: 'haven', path: '/Users/me/haven', url: 'http://localhost:3000', phone: true })
+    expect(withPhone('localhost:3000', 'yes')).toEqual({ name: 'haven', path: '/Users/me/haven', url: 'http://localhost:3000' })
+    expect(withPhone('', true)).toEqual({ name: 'haven', path: '/Users/me/haven' })
+  })
 })
 
 describe('migrateSettings', () => {

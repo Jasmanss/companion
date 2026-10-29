@@ -133,6 +133,32 @@ describe('ReviewStore', () => {
       expect(third.get(id)?.regions).toBeUndefined()
     }))
 
+  it("keeps the phone's pair, serves it as review://<id>/before-phone and /after-phone, and nothing it doesn't have", () =>
+    inTemp(async (dir) => {
+      const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      const phone = { before: 'turn-start' as const, heightBefore: 2400, heightAfter: 2600, changedPixels: 900, minPixels: 243 }
+      const { id } = await store.save({ ...draft(), phone }, { ...files, beforePhone: Buffer.from('pb'), afterPhone: Buffer.from('pa') })
+      expect(store.pictureFor(`review://${id}/before-phone`)).toBe(store.file(id, 'before-phone'))
+      expect(store.pictureFor(`review://${id}/after-phone`)).toBe(store.file(id, 'after-phone'))
+      expect((await store.read(id, 'after-phone'))?.toString()).toBe('pa')
+      const again = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await again.load()
+      expect(again.get(id)?.phone).toEqual(phone)
+      // A review without the phone's pictures, or without an earlier one, serves none of them.
+      const plain = await store.save(draft('/Users/me/other'), files)
+      expect(store.pictureFor(`review://${plain.id}/after-phone`)).toBeNull()
+      const first = await store.save({ ...draft('/Users/me/third'), phone: { ...phone, before: 'none', heightBefore: null } }, { ...files, afterPhone: Buffer.from('pa') })
+      expect(store.pictureFor(`review://${first.id}/before-phone`)).toBeNull()
+      expect(store.pictureFor(`review://${first.id}/after-phone`)).not.toBeNull()
+      // Phone facts that don't read are dropped, not the review.
+      const json = path.join(path.dirname(store.file(id, 'after')!), 'review.json')
+      await fs.writeFile(json, JSON.stringify({ ...JSON.parse(await fs.readFile(json, 'utf8')), phone: { before: 'yesterday' } }))
+      const third = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
+      await third.load()
+      expect(third.get(id)).not.toBeNull()
+      expect(third.get(id)?.phone).toBeUndefined()
+    }))
+
   it('serves review://<id>/before and /after for the viewer, and nothing else', () =>
     inTemp(async (dir) => {
       const store = new ReviewStore(dir, REVIEW_LIMITS, () => NOW)
