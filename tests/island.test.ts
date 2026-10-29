@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
 import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
-import { fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
+import { fadesFor, fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
 /** The 14-inch MacBook Pro's notch. */
@@ -426,5 +426,19 @@ describe('big messages and good news on the island', () => {
     notes.hover(false)
     vi.advanceTimersByTime(NOTE_AFTER_HOVER_MS)
     expect(notes.current).toBeNull()
+  })
+})
+
+describe('the island with Reduce Motion', () => {
+  it('fades only when its shape or Steward moves: a new mood or status changes in place, and a fade on its way is not restarted', () => {
+    const notch = { width: 185, height: 32 }
+    expect(fadesFor(null, { level: 'rest', hover: false }, notch)).toBe(true)
+    expect(fadesFor({ level: 'rest', hover: false }, { level: 'approval', hover: false }, notch)).toBe(true)
+    expect(fadesFor({ level: 'compact', hover: false }, { level: 'compact', hover: true }, notch)).toBe(true)
+    // The join sends the note, then the mood ("needs you"): the second is the same place, so no second fade.
+    expect(fadesFor({ level: 'approval', hover: false }, { level: 'approval', hover: false }, notch)).toBe(false)
+    // A note growing into a long note moves; the cursor on a note changes nothing about its shape.
+    expect(fadesFor({ level: 'note', hover: false }, { level: 'long', hover: false }, notch)).toBe(true)
+    expect(fadesFor({ level: 'note', hover: false }, { level: 'note', hover: true }, notch)).toBe(false)
   })
 })

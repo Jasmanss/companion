@@ -181,3 +181,71 @@ describe('measuring what a page drew', () => {
     expect(measureMotion(drawn([1, 1, 1], 20), 700, 'visible')).toMatchObject({ frames: 0, positions: 1, stuck: 0, stillGapMs: 20, drawn: 3 })
   })
 })
+
+/**
+ * The island's join fade on a macOS CI runner (Reduce Motion is on): out to 0, held while the island changes, back to 1,
+ * a frame every 17 ms but for one runner stall just before the first step back in. The five real runs of it:
+ */
+function joinFade(o: { inn: number[]; hold: number; stall: number; drawn: number }): { samples: Sample[]; drawn: number } {
+  const lead = 4
+  const values = [...Array<number>(lead).fill(1), 0.6, 0.2, 0, ...Array<number>(o.hold).fill(0), ...o.inn, 1]
+  const tail = Math.max(0, o.drawn - values.length)
+  const all = [...values, ...Array<number>(tail).fill(1)]
+  const stallAt = lead + 3 + o.hold
+  let t = 0
+  return { samples: all.map((v, i): Sample => [i ? (t += i === stallAt ? o.stall : 17) : 0, String(v)]), drawn: all.length }
+}
+const RUNS = {
+  // main at a61df04, main at d55fe71 and #42 passed; #43 (twice) and #44 failed on the count of positions alone.
+  'main a61df04: 8 positions, a 384 ms stall at about 235 ms in': { inn: [0.3, 0.5, 0.7, 0.9], hold: 11, stall: 384, drawn: 40, positions: 8 },
+  'main d55fe71: 8 positions, a 183 ms stall at about 233 ms in': { inn: [0.3, 0.5, 0.7, 0.9], hold: 11, stall: 183, drawn: 40, positions: 8 },
+  '#42: 8 positions, a 383 ms stall at about 234 ms in': { inn: [0.3, 0.5, 0.7, 0.9], hold: 11, stall: 383, drawn: 40, positions: 8 },
+  '#43: 7 positions, a 336 ms stall at about 250 ms in': { inn: [0.3, 0.5, 0.8], hold: 12, stall: 336, drawn: 38, positions: 7 },
+  '#43 again: 7 positions, a 182 ms stall at about 250 ms in': { inn: [0.3, 0.5, 0.8], hold: 12, stall: 182, drawn: 38, positions: 7 },
+  '#44: 6 positions, a 228 ms stall at about 274 ms in': { inn: [0.4, 0.8], hold: 13, stall: 228, drawn: 37, positions: 6 },
+}
+
+describe("judging a Reduce Motion fade on a CI runner, from the island join's real runs", () => {
+  for (const [name, run] of Object.entries(RUNS))
+    it(`passes ${name}: one stall of the runner's doesn't make a fade rough`, () => {
+      const { samples, drawn } = joinFade(run)
+      const m = measureMotion(samples, 900, 'visible')
+      expect(m.positions).toBe(run.positions)
+      expect(m.fade).toEqual({ turns: 1, restsAtEnds: true })
+      expect(m.maxGapMs).toBe(run.stall)
+      expect(drawn).toBeGreaterThan(30)
+      expect(judgeMotion('Steward joining the island', m, true).result).toBe('smooth')
+      // On a Mac with a screen the strict judgment stays: that stall is a stutter there.
+      expect(judgeMotion('Steward joining the island', m, false).result).toBe('not smooth')
+    })
+
+  // Still frames before and after, so the page drew enough to judge.
+  const judge = (values: number[]) => {
+    const all = [...Array<number>(6).fill(values[0]), ...values, ...Array<number>(6).fill(values.at(-1)!)]
+    return judgeMotion('x', measureMotion(all.map((v, i): Sample => [i * 17, String(v)]), 900, 'visible'), true)
+  }
+
+  it('still fails a fade that sticks mid-way while the page draws', () => {
+    expect(judge([1, 1, 0.7, 0.4, 0.4, 0.4, 0.1, 0, 0.5, 1, 1]).result).toBe('not smooth')
+  })
+
+  it('fails a fade that stops part of the way', () => {
+    const v = judge([1, 1, 0.7, 0.4, 0.1, 0, 0.3, 0.5, 0.5, 0.5])
+    expect(v.result).toBe('not smooth')
+    expect(v.line).toContain('it stopped part of the way')
+  })
+
+  it('fails a fade that starts over: out, partly back, out again (the island once refaded on every new mood)', () => {
+    const v = judge([1, 1, 0.6, 0.2, 0, 0.4, 0.8, 0.5, 0.1, 0, 0.5, 1, 1])
+    expect(v.result).toBe('not smooth')
+    expect(v.line).toContain('it turned 3 times')
+  })
+
+  it('fails a fade drawn in only two steps', () => {
+    expect(judge([1, 1, 0, 0, 0, 0, 1, 1]).result).toBe('not smooth')
+  })
+
+  it('passes a plain one-way fade', () => {
+    expect(judge([1, 1, 0.8, 0.6, 0.4, 0.2, 0, 0]).result).toBe('smooth')
+  })
+})

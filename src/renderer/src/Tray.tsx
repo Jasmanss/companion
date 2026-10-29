@@ -18,29 +18,32 @@ export function Tray({ items, saveResult, onDragOut, onOpen, onSave, onDismissSa
   const fail = (err: unknown) => onError(err instanceof Error ? err.message : String(err))
   const ids = items.map((item) => item.id)
 
+  // In the panel's Tray card, which has the heading and the count.
   return (
-    <section className="tray" aria-label="Image tray">
-      <div className="tray-head">
-        <span className="tray-title">
-          Tray{items.length > 0 && <span className="count">{items.length}</span>}
-        </span>
-        {items.length > 0 && (
-          <div className="tray-actions">
-            <span className="chip drag-all" draggable onDragStart={onDragOut(ids)} title="Drag everything out at once">
-              <DragIcon /> Drag all
-            </span>
-            <button className="chip" onClick={onSave}>
-              Save to project
-            </button>
-            <button className="chip quiet" onClick={() => api().tray.clear().catch(fail)}>
-              Clear
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="tray">
+      {items.length > 0 && (
+        <div className="tray-actions">
+          <span className="chip drag-all" draggable onDragStart={onDragOut(ids)} title="Drag everything out at once">
+            <DragIcon /> Drag all
+          </span>
+          <button className="chip" onClick={onSave}>
+            Save to project
+          </button>
+          <button className="chip quiet" onClick={() => api().tray.clear().catch(fail)}>
+            Clear
+          </button>
+        </div>
+      )}
 
       {items.length === 0 ? (
-        <p className="tray-empty">Drop images here, paste with ⌘V, or ask me to find some.</p>
+        <>
+          <div className="tray-slots" aria-hidden>
+            <i />
+            <i />
+            <i />
+          </div>
+          <p className="tray-empty">Drop or paste images, or ask me to find some.</p>
+        </>
       ) : (
         <ul className="tray-grid">
           {items.map((item, i) => (
@@ -75,6 +78,6 @@ export function Tray({ items, saveResult, onDragOut, onOpen, onSave, onDismissSa
           </div>
         </div>
       )}
-    </section>
+    </div>
   )
 }

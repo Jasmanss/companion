@@ -14,7 +14,7 @@
 // Springs move it, setting only transforms and opacity, and only while something is still moving. With Reduce Motion
 // it fades out, changes and fades back in instead. The real notch has no pixels: the island's own copy of it is drawn
 // over Steward, so what's behind the notch is hidden on a screen without one too (a test run's pretend notch).
-import { fitNote, ISLAND_CARD_GAP, ISLAND_LONG_LINES, islandParts, ISLAND_RADIUS, joins, NOTCH_RADIUS, NOTE_LINES, NOTE_PAD, PEEK_SIZE, type IslandLevel, type NoteFit } from '../../shared/notch'
+import { fadesFor, fitNote, ISLAND_CARD_GAP, ISLAND_LONG_LINES, islandParts, ISLAND_RADIUS, joins, NOTCH_RADIUS, NOTE_LINES, NOTE_PAD, PEEK_SIZE, type IslandAim, type IslandLevel, type NoteFit } from '../../shared/notch'
 import type { IslandAct, IslandNote, IslandStatus, NotchLayout, ReviewView } from '../../shared/types'
 import { blob, div, px } from './notch-blob'
 import { makeView, type PillKind, type PillView } from './pill/render'
@@ -366,6 +366,8 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
   let level: IslandLevel = 'rest'
   let shown = false
   let fade: ReturnType<typeof setTimeout> | undefined
+  /** Where the island is, or is fading to (Reduce Motion). */
+  let aimed: IslandAim | null = null
   const target = (lv: IslandLevel, hover: boolean, snap: boolean) => {
     const p = islandParts(lv, notch, hover)
     const set = (s: Spring, v: number) => (snap ? s.snap(v) : (s.t = v))
@@ -394,6 +396,7 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
       const news = setNote(status.note, lv === 'note' || lv === 'long', first || o.reduced)
       setCard(status.note, lv)
       if (first) {
+        aimed = { level: lv, hover }
         target(lv, hover, true)
         return apply()
       }
@@ -403,7 +406,11 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
         if (news && lv === 'note' && status.note?.kind === 'finished') P.y.x = -110
         return kick()
       }
-      // Reduce Motion: fade out, change, fade back in.
+      // Reduce Motion: fade out, change, fade back in, but only when something moves. A new mood or status alone changes
+      // in place, and a fade already on its way there isn't started over (that held the island hidden, and blinked it).
+      const next = { level: lv, hover }
+      if (!fadesFor(aimed, next, notch)) return
+      aimed = next
       root.classList.add('rm-out')
       clearTimeout(fade)
       fade = setTimeout(() => {

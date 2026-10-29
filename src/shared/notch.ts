@@ -255,6 +255,18 @@ export function fitNote(title: string, detail: string, width: number, measure: (
   return lines <= NOTE_LINES ? 'long' : 'toolong'
 }
 
+/** Where the island is going: its level, and whether the cursor is on it. */
+export interface IslandAim {
+  level: IslandLevel
+  hover: boolean
+}
+
+/** With Reduce Motion, whether going from one aim to the next needs the fade: only when the shape or Steward's place changes. */
+export function fadesFor(from: IslandAim | null, to: IslandAim, notch: { width: number; height: number }): boolean {
+  if (!from) return true
+  return JSON.stringify(islandParts(from.level, notch, from.hover)) !== JSON.stringify(islandParts(to.level, notch, to.hover))
+}
+
 /** Where the island takes clicks, in window coordinates: the black shape, and Steward wherever it peeks. */
 export function islandBoxes(parts: IslandParts, level: IslandLevel, l: NotchLayout): Box[] {
   const boxes: Box[] = [{ x: l.cx - parts.width / 2, y: 0, width: parts.width, height: parts.height }]
