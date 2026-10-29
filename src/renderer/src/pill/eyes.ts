@@ -59,11 +59,19 @@ const V: Record<Mood, Target> = {
   proud: { sx: 1.4, sy: 1.2, happy: 1 },
   hello: { sx: 1.3, sy: 1.15, happy: 0.75 },
   watching: { sy: 0.94, lid: 0.5 }, // Overnight Watch: half-lidded, awake enough to keep an eye on things
+  // The idle loop's moves (shared/idle-loop): the targets are each one's still pose; MOVES animates them.
+  ponder: { lid: 0.12 },
+  lookaround: {},
+  smile: { happy: 0.55, sx: 1.1 },
+  yawn: { closed: 1, talk: 1, oy: -0.3, sy: 0.94 },
+  stretch: { sy: 1.3, gap: 1.1, squint: 0.3 },
+  slowblink: {},
 }
 /** Seconds between blinks per mood (0: never blinks). */
 const BLINK: Record<Mood, number> = {
   idle: 3.6, listening: 4.2, thinking: 0, talking: 3.2, done: 0, celebrating: 0, 'needs-you': 4, worried: 2.4, mad: 5.5, resting: 7, sleepy: 0,
   confused: 3, focused: 6.5, juggling: 0, nod: 0, proud: 0, hello: 0, watching: 6,
+  ponder: 4, lookaround: 4, smile: 0, yawn: 0, stretch: 0, slowblink: 0,
 }
 /** Needs you waiting this long grows impatient: the pulse quickens and the eyes look toward the panel. */
 export const IMPATIENT_S = 120
@@ -99,7 +107,13 @@ interface Moves {
   look?(t: number, age: number): [number, number]
   tweak?(tg: Pose, age: number): void
   body?(B: EyesState['body'], t: number, age: number, e: number): void
+  /** A mouth that isn't talking (the yawn): how open and how round. */
+  say?(age: number): { open: number; round: number }
 }
+/** The yawn: closes and opens wide over 0.7 s, holds a second, and lets go. */
+const yawnA = (age: number) => (age < 0.7 ? ease(age / 0.7) : age < 1.7 ? 1 : age < 2.5 ? 1 - ease((age - 1.7) / 0.8) : 0)
+/** Ponder: up and aside, held, and back. */
+const ponderF = (age: number) => ease((age - 0.2) / 0.4) * (1 - ease((age - 1.9) / 0.4))
 const MOVES: Partial<Record<Mood, Moves>> = {
   // Reads along a line, row after row, leaning in a little.
   focused: {
@@ -157,6 +171,80 @@ const MOVES: Partial<Record<Mood, Moves>> = {
       B.ty -= 0.09 * bell((age - 0.1) / 0.45) * e
     },
   },
+  // The idle loop's moves. Looks up and aside, as if thinking of something, head tilted.
+  ponder: {
+    still: [-0.4, -0.5],
+    look: (_t, age) => {
+      const f = ponderF(age)
+      return [-0.55 * f, -0.7 * f]
+    },
+    body: (B, _t, age, e) => {
+      B.rot = 5 * ponderF(age) * e
+    },
+  },
+  // Slowly to one side, then the other, then back (unlike a quick glance).
+  lookaround: {
+    still: [0, 0],
+    look: (_t, age) => {
+      const to = (a: number, b: number, t0: number, t1: number) => a + (b - a) * ease((age - t0) / (t1 - t0))
+      if (age < 0.4) return [to(0, -0.8, 0, 0.4), 0.05]
+      if (age < 1.1) return [-0.8, 0.05]
+      if (age < 1.6) return [to(-0.8, 0.8, 1.1, 1.6), 0.05]
+      if (age < 2.1) return [0.8, 0.05]
+      return [to(0.8, 0, 2.1, 2.4), 0.05]
+    },
+  },
+  // A small, contented smile.
+  smile: {
+    still: [0, -0.05],
+    look: () => [0, -0.05],
+    body: (B, _t, age, e) => {
+      B.ty -= 0.01 * bell(age / 1.6) * e
+    },
+  },
+  // A real yawn, with a mouth (the blocky one has none: closed eyes only).
+  yawn: {
+    still: [0, 0],
+    tweak: (tg, age) => {
+      const a = yawnA(age)
+      tg.closed = a
+      tg.talk = a
+      tg.oy = -0.3 * a
+      tg.sy = 1 - 0.06 * a
+    },
+    say: (age) => ({ open: 0.95 * yawnA(age), round: 0.55 }),
+    body: (B, _t, age, e) => {
+      const a = yawnA(age)
+      B.sc += 0.05 * a * e
+      B.ty -= 0.03 * a * e
+    },
+  },
+  // Grows tall with a happy squeeze, then relaxes.
+  stretch: {
+    still: [0, 0],
+    tweak: (tg, age) => {
+      const s = Math.min(1.15, bell(age / 1.8) * (1 + 0.12 * Math.sin(age * 9)))
+      tg.sy = 1 + 0.3 * s
+      tg.gap = 1 + 0.12 * s
+      tg.sx = 1 - 0.1 * s
+      tg.squint = 0.3 * s
+    },
+    body: (B, _t, age, e) => {
+      const s = bell(age / 1.8)
+      B.ty -= 0.05 * s * e
+      B.sc += 0.03 * s * e
+    },
+  },
+  // At rest, the yawn's small version: one slow, long blink and a little sink.
+  slowblink: {
+    still: [0, 0.1],
+    tweak: (tg, age) => {
+      tg.lid = 0.94 * bell(age / 1.5)
+    },
+    body: (B, _t, age, e) => {
+      B.ty += 0.02 * bell(age / 1.5) * e
+    },
+  },
 }
 
 /* ---------------- blocky eyes ---------------- */
@@ -182,6 +270,7 @@ const PX: Record<Mood, [Sprite, Sprite]> = {
   mad: ['mad', 'mad'], resting: ['heavy', 'heavy'], sleepy: ['asleep', 'asleep'],
   confused: ['big', 'short'], focused: ['short', 'short'], juggling: ['normal', 'normal'], nod: ['happy', 'happy'], proud: ['happy', 'happy'], hello: ['big', 'big'],
   watching: ['heavy', 'heavy'],
+  ponder: ['normal', 'normal'], lookaround: ['normal', 'normal'], smile: ['happy', 'happy'], yawn: ['closed', 'closed'], stretch: ['tall', 'tall'], slowblink: ['normal', 'normal'],
 }
 /** Talking's pixel mouths, as [column, row] cells under the eyes (which move up a row to make room). */
 const PX_MOUTH = {
@@ -255,6 +344,8 @@ export interface EyesState {
   toward: number
   /** Steady (the notch): no glance pulls the eyes off a cursor that's moving near them. */
   steady: boolean
+  /** Liveliness Off: on the calm faces (idle, resting) no blinks or glances; it only follows the cursor and reacts. */
+  still: boolean
   /** The cursor as of the last step, and when it last moved. */
   cursor: { x: number; y: number } | null
   cursorMovedAt: number
@@ -273,7 +364,7 @@ export function createEyes(seed = 1, t = 0): EyesState {
     look: { x: 0, y: 0 }, lookV: { x: 0, y: 0 }, glance: { x: 0, y: 0, until: 0, next: t + 1.5 + (seed % 3) },
     rest: { until: 0, next: t + 4 + (seed % 4) },
     blink: 0, blinkAt: -1, nextBlink: t + 1 + (seed % 5) * 0.4, double: false,
-    body: { tx: 0, ty: 0, sc: 1, rot: 0 }, rotV: 0, toward: 0, steady: false, cursor: null, cursorMovedAt: -1e9,
+    body: { tx: 0, ty: 0, sc: 1, rot: 0 }, rotV: 0, toward: 0, steady: false, still: false, cursor: null, cursorMovedAt: -1e9,
     keys: [], nod: 0,
     say: { open: 0, round: 0, ov: 0, rv: 0, stress: 0 },
   }
@@ -287,13 +378,14 @@ export function pressKey(st: EyesState): void {
 
 /**
  * mouth: false makes talking bounce the eyes instead of showing a mouth. lively: false is the calm personality.
- * toward: which way the panel is from this Pill (-1 left, 1 right, 0 this is the panel's own).
+ * toward: which way the panel is from this Pill (-1 left, 1 right, 0 this is the panel's own). still: Liveliness Off.
  */
-export function setStyle(st: EyesState, o: { mouth?: boolean; lively?: boolean; toward?: number; steady?: boolean }): void {
+export function setStyle(st: EyesState, o: { mouth?: boolean; lively?: boolean; toward?: number; steady?: boolean; still?: boolean }): void {
   if (o.mouth !== undefined) st.mouth = o.mouth
   if (o.lively !== undefined) st.lively = o.lively
   if (o.toward !== undefined) st.toward = o.toward
   if (o.steady !== undefined) st.steady = o.steady
+  if (o.still !== undefined) st.still = o.still
 }
 
 /** Change mood. glint picks what thinking is busy with: 'sweep' (default), 'step' (reading a file) or 'search'. */
@@ -373,11 +465,14 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
   // Resting: a lazy glance toward the middle of the screen every 8 to 12 seconds.
   const R = st.rest
   if (following) { R.until = Math.min(R.until, t); R.next = Math.max(R.next, t + 1) }
-  if (m === 'resting' && !rm && t > R.next) { R.until = t + 1.5; R.next = t + 8 + st.rand() * 4 }
-  const restGlance = m === 'resting' && !rm && t < R.until
+  // Liveliness Off: the calm faces hold still (no blinks or glances) until something happens.
+  const hold = st.still && (m === 'idle' || m === 'resting')
+  if (m === 'resting' && !rm && !hold && t > R.next) { R.until = t + 1.5; R.next = t + 8 + st.rand() * 4 }
+  const restGlance = m === 'resting' && !rm && !hold && t < R.until
 
   // Talking: where the mouth is heading this frame. Reduced motion holds it half open.
-  const say = !talking ? { open: 0, round: 0, stress: 0 } : rm ? { open: 0.45, round: 0, stress: 0 } : speech(t)
+  // A yawn opens its own mouth.
+  const say = moves?.say && st.mouth && !rm ? { ...moves.say(age), stress: 0 } : !talking ? { open: 0, round: 0, stress: 0 } : rm ? { open: 0.45, round: 0, stress: 0 } : speech(t)
   st.say.stress = say.stress
 
   const targets = {} as Record<Side, Pose>
@@ -393,6 +488,7 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
       if (m === 'resting' && !restGlance) tg.lid += (0.28 - tg.lid) * near // the cursor came close: lids lift
       moves?.tweak?.(tg, age)
     }
+    if (moves?.say && !st.mouth) { tg.talk = 0; tg.oy = 0 } // the mouth is off: no mouth, and no room made for one
     targets[side] = tg
   }
 
@@ -406,7 +502,7 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
     g.until = t + 0.5 + st.rand() * 0.7
     g.next = t + (2 + st.rand() * 3.5) / e
   }
-  const glancing = !rm && t < g.until // reduced motion: no glances
+  const glancing = !rm && !hold && t < g.until // reduced motion: no glances
   switch (m) {
     case 'idle': lx = glancing ? g.x : px * 0.7 * e; ly = glancing ? g.y : py * 0.6 * e; break
     case 'listening': lx = 0; ly = 0.05; break // straight at you: the slide apart does the talking
@@ -462,7 +558,7 @@ export function stepEyes(st: EyesState, t: number, dt: number, pointer: { x: num
 
   // Blinks: a quick close and a slower open, sometimes twice. Resting blinks slowly.
   const gap = BLINK[m] ?? 3.6
-  if (rm || !gap || (m === 'needs-you' && age < 2.5)) { st.blink = 0; st.nextBlink = Math.max(st.nextBlink, t + 0.8) }
+  if (rm || hold || !gap || (m === 'needs-you' && age < 2.5)) { st.blink = 0; st.nextBlink = Math.max(st.nextBlink, t + 0.8) }
   else {
     if (t >= st.nextBlink) { st.blinkAt = t; st.double = m !== 'resting' && st.rand() < 0.18; st.nextBlink = t + gap * (0.6 + 0.8 * st.rand()) }
     const dur = m === 'resting' ? 0.7 : 0.19

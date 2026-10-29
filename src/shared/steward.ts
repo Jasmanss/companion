@@ -66,6 +66,7 @@ export const DEFAULT_STEWARD: StewardPrefs = {
   glass: 'tinted',
   mouth: true,
   personality: 'lively',
+  liveliness: 'calm',
   name: DEFAULT_NAME,
   edge: 'right',
   notch: false,

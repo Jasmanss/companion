@@ -62,6 +62,7 @@ import {
 } from './presence'
 import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
+import { FIRST_QUIET_MS, GAP_MS, isIdleMove } from '../shared/idle-loop'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
@@ -94,7 +95,7 @@ const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
-/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows, "panel" only shows the panel (CI runs it all). */
+/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows, "idle" only the idle loop, "panel" only shows the panel (CI runs it all). */
 const SMOKE_ONLY = process.env.STEWARD_SMOKE_ONLY
 /** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
 const SLIDE_MS = 700
@@ -516,7 +517,7 @@ function hideTab(why?: string): void {
   setSlide(quiet(), false)
 }
 
-const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello', 'watching']
+const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello', 'watching', 'ponder', 'lookaround', 'smile', 'yawn', 'stretch', 'slowblink']
 const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
@@ -2078,6 +2079,12 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await checkCards(w, out)
       clearTimeout(cardsTimer)
       if (SMOKE_ONLY === 'panel') return app.exit(0)
+      if (SMOKE_ONLY === 'idle') {
+        const idleTimer = setTimeout(() => fail("Steward's idle loop timed out"), 60_000)
+        await checkIdleLoop(out)
+        clearTimeout(idleTimer)
+        return app.exit(0)
+      }
       if (SMOKE_ONLY === 'island') {
         const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
         await checkTabAlertWords(w, out)
@@ -2113,6 +2120,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const reactionsTimer = setTimeout(() => fail("Steward's reactions timed out"), 60_000)
       await checkReactions(out)
       clearTimeout(reactionsTimer)
+      const idleTimer = setTimeout(() => fail("Steward's idle loop timed out"), 60_000)
+      await checkIdleLoop(out)
+      clearTimeout(idleTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -2210,6 +2220,76 @@ async function checkReactions(out: string): Promise<void> {
     await sleep(at)
     await fs.writeFile(out.replace(/\.png$/, `-face-${label.toLowerCase().replace(/ /g, '-')}.png`), (await sw.webContents.capturePage(box)).toPNG())
   }
+  sw.close()
+  await sleep(400)
+}
+
+/**
+ * The idle loop (reactions Phase R2), in the open panel with Liveliness Calm: no move in the first 20 quiet seconds,
+ * then one (the face the panel tells the notch) by 35, which ends back at idle. With Reduce Motion on (as on the CI
+ * runners) or after midnight (sleepy), none at all. Then the moves in Settings → Steward's preview, and the setting,
+ * for the pictures.
+ */
+async function checkIdleLoop(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const reduced = (await win!.webContents.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`)) as boolean
+  const before = dock
+  await settings.update({ steward: { liveliness: 'calm' } })
+  // A fresh quiet: tucked away and back, so the panel's face goes resting, then idle.
+  setDock('collapsed')
+  await sleep(500)
+  setDock('expanded')
+  const start = Date.now()
+  const face = () => notch.state().mood
+  while (face() !== 'idle' && face() !== 'sleepy' && Date.now() - start < 3000) await sleep(50)
+  const calm = face()
+  if (calm !== 'idle' && calm !== 'sleepy') throw new Error(`before the idle loop, Steward's face in the open panel is ${calm}, not idle`)
+  const none = reduced ? 'Reduce Motion is on' : calm === 'sleepy' ? "it's after midnight (sleepy)" : null
+  // With none to wait for, a little past the 20 quiet seconds says enough.
+  const limit = FIRST_QUIET_MS + (none ? 4_000 : GAP_MS[1] - GAP_MS[0] + 4_000)
+  let move: { mood: Mood; at: number } | null = null
+  while (!move && Date.now() - start < limit) {
+    const m = face()
+    if (isIdleMove(m)) move = { mood: m, at: Date.now() - start }
+    else if (m !== calm) throw new Error(`the face went ${m} during the idle loop check, with nothing going on`)
+    else await sleep(100)
+  }
+  const s = (ms: number) => `${(ms / 1000).toFixed(1)} s`
+  if (none) {
+    if (move) throw new Error(`${none}, yet an idle move (${move.mood}) played ${s(move.at)} into the quiet`)
+    console.log(`smoke: idle loop: ${none}: no move in ${s(limit)} of quiet`)
+  } else {
+    if (!move) throw new Error(`no idle move in ${s(limit)} of quiet in the open panel`)
+    if (move.at < FIRST_QUIET_MS) throw new Error(`an idle move (${move.mood}) came ${s(move.at)} into the quiet, before 20 s`)
+    const played = Date.now()
+    while (isIdleMove(face()) && Date.now() - played < 4_000) await sleep(50)
+    if (face() !== 'idle') throw new Error(`after the idle move ${move.mood}, the face is ${face()}, not idle again`)
+    console.log(`smoke: idle loop: nothing in the first 20 quiet seconds, then ${move.mood} at ${s(move.at)}, back to idle ${s(Date.now() - played)} later`)
+  }
+  await settings.update({ steward: { liveliness: 'quiet' } })
+  setDock(before === 'expanded' ? 'expanded' : 'collapsed')
+
+  // The moves, as Settings → Steward previews them (each near its fullest), and the setting.
+  openSettings('steward')
+  const sw = settingsWin!
+  if (sw.webContents.isLoading()) await new Promise<void>((resolve) => sw.webContents.once('did-finish-load', () => resolve()))
+  sw.webContents.send('settings:section', 'steward')
+  await sleep(800)
+  const name = (label: string) => out.replace(/\.png$/, `-${label.toLowerCase().replace(/ /g, '-')}.png`)
+  for (const [label, at] of [['Ponder', 1100], ['Look around', 800], ['Yawn', 1200], ['Stretch', 850]] as const) {
+    const box = (await sw.webContents.executeJavaScript(
+      `(() => { const b = [...document.querySelectorAll('.set-moods button')].find((x) => x.textContent === ${JSON.stringify(label)}); b?.click(); const r = document.querySelector('.set-preview')?.getBoundingClientRect(); return b && r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null })()`,
+    )) as Electron.Rectangle | null
+    if (!box) throw new Error(`Settings → Steward has no "${label}" in its mood preview`)
+    await sleep(at)
+    await fs.writeFile(name(`idle-${label}`), (await sw.webContents.capturePage(box)).toPNG())
+  }
+  const row = (await sw.webContents.executeJavaScript(
+    `(() => { const r = [...document.querySelectorAll('.set-row')].find((x) => x.querySelector('.set-label span')?.textContent === 'Liveliness'); r?.scrollIntoView({ block: 'center' }); const b = r?.getBoundingClientRect(); return b ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null })()`,
+  )) as Electron.Rectangle | null
+  if (!row) throw new Error('Settings → Steward has no Liveliness')
+  await sleep(300)
+  await fs.writeFile(name('idle-liveliness'), (await sw.webContents.capturePage(row)).toPNG())
   sw.close()
   await sleep(400)
 }
@@ -4576,6 +4656,9 @@ app.whenReady().then(async () => {
   if (SMOKE_OUT) await Promise.all(['settings.json', 'state.json', 'reviews'].map((f) => fs.rm(path.join(userData, f), { recursive: true, force: true })))
   settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ registered, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
   await settings.load()
+  // The idle loop's moves would land in the middle of the other checks' faces and pictures, so the smoke check runs with
+  // Liveliness Quiet; checkIdleLoop turns Calm on for itself.
+  if (SMOKE_OUT) await settings.update({ steward: { liveliness: 'quiet' } })
   // Only when needed, the window starts out of sight, with its page slid out ready to come in.
   slidOut = quiet()
   registerGlobalShortcuts()
