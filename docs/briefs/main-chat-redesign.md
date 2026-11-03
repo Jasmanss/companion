@@ -161,4 +161,17 @@ Nothing is open. The order above is a recommendation: say if the cards (M2) shou
 - **By hand:** all four situations in light and dark over a busy desktop, Reduce Motion, notch and a moved panel, a real Auto run, a real risky command.
 
 ## Result (Main building)
-Not started.
+
+### M1 built and merged (recorded 2026-11-02, from the PR)
+- **PR #39**, merge `3407fdf` (2026-10-27). Status stays `ready`: M3 is not built.
+- **Built:** the header is new chat, Settings and tuck (the hide button and the pin are gone; hiding stays in the menu bar menu and the Hide shortcut); **Keep panel open** in Settings → General (it reuses the old "Tuck the panel away when I click elsewhere" row, inverted, so there is no second row for one setting); **Ask | Auto** inside the text box, the same setting as Settings → Running commands; a round Send that becomes a round Stop while Steward works; "Ran automatically" with a shield and `auto · safe` or `on your list`; in Auto a card that still asks gives the reason ("Auto is on, but deleting files always asks."); the placeholder is now "Ask, or run a command…".
+- **Fixed along the way:** clicking Ask then Auto quickly left the mode on Ask (the panel's copy of the settings lagged a click); smoke caught it.
+- **Checks:** lint, typecheck, 569 tests; a full hidden smoke on the final commit passed.
+- **Still open, required by the brief before M1 counts as done:** a hand test with real risky commands in Auto. Not smoked: the "on your list" tag (unit tested).
+
+### M2 built and merged (recorded 2026-11-02, from the PR)
+- **PR #44**, merge `5511ae9` (2026-10-29). Status stays `ready`: M3 is not built.
+- **Built:** the home is one grid of cards with one heading style and no bullets; the promoted card goes first, full width, with an accent border: what waits on you (orange, "Waiting on you"), then sessions finished within a day, then the night's report or the morning brief, then where you left off. Sessions are one row each with a one-line summary; where-you-left-off shows the branch and the last two commits as a timeline when promoted and is worked out on every panel open; the review, brief and night report keep their controls inside a tile; a failed build gets its own card with "Want me to look?" and other alerts go to a News card (the banner is gone); the tray shows three dashed slots when empty; the Try chips fill the box and do not send. During a chat only what waits on you and any notes stay above it.
+- **Checks:** lint, typecheck, 640 tests (new `tests/cards.test.ts` for the promoted-card rule); one full smoke run with a step for each situation.
+- **Known rough edges:** an alert that already peeked out at the tab also stays in the News card until Clear (the old banner left by itself after 6 to 12 s); with a long project name the review's address chip is cut off.
+- **Not checked:** a chat in progress (no API key in smoke; unit tests only), a hand test on a real desktop in light and dark.

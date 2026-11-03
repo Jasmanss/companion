@@ -123,4 +123,20 @@ The user: "Accept all four reactions defaults: the milder frustrated without the
 - **By hand:** the feel of every reaction at the panel, the notch at rest and the compact island; a real long turn for Proud; a real failing run for Frustrated; Reduce Motion; Dim when idle; an hour of idle to judge the loop.
 
 ## Result (Main building)
-Not started.
+
+### R1 built and merged (recorded 2026-11-02, from the PR)
+- **PR #38**, merge `0b8cbd3` (2026-10-26). Status stays `ready`: R3 is not built.
+- **Built:** Focusing, Juggling, Quick nod, Happy, Proud (two hops and one small burst of confetti), Confused (a chat waiting for input, or a reply ending in a real question), Welcome back (after 10 minutes or more away) and Needs you (the pulse quickens after 2 minutes and Steward looks toward the panel), in the panel, the tab and the notch; the island's "?" for a question and a small spark after a long turn; all six new faces in Settings → Steward's mood preview; every new face holds a still pose in Reduce Motion.
+- **One change from the brief:** a reply ending in an offer like "Want me to commit this?" does not count as a question, or Confused would replace most finishes.
+- **Checks:** lint, typecheck, 544 tests; smoke run 9 passed in full. A real bug found and fixed: on a new mood's first frame Focusing could draw nothing because its numbers became NaN.
+- **Not checked:** Juggling does not speed up with three chats; the impatient pulse counts from the face's last change, not from the approval's arrival; no picture of the island's "?" or spark; Welcome back only with a set time; how it feels on the real Mac.
+
+### R2 built and merged (recorded 2026-11-02, from the PR and the front door)
+- **PR #48**, merge `a76e7b8` (2026-11-02). Status stays `ready`: R3 (frustrated, with the new hook) is not built.
+- **Built:** the idle loop: nothing for 20 quiet seconds, then one move every 10 to 25 seconds, never the same twice in a row. Moves: ponder (looks up and aside, head tilted), look around, smile, and after 2 quiet minutes a yawn or stretch (at most one every 4 minutes; at rest a yawn plays as one slow, long blink). The moves stop after 5 quiet minutes. It holds still while a chat works, a reaction plays, an alert is out, you type, the eyes are dimmed or Reduce Motion is on; the notch also skips a move while the cursor is near. Only the face moves: the island and the panel never change size.
+- **New setting:** Settings → Steward → **Liveliness: Calm (default) | Quiet (blinks and glances only) | Off** (holds still, still follows the cursor and plays every reaction). The mood preview shows the five moves.
+- **Fixed along the way:** the engine worked out a head tilt but the Glass and Flat Pill never drew it, so R1's Confused never rocked its head. Confused and Ponder tilt now.
+- **Checks:** lint, typecheck, 682 tests (12 new); one full hidden smoke passed (at 2:45 am, so the face was Sleepy and it confirmed no move played; the idle check alone ran in daytime and saw Look around at 23 s).
+- **A correction to this brief (Roadmap & design):** "Doze, as today" was wrong. The app does not doze after 5 and 10 quiet minutes: at rest it is Resting right away, and Sleepy only after midnight. Main building kept the faces as they are. A real dozing face is its own change if wanted (on the status page's ideas).
+- **Naming overlap to settle:** Settings → Steward now has "Personality: Calm | Lively" (how much it glances, follows the cursor and hops) and "Liveliness: Calm | Quiet | Off" (the idle loop's small moves) in the same group. My suggestion: rename the new row **"Idle moves"**, which says what it does and does not read as a second Personality. A small fix, on the Small fixes list.
+- **Not checked:** an hour of idle by hand, the moves at the real notch and the compact island, the notch window itself playing or skipping a move (unit tested only), a full smoke run in daytime with moves on.

@@ -186,3 +186,28 @@ Status stays `ready`: Phases 2 to 5 are not built. Built by Feature building.
 ### Phase 1 merged (recorded 2026-10-21, from the front door)
 - PR #26 was merged into main by the user: merge commit `00e2cb1`. It includes the fixes above.
 - Status stays `ready`: Phases 2 to 5 are not built. **Next:** Phase 2 (Tell me, the alert), after the user's go typed into Feature building.
+
+### Phase 1b built and merged (recorded 2026-11-02, from the PRs and the front door)
+- **PR #35**, merge `7f5ac62` (2026-10-25). Status stays `ready`.
+- **Built:** "Open big" on the card; the big viewer (Slide, Side by side, Flip, Fit and 100%, keys 1 2 3 Z and [ ], Looks good and Send it back inside it, Open in Preview); "Claude says" from the Stop hook's last words (markdown stripped, questions and a bare "Done." skipped, at most two sentences); pictures through a read-only `review://` address that serves only a stored review's before or after picture.
+- **Checks:** lint, typecheck, 506 tests; hidden smoke run 3 passed (opened the viewer, both full-width pictures, keys and a real drag, Esc back, both decisions).
+- **Calls made:** the open button sits in the card picture's corner (the slider takes drags on the picture); no greyed-out Show changes in 1b (Phase 3 added it); clicking outside the viewer tucks Steward away unless pinned, where the brief says it should return to the panel.
+- **Not checked:** real key presses, notch mode, two waiting reviews, 100% on a tall page, a hand test.
+
+### Phase 2 built and merged (recorded 2026-11-02, from the PRs and the front door)
+- **PR #37**, merge `f16957e` (2026-10-25). Status stays `ready`.
+- **Built:** the alert "haven changed · Review what Claude did?" (counts as "needs me", no Notifications switch hides it); in Island mode it opens as the island's catch-all note with the review's thumbnail mark (island Phase 3 later gave it the review size); the same turn's "finished" alert is withdrawn while it waits; the menu bar dot and the switcher's violet dot while a review waits; "3 files changed" from read-only git; the last 5 checks per project in Settings → Projects.
+- **Checks:** lint, typecheck, 544 tests; smoke run 2 passed (the alert at the edge and in the island, the dot).
+- **Not checked:** the real menu bar icon, the switcher dot and the history list (built, no smoke); a review arriving while another alert is out; real use on the notch Mac.
+
+### Phase 3 built and merged (recorded 2026-11-02, from the PR, the front door's report and Roadmap & design)
+- **PR #49**, merge `ecfcc94` (2026-11-02), from the report `visual-review-3-report.md`. Status stays `ready`: Phase 4 is not built.
+- **Built:**
+  - **Show changes** in the viewer (the button 1b designed): outlines the changed parts of the page in red over Slide, Side by side and Flip, with "1 of 3", previous and next, N, Shift N and C. The card says "2 areas changed". When it can't, the button says why (no earlier picture, an older review, nothing found).
+  - **Phone width (390 px):** a per-project Settings switch under the App address ("Also at a phone's width (390 px). Each look takes about twice as long.", off by default), and Desktop | Phone in the viewer (key P). The viewer opens on Phone when only the phone's width changed; the card then says so, with a "Phone too" chip when both changed.
+  - **How:** the compare step groups changed pixels on a 16-pixel grid in page pixels (changes within 32 pixels join; lone specks drop; the biggest 12 kept). The "looks different" gate is now cut to a quarter of the width at either width.
+- **A real bug found by the smoke's screenshot and fixed:** the gate shrank a phone picture hardly at all (390 to 98 against 1,440 to 360), so a phone turn could make a review when nothing changed. The smoke now checks the same page twice at both widths makes no review.
+- **Checks:** lint, typecheck, 687 tests; the final code passed the hidden smoke in full (run 3, e546787). Later runs failed in the presence check because the MacBook's lid was closed, before any Visual Review step.
+- **Design check (Roadmap & design, 2026-11-02):** no design page covered the phone's width, so Feature building reused the viewer's segmented control. Looking at its screenshots: it fits. Desktop | Phone sits beside Slide, Side by side and Flip in the same style, P is added to the key line, the phone picture is centered at its real width, and the Settings switch sits under the App address with its one-line cost. No redesign needed. Two things to watch by hand, not changed: the viewer's top bar now holds seven things (name, address, files changed, two segmented controls, Show changes with its counter, Fit and 100%) and could wrap on a small screen, and a 390 px picture looks a little soft on a Retina screen (width only, no 2x pictures; Feature building's call).
+- **Open bug (on the Small fixes list):** when a turn makes a phone-width page taller than the window, Show changes also outlines the spinner and one area from the heading down, though they look unchanged. The review itself is right (the same page twice gives 0 changed pixels). The cause is unknown; making every capture scrollable made no difference.
+- **Not checked:** a real app by hand, a real responsive page, dark mode, a page several screens tall at a phone's width, how long a real turn's looks take with the phone width on, CI on the branch.

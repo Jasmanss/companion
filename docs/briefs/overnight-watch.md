@@ -146,4 +146,23 @@ What "calls only" means for OW 4, so the build is not surprised: until texts are
 - **By hand:** the keep-awake and the battery warning, a real test call and text, a practice night, then one real night with a real failing deploy.
 
 ## Result (Feature building)
-Not started.
+
+### OW1 built and merged (recorded 2026-11-02, from the PR)
+- **PR #40**, merge `f56720f` (2026-10-27). Status stays `ready`.
+- **Built:** the goodnight card (a moon button in the panel's top bar and "Goodnight…" in the menu bar menu: sessions working now, the projects whose deploys Steward can see, whether the Mac is plugged in, "keep the lid open", the wake time with 7:30 as the default); **Go rest** ("Goodnight. I've got it.", the face turns to a new Watching mood, the moon in the menu bar title, the Mac kept awake with `powerSaveBlocker` for the night only); while nobody has used the Mac for 5 minutes alerts wait for the panel; the night's log (alerts by kind and title only, never the detail, plus sleep, waking and battery); the night ends at the wake time, "I'm up", Stop watching, 12 hours, or 2 minutes of use after you come back; a night carries on after a restart; the newest 14 nights are kept.
+- **Checks:** lint, typecheck, 591 tests; smoke passed including that Go rest holds the keep-awake.
+- **Not checked:** a real night (the Mac staying awake, the battery warning, real sleep and wake), the real menu bar, SPEC.md not updated.
+- **Calls made:** held alerts still show when the panel next opens (the report is OW2); no on/off switches or Practice night yet; the wake time is saved with the night, not in Settings.
+
+### OW2 built and merged (recorded 2026-11-02, from the PR)
+- **PR #41**, merge `3789caa` (2026-10-28).
+- **Built:** the night report. One card when a night ends ("Good morning · 2 things needed you. 2 things changed.") instead of the held alerts one by one; the report at the top of the panel with the hours watched, the time the Mac slept and Steward could not see, "Needed you" (with what came of each, repeats within 10 minutes joined), "What changed" (finished sessions, the night's reviews as full cards while they wait), and a deploys strip per project; ending the night from the open panel shows the report there with no card; it replaces that day's morning brief; Earlier night and Later night step through the 14 kept; Settings → Overnight Watch has Clear night reports. The report is a template built from the log (`src/main/night-report.ts`, no model) and uses alert titles only.
+- **Checks:** lint, typecheck, 612 tests; smoke run 4 passed in full (runs 1 to 3 failed on a busy Mac or an old check, plus one real bug: the Watch check left its test review in the store).
+- **Not checked:** a real night, the card on a real notch or after a restart, Clear night reports by hand.
+
+### OW3 built and merged (recorded 2026-11-02, from the PR)
+- **PR #43**, merge `a61df04` (2026-10-28). Status stays `ready`: Phases 4 and 5 are not built.
+- **Built:** CI on main every 2 minutes with one read-only `gh run list` (workflow name and result only); a run already red at Go rest is not news, one that goes red after is, and green ends Steward's worry; stuck sessions (mid-turn, no hook event and no log growth) get a word at 45 quiet minutes and "may be stuck" at 90, counted from Go rest at the earliest; one function sorts events into urgent, waiting on you or report-only (urgent: a failing production deploy, CI red on main, 90 quiet minutes), the report marks "Urgent" and has a CI strip per project; the goodnight card has a "CI on main" line and "Working now" counts sessions mid-turn.
+- **Checks:** lint, typecheck, 648 tests; smoke runs 2 and 3 passed in full. A real bug found by run 1: a red CI run left Steward's face worried and a later check expected rest.
+- **Not checked:** a real night against a real repo, a real 45 or 90 quiet minutes. **Old hooks:** stuck detection needs the prompt hook Visual Review added; anyone who connected before that and never updated gets no stuck alerts, and the goodnight card does not say so yet (worth a line there).
+- **Calls made:** only the `main` branch (a project with another default branch is not seen); 45 and 90 minutes are fixed until Settings → Watch comes with the phone in Phase 4.

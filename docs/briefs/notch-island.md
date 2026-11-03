@@ -425,6 +425,21 @@ Unit: the state sizes, the island staying inside the work area, the moved-panel 
 
 
 ## Result (Main building)
-- What was built, files changed, check results
-- Branch / worktree
-- Anything unfinished or uncertain
+
+### Phase 1 built and merged (recorded 2026-11-02, from the PRs)
+- **PR #34**, merge `a4fc04f` (2026-10-24): Steward peeks out of the notch, and the island grows while Claude works (compact with a spinner and time, the right side, hover).
+
+### Phase 2 built and merged (recorded 2026-11-02, from the PR)
+- **PR #36**, merge `b4e4e39` (2026-10-25). Status stays `ready`.
+- **Built:** the note (381 by 60: "Main building finished · what Claude said", "api started" with the count; 4.5 s, then compact; kept while the cursor is on it); **chat names** read from the chat's transcript title (last 256 KB, `.jsonl` files under `~/.claude/projects` only), kept in the note, alerts and the session strip; **the panel opens at the side** in notch mode (near the top, or where it was dragged), never under the notch, with a new Settings row "Panel opens on: Left | Right"; with Island on, a finished chat no longer also comes out under the notch.
+- **Fixed along the way:** the alert under the notch skipped most of its way in (set up while its window was hidden); it now plays its full 425 ms.
+- **Checks:** lint, typecheck, 506 tests; smoke run 10 passed in full (the note grows in 108 positions in 108 frames).
+- **Not checked:** the note on the real notch and the menu bar it covers (98 pt each side), a real Claude app chat's name (unit tested), the panel on the left, a light wallpaper.
+
+### Phase 3 built and merged (recorded 2026-11-02, from the PR)
+- **PR #42**, merge `d55fe71` (2026-10-28). Status stays `ready`: Phases 4 and 5 are not built.
+- **Built:** every alert opens as the island and the old pill under the notch is gone in Island mode (a session's approval or question with Open and Later, Steward's own request with Deny and Allow, a failed build with "Want me to look?", a review at the review size, good news, first launch and anything else as a note); Steward joins the big sizes; red mark for a failed build and a spark for good news; stay times 4.5, 6.5 and 9 s; good news close together joins one note; "Needs me" lets a failed build out and "Nothing" shows only the status marks.
+- **Plan update 3, built:** the eye jitter fix (while the cursor is near the notch's eyes draw every frame and the cursor is checked every 16 ms; no glances then; Resting blends instead of flipping) and alert text never cut off (a note too long for one line grows to 380 by 94 and up to three lines; past that "…" and 9 s; the edge alert shows three lines and its window grows).
+- **Two fixes beyond the brief:** with "Only when needed" the cursor on the island keeps a message out; a failed deploy's red mark no longer vanishes under another project's good news.
+- **Checks:** lint, typecheck, 617 tests; one full smoke run, 111 steps, including one alert of every kind failing if the old pill shows and checking long text is not clipped. **Eye jitter, measured** in a cursor sweep: Resting frames that moved the eyes 1 to 14 → 123 to 143 of about 179, biggest single step 0.88 pt → 0.04 pt; Idle 27 to 31 → 155 to 159 (one outlier of 0.98 pt in the full run).
+- **Not checked:** a hand test on the real notch. Plan update 4 (the glass Steward) is Phase 4's.
