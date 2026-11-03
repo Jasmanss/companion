@@ -48,6 +48,8 @@ export interface CaptureOptions {
    * and transitions are switched off, and the page is captured again until two in a row match, for up to `settleMs`.
    */
   review?: { settleMs: number }
+  /** How big the window is (CSS pixels): 1,440 by 900 unless asked (Visual Review's phone width). */
+  viewport?: { width: number; height: number }
 }
 
 export interface Capture {
@@ -73,14 +75,14 @@ export function sliceCrop(covered: number, scrollY: number, viewportHeight: numb
 }
 
 /** Load a page in a hidden window and screenshot the whole page, or just the section around some text. */
-export async function capturePage(url: string, { section, review }: CaptureOptions = {}): Promise<Capture> {
+export async function capturePage(url: string, { section, review, viewport = VIEWPORT }: CaptureOptions = {}): Promise<Capture> {
   const target = new URL(url)
   if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('Only http(s) pages can be captured')
   if (review && !isLoopbackUrl(target.toString())) throw new Error('Visual Review only looks at pages on this Mac (localhost or 127.0.0.1)')
 
   const win = new BrowserWindow({
     show: false,
-    ...VIEWPORT,
+    ...viewport,
     webPreferences: {
       offscreen: true,
       // Hidden windows get throttled animation frames, which leaves scroll-driven pages half-way through moving.
@@ -134,7 +136,7 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
     if (review) {
       image = await steady(async () => {
         const m = await measure() // the page may grow while it settles
-        const shot = await stitch(win, run, m.viewportHeight, 0, Math.min(m.pageHeight, MAX_PAGE_HEIGHT))
+        const shot = await stitch(win, run, viewport.width, m.viewportHeight, 0, Math.min(m.pageHeight, MAX_PAGE_HEIGHT))
         await run(SHOW_FIXED + `;scrollTo({ top: 0, behavior: 'instant' })`) // the next picture starts from the same page
         return shot
       }, review.settleMs)
@@ -142,10 +144,10 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
     } else if (found) {
       // Sticky navs would cover the top of the section.
       await run(HIDE_FIXED)
-      image = await stitch(win, run, viewportHeight, found.top, found.bottom)
+      image = await stitch(win, run, viewport.width, viewportHeight, found.top, found.bottom)
       description = `the section starting at "${section}"`
     } else {
-      image = await stitch(win, run, viewportHeight, 0, limit)
+      image = await stitch(win, run, viewport.width, viewportHeight, 0, limit)
       const cut = pageHeight > MAX_PAGE_HEIGHT ? `, cut off at ${MAX_PAGE_HEIGHT}px of ${pageHeight}px` : ''
       description = section ? `the full page (couldn't find "${section}" on it${cut})` : `the full page${cut}`
     }
@@ -159,10 +161,10 @@ export async function capturePage(url: string, { section, review }: CaptureOptio
   }
 }
 
-/** Capture the viewport at 1x so slices line up with CSS pixels. */
-async function snapshot(win: BrowserWindow): Promise<Electron.NativeImage> {
+/** Capture the viewport (this many CSS pixels wide) at 1x so slices line up with CSS pixels. */
+async function snapshot(win: BrowserWindow, width: number): Promise<Electron.NativeImage> {
   const image = await win.webContents.capturePage()
-  return image.getSize().width === VIEWPORT.width ? image : image.resize({ width: VIEWPORT.width })
+  return image.getSize().width === width ? image : image.resize({ width })
 }
 
 /** Capture again until two pictures in a row are the same (a dev server finishing its hot reload, an image arriving), or `maxMs` passes. */
@@ -185,12 +187,12 @@ function sameImage(a: Electron.NativeImage, b: Electron.NativeImage): boolean {
 }
 
 /** Snapshot once the page stops changing (smooth scrolling, lazy images), or after a second regardless. */
-async function settledSnapshot(win: BrowserWindow): Promise<Electron.NativeImage> {
+async function settledSnapshot(win: BrowserWindow, width: number): Promise<Electron.NativeImage> {
   await delay(200)
-  let previous = await snapshot(win)
+  let previous = await snapshot(win, width)
   for (const started = Date.now(); Date.now() - started < 1000; ) {
     await delay(100)
-    const next = await snapshot(win)
+    const next = await snapshot(win, width)
     if (next.toBitmap().equals(previous.toBitmap())) return next
     previous = next
   }
@@ -201,6 +203,7 @@ async function settledSnapshot(win: BrowserWindow): Promise<Electron.NativeImage
 async function stitch(
   win: BrowserWindow,
   run: <T>(script: string) => Promise<T>,
+  width: number,
   viewportHeight: number,
   from: number,
   to: number,
@@ -209,14 +212,14 @@ async function stitch(
   let covered = from
   for (let y = from; covered < to; y += viewportHeight) {
     await run(`scrollTo({ top: ${y}, behavior: 'instant' })`)
-    const slice = await settledSnapshot(win)
+    const slice = await settledSnapshot(win, width)
     const scrollY = await run<number>('scrollY')
     const crop = sliceCrop(covered, scrollY, viewportHeight, to)
     if (!crop) break
     const scale = slice.getSize().height / viewportHeight
     rows.push(
       slice
-        .crop({ x: 0, y: Math.round(crop.top * scale), width: VIEWPORT.width, height: Math.round(crop.height * scale) })
+        .crop({ x: 0, y: Math.round(crop.top * scale), width, height: Math.round(crop.height * scale) })
         .toBitmap(),
     )
     covered = scrollY + crop.top + crop.height
@@ -225,7 +228,7 @@ async function stitch(
     if (scrollY + viewportHeight >= to) break
   }
   const bitmap = Buffer.concat(rows)
-  return nativeImage.createFromBitmap(bitmap, { width: VIEWPORT.width, height: bitmap.length / (VIEWPORT.width * 4) })
+  return nativeImage.createFromBitmap(bitmap, { width, height: bitmap.length / (width * 4) })
 }
 
 const HIDE_FIXED = `for (const el of document.querySelectorAll('body *')) {

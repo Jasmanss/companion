@@ -19,6 +19,13 @@ describe('project addresses (Visual Review)', () => {
       expect(project(url)).toEqual({ name: 'haven', path: '/Users/me/haven' })
     }
   })
+
+  it("keeps the phone's width only when on, and only alongside an address", () => {
+    const withPhone = (url: unknown, phone: unknown) => migrateSettings({ projects: [{ name: 'haven', path: '/Users/me/haven', url, phone }] }).projects[0]
+    expect(withPhone('localhost:3000', true)).toEqual({ name: 'haven', path: '/Users/me/haven', url: 'http://localhost:3000', phone: true })
+    expect(withPhone('localhost:3000', 'yes')).toEqual({ name: 'haven', path: '/Users/me/haven', url: 'http://localhost:3000' })
+    expect(withPhone('', true)).toEqual({ name: 'haven', path: '/Users/me/haven' })
+  })
 })
 
 describe('migrateSettings', () => {
@@ -78,7 +85,7 @@ describe('migrateSettings', () => {
 
   it('gives a file from before the character arrived the default one: glass, silver, on the right', () => {
     const migrated = migrateSettings({ projects: [], keepPanelOpen: true })
-    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', name: 'Steward', edge: 'right', notch: false, notchStyle: 'chin', size: 'small', tint: 'ice', frost: 50, ...AS_BEFORE })
+    expect(migrated.steward).toEqual({ version: 'glass', color: 'silver', glass: 'tinted', mouth: true, personality: 'lively', liveliness: 'calm', name: 'Steward', edge: 'right', notch: false, notchStyle: 'chin', size: 'small', tint: 'ice', frost: 50, ...AS_BEFORE })
   })
 
   it("keeps each of the character's options it knows, one at a time, and tidies the name", () => {

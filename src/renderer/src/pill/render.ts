@@ -178,7 +178,8 @@ function mouthPath(x: number, top: number, w: number, h: number, flat: number): 
 
 /* ---------------- views ---------------- */
 let uid = 0
-const bodyCss = (st: EyesState, W: number, H: number) => `translate(${(st.body.tx * W).toFixed(2)}px,${(st.body.ty * H).toFixed(2)}px) scale(${st.body.sc.toFixed(4)})`
+/** The body's move: a lift or a shake, a lean (confused rocking, ponder's tilt), and a breath. */
+const bodyCss = (st: EyesState, W: number, H: number) => `translate(${(st.body.tx * W).toFixed(2)}px,${(st.body.ty * H).toFixed(2)}px) rotate(${st.body.rot.toFixed(2)}deg) scale(${st.body.sc.toFixed(4)})`
 
 /** One Pill view, W x H pixels. */
 export function makeView(kind: PillKind, W: number, H: number, o: ViewOptions): PillView {

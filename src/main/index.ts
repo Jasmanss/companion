@@ -9,7 +9,7 @@ import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
-import { REVIEW_VIEWER_GAP, reviewViewerRect } from '../shared/review'
+import { PHONE_SHOT, REVIEW_PICTURES, REVIEW_VIEWER_GAP, reviewViewerRect, type ReviewPicture } from '../shared/review'
 import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, IslandAct, IslandNote, IslandNoteKind, Mood, NightReport, NotchGeometry, NotchLayout, NotchStyle, PillGlint, Project, SessionView, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
@@ -62,10 +62,11 @@ import {
 } from './presence'
 import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
+import { FIRST_QUIET_MS, GAP_MS, isIdleMove } from '../shared/idle-loop'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
 import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
-import { isReviewId, ReviewStore, type ReviewRecord } from './review-store'
+import { hasPicture, isReviewId, looksChanged, ReviewStore, type ReviewRecord } from './review-store'
 import { SessionTracker } from './sessions'
 import { filesChangedSince, lookAtFiles } from './turn-files'
 import { buildNightReport } from './night-report'
@@ -94,7 +95,7 @@ const SMOKE_THEME = process.env.STEWARD_SMOKE_THEME
 const SMOKE_DEMO = process.env.STEWARD_SMOKE_DEMO
 /** Smoke check extra: screenshot every section of the Settings window, not just the first. */
 const SMOKE_SECTIONS = process.env.STEWARD_SMOKE_SECTIONS
-/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows, "panel" only shows the panel (CI runs it all). */
+/** Smoke check shortcut while building: "island" runs only the notch island's checks once the panel shows, "idle" only the idle loop, "panel" only shows the panel (CI runs it all). */
 const SMOKE_ONLY = process.env.STEWARD_SMOKE_ONLY
 /** The window goes when the page says the tab's slide out has ended (0.3 s); if it never says, it goes after this. */
 const SLIDE_MS = 700
@@ -516,7 +517,7 @@ function hideTab(why?: string): void {
   setSlide(quiet(), false)
 }
 
-const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello', 'watching']
+const MOODS: Mood[] = ['resting', 'idle', 'listening', 'thinking', 'talking', 'done', 'needs-you', 'worried', 'mad', 'celebrating', 'sleepy', 'confused', 'focused', 'juggling', 'nod', 'proud', 'hello', 'watching', 'ponder', 'lookaround', 'smile', 'yawn', 'stretch', 'slowblink']
 const GLINTS: PillGlint[] = ['sweep', 'step', 'search']
 const isOpen = (state: DockState) => state === 'expanded' || state === 'viewing'
 
@@ -1839,6 +1840,11 @@ function registerIpc(): void {
     sendReviewProblems()
     return settings.view()
   })
+  ipcMain.handle('settings:setProjectPhone', async (_e, projectPath: unknown, on: unknown) => {
+    if (typeof projectPath !== 'string' || typeof on !== 'boolean') throw new Error('Bad request')
+    await settings.setProjectPhone(projectPath, on)
+    return settings.view()
+  })
   ipcMain.handle('settings:setApiKey', async (_e, key: string) => {
     await settings.setSecret('anthropic', key)
     return settings.view()
@@ -1947,7 +1953,8 @@ function registerIpc(): void {
     return text
   })
   ipcMain.handle('review:openFull', async (_e, id: unknown, which: unknown) => {
-    const file = isReviewId(id) && (which === 'before' || which === 'after') ? reviewStore.file(id, which) : null
+    const record = isReviewId(id) ? reviewStore.get(id) : null
+    const file = record && REVIEW_PICTURES.includes(which as ReviewPicture) && hasPicture(record, which as ReviewPicture) ? reviewStore.file(record.id, which as ReviewPicture) : null
     if (file) await shell.openPath(file)
   })
   ipcMain.handle('review:history', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.history(projectPath) : []))
@@ -2078,6 +2085,12 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       await checkCards(w, out)
       clearTimeout(cardsTimer)
       if (SMOKE_ONLY === 'panel') return app.exit(0)
+      if (SMOKE_ONLY === 'idle') {
+        const idleTimer = setTimeout(() => fail("Steward's idle loop timed out"), 60_000)
+        await checkIdleLoop(out)
+        clearTimeout(idleTimer)
+        return app.exit(0)
+      }
       if (SMOKE_ONLY === 'island') {
         const islandTimer = setTimeout(() => fail('the island timed out'), 150_000)
         await checkTabAlertWords(w, out)
@@ -2113,6 +2126,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const reactionsTimer = setTimeout(() => fail("Steward's reactions timed out"), 60_000)
       await checkReactions(out)
       clearTimeout(reactionsTimer)
+      const idleTimer = setTimeout(() => fail("Steward's idle loop timed out"), 60_000)
+      await checkIdleLoop(out)
+      clearTimeout(idleTimer)
       const notchTimer = setTimeout(() => fail('notch timed out'), 150_000 + Number(process.env.STEWARD_SMOKE_IDLE ?? 0) * 3000)
       await checkNotch(out)
       clearTimeout(notchTimer)
@@ -2210,6 +2226,76 @@ async function checkReactions(out: string): Promise<void> {
     await sleep(at)
     await fs.writeFile(out.replace(/\.png$/, `-face-${label.toLowerCase().replace(/ /g, '-')}.png`), (await sw.webContents.capturePage(box)).toPNG())
   }
+  sw.close()
+  await sleep(400)
+}
+
+/**
+ * The idle loop (reactions Phase R2), in the open panel with Liveliness Calm: no move in the first 20 quiet seconds,
+ * then one (the face the panel tells the notch) by 35, which ends back at idle. With Reduce Motion on (as on the CI
+ * runners) or after midnight (sleepy), none at all. Then the moves in Settings → Steward's preview, and the setting,
+ * for the pictures.
+ */
+async function checkIdleLoop(out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const reduced = (await win!.webContents.executeJavaScript(`matchMedia('(prefers-reduced-motion: reduce)').matches`)) as boolean
+  const before = dock
+  await settings.update({ steward: { liveliness: 'calm' } })
+  // A fresh quiet: tucked away and back, so the panel's face goes resting, then idle.
+  setDock('collapsed')
+  await sleep(500)
+  setDock('expanded')
+  const start = Date.now()
+  const face = () => notch.state().mood
+  while (face() !== 'idle' && face() !== 'sleepy' && Date.now() - start < 3000) await sleep(50)
+  const calm = face()
+  if (calm !== 'idle' && calm !== 'sleepy') throw new Error(`before the idle loop, Steward's face in the open panel is ${calm}, not idle`)
+  const none = reduced ? 'Reduce Motion is on' : calm === 'sleepy' ? "it's after midnight (sleepy)" : null
+  // With none to wait for, a little past the 20 quiet seconds says enough.
+  const limit = FIRST_QUIET_MS + (none ? 4_000 : GAP_MS[1] - GAP_MS[0] + 4_000)
+  let move: { mood: Mood; at: number } | null = null
+  while (!move && Date.now() - start < limit) {
+    const m = face()
+    if (isIdleMove(m)) move = { mood: m, at: Date.now() - start }
+    else if (m !== calm) throw new Error(`the face went ${m} during the idle loop check, with nothing going on`)
+    else await sleep(100)
+  }
+  const s = (ms: number) => `${(ms / 1000).toFixed(1)} s`
+  if (none) {
+    if (move) throw new Error(`${none}, yet an idle move (${move.mood}) played ${s(move.at)} into the quiet`)
+    console.log(`smoke: idle loop: ${none}: no move in ${s(limit)} of quiet`)
+  } else {
+    if (!move) throw new Error(`no idle move in ${s(limit)} of quiet in the open panel`)
+    if (move.at < FIRST_QUIET_MS) throw new Error(`an idle move (${move.mood}) came ${s(move.at)} into the quiet, before 20 s`)
+    const played = Date.now()
+    while (isIdleMove(face()) && Date.now() - played < 4_000) await sleep(50)
+    if (face() !== 'idle') throw new Error(`after the idle move ${move.mood}, the face is ${face()}, not idle again`)
+    console.log(`smoke: idle loop: nothing in the first 20 quiet seconds, then ${move.mood} at ${s(move.at)}, back to idle ${s(Date.now() - played)} later`)
+  }
+  await settings.update({ steward: { liveliness: 'quiet' } })
+  setDock(before === 'expanded' ? 'expanded' : 'collapsed')
+
+  // The moves, as Settings → Steward previews them (each near its fullest), and the setting.
+  openSettings('steward')
+  const sw = settingsWin!
+  if (sw.webContents.isLoading()) await new Promise<void>((resolve) => sw.webContents.once('did-finish-load', () => resolve()))
+  sw.webContents.send('settings:section', 'steward')
+  await sleep(800)
+  const name = (label: string) => out.replace(/\.png$/, `-${label.toLowerCase().replace(/ /g, '-')}.png`)
+  for (const [label, at] of [['Ponder', 1100], ['Look around', 800], ['Yawn', 1200], ['Stretch', 850]] as const) {
+    const box = (await sw.webContents.executeJavaScript(
+      `(() => { const b = [...document.querySelectorAll('.set-moods button')].find((x) => x.textContent === ${JSON.stringify(label)}); b?.click(); const r = document.querySelector('.set-preview')?.getBoundingClientRect(); return b && r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null })()`,
+    )) as Electron.Rectangle | null
+    if (!box) throw new Error(`Settings → Steward has no "${label}" in its mood preview`)
+    await sleep(at)
+    await fs.writeFile(name(`idle-${label}`), (await sw.webContents.capturePage(box)).toPNG())
+  }
+  const row = (await sw.webContents.executeJavaScript(
+    `(() => { const r = [...document.querySelectorAll('.set-row')].find((x) => x.querySelector('.set-label span')?.textContent === 'Liveliness'); r?.scrollIntoView({ block: 'center' }); const b = r?.getBoundingClientRect(); return b ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null })()`,
+  )) as Electron.Rectangle | null
+  if (!row) throw new Error('Settings → Steward has no Liveliness')
+  await sleep(300)
+  await fs.writeFile(name('idle-liveliness'), (await sw.webContents.capturePage(row)).toPNG())
   sw.close()
   await sleep(400)
 }
@@ -2514,6 +2600,27 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
   await until(wc, `document.querySelector('.rvv-zoom')?.textContent.startsWith('100%')`, 'Z did not show the page at 100%')
   await press('z')
 
+  // Show changes (C): each changed area kept with the review is outlined, "1 of N"; N goes to the next one; side by side
+  // both pictures are outlined; C again takes them away.
+  const areas = reviewStore.get(id)?.regions ?? []
+  need(areas.length >= 1, `the review kept no changed areas (${JSON.stringify(areas)})`)
+  const counted = () => wc.executeJavaScript(`document.querySelector('.rvv-changes .rvv-count span')?.textContent ?? ''`) as Promise<string>
+  await press('c')
+  await until(wc, `document.querySelectorAll('.rvv-slide .rvv-mark').length === ${areas.length}`, `C did not outline the ${areas.length} changed areas`)
+  need((await counted()) === `1 of ${areas.length}`, `Show changes says "${await counted()}", not 1 of ${areas.length}`)
+  await sleep(500)
+  await fs.writeFile(out.replace(/\.png$/, '-review-changes.png'), (await wc.capturePage()).toPNG())
+  await press('n')
+  const next = (1 % areas.length) + 1
+  await until(wc, `document.querySelector('.rvv-mark.on')?.dataset.i === '${next - 1}'`, `N did not go to change ${next}`)
+  need((await counted()) === `${next} of ${areas.length}`, `after N, Show changes says "${await counted()}"`)
+  await press('2')
+  await until(wc, `document.querySelectorAll('.rvv-sbs .rvv-mark').length === ${areas.length * 2}`, 'side by side, both pictures are not outlined')
+  await press('1')
+  await press('c')
+  await until(wc, `!document.querySelector('.rvv-mark')`, 'C again did not take the outlines away')
+  console.log(`smoke: Show changes outlines the ${areas.length} changed ${areas.length === 1 ? 'area' : 'areas'} (${areas.map((r) => `${r.width}x${r.height} at ${r.x},${r.y}`).join('; ')}), N goes to the next, side by side outlines both`)
+
   // A drag on the picture moves the slider: real mouse input, from a fifth of the way across to four fifths.
   const box = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rvv-slide').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width } })()`)
   const at = (f: number) => ({ x: Math.round(box.x + box.width * f), y: Math.round(box.y + 60) })
@@ -2748,6 +2855,45 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     server.setVersion('b')
     console.log(`smoke: a reshaped soft fade makes a review (${softReview!.changedPixels} small pixels changed at a cutoff of ${CHANNEL_TOLERANCE})`)
 
+    // At a phone's width too: a turn that only changes the narrow layout makes a review that says so, and the viewer
+    // opens on the phone's pictures, 390 wide, with the change outlined. The turn's start loads the page twice (once per
+    // width), so the page changes only once both have asked for it.
+    await settings.setProjectPhone(projectDir, true)
+    /** A prompt with the phone's width on: the page changes only once both before pictures have asked for it. */
+    const bothLook = async (id: string) => {
+      const hitsAtPrompt = server.hits()
+      reviews.turnStarted({ ...turn(id), hook_event_name: 'UserPromptSubmit' })
+      for (const started = Date.now(); server.hits() < hitsAtPrompt + 2; await sleep(50)) if (Date.now() - started > 30_000) throw new Error("the phone's before picture never asked for the page")
+    }
+    // The same page at both widths makes no review: text edges and a spinner drawn twice are not a change.
+    await bothLook('phone-same')
+    need((await reviews.turnStopped({ ...turn('phone-same'), hook_event_name: 'Stop' })) === null, "the same page made a review with the phone's width on")
+    await bothLook('phone')
+    server.setVersion('narrow')
+    const phoneReview = await reviews.turnStopped({ ...turn('phone'), hook_event_name: 'Stop' })
+    need(phoneReview?.phone !== undefined && looksChanged(phoneReview.phone) && !looksChanged(phoneReview), `a change only at a phone's width made no review that says so (${JSON.stringify(phoneReview?.phone)})`)
+    for (const which of ['before-phone', 'after-phone'] as const) need((await reviewStore.read(phoneReview!.id, which))?.length !== undefined, `the review has no ${which} picture`)
+    await until(wc, `document.querySelector('.card.review')?.textContent.includes("Only a phone's width looks different")`, "the card does not say only a phone's width changed")
+    await wc.executeJavaScript(`document.querySelector('.card.review .rv-open').click()`)
+    await until(
+      wc,
+      `(() => { const p = [...document.querySelectorAll('.rvv-slide img')]; return [...document.querySelectorAll('.rvv-seg button[aria-pressed=true]')].some((b) => b.textContent === 'Phone') && p.length === 2 && p.every((i) => i.complete && i.naturalWidth === ${PHONE_SHOT.width}) })()`,
+      "the viewer did not open on the phone's pictures, 390 wide",
+    )
+    const phoneAreas = phoneReview!.phone!.regions ?? []
+    await wc.executeJavaScript(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true, cancelable: true }))`)
+    await until(wc, `document.querySelectorAll('.rvv-slide .rvv-mark').length === ${phoneAreas.length} && ${phoneAreas.length} > 0`, "Show changes did not outline the change at a phone's width")
+    await sleep(500)
+    await fs.writeFile(out.replace(/\.png$/, '-review-phone.png'), (await wc.capturePage()).toPNG())
+    await wc.executeJavaScript(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true, cancelable: true }))`)
+    await until(wc, `[...document.querySelectorAll('.rvv-slide img')].every((i) => i.complete && i.naturalWidth === 1440)`, "P did not switch to the desktop's pictures")
+    await wc.executeJavaScript(`document.querySelector('.review-viewer button[aria-label="Back to the panel"]').click()`)
+    await until(wc, '!document.querySelector(".review-viewer")', 'the viewer did not close')
+    await reviews.markGood(phoneReview!.id)
+    await settings.setProjectPhone(projectDir, false)
+    server.setVersion('b')
+    console.log(`smoke: a change only at a phone's width makes a review that says so (${phoneReview!.phone!.changedPixels} small pixels changed there, ${phoneAreas.length} outlined), and the viewer opens on the phone's pictures, P switching to the desktop's`)
+
     // A capture that fails says why, quietly, where the card would be. No alert.
     const dead = await deadPort()
     await settings.setProjectUrl(projectDir, `localhost:${dead}`)
@@ -2780,6 +2926,15 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     })
     const field = 'input.set-address'
     await until(sw.webContents, `Boolean(document.querySelector(${JSON.stringify(field)}))`, 'Settings has no App address field')
+    // The phone's width, under the address: off, then on with a click, then off.
+    const phoneSwitch = '.set-phone input[role=switch]'
+    need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)})?.checked`)) === false, "Settings has no phone's width switch, or it is on")
+    await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)}).click()`)
+    for (const started = Date.now(); !settings.projects().find((p) => p.path === projectDir)?.phone; await sleep(100)) if (Date.now() - started > 3000) throw new Error("the phone's width switch did not turn it on")
+    // The window shows it on before it is clicked again (a click before that would only turn it on again).
+    await until(sw.webContents, `document.querySelector(${JSON.stringify(phoneSwitch)})?.checked === true`, "Settings did not show the phone's width as on")
+    await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)}).click()`)
+    for (const started = Date.now(); settings.projects().find((p) => p.path === projectDir)?.phone; await sleep(100)) if (Date.now() - started > 3000) throw new Error("the phone's width switch did not turn it off")
     need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(field)}).value`)) === `http://localhost:${server.port}/private`, 'the field does not show the saved address')
     await until(sw.webContents, `[...document.querySelectorAll('.set-problem')].some((n) => n.textContent.includes('sends you to /login'))`, 'Settings does not say the address is a login')
     await sw.webContents.executeJavaScript(`[...document.querySelectorAll('.set-row button')].find((b) => b.textContent === 'Try it now')?.click()`)
@@ -4576,6 +4731,9 @@ app.whenReady().then(async () => {
   if (SMOKE_OUT) await Promise.all(['settings.json', 'state.json', 'reviews'].map((f) => fs.rm(path.join(userData, f), { recursive: true, force: true })))
   settings = new SettingsStore(path.join(userData, 'settings.json'), () => ({ registered, openAtLogin: loginItem(), version: app.getVersion() }), broadcastSettings)
   await settings.load()
+  // The idle loop's moves would land in the middle of the other checks' faces and pictures, so the smoke check runs with
+  // Liveliness Quiet; checkIdleLoop turns Calm on for itself.
+  if (SMOKE_OUT) await settings.update({ steward: { liveliness: 'quiet' } })
   // Only when needed, the window starts out of sight, with its page slid out ready to come in.
   slidOut = quiet()
   registerGlobalShortcuts()
@@ -4597,8 +4755,8 @@ app.whenReady().then(async () => {
   await reviewStore.load()
   reviews = new ReviewTracker({
     projects: () => settings.projects(),
-    capture: (url) => capturePage(url, { review: { settleMs: 10_000 } }),
-    compare: comparePictures,
+    capture: (url, size) => capturePage(url, { review: { settleMs: 10_000 }, ...(size === 'phone' ? { viewport: PHONE_SHOT } : {}) }),
+    compare: (before, after, size) => comparePictures(before, after, size === 'phone' ? PHONE_SHOT : undefined),
     card: cardPicture,
     store: reviewStore,
     onChange: () => void sendReviews(),
