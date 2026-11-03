@@ -227,6 +227,93 @@ describe('ReviewTracker, turns that make no card', () => {
   })
 })
 
+describe("ReviewTracker, at a phone's width", () => {
+  /** A project that asks for the phone's width too, and a page per width (an Error: that capture fails). */
+  async function phoneSetup(o: { phone?: boolean } = {}) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
+    dirs.push(dir)
+    const store = new ReviewStore(dir, REVIEW_LIMITS)
+    const pages: { desktop: string; phone: string | Error } = { desktop: 'desk old', phone: 'phone old' }
+    const captured: string[] = []
+    const log: string[] = []
+    const tracker = new ReviewTracker({
+      projects: () => [{ ...project, ...(o.phone === false ? {} : { phone: true }) }],
+      capture: async (_url, size) => {
+        captured.push(size)
+        const page = pages[size]
+        if (page instanceof Error) throw page
+        return size === 'phone' ? { png: Buffer.from(page), width: 390, height: 2400 } : shot(page)
+      },
+      compare: (a, b) => diff(a.toString() !== b.toString()),
+      card: (png) => Buffer.from(`card:${png.toString()}`),
+      store,
+      onChange: () => {},
+      log: (m) => log.push(m),
+    })
+    return { tracker, store, pages, captured, log }
+  }
+
+  it('looks at both widths at the prompt and the stop, and keeps both pairs', async () => {
+    const { tracker, store, pages, captured } = await phoneSetup()
+    tracker.turnStarted(start())
+    await tick()
+    pages.desktop = 'desk new'
+    pages.phone = 'phone new'
+    const review = await tracker.turnStopped(stop())
+    expect(captured).toEqual(['desktop', 'phone', 'desktop', 'phone'])
+    expect(review?.phone).toMatchObject({ before: 'turn-start', heightBefore: 2400, heightAfter: 2400, changedPixels: 900 })
+    expect((await store.read(review!.id, 'before-phone'))?.toString()).toBe('phone old')
+    expect((await store.read(review!.id, 'after-phone'))?.toString()).toBe('phone new')
+    const [view] = await tracker.pending()
+    expect(view.phone).toEqual({ beforeFrom: 'turn-start', heightBefore: 2400, heightAfter: 2400, regions: null, changed: true, only: false })
+    expect(view.files.phoneAfter).toBe(store.file(review!.id, 'after-phone'))
+    // The note for the session points at the phone's picture too.
+    expect(await tracker.sendBack(review!.id, 'fix the menu')).toContain(`At a phone's width (390 px): ${store.file(review!.id, 'after-phone')}`)
+  })
+
+  it("makes a review when only the phone's width changed, and says so", async () => {
+    const { tracker, pages } = await phoneSetup()
+    tracker.turnStarted(start())
+    await tick()
+    pages.phone = 'phone new'
+    expect(await tracker.turnStopped(stop())).not.toBeNull()
+    const [view] = await tracker.pending()
+    expect(view.phone).toMatchObject({ changed: true, only: true })
+  })
+
+  it('makes no review when both widths look the same', async () => {
+    const { tracker, log } = await phoneSetup()
+    tracker.turnStarted(start())
+    await tick()
+    expect(await tracker.turnStopped(stop())).toBeNull()
+    expect(log.at(-1)).toMatch(/looks the same \(0 small pixels changed; at a phone's width 0/)
+  })
+
+  it("goes on at the desktop's width when the phone's picture can't be taken, saying so in the log only", async () => {
+    const { tracker, pages, log } = await phoneSetup()
+    pages.phone = new Error('net::ERR_CONNECTION_REFUSED')
+    tracker.turnStarted(start())
+    await tick()
+    pages.desktop = 'desk new'
+    const review = await tracker.turnStopped(stop())
+    expect(review).not.toBeNull()
+    expect(review?.phone).toBeUndefined()
+    expect(tracker.problems()).toEqual([])
+    expect(log.some((m) => m.startsWith('no phone picture of site'))).toBe(true)
+  })
+
+  it("doesn't look at a phone's width for a project that doesn't ask", async () => {
+    const { tracker, pages, captured } = await phoneSetup({ phone: false })
+    tracker.turnStarted(start())
+    await tick()
+    pages.desktop = 'desk new'
+    const review = await tracker.turnStopped(stop())
+    expect(captured).toEqual(['desktop', 'desktop'])
+    expect(review?.phone).toBeUndefined()
+    expect((await tracker.pending())[0].phone).toBeNull()
+  })
+})
+
 describe('ReviewTracker, a check is never silent', () => {
   it('leaves a quiet note when the page looks the same, and says why in the log', async () => {
     const { tracker, onChecks, log } = await setup({ changed: false })
@@ -449,7 +536,7 @@ describe('ReviewTracker, problems the user should see', () => {
       onChange: () => {},
       log: (m) => log.push(m),
     })
-    for (let i = 0; i < 6; i++) tracker.turnStarted(start({ prompt_id: `p${i}` }))
+    for (let i = 0; i < 10; i++) tracker.turnStarted(start({ prompt_id: `p${i}` }))
     await tick()
     expect(log.filter((m) => m.includes('busy'))).toHaveLength(2) // two more than the queue holds
     expect(tracker.problems()).toEqual([])

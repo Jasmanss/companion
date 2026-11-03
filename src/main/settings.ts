@@ -140,12 +140,24 @@ export class SettingsStore {
   async setProjectUrl(projectPath: string, address: string): Promise<void> {
     const project = this.data.projects.find((p) => p.path === projectPath)
     if (!project) throw new Error('Unknown project')
-    if (address.trim() === '') delete project.url
-    else {
+    if (address.trim() === '') {
+      delete project.url
+      delete project.phone
+    } else {
       const parsed = parseAppAddress(address)
       if (!parsed.ok) throw new Error(parsed.reason)
       project.url = parsed.url
     }
+    await this.save()
+  }
+
+  /** Visual Review at a phone's width too, for a project that has an address. */
+  async setProjectPhone(projectPath: string, on: boolean): Promise<void> {
+    const project = this.data.projects.find((p) => p.path === projectPath)
+    if (!project) throw new Error('Unknown project')
+    if (on && !project.url) throw new Error('Add an address first.')
+    if (on) project.phone = true
+    else delete project.phone
     await this.save()
   }
 

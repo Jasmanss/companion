@@ -1,13 +1,14 @@
 import { nativeImage } from 'electron'
 import { CARD_SHOT } from '../shared/review'
+import type { ReviewRegion } from '../shared/types'
 
 /**
- * The change gate: do two pictures of the page look different? Both are cut down to this width first (plain nativeImage
- * resize), so a pixel here is a 4 by 4 block of the real page, and compared pixel by pixel.
+ * The change gate: do two pictures of the page look different? Both are cut down to a quarter of their width first (plain
+ * nativeImage resize), so a pixel here is a 4 by 4 block of the real page at either width, and compared pixel by pixel.
  */
-export const GATE_WIDTH = 360
-/** A screen of the page at that width is this tall. */
-const GATE_SCREEN_ROWS = Math.round((GATE_WIDTH * CARD_SHOT.height) / CARD_SHOT.width)
+export const GATE_FACTOR = 4
+/** The desktop's pictures (1,440 wide) at the gate. */
+export const GATE_WIDTH = CARD_SHOT.width / GATE_FACTOR
 /**
  * A pixel counts as changed when any colour is off by more than this (out of 255). Low, so a pale tint or a reshaped
  * gradient counts: haven's fade from #F4E6E1 to #FBFBF8 differs by at most 23 on any colour, and a reshaped fade by
@@ -18,11 +19,19 @@ const GATE_SCREEN_ROWS = Math.round((GATE_WIDTH * CARD_SHOT.height) / CARD_SHOT.
  */
 export const CHANNEL_TOLERANCE = 6
 /**
- * The page "looks different" when about 0.3% of a screen's pixels changed (a 128 by 32 pixel button, about). It is a share of
- * one screen, not of the whole page, so a button that changed on a long page still counts. Tuned on real pages later.
+ * The page "looks different" when about 0.3% of a screen's pixels changed (a 128 by 32 pixel button, about, at the
+ * desktop's width). It is a share of one screen, not of the whole page, so a button that changed on a long page still
+ * counts. Tuned on real pages later.
  */
 export const GATE_SHARE = 0.003
-export const GATE_MIN_PIXELS = Math.round(GATE_WIDTH * GATE_SCREEN_ROWS * GATE_SHARE)
+
+/** How many of the gate's pixels must change for a page photographed in a window this size (CSS pixels) to look different. */
+export function gateMinPixels(screen: { width: number; height: number }): number {
+  const width = Math.round(screen.width / GATE_FACTOR)
+  return Math.round(width * Math.round((width * screen.height) / screen.width) * GATE_SHARE)
+}
+/** The desktop's: 243. */
+export const GATE_MIN_PIXELS = gateMinPixels(CARD_SHOT)
 
 /** Raw pixels, four bytes each (blue, green, red, alpha), as nativeImage.toBitmap gives them. */
 export interface Bitmap {
@@ -39,6 +48,8 @@ export interface Diff {
   minPixels: number
   /** The pictures' heights, in the gate's small pixels. */
   heights: [number, number]
+  /** Where it changed, in the page's own pixels, top to bottom (comparePictures finds them). */
+  regions?: ReviewRegion[]
 }
 
 /**
@@ -66,17 +77,104 @@ export function diffBitmaps(before: Bitmap, after: Bitmap, minPixels = GATE_MIN_
   return { changed: changedPixels >= minPixels, changedPixels, minPixels, heights }
 }
 
-function small(png: Buffer): Bitmap {
-  const image = nativeImage.createFromBuffer(png)
-  const { width } = image.getSize()
-  const reduced = width > GATE_WIDTH ? image.resize({ width: GATE_WIDTH, quality: 'good' }) : image
-  const size = reduced.getSize()
-  return { width: size.width, height: size.height, data: reduced.toBitmap() }
+/**
+ * Changed pixels are grouped on a grid of cells this many of the page's own pixels wide, at either width (a small pixel is
+ * 4 of the page's at the desktop's width, and about 1 at a phone's).
+ */
+const CELL_PX = 16
+/** A cell with fewer changed pixels than this is a speck, not a change. */
+const CELL_MIN_PIXELS = 2
+/** Changes this close (in the page's pixels, any way) are one area: a button's label and its border are one change. */
+const JOIN_PX = 32
+/** The most areas kept: the biggest changes, shown top to bottom. */
+export const MAX_REGIONS = 12
+
+/**
+ * Where two small bitmaps of the same width differ, as rectangles in the page's own pixels (`scale` page pixels to a
+ * small one). Rows only one of them has (the page got taller or shorter) are changed all the way across. Different
+ * widths can't be lined up: the whole page is one area.
+ */
+export function changedRegions(before: Bitmap, after: Bitmap, scale: number, tolerance = CHANNEL_TOLERANCE): ReviewRegion[] {
+  const height = Math.max(before.height, after.height)
+  const page = (x: number, y: number, w: number, h: number): ReviewRegion => ({ x: Math.round(x * scale), y: Math.round(y * scale), width: Math.round(w * scale), height: Math.round(h * scale) })
+  if (before.width !== after.width) return [page(0, 0, Math.max(before.width, after.width), height)]
+  const { width } = before
+  const shared = Math.min(before.height, after.height)
+  const cell = Math.max(1, Math.round(CELL_PX / scale))
+  const joinCells = Math.max(1, Math.ceil(JOIN_PX / (cell * scale)))
+  const cols = Math.ceil(width / cell)
+  const rows = Math.ceil(height / cell)
+  const counts = new Uint32Array(cols * rows)
+  for (let y = 0; y < height; y++) {
+    const row = Math.floor(y / cell) * cols
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      const differs =
+        y >= shared ||
+        Math.abs(before.data[i] - after.data[i]) > tolerance ||
+        Math.abs(before.data[i + 1] - after.data[i + 1]) > tolerance ||
+        Math.abs(before.data[i + 2] - after.data[i + 2]) > tolerance
+      if (differs) counts[row + Math.floor(x / cell)]++
+    }
+  }
+  // Group the changed cells: each group's bounds, and how many pixels changed in it.
+  const seen = new Uint8Array(cols * rows)
+  const groups: { c0: number; r0: number; c1: number; r1: number; pixels: number }[] = []
+  for (let start = 0; start < counts.length; start++) {
+    if (seen[start] || counts[start] < CELL_MIN_PIXELS) continue
+    const group = { c0: cols, r0: rows, c1: -1, r1: -1, pixels: 0 }
+    const stack = [start]
+    seen[start] = 1
+    while (stack.length) {
+      const at = stack.pop()!
+      const c = at % cols
+      const r = Math.floor(at / cols)
+      group.c0 = Math.min(group.c0, c)
+      group.c1 = Math.max(group.c1, c)
+      group.r0 = Math.min(group.r0, r)
+      group.r1 = Math.max(group.r1, r)
+      group.pixels += counts[at]
+      for (let dr = -joinCells; dr <= joinCells; dr++)
+        for (let dc = -joinCells; dc <= joinCells; dc++) {
+          const nc = c + dc
+          const nr = r + dr
+          if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue
+          const next = nr * cols + nc
+          if (!seen[next] && counts[next] >= CELL_MIN_PIXELS) {
+            seen[next] = 1
+            stack.push(next)
+          }
+        }
+    }
+    groups.push(group)
+  }
+  return groups
+    .sort((a, b) => b.pixels - a.pixels)
+    .slice(0, MAX_REGIONS)
+    .map((g) => {
+      const x = g.c0 * cell
+      const y = g.r0 * cell
+      return page(x, y, Math.min(width, (g.c1 + 1) * cell) - x, Math.min(height, (g.r1 + 1) * cell) - y)
+    })
+    .sort((a, b) => a.y - b.y || a.x - b.x)
 }
 
-/** Does the page look different between two full-page pictures (PNG)? */
-export function comparePictures(before: Buffer, after: Buffer): Diff {
-  return diffBitmaps(small(before), small(after))
+function small(png: Buffer): Bitmap & { scale: number } {
+  const image = nativeImage.createFromBuffer(png)
+  const { width } = image.getSize()
+  const reduced = image.resize({ width: Math.max(1, Math.round(width / GATE_FACTOR)), quality: 'good' })
+  const size = reduced.getSize()
+  return { width: size.width, height: size.height, data: reduced.toBitmap(), scale: width / size.width }
+}
+
+/**
+ * Does the page look different between two full-page pictures (PNG), and where? `screen` is the window they were
+ * photographed in (the desktop's unless said), for how much must change.
+ */
+export function comparePictures(before: Buffer, after: Buffer, screen: { width: number; height: number } = CARD_SHOT): Diff {
+  const [a, b] = [small(before), small(after)]
+  const diff = diffBitmaps(a, b, gateMinPixels(screen))
+  return { ...diff, regions: diff.changed ? changedRegions(a, b, b.scale) : [] }
 }
 
 /** How many small pixels differ at each of these cutoffs: for the smoke check to log where the noise is. */
