@@ -8,12 +8,6 @@ export const GearIcon = () => (
   </svg>
 )
 
-export const PinIcon = ({ on }: { on: boolean }) => (
-  <svg {...base} fill={on ? 'currentColor' : 'none'}>
-    <path d="M10.5 1.8l3.7 3.7-2.3.8-2.4 2.4.3 3.1-1.3 1.3-2.4-2.4-3.6 3.6M5.9 10.3L3.5 7.9l1.3-1.3 3.1.3 2.4-2.4.2-2.7z" />
-  </svg>
-)
-
 export const ChevronRightIcon = () => (
   <svg {...base}>
     <path d="M6 3l5 5-5 5" />
@@ -35,14 +29,6 @@ export const DragIcon = () => (
 export const ChevronLeftIcon = () => (
   <svg {...base}>
     <path d="M10 3L5 8l5 5" />
-  </svg>
-)
-
-export const HideIcon = () => (
-  <svg {...base}>
-    <path d="M2 8s2.2-4.2 6-4.2S14 8 14 8s-2.2 4.2-6 4.2S2 8 2 8z" />
-    <circle cx="8" cy="8" r="1.8" />
-    <path d="M2.5 13.5l11-11" />
   </svg>
 )
 
@@ -165,3 +151,86 @@ export const BellIcon = () => (
   </svg>
 )
 
+
+/** Send: an arrow up (design/main-chat.html). */
+export const SendIcon = () => (
+  <svg {...base}>
+    <path d="M8 13V3M8 3L4 7M8 3l4 4" />
+  </svg>
+)
+
+export const StopIcon = () => (
+  <svg {...base}>
+    <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" />
+  </svg>
+)
+
+/** Auto, in the Ask | Auto switch. */
+export const ShieldIcon = () => (
+  <svg {...base}>
+    <path d="M8 1.8l5 1.8v4c0 3-2 5-5 6.6C5 12.6 3 10.6 3 7.6v-4z" />
+  </svg>
+)
+
+/** A command that ran by itself. */
+export const ShieldOkIcon = () => (
+  <svg {...base}>
+    <path d="M8 1.8l5 1.8v4c0 3-2 5-5 6.6C5 12.6 3 10.6 3 7.6v-4z" />
+    <path d="M5.6 8l1.7 1.7L10.6 6.3" />
+  </svg>
+)
+
+/** A crescent moon: Goodnight, Overnight Watch. */
+export const MoonIcon = () => (
+  <svg {...base}>
+    <path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z" />
+  </svg>
+)
+
+/* ---------- the panel's cards (tile headings) ---------- */
+export const EyeIcon = () => (
+  <svg {...base}>
+    <path d="M1.8 8s2.3-4.4 6.2-4.4S14.2 8 14.2 8s-2.3 4.4-6.2 4.4S1.8 8 1.8 8z" />
+    <circle cx="8" cy="8" r="1.9" />
+  </svg>
+)
+
+/** Claude Code sessions: two people. */
+export const PeopleIcon = () => (
+  <svg {...base}>
+    <circle cx="6" cy="5.6" r="2.3" />
+    <path d="M1.8 13.4c.5-2.4 2.2-3.7 4.2-3.7s3.7 1.3 4.2 3.7M10.6 3.6a2.2 2.2 0 010 4.1M12.1 9.9c1.2.5 1.9 1.6 2.1 3.2" />
+  </svg>
+)
+
+/** Where you left off: a branch. */
+export const BranchIcon = () => (
+  <svg {...base}>
+    <circle cx="4.5" cy="3.6" r="1.6" />
+    <circle cx="4.5" cy="12.4" r="1.6" />
+    <circle cx="11.5" cy="5.6" r="1.6" />
+    <path d="M4.5 5.2v5.6M11.5 7.2c0 2.6-2.4 3-7 3.6" />
+  </svg>
+)
+
+/** Things to try. */
+export const SparkIcon = () => (
+  <svg {...base}>
+    <path d="M8 1.8l1.5 4.7L14.2 8l-4.7 1.5L8 14.2l-1.5-4.7L1.8 8l4.7-1.5z" />
+  </svg>
+)
+
+/** A build that failed. */
+export const WarningIcon = () => (
+  <svg {...base}>
+    <path d="M8 2.2l6.2 11H1.8z" />
+    <path d="M8 6.6v3M8 11.6h.01" />
+  </svg>
+)
+
+/** The morning brief: the sun coming up over the horizon. */
+export const SunriseIcon = () => (
+  <svg {...base}>
+    <path d="M1.8 12.5h12.4M4.6 12.5a3.4 3.4 0 016.8 0M8 3.2v2M3.2 6.8l1.3 1.1M12.8 6.8l-1.3 1.1" />
+  </svg>
+)

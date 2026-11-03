@@ -47,3 +47,26 @@ export function turnStartedAt(lines: Record<string, unknown>[], promptId: string
   }
   return earliest
 }
+
+/** The chat's name is looked for in this much of the end of its log: logs run to tens of MB, and the name repeats. */
+export const TITLE_TAIL_BYTES = 256 * 1024
+const MAX_TITLE = 60
+
+/**
+ * The chat's own name in the Claude app: the newest custom-title line (the app writes one now and then, and again when
+ * the chat is renamed). Null when there's none, as in a terminal session or a chat with no name yet.
+ */
+export function chatTitle(lines: Record<string, unknown>[]): string | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const { type, customTitle } = lines[i]
+    if (type !== 'custom-title' || typeof customTitle !== 'string') continue
+    const title = customTitle.replace(/\s+/g, ' ').trim()
+    if (title) return title.length > MAX_TITLE ? `${title.slice(0, MAX_TITLE - 1)}…` : title
+  }
+  return null
+}
+
+/** The chat's name from the end of its log only, or null (none there, or the log can't be read). */
+export function readChatTitle(file: string, bytes = TITLE_TAIL_BYTES): Promise<string | null> {
+  return readTail(file, bytes).then(chatTitle, () => null)
+}

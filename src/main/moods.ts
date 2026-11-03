@@ -37,6 +37,11 @@ export class MoodBoard {
     return (newest(this.entries.filter((e) => !STICKY.has(e.mood))) ?? newest(this.entries))?.mood ?? null
   }
 
+  /** A deploy failed and nothing for that project has worked since (mad, then worried), whatever face shows on top. */
+  troubled(now: number): boolean {
+    return this.entries.some((e) => (e.mood === 'mad' || e.mood === 'worried') && e.until > now)
+  }
+
   /** When the current mood might change next, if ever. */
   nextChange(now: number): number | null {
     const future = this.entries.map((e) => e.until).filter((t) => t > now)

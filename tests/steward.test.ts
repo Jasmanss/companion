@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanFrost, cleanName, colorHex, DEFAULT_STEWARD, frostFill, MAX_NAME, PANEL_TINT_IDS, PANEL_TINTS, panelTint, panelVars, PILL_COLOR_IDS, PILL_COLORS, TAB_SIZES } from '../src/shared/steward'
+import { alertPeekAfterSwitch, cleanFrost, cleanName, colorHex, DEFAULT_ALERT_PEEK, DEFAULT_STEWARD, frostFill, MAX_NAME, PANEL_TINT_IDS, PANEL_TINTS, panelTint, panelVars, PILL_COLOR_IDS, PILL_COLORS, TAB_SIZES } from '../src/shared/steward'
 
 describe("the character's colors", () => {
   it('are six at most, with silver among them and first, as the default', () => {
@@ -104,5 +104,22 @@ describe('the frost', () => {
       '--live-light': '14, 150, 98',
       '--frost': '0.12',
     })
+  })
+})
+
+describe('alerts that peek out, by Presence', () => {
+  it('start as a session that needs me when quiet, and as everything switched on when always visible', () => {
+    expect(DEFAULT_ALERT_PEEK).toEqual({ quiet: 'needs-me', always: 'all' })
+    expect(DEFAULT_STEWARD.alertPeek).toBe(DEFAULT_ALERT_PEEK[DEFAULT_STEWARD.presence])
+  })
+
+  it('follow the switch while still on the old default, and stay where someone put them', () => {
+    expect(alertPeekAfterSwitch('always', 'quiet', 'all')).toBe('needs-me')
+    expect(alertPeekAfterSwitch('quiet', 'always', 'needs-me')).toBe('all')
+    // A choice that isn't the old default was made on purpose.
+    expect(alertPeekAfterSwitch('always', 'quiet', 'none')).toBe('none')
+    expect(alertPeekAfterSwitch('always', 'quiet', 'needs-me')).toBe('needs-me')
+    expect(alertPeekAfterSwitch('quiet', 'always', 'all')).toBe('all')
+    expect(alertPeekAfterSwitch('quiet', 'always', 'none')).toBe('none')
   })
 })

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NotchGeometry, NotchState, SessionView, SettingsSection, SettingsView, TrayItem } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, Brief, StewardAPI, DockState, LeftOff, Mood, NightReport, NotchGeometry, NotchState, ReviewCheck, ReviewProblem, ReviewView, SessionView, SettingsSection, SettingsView, TrayItem, WatchView } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, payload: T) => cb(payload)
@@ -12,8 +12,18 @@ const api: StewardAPI = {
     expand: () => ipcRenderer.invoke('dock:expand'),
     collapse: () => ipcRenderer.invoke('dock:collapse'),
     hide: () => ipcRenderer.invoke('dock:hide'),
-    view: () => ipcRenderer.invoke('dock:view'),
+    view: (kind = 'tray') => ipcRenderer.invoke('dock:view', kind),
     onState: (cb) => subscribe<DockState>('dock:state', cb),
+    drag: (phase, dy) => ipcRenderer.send('dock:drag', phase, dy),
+    resetPlace: () => ipcRenderer.invoke('dock:resetPlace'),
+    overhang: () => ipcRenderer.invoke('dock:overhang'),
+    onOverhang: (cb) => subscribe<number>('dock:overhang', cb),
+    intoNotchEnded: () => ipcRenderer.send('dock:intoNotchEnded'),
+    nudgeWords: (height) => ipcRenderer.send('dock:nudgeWords', height),
+    dragPanel: (phase, x, y) => ipcRenderer.send('dock:dragPanel', phase, x, y),
+    resetPanel: () => ipcRenderer.invoke('dock:resetPanel'),
+    onPlaced: (cb) => subscribe<boolean>('dock:placed', cb),
+    onLeft: (cb) => subscribe<void>('dock:left', cb),
   },
   tray: {
     list: () => ipcRenderer.invoke('tray:list'),
@@ -43,8 +53,11 @@ const api: StewardAPI = {
     setVercelToken: (token) => ipcRenderer.invoke('settings:setVercelToken', token),
     addProject: () => ipcRenderer.invoke('settings:addProject'),
     addProjectAndSwitch: () => ipcRenderer.invoke('settings:addProjectAndSwitch'),
+    addStepAsideApp: () => ipcRenderer.invoke('settings:addStepAsideApp'),
     addProjectPath: (path) => ipcRenderer.invoke('settings:addProjectPath', path),
     removeProject: (path) => ipcRenderer.invoke('settings:removeProject', path),
+    setProjectUrl: (path, url) => ipcRenderer.invoke('settings:setProjectUrl', path, url),
+    setProjectPhone: (path, on) => ipcRenderer.invoke('settings:setProjectPhone', path, on),
     setCurrentProject: (path) => ipcRenderer.invoke('settings:setCurrentProject', path),
     setAllowlist: (list) => ipcRenderer.invoke('settings:setAllowlist', list),
     suggestProjects: () => ipcRenderer.invoke('settings:suggestProjects'),
@@ -64,9 +77,39 @@ const api: StewardAPI = {
   alerts: {
     onShow: (cb) => subscribe<AlertView[]>('alerts:show', cb),
     onMood: (cb) => subscribe<Mood | null>('alerts:mood', cb),
+    onAct: (cb) => subscribe<AlertView>('alerts:act', cb),
   },
   deploys: {
     status: () => ipcRenderer.invoke('deploys:status'),
+  },
+  review: {
+    list: () => ipcRenderer.invoke('review:list'),
+    onChanged: (cb) => subscribe<ReviewView[]>('review:changed', cb),
+    onOpen: (cb) => subscribe<string>('review:open', cb),
+    problems: () => ipcRenderer.invoke('review:problems'),
+    onProblems: (cb) => subscribe<ReviewProblem[]>('review:problems', cb),
+    checks: () => ipcRenderer.invoke('review:checks'),
+    onChecks: (cb) => subscribe<ReviewCheck[]>('review:checks', cb),
+    tryIt: (path) => ipcRenderer.invoke('review:tryIt', path),
+    markGood: (id) => ipcRenderer.invoke('review:markGood', id),
+    sendBack: (id, note) => ipcRenderer.invoke('review:sendBack', id, note),
+    openFull: (id, which) => ipcRenderer.invoke('review:openFull', id, which),
+    history: (projectPath) => ipcRenderer.invoke('review:history', projectPath),
+    onHistory: (cb) => subscribe<void>('review:history', () => cb()),
+    usage: () => ipcRenderer.invoke('review:usage'),
+    clear: () => ipcRenderer.invoke('review:clear'),
+  },
+  watch: {
+    get: () => ipcRenderer.invoke('watch:get'),
+    start: (wakeTime) => ipcRenderer.invoke('watch:start', wakeTime),
+    stop: (why) => ipcRenderer.invoke('watch:stop', why),
+    setWakeTime: (wakeTime) => ipcRenderer.invoke('watch:setWakeTime', wakeTime),
+    onChanged: (cb) => subscribe<WatchView>('watch:changed', cb),
+    onGoodnight: (cb) => subscribe<void>('watch:goodnight', () => cb()),
+    report: (id) => ipcRenderer.invoke('watch:report', id),
+    nights: () => ipcRenderer.invoke('watch:nights'),
+    clear: () => ipcRenderer.invoke('watch:clear'),
+    onReport: (cb) => subscribe<NightReport>('watch:report', cb),
   },
   leftOff: {
     onShow: (cb) => subscribe<LeftOff>('leftoff:show', cb),
@@ -92,6 +135,15 @@ const api: StewardAPI = {
     onState: (cb) => subscribe<NotchState>('notch:state', cb),
     onCursor: (cb) => subscribe<{ x: number; y: number } | null>('notch:cursor', cb),
     click: () => ipcRenderer.send('notch:click'),
+    fit: (at, fit) => ipcRenderer.send('notch:fit', at, fit),
+    act: (what, at) => ipcRenderer.send('notch:act', what, at),
+  },
+  presence: {
+    onNote: (cb) => subscribe<string>('presence:note', cb),
+    slid: () => ipcRenderer.invoke('presence:slid'),
+    onSlide: (cb) => subscribe<{ out: boolean; animate: boolean }>('presence:slide', cb),
+    onNear: (cb) => subscribe<boolean>('presence:near', cb),
+    slideEnded: (by) => ipcRenderer.send('presence:slideEnded', by),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 }

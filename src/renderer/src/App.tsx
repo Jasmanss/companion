@@ -1,21 +1,32 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
+import { rankCards, type Card } from '../../shared/cards'
+import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
-import { DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
-import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, Project, SaveResult, SessionView, SettingsView, TrayItem } from '../../shared/types'
+import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
+import type { ActivityKind, AgentEvent, AlertView, Brief, DockState, LeftOff, Mood, NightReport, NotchGeometry, Project, ReviewView, SaveResult, SessionView, SettingsView, TrayItem, ViewerKind, WatchView } from '../../shared/types'
 import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
 import { ContextPill, ProjectSwitcher } from './ContextPill'
-import { ChevronRightIcon, GearIcon, HideIcon, NewChatIcon, PinIcon } from './icons'
+import { BellIcon, BranchIcon, ChevronRightIcon, EyeIcon, GearIcon, ImageIcon, MoonIcon, NewChatIcon, PeopleIcon, SparkIcon, SunriseIcon, WarningIcon } from './icons'
 import { BriefCard } from './BriefCard'
-import { LeftOffCard } from './LeftOffCard'
-import { Nudge } from './Nudge'
+import { LeftOffBody, LeftOffSmall } from './LeftOffCard'
+import { ReviewCard, ReviewProblems } from './ReviewCard'
+import { ReviewViewer } from './ReviewViewer'
+import { GoodnightCard } from './GoodnightCard'
+import { NightReportCard } from './NightReportCard'
+import { NotchNudge, Nudge } from './Nudge'
 import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
-import { Pill, pillKey } from './Pill'
+import { Pill, pillKey, useMedia } from './Pill'
+import { useIdleMove } from './idle-loop'
 import { glintFor, workingMood } from './pill/glint'
-import { SessionStrip } from './SessionStrip'
+import { palette } from './pill/render'
+import { useTabDrag } from './tab-drag'
+import { usePanelDrag } from './panel-drag'
+import { useDimmed } from './dim'
+import { FailedBuild, NewsRows, NoteRows, SessionRows, Tile, TryChips, type Note } from './Tile'
 import { Tray } from './Tray'
 import { Viewer } from './Viewer'
 
@@ -37,6 +48,13 @@ function urlFromDrag(data: DataTransfer): { url: string; source?: string } | nul
 
 const canDrop = (e: globalThis.DragEvent) => ['Files', 'text/uri-list', 'text/html'].some((t) => e.dataTransfer?.types.includes(t))
 
+/** How long after its own end time a slide out counts as over when no frame came to draw its end (see the slide below). */
+const SLIDE_END_GRACE_MS = 100
+/** The most alerts the news card keeps. */
+const MAX_NEWS = 10
+/** Alerts with a card of their own (a session's, a review's, a failed build's, the night's): the news card leaves them out. */
+const OWN_CARD = ['approval:', 'input:', 'agent-approval:', 'review:', 'finished:', 'night:', 'deploy-failed:', 'first-peek']
+
 export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
   const [items, setItems] = useState<TrayItem[]>([])
@@ -49,12 +67,29 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null)
   const [viewIndex, setViewIndex] = useState(0)
+  // The big view shows the tray's images or a review's before and after; which one it is, and which review.
+  const [viewKind, setViewKind] = useState<ViewerKind>('tray')
+  const [reviewIndex, setReviewIndex] = useState(0)
   const [sessions, setSessions] = useState<SessionView[]>([])
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
-  const [banner, setBanner] = useState<AlertView | null>(null)
+  /** Alerts that came while the panel was open, or waited for it to open: a failed build's card, and the news card. */
+  const [held, setHeld] = useState<AlertView[]>([])
+  /** A thing to try, picked from the Try card: it goes in the box. */
+  const [draft, setDraft] = useState<{ text: string; at: number } | null>(null)
+  /** The one-time note about Steward hiding until it's needed. */
+  const [presenceNote, setPresenceNote] = useState<string | null>(null)
   const [eventMood, setEventMood] = useState<Mood | null>(null)
   const [leftOff, setLeftOff] = useState<LeftOff | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
+  /** Visual Review: what changed on a running page, waiting for a decision. "Later" hides one until the panel opens again. */
+  const [reviews, setReviews] = useState<ReviewView[]>([])
+  const [laterReviews, setLaterReviews] = useState<ReadonlySet<string>>(new Set())
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null)
+  // Overnight Watch: the night going on (or not), and the goodnight card, open or not.
+  const [watchView, setWatchView] = useState<WatchView | null>(null)
+  const [goodnight, setGoodnight] = useState(false)
+  // The night report showing, if one is: after a night, or opened from the card.
+  const [nightReport, setNightReport] = useState<NightReport | null>(null)
   const [lateNight, setLateNight] = useState(() => isLateNight(new Date()))
   const [switcher, setSwitcher] = useState(false)
   const switcherShown = usePresence(switcher)
@@ -77,20 +112,23 @@ export function App() {
     api.tray.list().then(setItems, showError)
     api.settings.get().then(setSettings, showError)
     api.sessions.list().then(setSessions, showError)
+    api.review.list().then(setReviews, showError)
     // The agent can switch projects too.
     const offSettings = api.settings.onChanged(setSettings)
-    const offDock = api.dock.onState(setDock)
+    const offDock = api.dock.onState((state) => {
+      setDock(state)
+      if (state === 'expanded') setLaterReviews(new Set())
+    })
+    const offReview = api.review.onChanged(setReviews)
     const offTray = api.tray.onChanged(setItems)
     const offAgent = api.agent.onEvent(handleAgentEvent)
     const offSessions = api.sessions.onChanged(setSessions)
     const offAlerts = api.alerts.onShow(handleAlerts)
+    const offNote = api.presence.onNote(setPresenceNote)
     const offMood = api.alerts.onMood(setEventMood)
     const offLeftOff = api.leftOff.onShow(setLeftOff)
-    // The brief already includes where you left off.
-    const offBrief = api.brief.onShow((b) => {
-      setBrief(b)
-      setLeftOff(null)
-    })
+    // The brief already says where you left off: that card waits while it shows (rankCards).
+    const offBrief = api.brief.onShow(setBrief)
     // Frosted by macOS (vibrant) or solid: the CSS draws the glass to match.
     const showAppearance = ({ vibrant }: { vibrant: boolean }) => document.documentElement.toggleAttribute('data-vibrant', vibrant)
     api.appearance.get().then(showAppearance, () => {})
@@ -102,12 +140,14 @@ export function App() {
       offMood()
       offLeftOff()
       offBrief()
+      offReview()
       clearInterval(clock)
       offDock()
       offTray()
       offAgent()
       offSessions()
       offAlerts()
+      offNote()
     }
     // The handlers only use state setters and refs, so subscribing once is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,21 +160,161 @@ export function App() {
   }, [toast])
 
   useEffect(() => {
-    if (!banner) return
-    const t = setTimeout(() => setBanner(null), 6000)
-    return () => clearTimeout(t)
-  }, [banner])
-
-  useEffect(() => {
     currentProject.current = settings?.currentProject ?? null
   }, [settings?.currentProject])
 
   // Settings → Steward, with the defaults for anything an older main process doesn't send.
   const look = { ...DEFAULT_STEWARD, ...settings?.steward }
+  // Only when needed, the tab slides in from the screen edge and back as a transform in the page (see styles.css), so
+  // every frame is the compositor's. The window never moves: macOS puts a window that is partly off screen back on it.
+  useEffect(() => {
+    const root = document.documentElement
+    const jump = (out: boolean) => {
+      root.dataset.slideJump = ''
+      root.dataset.slide = out ? 'out' : 'in'
+      // Read the style now, so the jump is over before the transitions come back.
+      void getComputedStyle(document.getElementById('root')!).transform
+      delete root.dataset.slideJump
+    }
+    // The window goes when the slide out has ended (the transform, or with Reduce Motion the fade), not on a guess.
+    // transitionend only comes with a drawn frame, and a page that isn't being drawn (a sleeping screen) gets none, so
+    // the slide's own end time, a little after, says so too.
+    const page = document.getElementById('root')!
+    let clock: ReturnType<typeof setTimeout> | undefined
+    const ended = (by: 'drawn' | 'clock') => {
+      clearTimeout(clock)
+      if (root.dataset.slide === 'out') api.presence.slideEnded(by)
+    }
+    const drawn = (e: TransitionEvent) => {
+      if (e.target === page && (e.propertyName === 'transform' || e.propertyName === 'opacity')) ended('drawn')
+    }
+    const slide = ({ out, animate }: { out: boolean; animate: boolean }) => {
+      clearTimeout(clock)
+      if (!animate) return jump(out)
+      // Coming in: the first frame is drawn away, and the next one starts the slide.
+      if (!out && root.dataset.slide === 'out') requestAnimationFrame(() => (root.dataset.slide = 'in'))
+      else root.dataset.slide = out ? 'out' : 'in'
+      if (!out) return
+      // getAnimations() brings the style up to date, so the slide's transition is there, with its length.
+      const ms = Math.max(0, ...page.getAnimations().map((a) => Number(a.effect?.getComputedTiming().endTime) || 0))
+      clock = setTimeout(() => ended('clock'), ms + SLIDE_END_GRACE_MS)
+    }
+    page.addEventListener('transitionend', drawn)
+    void api.presence.slid().then(jump)
+    const off = api.presence.onSlide(slide)
+    return () => {
+      off()
+      clearTimeout(clock)
+      page.removeEventListener('transitionend', drawn)
+    }
+  }, [])
+
+  // The tab and the nudge hang a little past the screen edge (so the window's rounded corners are off the screen); the
+  // part that hangs over stays empty (see styles.css).
+  useEffect(() => {
+    const set = (points: number) => document.documentElement.style.setProperty('--overhang', `${points}px`)
+    void api.dock.overhang().then(set)
+    return api.dock.onOverhang(set)
+  }, [])
+
   // The tab and the panel's animations face away from the screen edge it sits on.
   useEffect(() => {
     document.documentElement.dataset.edge = look.edge
   }, [look.edge])
+
+  // Docked in the notch: the nudge comes out under it, and closing plays the way out before the window goes (below).
+  const [notchGeo, setNotchGeo] = useState<NotchGeometry | null>(null)
+  useEffect(() => {
+    void api.notch.geometry().then(setNotchGeo)
+    return api.notch.onGeometry(setNotchGeo)
+  }, [])
+
+  // Dragged somewhere, the panel pops in and out where it is (styles.css). Main says so just before it opens or closes,
+  // and the attribute is set right away, so the panel's first frame already has the right entrance.
+  const [placed, setPlaced] = useState(false)
+  useEffect(
+    () =>
+      api.dock.onPlaced((on) => {
+        document.documentElement.toggleAttribute('data-placed', on)
+        setPlaced(on)
+      }),
+    [],
+  )
+  const panelDrag = usePanelDrag()
+
+  // Overnight Watch: the night going on or not, and Goodnight from the menu bar opening the card. Closing the panel
+  // puts the card away (a night going on still shows next time).
+  useEffect(() => {
+    api.watch.get().then(setWatchView, () => {})
+    const offWatch = api.watch.onChanged(setWatchView)
+    const offGoodnight = api.watch.onGoodnight(() => setGoodnight(true))
+    // The report is the morning's brief, and its card's click is what opened the panel: neither shows as well.
+    const offReport = api.watch.onReport((report) => {
+      setNightReport(report)
+      setGoodnight(false)
+      setBrief(null)
+      setHeld((list) => list.filter((a) => !a.key.startsWith('night:')))
+    })
+    return () => {
+      offWatch()
+      offGoodnight()
+      offReport()
+    }
+  }, [])
+  const openNightReport = (id: string) =>
+    api.watch.report(id).then((report) => {
+      if (report) {
+        setNightReport(report)
+        setGoodnight(false)
+      }
+    }, showError)
+  // A review decided inside the report changes what the report says about it.
+  useEffect(() => {
+    if (nightReport) void api.watch.report(nightReport.id).then((r) => r && setNightReport(r), () => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviews])
+  useEffect(() => {
+    if (dock === 'collapsed' || dock === 'hidden') setGoodnight(false)
+  }, [dock])
+
+  // Docked in the notch, closing doesn't swap the panel for the edge's tab: what was out stays and plays its way out
+  // (styles.css: the panel or the viewer slides back toward its side, a nudge goes back up into the notch), and then
+  // tells main the window can go. A moved panel does
+  // the same where it is, at the edge too. What's next is drawn once main says the window has gone or moved (onLeft),
+  // so the tab never shows for a frame in the panel's window. Worked out while rendering, for the same reason.
+  const [leaving, setLeaving] = useState<DockState | null>(null)
+  const [shownDock, setShownDock] = useState(dock)
+  if (dock !== shownDock) {
+    setShownDock(dock)
+    const wasOpen = shownDock === 'expanded' || shownDock === 'viewing'
+    const wasOut = wasOpen || shownDock === 'nudge'
+    const closing = dock === 'collapsed' || dock === 'hidden'
+    setLeaving(closing && ((wasOut && look.notch && notchGeo !== null) || (wasOpen && placed)) ? shownDock : null)
+  }
+  useEffect(() => api.dock.onLeft(() => setLeaving(null)), [])
+  const leavingInPlace = leaving !== null && leaving !== 'nudge' && placed
+  useEffect(() => {
+    if (!leaving) return
+    const root = document.documentElement
+    root.setAttribute('data-leaving', leavingInPlace ? 'in-place' : '')
+    let told = false
+    const done = () => {
+      if (told) return
+      told = true
+      api.dock.intoNotchEnded()
+    }
+    // Its own end, or (a page that isn't being drawn gets no animationend) a moment after it should have ended.
+    const ended = (e: AnimationEvent) => {
+      if (['panel-out', 'panel-fade-out', 'nudge-up', 'panel-settle-out'].includes(e.animationName)) done()
+    }
+    document.addEventListener('animationend', ended)
+    const timer = setTimeout(done, 400)
+    return () => {
+      document.removeEventListener('animationend', ended)
+      clearTimeout(timer)
+      root.removeAttribute('data-leaving')
+    }
+  }, [leaving, leavingInPlace])
 
   // The glass's tint and frost, from Settings → Steward.
   useEffect(() => applyPanelLook({ tint: look.tint, frost: look.frost }), [look.tint, look.frost])
@@ -149,10 +329,10 @@ export function App() {
     if (refocus) pill.current?.focus()
   }, [])
 
-  /** Alerts the main process let through: the nudge shows them when tucked away, a banner when the panel is open. */
+  /** Alerts the main process let through: the nudge shows them when tucked away, the panel's cards when it's open. */
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
-    setBanner(list[0] ?? null)
+    setHeld((before) => [...list, ...before.filter((a) => !list.some((b) => b.key === a.key))].slice(0, MAX_NEWS))
   }
 
   const tuckAway = useCallback(() => {
@@ -211,7 +391,7 @@ export function App() {
       case 'approval':
         setEntries((prev) => [
           ...prev,
-          { kind: 'approval', id: nextId++, approvalId: event.id, command: event.command, cwd: event.cwd, why: event.why, status: 'pending' },
+          { kind: 'approval', id: nextId++, approvalId: event.id, command: event.command, cwd: event.cwd, why: event.why, reason: event.reason, status: 'pending' },
         ])
         break
       case 'approval-resolved':
@@ -356,7 +536,14 @@ export function App() {
 
   const openViewer = (index: number) => {
     setViewIndex(index)
-    void api.dock.view()
+    setViewKind('tray')
+    void api.dock.view('tray')
+  }
+
+  const openReview = (index: number) => {
+    setReviewIndex(index)
+    setViewKind('review')
+    void api.dock.view('review')
   }
 
   const pickProject = (project: Project) => {
@@ -375,32 +562,200 @@ export function App() {
     void api.agent.reset()
   }
 
-  // The pin is the "tuck away when I click elsewhere" setting, so Settings shows it too.
-  const pinned = settings?.keepPanelOpen ?? false
-  const waiting = sessions.some((s) => s.state === 'needs-approval' || s.state === 'needs-input')
-  const mood = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked: dock === 'collapsed' || dock === 'hidden' }), work)
+  // An approval is needs-you; a chat waiting for input is confused (main's reactions say so).
+  const waiting = sessions.some((s) => s.state === 'needs-approval')
+  const tucked = dock === 'collapsed' || dock === 'hidden'
+  const calm = workingMood(pickMood({ agentMood, eventMood, listening: dragOver || typing, waiting, lateNight, tucked, watching: watchView?.watching }), work)
   const glint = glintFor(work)
+  // Dim when idle: the tab's eyes fade after a while at rest, until something happens or the cursor comes near.
+  const [near, setNear] = useState(false)
+  useEffect(() => api.presence.onNear(setNear), [])
+  const tabDimmed = useDimmed(canDim({ enabled: look.dimWhenIdle, atRest: dock === 'collapsed' && !busy, near }), calm)
+  // The idle loop: now and then a small move while nothing is going on (shared/idle-loop). Not on dimmed eyes, nor
+  // tucked away with the cursor near (they follow it), nor with an alert out. The notch checks its own eyes too.
+  const reduced = useMedia('(prefers-reduced-motion: reduce)')
+  const move = useIdleMove({ liveliness: look.liveliness, mood: calm, spot: tucked ? 'peek' : 'panel', reduced, dimmed: tucked && (tabDimmed || near), alertOut: dock === 'nudge' })
+  const mood = move ?? calm
   // Docked in the notch, the notch window shows the character: it gets the same mood.
   useEffect(() => api.notch.reportMood(mood, glint), [mood, glint])
   const tab = TAB_SIZES[look.size].pill
+  // The tab at the edge: the panel opens inward from it.
+  const inward = look.edge === 'right' ? -1 : 1
+  // The tab can be dragged up or down its edge; a plain click still opens the panel.
+  const tabDrag = useTabDrag(() => void api.dock.expand())
   const noKey = settings?.apiKeySource === 'none'
+  const shownReviews = reviews.filter((r) => !laterReviews.has(r.id))
+  // The night report shows its night's reviews itself, so the card at the top is for the others.
+  const inReport = new Set(nightReport?.reviews.map((r) => r.id))
+  const topReviews = shownReviews.filter((r) => !inReport.has(r.id))
+  const noReviewToView = dock === 'viewing' && viewKind === 'review' && shownReviews.length === 0
+  useEffect(() => {
+    if (noReviewToView) void api.dock.expand()
+  }, [noReviewToView])
 
   /** "Want me to look?" and the like: open the panel and ask the agent. */
   const runAction = (alert: AlertView) => {
     if (!alert.action) return
-    setBanner(null)
+    setHeld((list) => list.filter((a) => a.key !== alert.key))
     void api.dock.expand()
     if (noKey) return setToast('Add your Anthropic API key in Settings first.')
     send(alert.action.prompt)
   }
-  const hide = settings?.shortcuts?.hideFromEdge
-  const hideKey = hide?.active ? ` (${formatAccelerator(hide.accelerator)})` : ''
+  // From the notch island: an alert's offer taken there, and a review's Open big.
+  const fromIsland = useRef<{ runAction(alert: AlertView): void; openReviewById(id: string): void } | null>(null)
+  fromIsland.current = {
+    runAction,
+    openReviewById: (id) => {
+      const index = shownReviews.findIndex((r) => r.id === id)
+      if (index >= 0) openReview(index)
+    },
+  }
+  useEffect(() => {
+    const offAct = api.alerts.onAct((alert) => fromIsland.current?.runAction(alert))
+    const offOpen = api.review.onOpen((id) => fromIsland.current?.openReviewById(id))
+    return () => {
+      offAct()
+      offOpen()
+    }
+  }, [])
+  // The home: every block is a tile, the most important one promoted (rankCards). Alerts that came while the panel was
+  // open: a failed build gets its own card, the rest are news.
+  const failedAlert = held.find((a) => a.key.startsWith('deploy-failed:'))
+  const news = held.filter((a) => !OWN_CARD.some((k) => a.key.startsWith(k)))
+  const dropHeld = (keep: (a: AlertView) => boolean) => setHeld((list) => list.filter(keep))
+  const notes: Note[] = [
+    presenceNote && { text: presenceNote, label: 'Got it', run: () => setPresenceNote(null) },
+    reviewNotice && { text: reviewNotice, label: 'Got it', run: () => setReviewNotice(null) },
+    noKey && { text: 'Add your Anthropic API key to start chatting.', label: 'Open settings', run: () => void api.settings.open('connections') },
+  ].filter((n): n is Note => !!n)
+  const cards = rankCards({
+    sessions,
+    reviews: topReviews.length,
+    failed: !!failedAlert,
+    news: news.length,
+    first: nightReport ? 'night' : brief ? 'brief' : null,
+    leftOff: !!leftOff,
+    tray: items.length,
+    notes: notes.length,
+    chatting: entries.length > 0,
+    now: Date.now(),
+  })
+  const tile = (card: Card) => {
+    const promoted = card.size === 'promoted'
+    switch (card.kind) {
+      case 'sessions':
+        return (
+          <Tile key={card.kind} card={card} icon={<PeopleIcon />} label={promoted && !card.urgent ? 'Sessions finished' : 'Sessions'} count={sessions.length}>
+            <SessionRows sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
+          </Tile>
+        )
+      case 'review': {
+        const top = topReviews[0]
+        return (
+          <Tile key={card.kind} card={card} icon={<EyeIcon />} label="Review" count={topReviews.length}>
+            <ReviewCard
+              key={top.id}
+              review={top}
+              more={topReviews.length - 1}
+              onOpen={() => openReview(shownReviews.indexOf(top))}
+              onLater={() => setLaterReviews(new Set(laterReviews).add(top.id))}
+              onDone={setReviewNotice}
+              onError={setToast}
+            />
+          </Tile>
+        )
+      }
+      case 'failed':
+        return (
+          <Tile key={card.kind} card={card} icon={<WarningIcon />} label="Build failed">
+            <FailedBuild alert={failedAlert!} onAction={runAction} onDismiss={() => dropHeld((a) => a.key !== failedAlert!.key)} />
+          </Tile>
+        )
+      case 'news':
+        return (
+          <Tile key={card.kind} card={card} icon={<BellIcon />} label="News" count={news.length}>
+            <NewsRows alerts={news} onClear={() => dropHeld((a) => !news.includes(a))} />
+          </Tile>
+        )
+      case 'night':
+        return (
+          <Tile key={card.kind} card={card} icon={<MoonIcon />} label="Night report">
+            <NightReportCard
+              report={nightReport!}
+              pending={reviews}
+              onStep={openNightReport}
+              onDismiss={() => setNightReport(null)}
+              onOpenReview={(id) => {
+                const i = shownReviews.findIndex((r) => r.id === id)
+                if (i >= 0) openReview(i)
+              }}
+              onReviewDone={setReviewNotice}
+              onError={setToast}
+            />
+          </Tile>
+        )
+      case 'brief':
+        return (
+          <Tile key={card.kind} card={card} icon={<SunriseIcon />} label="Morning brief">
+            <BriefCard brief={brief!} onDismiss={() => setBrief(null)} />
+          </Tile>
+        )
+      case 'leftoff':
+        return (
+          <Tile key={card.kind} card={card} icon={<BranchIcon />} label={promoted ? 'Where you left off' : 'Left off'}>
+            {promoted ? <LeftOffBody card={leftOff!} /> : <LeftOffSmall card={leftOff!} />}
+          </Tile>
+        )
+      case 'tray':
+        return (
+          <Tile key={card.kind} card={card} icon={<ImageIcon />} label="Tray" count={items.length}>
+            <Tray items={items} saveResult={saveResult} onDragOut={dragOut} onOpen={openViewer} onSave={saveToProject} onDismissSave={() => setSaveResult(null)} onError={showError} />
+          </Tile>
+        )
+      case 'try':
+        return (
+          <Tile key={card.kind} card={card} icon={<SparkIcon />} label="Try">
+            <TryChips
+              onPick={(text) => {
+                setDraft({ text, at: Date.now() })
+                composer.current?.focus()
+              }}
+            />
+          </Tile>
+        )
+      case 'note':
+        return (
+          <Tile key={card.kind} card={card} icon={<BellIcon />} label="Note">
+            <NoteRows notes={notes} />
+          </Tile>
+        )
+    }
+  }
   const project = settings?.projects.find((p) => p.path === settings.currentProject) ?? null
   const lastFile = project ? lastFiles[project.path] : undefined
   // Working: what it's on right now. Idle: the last file it read here.
   const pillTouch: Touch | null = (busy && touch) || (lastFile ? { kind: 'file', text: lastFile } : null)
 
-  if (dock === 'viewing' && items.length > 0) {
+  // Going back into the notch, what was open stays on screen until it's gone (see leaving, above).
+  const view = leaving ?? dock
+
+  if (view === 'viewing' && viewKind === 'review') {
+    // Decided or cleared while it's open: an empty viewer for the moment it takes to go back to the panel.
+    if (!shownReviews.length) return <div className="viewer review-viewer" data-app />
+    return (
+      <ReviewViewer
+        reviews={shownReviews}
+        index={Math.min(reviewIndex, shownReviews.length - 1)}
+        onIndex={setReviewIndex}
+        onDone={(text) => {
+          void api.dock.expand()
+          setReviewNotice(text)
+        }}
+      />
+    )
+  }
+
+  if (view === 'viewing' && items.length > 0) {
     return (
       <Viewer
         items={items}
@@ -413,19 +768,24 @@ export function App() {
     )
   }
 
-  if (dock === 'nudge') {
+  if (view === 'nudge' && look.notch && notchGeo) {
+    const lit = palette(look.version, { color: colorHex(look.color), tinted: true, light: false, mouth: look.mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
+    return <NotchNudge alerts={nudgeAlerts} notchWidth={notchGeo.width} lit={lit} onOpen={() => api.dock.expand()} onDismiss={tuckAway} />
+  }
+
+  if (view === 'nudge') {
     return (
       <Nudge alerts={nudgeAlerts} onOpen={() => api.dock.expand()} onDismiss={tuckAway} onAction={runAction}>
-        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} />
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} panelSide={inward} />
       </Nudge>
     )
   }
 
-  if (dock === 'collapsed' || dock === 'hidden') {
+  if (view === 'collapsed' || view === 'hidden') {
     const open = settings?.shortcuts?.togglePanel
     return (
-      <button className="peek" data-app onClick={() => api.dock.expand()} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
-        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked />
+      <button className="peek" data-app data-dim={`setting ${look.dimWhenIdle}, ${dock}, busy ${busy}, near ${near}, ${mood}`} {...tabDrag} title={open?.active ? `${look.name} (${formatAccelerator(open.accelerator)})` : look.name}>
+        <Pill mood={mood} glint={glint} width={tab.width} height={tab.height} cls="peek" look={look} tucked dimmed={tabDimmed} panelSide={inward} />
         {items.length > 0 && <span className="peek-count">{items.length}</span>}
       </button>
     )
@@ -433,28 +793,26 @@ export function App() {
 
   return (
     <div className={`panel ${dragOver ? 'drag-over' : ''}`} data-app>
-      <header className="panel-head">
+      <header className="panel-head" title="Drag to move. Double-click to put it back." {...panelDrag}>
         <Pill mood={mood} glint={glint} width={64} height={54} cls="header" look={look} />
         <div className="head-text">
           <div className="head-top">
             <span className="name">{look.name}</span>
             <div className="head-actions">
+              <button
+                className={`icon-btn ${watchView?.watching || goodnight ? 'on' : ''}`}
+                aria-label="Goodnight"
+                title={watchView?.watching ? 'Overnight Watch is on' : 'Goodnight: watch overnight'}
+                aria-pressed={goodnight || Boolean(watchView?.watching)}
+                onClick={() => setGoodnight(!goodnight)}
+              >
+                <MoonIcon />
+              </button>
               <button className="icon-btn" aria-label="New chat" title="New chat" disabled={entries.length === 0 || busy} onClick={newChat}>
                 <NewChatIcon />
               </button>
-              <button
-                className={`icon-btn ${pinned ? 'on' : ''}`}
-                aria-label={pinned ? 'Unpin panel' : 'Keep panel open'}
-                aria-pressed={pinned}
-                onClick={() => api.settings.update({ keepPanelOpen: !pinned }).then(setSettings, showError)}
-              >
-                <PinIcon on={pinned} />
-              </button>
               <button className="icon-btn" aria-label="Settings" title={settingsKey ? `Settings (${formatAccelerator(settingsKey)})` : 'Settings'} onClick={() => api.settings.open()}>
                 <GearIcon />
-              </button>
-              <button className="icon-btn" aria-label="Hide from the screen edge" title={`Hide from the screen edge${hideKey}. Bring it back from the menu bar icon.`} onClick={() => api.dock.hide()}>
-                <HideIcon />
               </button>
               <button className="icon-btn" aria-label="Tuck away" title="Tuck away (Esc)" onClick={() => api.dock.collapse()}>
                 <ChevronRightIcon />
@@ -479,57 +837,27 @@ export function App() {
           settings={settings}
           anchor={pill}
           leaving={switcherShown.leaving}
+          reviewing={new Set(reviews.map((r) => r.projectPath))}
           onPick={pickProject}
           onAdd={addProject}
           onClose={closeSwitcher}
         />
       )}
 
-      <SessionStrip sessions={sessions} onDismiss={(id) => api.sessions.dismiss(id).catch(showError)} />
-      {banner && (
-        <div className="banner" role="status" onClick={() => setBanner(null)}>
-          <strong>{banner.title}</strong>
-          {banner.detail && <span>{banner.detail}</span>}
-          {banner.action && (
-            <button
-              className="chip"
-              onClick={(e) => {
-                e.stopPropagation()
-                runAction(banner)
-              }}
-            >
-              {banner.action.label}
-            </button>
-          )}
-        </div>
-      )}
-
-      <Tray
-        items={items}
-        saveResult={saveResult}
-        onDragOut={dragOut}
-        onOpen={openViewer}
-        onSave={saveToProject}
-        onDismissSave={() => setSaveResult(null)}
-        onError={showError}
-      />
       <div className="body">
-        {brief && <BriefCard brief={brief} onDismiss={() => setBrief(null)} />}
-        {leftOff && <LeftOffCard card={leftOff} onDismiss={() => setLeftOff(null)} />}
-        {noKey && (
-          <div className="notice">
-            Add your Anthropic API key to start chatting.
-            <button className="chip" onClick={() => api.settings.open('connections')}>
-              Open settings
-            </button>
-          </div>
-        )}
-        <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />
+        {watchView && (goodnight || watchView.watching) && <GoodnightCard view={watchView} onClose={() => setGoodnight(false)} onReport={openNightReport} onError={setToast} />}
+        <ReviewProblems />
+        {cards.length > 0 && <div className={`tiles${entries.length > 0 ? ' above' : ''}`}>{cards.map(tile)}</div>}
+        {entries.length > 0 && <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />}
       </div>
       <Composer
         busy={busy}
         disabled={noKey}
+        mode={settings?.commandMode}
+        // Always sent, even if it looks the same: the panel's copy of the settings can lag a click behind.
+        onMode={(commandMode) => api.settings.update({ commandMode }).then(setSettings, showError)}
         onSend={send}
+        draft={draft}
         onStop={() => api.agent.cancel()}
         onTyping={(on) => {
           setTyping(on)

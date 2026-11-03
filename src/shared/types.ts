@@ -3,12 +3,42 @@
  * expanded: the panel · viewing: the large image viewer
  */
 export type DockState = 'hidden' | 'collapsed' | 'nudge' | 'expanded' | 'viewing'
+/** What the viewing state shows: the tray's images, or a Visual Review's before and after (a bigger window). */
+export type ViewerKind = 'tray' | 'review'
 
 /**
  * What the character's face shows. Some come from real events: mad and then worried for a failed build, celebrating
- * for a deploy or merge, sleepy for the hour.
+ * for a deploy or merge, sleepy for the hour. The reactions follow the chats (main/reactions.ts): focused while one
+ * works, juggling while several do, a nod, done or proud when one stops (by how long its turn was), confused when one
+ * asks you something, hello when you're back at the Mac. Watching is Overnight Watch: half-lidded, a slow blink.
+ * The idle loop's moves (shared/idle-loop) play now and then while nothing is going on: ponder, look around, a small
+ * smile, and rarely a yawn (a slow blink at the notch) or a stretch.
  */
-export type Mood = 'resting' | 'idle' | 'listening' | 'thinking' | 'talking' | 'done' | 'needs-you' | 'worried' | 'mad' | 'celebrating' | 'sleepy'
+export type Mood =
+  | 'resting'
+  | 'idle'
+  | 'listening'
+  | 'thinking'
+  | 'talking'
+  | 'done'
+  | 'needs-you'
+  | 'worried'
+  | 'mad'
+  | 'celebrating'
+  | 'sleepy'
+  | 'confused'
+  | 'focused'
+  | 'juggling'
+  | 'nod'
+  | 'proud'
+  | 'hello'
+  | 'watching'
+  | 'ponder'
+  | 'lookaround'
+  | 'smile'
+  | 'yawn'
+  | 'stretch'
+  | 'slowblink'
 
 /** Glass: a tinted lens. Flat: one solid color. Blocky: pixels. */
 export type PillVersion = 'glass' | 'flat' | 'blocky'
@@ -18,7 +48,58 @@ export type PillColor = 'silver' | 'sky' | 'lilac' | 'mint' | 'peach' | 'graphit
 /** The color the panel's glass is tinted with. */
 export type PanelTint = 'ice' | 'lilac' | 'mint' | 'peach' | 'graphite'
 
-export type NotchStyle = 'chin' | 'wings'
+export type NotchStyle = 'chin' | 'wings' | 'island'
+
+/**
+ * What the island's right side shows (the Smart choice): Claude working (a spinner and the time), two projects working
+ * (a spinner and a count), finished (a check), needs you (an amber mark), asks you something (a "?"), a review ready (a
+ * thumbnail), a build failed (a red mark), good news (a spark, while its note shows).
+ */
+export type IslandRight = 'working' | 'two' | 'finished' | 'needs' | 'asks' | 'review' | 'failed' | 'good'
+export interface IslandStatus {
+  /** null: nothing going on, so no island; Steward peeks from the notch. */
+  right: IslandRight | null
+  /** Working: when the turn began, so the time counts up from it. */
+  since?: number
+  /** Two projects: how many are working. */
+  count?: number
+  /** Finished after a long turn (Steward is proud): a small spark pops once by the check. */
+  spark?: boolean
+  /** A short message, one line under the notch, for a few seconds: the island grows into the note size for it. */
+  note?: IslandNote
+}
+/**
+ * A message the island grows for. The note size: finished ("Main building finished", and what Claude said), started (a
+ * second project started while one works), good (deployed, a PR merged), first (the first launch's how-to), alert (the
+ * catch-all: any other alert, its title and one line). The approval size: wait (a session waits for your OK), input (a
+ * session asks you something), agent (Steward's own request, with Allow and Deny), failed (a build failed). The review
+ * size: review.
+ */
+/** The buttons on the island's messages. */
+export type IslandAct = 'open' | 'later' | 'look' | 'allow' | 'deny' | 'good' | 'big'
+export type IslandNoteKind = 'finished' | 'started' | 'good' | 'first' | 'alert' | 'wait' | 'input' | 'agent' | 'failed' | 'review'
+export interface IslandNote {
+  kind: IslandNoteKind
+  /** The chat's name (or the project's), in bold, then the rest. */
+  name: string
+  text: string
+  /** When it was shown: a new note, even one saying the same, is a new message. */
+  at: number
+  /** The alert it came from, if any: its buttons act on it. */
+  key?: string
+  /** The alert's offer, like "Want me to look?". */
+  action?: string
+  /** Good news that came within a moment of it, joined into this note: "and 2 more". */
+  more?: number
+  /** How its words fit (the notch page measures them): on one line, the long note, or too long. */
+  fit?: 'note' | 'long' | 'toolong'
+}
+
+/** Always visible: the tab (or the notch's chin) is always there. Only when needed: it's out of sight until it's useful. */
+export type Presence = 'always' | 'quiet'
+
+/** Which alerts peek out from where Steward sits: only a session that needs you, everything switched on in Notifications, or none. */
+export type AlertPeek = 'needs-me' | 'all' | 'none'
 
 /** The notch on a display that has one, in screen points (Electron's coordinates). Read from macOS, never guessed. */
 export interface NotchGeometry {
@@ -43,6 +124,16 @@ export interface NotchState {
   layout: NotchLayout | null
   mood: Mood
   glint: PillGlint
+  /** Asleep (Only when needed, at rest): just the notch's own black, no eyes. */
+  awake: boolean
+  /** The cursor is on the black (Always visible): it grows a little. */
+  hover?: boolean
+  /** An alert is out under the notch, joined to the chin (Wings grows its chin for it). */
+  nudge?: boolean
+  /** The island (Settings → Steward → In the notch → Island): what it shows. */
+  island?: IslandStatus
+  /** The panel is open at the side: which way it is from the notch (x and y from -1 to 1), for Steward to look at. */
+  panel?: { x: number; y: number } | null
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */
@@ -55,6 +146,8 @@ export interface StewardPrefs {
   mouth: boolean
   /** Lively glances around, follows the cursor and hops when happy; calm mostly keeps still. */
   personality: 'calm' | 'lively'
+  /** The idle loop: calm adds a small move now and then while nothing is going on; quiet only blinks and glances; off holds still until something happens. */
+  liveliness: 'calm' | 'quiet' | 'off'
   /** Shown in the panel, and what the agent answers to. */
   name: string
   /** The side of the screen it docks on; also where it goes when it can't be in the notch. */
@@ -68,6 +161,24 @@ export interface StewardPrefs {
   /** The panel's glass: its tint, and how frosted it is, 0 (clear) to 100 (frosted). */
   tint: PanelTint
   frost: number
+  /** Always visible, or out of sight until it's needed (a cursor pushed against its spot, an alert, or the hotkey). */
+  presence: Presence
+  /** Which alerts peek out. The rest wait in the menu bar and show as cards when the panel next opens. */
+  alertPeek: AlertPeek
+  /** The eyes fade after a while at rest. Saved now; it does something from the next build. */
+  dimWhenIdle: boolean
+  /** Viewers and recordings don't see Steward. Saved now; it does something from a later build. */
+  hideFromScreenShare: boolean
+  /** Step aside: hidden while an app is full screen on Steward's screen. */
+  hideInFullScreen: boolean
+  /** Step aside: hidden while one of these apps is in front. */
+  hideInApps: StepAsideApp[]
+}
+
+/** An app Steward steps aside for: its bundle id, and its name to show in Settings. */
+export interface StepAsideApp {
+  id: string
+  name: string
 }
 
 export interface TrayItem {
@@ -87,6 +198,10 @@ export interface TrayItem {
 export interface Project {
   name: string
   path: string
+  /** Where the project's app runs on this Mac (Visual Review). Empty means Visual Review is off for the project. */
+  url?: string
+  /** Visual Review looks at the page at a phone's width (390 px) too. Only with an address. */
+  phone?: boolean
 }
 
 /** Which alerts peek out from the screen edge, and which cards the panel shows. All on by default. */
@@ -119,10 +234,14 @@ export interface ShortcutView {
 /** The sections of the Settings window, in sidebar order. */
 export type SettingsSection = 'general' | 'steward' | 'projects' | 'shortcuts' | 'connections' | 'notifications'
 
+/** How Steward's chat runs commands: it asks each time, or runs the safe ones and asks only for risky ones. */
+export type CommandMode = 'ask' | 'auto'
+
 /** What Settings can change in one go. Keys, projects and the allowlist have their own calls. */
 export interface SettingsPatch {
   /** The panel stays open when you click elsewhere (the pin in its header). */
   keepPanelOpen?: boolean
+  commandMode?: CommandMode
   notifications?: Partial<NotificationPrefs>
   openAtLogin?: boolean
   steward?: Partial<StewardPrefs>
@@ -137,6 +256,7 @@ export interface SettingsView {
   hasUnsplashKey: boolean
   hasVercelToken: boolean
   keepPanelOpen: boolean
+  commandMode: CommandMode
   notifications: NotificationPrefs
   /** Lives in macOS, not in the settings file. Unavailable while developing (it would register Electron itself). */
   openAtLogin: { available: boolean; enabled: boolean; needsApproval: boolean }
@@ -152,8 +272,10 @@ export type SessionState = 'working' | 'needs-approval' | 'needs-input' | 'finis
 
 export interface SessionView {
   id: string
-  /** The matching project's name, or the folder name. */
+  /** The chat's own name in the Claude app, else the matching project's name, or the folder name. */
   name: string
+  /** With a chat name: the project or folder, as a quieter second word. */
+  place?: string
   projectPath: string | null
   cwd: string
   state: SessionState
@@ -209,11 +331,172 @@ export interface ClaudeHookStatus {
   connected: boolean
   /** Some are there but need updating, e.g. still pointing at the data folder from before the rename. */
   outdated: boolean
+  /** The prompt hook Visual Review needs (UserPromptSubmit) is in ~/.claude/settings.json with the current command. */
+  reviewHook: boolean
   /** The backup kept from before Steward first changed the settings (file name). */
   backupFile: string
   serverRunning: boolean
   settingsFile: string
   error?: string
+}
+
+/**
+ * Why a night's Watch ended: the wake time, "I'm up", Stop watching, you came back and used the Mac for a couple of
+ * minutes, or the 12-hour cap.
+ */
+export type WatchEnd = 'wake-time' | 'up' | 'stopped' | 'back' | 'cap'
+
+/** Overnight Watch, for the panel: watching or not, and what the goodnight card says Steward can watch tonight. */
+export interface WatchView {
+  watching: boolean
+  /** Watching: since when, and until when (the wake time, or the 12-hour cap). */
+  since?: number
+  until?: number
+  /** The wake time last picked, as "07:30". */
+  wakeTime: string
+  /** What there is to watch tonight. */
+  plan: {
+    /** Claude Code sessions working now, by name. */
+    working: string[]
+    /** How many sessions are waiting on you now. */
+    waiting: number
+    /** Projects whose deploys Steward can see (linked to Vercel). */
+    deploys: string[]
+    /** Projects on GitHub, whose runs on main it can see; null when gh isn't installed. */
+    ci: string[] | null
+  }
+  /** The Mac is on battery: it may sleep however Steward tries. */
+  onBattery: boolean
+  /** How the last Watch ended, while it's still worth saying (until the next one starts). */
+  ended?: { at: number; why: WatchEnd }
+  /** The newest night with a report kept, for "Last night" on the card. */
+  lastNight?: string
+}
+
+/**
+ * Overnight Watch's night report: what happened while you rested, from the night's log and Visual Review's store. A
+ * template, no model call. Words only: an alert's title, never its detail.
+ */
+export interface NightReport {
+  id: string
+  /** "Good morning" for the newest night, "Saturday night" for an earlier one. */
+  title: string
+  /** When it was watched, as "11:10 PM to 7:02 AM". */
+  span: string
+  /** One line: "2 things needed you. 2 things changed.", or "Quiet night. Nothing needed you." */
+  summary: string
+  /** When Steward couldn't see, in words: the Mac slept, or Steward wasn't running. */
+  gaps: string[]
+  /**
+   * What needed you, and what came of it: urgent (a production deploy failing, CI red on main, a session that may be
+   * stuck) or waiting on you (a session wanting your OK or input, or quiet for 45 minutes).
+   */
+  needed: { at: number; title: string; note: string; urgent: boolean }[]
+  /** Sessions that finished. */
+  finished: { at: number; title: string }[]
+  /** Visual Reviews made during the night, and what became of each (gone: no longer kept). */
+  reviews: { id: string; at: number; title: string; said: string | null; status: 'new' | 'good' | 'sent-back' | 'gone' }[]
+  /** Deploys per project, oldest first. */
+  deploys: { project: string; runs: { at: number; ok: boolean; production: boolean }[] }[]
+  /** Runs on main per project, oldest first. */
+  ci: { project: string; runs: { at: number; ok: boolean; workflow: string }[] }[]
+  /** How many more of each there were than the lists hold. */
+  more: { needed: number; finished: number }
+  /** The nights kept before and after this one, to step through. */
+  earlier: string | null
+  later: string | null
+}
+
+/** A part of the page that changed, in the page's own pixels as photographed (1,440 wide at desktop). */
+export interface ReviewRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Visual Review: one finished turn whose page looks different, waiting for a decision. */
+export interface ReviewView {
+  id: string
+  project: string
+  projectPath: string
+  /** The address that was captured, as typed in Settings. */
+  address: string
+  createdAt: number
+  /** The top of each page, small, as data URLs for the slider. `before` is null when there is no earlier picture. */
+  before: string | null
+  after: string
+  /** When the before picture was taken: as the prompt was sent, the last time Steward looked, or never. */
+  beforeFrom: 'turn-start' | 'last-look' | 'none'
+  /** Page heights in pixels, so the card can say the page is taller now. */
+  heightBefore: number | null
+  heightAfter: number
+  /** The full-page pictures on disk (the note for the session points at them). */
+  files: { before: string | null; after: string; phoneAfter?: string | null }
+  /** "Claude says": the start of Claude's last reply for the turn, or null when it said nothing worth showing. */
+  said: string | null
+  /** How many files the turn changed in the project's git checkout, or null when git couldn't say. */
+  filesChanged: number | null
+  /** Where the page changed, top to bottom; null when it wasn't measured (no earlier picture, or an older review). */
+  regions: ReviewRegion[] | null
+  /** The page at a phone's width (390 px), when the project asks for it: the same facts, and whether it changed. */
+  phone: ReviewPhone | null
+}
+
+/** Visual Review at a phone's width: the pictures are served as review://<id>/before-phone and /after-phone. */
+export interface ReviewPhone {
+  beforeFrom: 'turn-start' | 'last-look' | 'none'
+  heightBefore: number | null
+  heightAfter: number
+  regions: ReviewRegion[] | null
+  /** It looks different at this width. */
+  changed: boolean
+  /** Only at this width: the desktop page looks the same, so the card's pictures show no change. */
+  only: boolean
+}
+
+/**
+ * What "Try it now" in Settings found: the page as Steward sees it, or why it couldn't. `note` says where the page ended up
+ * when it isn't the address (a redirect), and `login` that it looks like a login page.
+ */
+export type ReviewTryResult =
+  | { ok: true; image: string; width: number; height: number; ms: number; note?: string; login?: boolean }
+  | { ok: false; error: string }
+
+/** Visual Review looked when a turn ended and the page looks the same: a quiet line, so a check is never silent. */
+export interface ReviewCheck {
+  projectPath: string
+  project: string
+  /** The address it looked at. */
+  address: string
+  at: number
+}
+
+/**
+ * Visual Review's history: one look at a project's page as a turn ended, and what it found, so a quiet turn can be
+ * explained. review: the page changed and made a review (decided says what became of it, gone once it isn't kept).
+ * same: it looked the same. failed: it couldn't be seen (text says why). login: all it found was a login page.
+ */
+export interface ReviewHistoryEntry {
+  projectPath: string
+  address: string
+  at: number
+  found: 'review' | 'same' | 'failed' | 'login'
+  text?: string
+  reviewId?: string
+  decided?: 'new' | 'good' | 'sent-back' | 'gone'
+}
+
+/** Why Visual Review can't see a project's page right now: the last capture failed, or it only found a login page. Cleared by the next one that works. */
+export interface ReviewProblem {
+  projectPath: string
+  project: string
+  /** The address it tried. */
+  address: string
+  /** In plain words, such as "Nothing is answering at localhost:3000. Start the app, then try again." */
+  reason: string
+  login: boolean
+  at: number
 }
 
 /** The "where you left off" card for a project. */
@@ -286,6 +569,8 @@ export interface Activity {
   detail?: string
   /** Search results: the sites (search-web), or photo thumbnail URLs (search-photos). */
   results?: string[]
+  /** run-command: it ran without a Run card, because Auto judged it safe, or it's on your list of commands. */
+  ranBy?: 'auto' | 'list'
   /** A tray item it made (screenshot, add-image), so the panel can fly its thumbnail into the tray. */
   image?: string
 }
@@ -294,7 +579,8 @@ export type AgentEvent =
   | { type: 'mood'; mood: Mood }
   | { type: 'text'; delta: string }
   | { type: 'activity'; activity: Activity }
-  | { type: 'approval'; id: string; command: string; cwd: string; why?: string }
+  /** reason: Auto is on but this still asks, and why, in a few words ("pushing always asks"). */
+  | { type: 'approval'; id: string; command: string; cwd: string; why?: string; reason?: string }
   | { type: 'approval-resolved'; id: string; approved: boolean }
   /** Command output as it arrives (chunk), then all of it once the command ends (exitCode set). */
   | { type: 'output'; activityId: string; command: string; chunk?: string; exitCode?: number | null; text?: string }
@@ -315,8 +601,27 @@ export interface StewardAPI {
     expand(): Promise<void>
     collapse(): Promise<void>
     hide(): Promise<void>
-    view(): Promise<void>
+    view(kind?: ViewerKind): Promise<void>
     onState(cb: (state: DockState) => void): Unsubscribe
+    /** The tab being dragged up or down its edge: began, moved (dy points since it began), or ended. */
+    drag(phase: 'start' | 'move' | 'end', dy?: number): void
+    /** The tab back to the middle of the edge, and the panel back to where it opens (Settings → Steward). */
+    resetPlace(): Promise<void>
+    /** How far the tab and the nudge hang past the screen edge, in points; the page leaves that part empty. */
+    overhang(): Promise<number>
+    onOverhang(cb: (points: number) => void): Unsubscribe
+    /** Docked in the notch, the closed panel's way back up into the notch has played: the window can go. */
+    intoNotchEnded(): void
+    /** The alert at the edge: how tall its words are, so its window grows to hold them rather than cut them off. */
+    nudgeWords(height: number): void
+    /** The panel being dragged by its top bar: began, or moved, with the pointer here (screen points), or ended. */
+    dragPanel(phase: 'start' | 'move' | 'end', x?: number, y?: number): void
+    /** The panel back where it opens: at its edge, or under the notch (double-click on the top bar). */
+    resetPanel(): Promise<void>
+    /** Whether the panel has been moved, so it opens and closes where it is. */
+    onPlaced(cb: (placed: boolean) => void): () => void
+    /** The window has gone, or gone to the tab, after the closed panel's way out: the page can draw what's next. */
+    onLeft(cb: () => void): () => void
   }
   tray: {
     list(): Promise<TrayItem[]>
@@ -347,8 +652,14 @@ export interface StewardAPI {
     addProject(): Promise<SettingsView>
     /** Pick a folder, add it as a project if it's new, and switch to it. */
     addProjectAndSwitch(): Promise<SettingsView>
+    /** Pick an app in Finder and add it to Step aside's list. */
+    addStepAsideApp(): Promise<SettingsView>
     addProjectPath(path: string): Promise<SettingsView>
     removeProject(path: string): Promise<SettingsView>
+    /** Visual Review's address for a project: an address on this Mac, or '' to turn it off. Throws when it isn't one. */
+    setProjectUrl(path: string, url: string): Promise<SettingsView>
+    /** Visual Review at a phone's width too, for a project with an address. */
+    setProjectPhone(path: string, on: boolean): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
@@ -375,9 +686,61 @@ export interface StewardAPI {
     onShow(cb: (alerts: AlertView[]) => void): Unsubscribe
     /** The character's event mood (mad, worried, celebrating, done), or null when nothing's going on. */
     onMood(cb: (mood: Mood | null) => void): Unsubscribe
+    /** An alert's offer was taken on the notch island ("Want me to look?"): the panel runs it. */
+    onAct(cb: (alert: AlertView) => void): Unsubscribe
   }
   deploys: {
     status(): Promise<DeployStatus>
+  }
+  /** Visual Review: what Claude changed on the running page. */
+  review: {
+    /** Reviews waiting for a decision, newest first. */
+    list(): Promise<ReviewView[]>
+    onChanged(cb: (reviews: ReviewView[]) => void): Unsubscribe
+    /** Open big on the notch island: the panel opens this review in its viewer. */
+    onOpen(cb: (id: string) => void): Unsubscribe
+    /** Projects whose page Visual Review can't see right now, and why. */
+    problems(): Promise<ReviewProblem[]>
+    onProblems(cb: (problems: ReviewProblem[]) => void): Unsubscribe
+    /** Projects whose page Visual Review checked after a turn and found unchanged (the newest check of each). */
+    checks(): Promise<ReviewCheck[]>
+    onChecks(cb: (checks: ReviewCheck[]) => void): Unsubscribe
+    /** Capture a project's page once, so Settings can show it works. */
+    tryIt(path: string): Promise<ReviewTryResult>
+    markGood(id: string): Promise<void>
+    /** Marks it sent back and copies the note for the session; resolves to what was copied. */
+    sendBack(id: string, note: string): Promise<string>
+    /** Open the full-page picture. */
+    openFull(id: string, which: 'before' | 'after' | 'before-phone' | 'after-phone'): Promise<void>
+    /** The looks after recent turns in a project, newest first. */
+    history(projectPath: string): Promise<ReviewHistoryEntry[]>
+    /** The history changed (a turn ended, a review was decided, or it was cleared): ask again. */
+    onHistory(cb: () => void): Unsubscribe
+    /** How many reviews are kept and how much space they take. */
+    usage(): Promise<{ count: number; bytes: number }>
+    /** Delete every review picture. */
+    clear(): Promise<void>
+  }
+  /** Overnight Watch: Go rest, and Steward keeps the Mac awake and writes the night down. */
+  watch: {
+    get(): Promise<WatchView>
+    /** Go rest, watching until this wake time ("07:30"). */
+    start(wakeTime: string): Promise<WatchView>
+    /** "I'm up", or Stop watching. */
+    stop(why: 'up' | 'stopped'): Promise<WatchView>
+    /** Remember the wake time picked on the card. */
+    setWakeTime(wakeTime: string): Promise<WatchView>
+    onChanged(cb: (view: WatchView) => void): Unsubscribe
+    /** Goodnight from the menu bar: show the goodnight card. */
+    onGoodnight(cb: () => void): Unsubscribe
+    /** A night's report, or null when it isn't kept. */
+    report(id: string): Promise<NightReport | null>
+    /** How many nights' reports are kept. */
+    nights(): Promise<number>
+    /** Delete every night report (a night going on keeps its own). */
+    clear(): Promise<void>
+    /** Show this report: the night ended with the panel open, or the panel opened after it ended. */
+    onReport(cb: (report: NightReport) => void): Unsubscribe
   }
   leftOff: {
     /** Shown when you switch projects or come back after 2+ hours. */
@@ -409,6 +772,25 @@ export interface StewardAPI {
     onState(cb: (state: NotchState) => void): Unsubscribe
     onCursor(cb: (p: { x: number; y: number } | null) => void): Unsubscribe
     click(): void
+    /** How the island's message's words fit (at: which message), measured on the page. */
+    fit(at: number, fit: NonNullable<IslandNote['fit']>): void
+    /** A button on the island's message (at: which message): Open, Later, Want me to look?, Allow, Deny, Looks good, Open big. */
+    act(what: IslandAct, at: number): void
+  }
+  /** Only when needed: a one-time note, shown in the panel the first time it opens, and the tab's slide in and out. */
+  presence: {
+    onNote(cb: (text: string) => void): Unsubscribe
+    /** Whether the page starts slid out (off the screen edge). */
+    slid(): Promise<boolean>
+    /** Slide out (to the screen edge) or back in; animate false jumps. The page does it, so the window never moves. */
+    onSlide(cb: (slide: { out: boolean; animate: boolean }) => void): Unsubscribe
+    /**
+     * The slide out (or the fade, with Reduce Motion) has ended: the window can go. 'drawn': the page drew its end;
+     * 'clock': its end time passed with no frame drawn (a page that isn't being drawn gets no transitionend).
+     */
+    slideEnded(by: 'drawn' | 'clock'): void
+    /** The cursor came near the tab, or went away again (for Dim when idle). */
+    onNear(cb: (near: boolean) => void): Unsubscribe
   }
   copyText(text: string): Promise<void>
 }

@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import { isShortcutId, normalizeAccelerator } from '../shared/shortcuts'
-import { cleanFrost, cleanName, DEFAULT_STEWARD, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
-import type { NotificationPrefs, Project, SettingsPatch, ShortcutId, StewardPrefs } from '../shared/types'
+import { parseAppAddress } from '../shared/review'
+import { cleanFrost, cleanName, DEFAULT_STEWARD, isBundleId, MAX_NAME, PANEL_TINT_IDS, PILL_COLOR_IDS } from '../shared/steward'
+import type { CommandMode, NotificationPrefs, Project, SettingsPatch, ShortcutId, StepAsideApp, StewardPrefs } from '../shared/types'
+import { MAX_APPS, withApp } from './step-aside'
 
 export const DEFAULT_ALLOWLIST = ['git status', 'git diff', 'git log --oneline -20', 'npm test', 'npm run lint', 'npm run typecheck', 'ls']
 
@@ -24,6 +26,8 @@ export interface StoredSettings {
   /** Encrypted with the macOS keychain via safeStorage, base64. */
   secrets: Partial<Record<SecretKind, string>>
   keepPanelOpen: boolean
+  /** Whether the chat asks before each command, or runs the safe ones itself. Ask each time unless it's been switched. */
+  commandMode: CommandMode
   notifications: NotificationPrefs
   /** Only the ones you changed: an accelerator, or '' for off. The rest use Steward's defaults. */
   shortcuts: Partial<Record<ShortcutId, string>>
@@ -37,6 +41,7 @@ export const defaultSettings = (): StoredSettings => ({
   allowlist: [...DEFAULT_ALLOWLIST],
   secrets: {},
   keepPanelOpen: false,
+  commandMode: 'ask',
   notifications: { ...DEFAULT_NOTIFICATIONS },
   shortcuts: {},
   steward: { ...DEFAULT_STEWARD },
@@ -44,21 +49,46 @@ export const defaultSettings = (): StoredSettings => ({
 
 const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 'string' && typeof (p as Project)?.path === 'string'
 
+/**
+ * A project from a file: its name and path, and Visual Review's address only if it's still one on this Mac (a file can be
+ * edited by hand), with its phone width only alongside an address.
+ */
+function cleanProject({ name, path, url, phone }: Project): Project {
+  const address = typeof url === 'string' ? parseAppAddress(url) : null
+  return address?.ok ? { name, path, url: address.url, ...(phone === true ? { phone } : {}) } : { name, path }
+}
+
 /** The choices each of the character's options has (the name is free text, the frost a number). */
 const STEWARD_CHOICES = {
   version: ['glass', 'flat', 'blocky'],
   color: PILL_COLOR_IDS,
   glass: ['tinted', 'clear'],
   personality: ['calm', 'lively'],
+  liveliness: ['calm', 'quiet', 'off'],
   edge: ['right', 'left'],
-  notchStyle: ['chin', 'wings'],
+  notchStyle: ['chin', 'wings', 'island'],
   size: ['small', 'medium'],
   tint: PANEL_TINT_IDS,
+  presence: ['always', 'quiet'],
+  alertPeek: ['needs-me', 'all', 'none'],
 } as const
+
+/**
+ * What a settings file from before quiet mode gets for the options it doesn't have: today's behavior, not the fresh
+ * install's (DEFAULT_STEWARD is quiet, with the eyes dimming), so the settings someone already has stay exactly as they are.
+ */
+const OLD_FILE_STEWARD = { presence: 'always', alertPeek: 'all', dimWhenIdle: false, hideFromScreenShare: false, hideInFullScreen: false } as const satisfies Pick<
+  StewardPrefs,
+  'presence' | 'alertPeek' | 'dimWhenIdle' | 'hideFromScreenShare' | 'hideInFullScreen'
+>
 
 const pick = <T extends string>(value: unknown, choices: readonly T[], fallback: T): T => ((choices as readonly unknown[]).includes(value) ? (value as T) : fallback)
 
-/** The character's options from a file: each one kept if it's one Steward knows, its default otherwise. */
+/**
+ * The character's options from a file: each one kept if it's one Steward knows, its default otherwise. A file that exists
+ * but lacks the quiet-mode options (an older one, or one with a value that isn't one of Steward's) gets the old behavior;
+ * a fresh install has no file, and gets DEFAULT_STEWARD as it is.
+ */
 function migrateSteward(raw: unknown): StewardPrefs {
   const d = DEFAULT_STEWARD
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
@@ -68,6 +98,7 @@ function migrateSteward(raw: unknown): StewardPrefs {
     glass: pick(r.glass, STEWARD_CHOICES.glass, d.glass),
     mouth: typeof r.mouth === 'boolean' ? r.mouth : d.mouth,
     personality: pick(r.personality, STEWARD_CHOICES.personality, d.personality),
+    liveliness: pick(r.liveliness, STEWARD_CHOICES.liveliness, d.liveliness),
     name: typeof r.name === 'string' ? cleanName(r.name) : d.name,
     edge: pick(r.edge, STEWARD_CHOICES.edge, d.edge),
     notch: typeof r.notch === 'boolean' ? r.notch : d.notch,
@@ -75,7 +106,21 @@ function migrateSteward(raw: unknown): StewardPrefs {
     size: pick(r.size, STEWARD_CHOICES.size, d.size),
     tint: pick(r.tint, STEWARD_CHOICES.tint, d.tint),
     frost: r.frost === undefined ? d.frost : cleanFrost(r.frost),
+    presence: pick(r.presence, STEWARD_CHOICES.presence, OLD_FILE_STEWARD.presence),
+    alertPeek: pick(r.alertPeek, STEWARD_CHOICES.alertPeek, OLD_FILE_STEWARD.alertPeek),
+    dimWhenIdle: typeof r.dimWhenIdle === 'boolean' ? r.dimWhenIdle : OLD_FILE_STEWARD.dimWhenIdle,
+    hideFromScreenShare: typeof r.hideFromScreenShare === 'boolean' ? r.hideFromScreenShare : OLD_FILE_STEWARD.hideFromScreenShare,
+    hideInFullScreen: typeof r.hideInFullScreen === 'boolean' ? r.hideInFullScreen : OLD_FILE_STEWARD.hideInFullScreen,
+    hideInApps: cleanApps(r.hideInApps),
   }
+}
+
+/** Step aside's list from a file: apps with a real bundle id and a name, each once, at most MAX_APPS. */
+function cleanApps(raw: unknown): StepAsideApp[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((a): a is StepAsideApp => !!a && typeof a === 'object' && isBundleId(a.id) && typeof a.name === 'string')
+    .reduce((list: StepAsideApp[], a) => withApp(list, { id: a.id, name: a.name.slice(0, 80) }), [])
 }
 
 /**
@@ -110,11 +155,13 @@ export function migrateSettings(raw: unknown): StoredSettings {
     }
   }
   return {
-    projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(({ name, path }) => ({ name, path })) : d.projects,
+    projects: Array.isArray(r.projects) ? r.projects.filter(isProject).map(cleanProject) : d.projects,
     currentProject: typeof r.currentProject === 'string' ? r.currentProject : null,
     allowlist: Array.isArray(r.allowlist) ? r.allowlist.filter((c): c is string => typeof c === 'string') : d.allowlist,
     secrets,
     keepPanelOpen: typeof r.keepPanelOpen === 'boolean' ? r.keepPanelOpen : d.keepPanelOpen,
+    // Anything but a plain "auto" asks: a file with a value Steward doesn't know never turns Auto on.
+    commandMode: r.commandMode === 'auto' ? 'auto' : 'ask',
     notifications,
     shortcuts,
     steward: migrateSteward(r.steward),
@@ -123,6 +170,7 @@ export function migrateSettings(raw: unknown): StoredSettings {
 
 const Patch = z.strictObject({
   keepPanelOpen: z.boolean().optional(),
+  commandMode: z.enum(['ask', 'auto']).optional(),
   openAtLogin: z.boolean().optional(),
   notifications: z
     .strictObject({
@@ -142,6 +190,7 @@ const Patch = z.strictObject({
       glass: z.enum(STEWARD_CHOICES.glass),
       mouth: z.boolean(),
       personality: z.enum(STEWARD_CHOICES.personality),
+      liveliness: z.enum(STEWARD_CHOICES.liveliness),
       // Tidied (and an empty one made Steward again) when it's saved.
       name: z.string().max(MAX_NAME * 4),
       edge: z.enum(STEWARD_CHOICES.edge),
@@ -150,6 +199,15 @@ const Patch = z.strictObject({
       size: z.enum(STEWARD_CHOICES.size),
       tint: z.enum(STEWARD_CHOICES.tint),
       frost: z.number().int().min(0).max(100),
+      presence: z.enum(STEWARD_CHOICES.presence),
+      alertPeek: z.enum(STEWARD_CHOICES.alertPeek),
+      dimWhenIdle: z.boolean(),
+      hideFromScreenShare: z.boolean(),
+      hideInFullScreen: z.boolean(),
+      hideInApps: z
+        .array(z.object({ id: z.string().refine(isBundleId), name: z.string().min(1).max(80) }))
+        .max(MAX_APPS)
+        .refine((list) => new Set(list.map((a) => a.id)).size === list.length),
     })
     .partial()
     .optional(),

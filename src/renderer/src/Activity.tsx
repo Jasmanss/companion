@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { siteOf, summarize, summaryText } from '../../shared/activity'
 import type { ActivityKind } from '../../shared/types'
 import { foldSteps, type StepEntry } from './chat-groups'
-import { CameraIcon, FileIcon, FolderIcon, GlobeIcon, ImageIcon, LogsIcon, PhotosIcon, SearchIcon, TerminalIcon } from './icons'
+import { CameraIcon, FileIcon, FolderIcon, GlobeIcon, ImageIcon, LogsIcon, PhotosIcon, SearchIcon, ShieldOkIcon, TerminalIcon } from './icons'
 
 const ICONS: Record<ActivityKind, () => ReactNode> = {
   thinking: () => null,
@@ -202,7 +202,9 @@ export function flyToTray(from: HTMLElement, image: string): void {
 export function ActivityRow({ step, compact = false }: { step: StepEntry; compact?: boolean }) {
   const a = step.activity
   const running = a.status === 'running'
-  const Icon = ICONS[a.kind]
+  // A command that ran without a Run card says so, and why it could: Auto judged it safe, or it's on your list.
+  const ranBy = a.kind === 'run-command' && a.ranBy ? (a.ranBy === 'auto' ? 'auto · safe' : 'on your list') : null
+  const Icon = ranBy ? ShieldOkIcon : ICONS[a.kind]
   const file = a.target ?? ''
   const cut = file.lastIndexOf('/')
   const results = a.results ?? []
@@ -292,7 +294,8 @@ export function ActivityRow({ step, compact = false }: { step: StepEntry; compac
       </span>
       <span className="at">
         <span className="l">
-          <b className="lab">{a.label}</b>
+          <b className="lab">{ranBy ? (a.status === 'running' ? 'Running automatically' : 'Ran automatically') : a.label}</b>
+          {ranBy && <span className={`ran-by ${a.ranBy}`}>{ranBy}</span>}
           {target}
           {a.status === 'failed' && a.detail && a.kind !== 'run-command' && <span className="fail-why">{a.detail}</span>}
         </span>

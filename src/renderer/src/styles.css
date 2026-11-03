@@ -46,6 +46,8 @@
   --radius: 14px;
   /* Which way is away from the screen edge Steward sits on: 1 on the right edge, -1 on the left. */
   --side: 1;
+  /* How far the tab's and the nudge's window hangs past the screen edge (set by the main process). It stays empty. */
+  --overhang: 0px;
   color-scheme: light dark;
 }
 
@@ -88,6 +90,24 @@ body,
   height: 100%;
   background: transparent;
   overflow: hidden;
+}
+
+/* Only when needed: the tab slides in from the screen edge and back out. It's a transform on the page, drawn by the
+   compositor at the display's own rate; the window stays where it is. Away from the edge is --side times the window's own
+   width, so it's gone whatever the tab, the nudge or the panel is. Going out speeds up, coming in slows down. */
+:root[data-slide='out'] #root {
+  will-change: transform;
+  transform: translateX(calc(100% * var(--side)));
+  transition: transform 0.3s cubic-bezier(0.5, 0, 0.9, 0.4);
+}
+
+:root[data-slide='in'] #root {
+  transform: none;
+  transition: transform 0.38s var(--spring);
+}
+
+:root[data-slide-jump] #root {
+  transition: none !important;
 }
 
 body {
@@ -218,7 +238,7 @@ pre {
 /* ---------- peek (tucked away) ---------- */
 .peek {
   position: relative;
-  width: 100%;
+  width: calc(100% - var(--overhang));
   height: 100%;
   display: grid;
   place-items: center;
@@ -227,9 +247,23 @@ pre {
   border-radius: 18px 0 0 18px;
 }
 
-/* On the left edge, the tab and the nudge round off on the right. */
+/* Being dragged up or down its edge. */
+.peek.dragging {
+  cursor: grabbing;
+}
+
+/* The window hangs past the screen edge by --overhang, so its rounded corners are off the screen: the tab and the nudge
+   stop at the screen edge, square, and the part past it stays empty. */
+.peek,
+.nudge {
+  margin-right: var(--overhang);
+}
+
+/* On the left edge, the tab and the nudge round off on the right, and the empty part is on the left. */
 :root[data-edge='left'] .peek,
 :root[data-edge='left'] .nudge {
+  margin-right: 0;
+  margin-left: var(--overhang);
   border-radius: 0 18px 18px 0;
 }
 
@@ -237,6 +271,13 @@ pre {
 .pill-host {
   position: relative;
   flex: none;
+  transition: opacity 0.25s ease-out;
+}
+
+/* Dim when idle: the eyes fade slowly to about 40% and hold still. Waking is quick. */
+.pill-host.dimmed {
+  opacity: 0.4;
+  transition: opacity 1.2s ease-in-out;
 }
 
 /* Resting's standby glow, like a sleeping Mac's light: dimmer than idle, breathing slowly. Only opacity moves.
@@ -300,10 +341,11 @@ pre {
   animation: nudge-in 0.35s var(--spring) both;
 }
 
+/* Urgent: the same half-point rim as every Steward surface, tinted with the glow. */
 .nudge.urgent {
   box-shadow:
     inset 0 1px 0 var(--edge),
-    inset 0 0 0 1.5px rgba(var(--glow), 0.9);
+    inset 0 0 0 0.5px rgba(var(--live), 0.45);
 }
 
 .nudge-text {
@@ -322,7 +364,7 @@ pre {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   color: var(--t2);
   font-size: 12px;
   word-break: break-word;
@@ -364,6 +406,176 @@ pre {
   height: 12px;
 }
 
+/* ---------- the nudge under the notch ----------
+   Docked in the notch, the nudge is black, like the notch, and joins its chin (design/notch.html, "A nudge"). The
+   window's top is the menu bar line: concave corners join the chin's sides just under it, and the body starts 8 points
+   down, wide, with one line of text under the chin. The chin itself is the notch window's, drawn over this one.
+   Coming out, the body grows from narrow (hidden behind the chin) to full width while it drops 30 points into place:
+   its middle scales sideways and its two rounded ends slide out, so the corners never squash. Only transform and
+   opacity move. No overshoot: the window's edges would clip it. Going back is the same in reverse, quicker. */
+.notch-nudge {
+  position: relative;
+  height: 100%;
+  cursor: pointer;
+}
+
+.notch-nudge > i {
+  position: absolute;
+  background: #000;
+}
+
+.nn-mid,
+.nn-side,
+.notch-nudge > .nn-fil {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation-fill-mode: both;
+}
+
+.nn-mid,
+.nn-side {
+  top: 8px;
+  bottom: 0;
+}
+
+.nn-mid {
+  left: 16px;
+  right: 16px;
+  animation-name: nudge-mid-in;
+}
+
+/* A point wider than the corners, so the middle overlaps them: black on black, no seam. */
+.nn-side {
+  width: 17px;
+}
+
+.nn-side.l {
+  left: 0;
+  border-radius: 14px 0 0 16px;
+  animation-name: nudge-l-in;
+}
+
+.nn-side.r {
+  right: 0;
+  border-radius: 0 14px 16px 0;
+  animation-name: nudge-r-in;
+}
+
+/* The concave corners between the chin's sides and the body's top: black, minus a circle. */
+.notch-nudge > .nn-fil {
+  top: 0;
+  width: 8px;
+  height: 9px;
+  background: transparent;
+  animation-name: nudge-fil-in;
+}
+
+.nn-fil.l {
+  left: calc(50% - var(--neck) / 2 - 8px);
+  background: radial-gradient(circle at 0 0, transparent 7.5px, #000 8px);
+  transform-origin: 100% 100%;
+}
+
+.nn-fil.r {
+  left: calc(50% + var(--neck) / 2);
+  background: radial-gradient(circle at 100% 0, transparent 7.5px, #000 8px);
+  transform-origin: 0 100%;
+}
+
+.nn-line {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  color: #f2f3f5;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  animation: nudge-text-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.14s both;
+}
+
+.nn-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nn-text b {
+  color: var(--lit);
+}
+
+.nn-more {
+  flex: none;
+  color: rgba(242, 243, 245, 0.6);
+}
+
+/* Shown while the cursor is on the nudge, over the line's end (black, so the text under it doesn't show through). */
+.nn-close {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #000;
+  color: rgba(242, 243, 245, 0.7);
+  opacity: 0;
+  transition: opacity 0.15s linear;
+}
+
+.notch-nudge:hover .nn-close {
+  opacity: 1;
+}
+
+.nn-close:hover {
+  background: #2a2a2c;
+  color: #f2f3f5;
+}
+
+.nn-close svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Until the page draws its first frame, the way in waits at its start (Nudge.tsx, useDrawn). */
+.notch-nudge.wait,
+.notch-nudge.wait * {
+  animation-play-state: paused;
+}
+
+/* Going back up into the notch: the pieces, not the whole (App.tsx waits for the middle's end). */
+:root[data-leaving] #root > .notch-nudge {
+  animation: none;
+}
+
+:root[data-leaving] .nn-mid {
+  animation: nudge-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-side.l {
+  animation: nudge-l-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-side.r {
+  animation: nudge-r-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .notch-nudge > .nn-fil {
+  animation: nudge-fil-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+:root[data-leaving] .nn-line {
+  animation: nudge-text-out 0.1s linear forwards;
+}
+
 /* ---------- panel ---------- */
 .panel {
   position: relative;
@@ -377,12 +589,39 @@ pre {
   animation: panel-in 0.35s var(--spring) backwards;
 }
 
+/* Docked in the notch, the panel opens at the side and slides in from it, as at the edge. Closing, it slides back out
+   toward its side, the entrance in reverse, and then the window goes (App.tsx says when): there's no tab to go back to. */
+:root[data-leaving] #root > * {
+  animation: panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+/* Dragged somewhere, the panel pops in where it was left, at the edge or in the notch: a fade with a small grow from
+   its middle (design/movable-panel.html). */
+:root[data-placed] .panel {
+  transform-origin: 50% 50%;
+  animation: panel-settle-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* Closing, it shrinks a little and fades where it is, the pop-in in reverse; then the tab or the notch is back. */
+:root[data-leaving='in-place'] #root > * {
+  transform-origin: 50% 50%;
+  animation: panel-settle-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px 8px 6px;
   border-bottom: 1px solid var(--line);
+  /* The bar is the handle to drag the panel by (panel-drag.ts): a double-click on it doesn't select the name. */
+  user-select: none;
+  touch-action: none;
+}
+
+.panel-head.dragging {
+  cursor: grabbing;
 }
 
 .head-text {
@@ -604,6 +843,16 @@ pre {
   font-weight: 700;
 }
 
+/* A Visual Review waiting for a decision: the island's violet. */
+.sw-list .sw-review {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: rgb(165, 139, 255);
+}
+
 .sw-list .pp {
   flex: 1;
   min-width: 0;
@@ -693,6 +942,22 @@ pre {
   background: var(--inset);
 }
 
+/* The one main action on a card ("Want me to look?"). */
+.chip.primary {
+  background: var(--btn);
+  color: var(--btn-t);
+}
+
+.chip.primary:hover {
+  background: var(--btn);
+  filter: brightness(1.12);
+}
+
+/* On a tile (itself an inset) a chip needs a step more to show. */
+.tile .chip:not(.quiet, .primary) {
+  background: var(--inset2);
+}
+
 .btn {
   padding: 6px 12px;
   border: none;
@@ -725,84 +990,277 @@ pre {
   }
 }
 
-/* ---------- sessions ---------- */
-.sessions {
-  padding: 8px 12px;
+/* ---------- the panel's cards (Tile.tsx; design/main-chat.html, Direction F) ---------- */
+/* Every block is the same tile in a two-column grid: small (half), wide, or promoted (first, with an accent border;
+   orange when it waits on you). One heading style: small capitals with an icon and a count. */
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 10px;
+  overflow-y: auto;
+}
+
+/* With a chat going only what waits on you stays, above it, and never takes over. */
+.tiles.above {
+  flex: none;
+  max-height: 46%;
   border-bottom: 1px solid var(--line);
 }
 
-.session-chips {
+.tile {
   display: flex;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  overflow-x: auto;
-  list-style: none;
-  scrollbar-width: none;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--inset);
+  user-select: text;
+  animation: popin 0.3s var(--spring) both;
 }
 
-.session-chip {
-  display: inline-flex;
+.tile.wide,
+.tile.promoted {
+  grid-column: 1 / -1;
+}
+
+.tile.promoted {
+  gap: 9px;
+  padding: 14px;
+  border-color: rgba(var(--live), 0.4);
+  border-radius: 18px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 0 0 3px rgba(var(--live), 0.08);
+}
+
+.tile.urgent {
+  border-color: color-mix(in srgb, var(--warm) 50%, transparent);
+}
+
+.tile.promoted.urgent {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 0 0 3px color-mix(in srgb, var(--warm) 12%, transparent);
+}
+
+.tile-head {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 9px;
-  border: none;
-  border-radius: 999px;
+  gap: 7px;
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tile.promoted .tile-head {
+  font-size: 11px;
+}
+
+.tile.urgent .tile-head {
+  color: var(--warm);
+}
+
+.tile-head svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.tile-head .n {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 99px;
+  background: var(--inset2);
+  color: var(--t1);
+  letter-spacing: 0;
+}
+
+.tile p {
+  margin: 0;
+}
+
+.tile-quiet {
+  color: var(--t3);
+  font-size: 12.5px;
+}
+
+.tile-big {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-hl {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.tile-quote {
+  padding: 9px 12px;
+  border-radius: 12px;
   background: var(--inset);
+  color: var(--t3);
+  font-size: 12.5px;
+}
+
+.tile-quote b {
+  color: var(--t1);
+}
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hash {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--inset2);
+  font-size: 11px;
+}
+
+/* Commits as a short timeline: a line with a dot for each, no bullets. */
+.timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 2px 0;
+  padding-left: 20px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--inset2);
+}
+
+.tl-item {
+  position: relative;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.tl-item::before {
+  content: '';
+  position: absolute;
+  left: -19px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--live));
+  box-shadow: 0 0 0 3px rgba(var(--fill), 0.9);
+}
+
+.tl-item small {
+  display: block;
+  color: var(--t3);
+}
+
+/* Sessions as rows: a state dot, the name, the state on the right, and a one-line summary. */
+.srows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.srow-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+
+.srow-line b {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.srow-line span {
+  flex: none;
+  margin-left: auto;
+  color: var(--t3);
   font-size: 12px;
   white-space: nowrap;
 }
 
-.session-chip.on,
-.session-chip:hover {
-  background: var(--inset2);
-}
-
-.session-dot {
-  width: 7px;
-  height: 7px;
+.sdot {
+  flex: none;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--t3);
 }
 
-.session-chip.needs-approval .session-dot,
-.session-chip.needs-input .session-dot {
+.srow.needs-approval .sdot,
+.srow.needs-input .sdot {
   background: var(--warm);
-  box-shadow: 0 0 6px var(--warm);
 }
 
-.session-chip.working .session-dot {
-  background: rgb(var(--glow));
+.srow.working .sdot {
+  background: rgb(var(--live));
 }
 
-.session-chip.finished .session-dot {
+.srow.finished .sdot {
   background: var(--ok);
 }
 
-.session-name {
-  font-weight: 700;
+.srow .said {
+  margin: 1px 0 0 17px;
+  overflow: hidden;
+  color: var(--t3);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.session-state {
-  color: var(--t2);
+.srow.open .said {
+  white-space: normal;
 }
 
-.session-detail {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--inset);
-  transform-origin: top left;
-  animation: grow-in 0.3s var(--spring) both;
+.srow-more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0 17px;
 }
 
-.session-detail p {
-  margin: 0 0 6px;
-}
-
-.session-detail-text {
-  user-select: text;
-  word-break: break-word;
+.srow-more .session-cwd {
+  flex: 1;
+  min-width: 0;
 }
 
 .session-cwd {
@@ -813,54 +1271,57 @@ pre {
   white-space: nowrap;
 }
 
-.banner {
+/* Notes and news: rows of words, each with its button. */
+.nrows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 8px 12px 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(var(--glow), 0.14);
-  box-shadow: inset 0 0 0 1px rgba(var(--glow), 0.55);
-  text-align: left;
-  animation: popin 0.3s var(--spring) both;
+  gap: 6px;
+  font-size: 12.5px;
 }
 
-.banner span {
+.nrows span {
   color: var(--t2);
-  font-size: 12px;
 }
 
-.banner .chip {
-  align-self: flex-start;
-  margin-top: 4px;
-}
-
-/* ---------- tray ---------- */
-.tray {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.tray-head {
+.note-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+}
+
+/* The cards that came before the tiles (a review, the morning brief, the night's report) sit inside one, frameless:
+   their own top line stays under the tile's heading, and their lists have no bullets. */
+.tile > .card {
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+
+.tile ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---------- tray (inside its tile) ---------- */
+.tray {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-}
-
-.tray-title {
-  font-weight: 700;
-}
-
-.count {
-  margin-left: 6px;
-  color: var(--t2);
-  font-weight: 600;
 }
 
 .tray-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -869,8 +1330,22 @@ pre {
 }
 
 .tray-empty {
-  margin: 8px 0 2px;
-  color: var(--t2);
+  margin: 0;
+  color: var(--t3);
+  font-size: 12px;
+}
+
+/* Empty: three dashed slots. */
+.tray-slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  height: 44px;
+}
+
+.tray-slots i {
+  border: 1.5px dashed var(--inset2);
+  border-radius: 7px;
 }
 
 .tray-grid {
@@ -878,7 +1353,7 @@ pre {
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   max-height: 168px;
-  margin: 10px 0 0;
+  margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
@@ -964,6 +1439,221 @@ pre {
   gap: 6px;
 }
 
+/* ---------- Visual Review: what changed on the running page ---------- */
+.card.review {
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card.review .card-head {
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+.rv-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rv-actions .chip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rv-ba {
+  position: relative;
+  flex: none;
+  aspect-ratio: 1440 / 900;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--inset2);
+  box-shadow: 0 0 0 1px var(--line);
+  --x: 55%;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.rv-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.rv-layer.rv-after {
+  clip-path: inset(0 0 0 var(--x));
+}
+
+.rv-layer img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: top left;
+}
+
+.rv-tag {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rv-tag.b {
+  left: 8px;
+}
+
+.rv-tag.a {
+  right: 8px;
+}
+
+.rv-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x);
+  z-index: 3;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.rv-bar::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* The real control is a range input over the whole picture, so dragging anywhere and the arrow keys both work. */
+.rv-ba input[type='range'] {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+}
+
+.rv-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px rgb(var(--live));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rv-ba input[type='range']:focus-visible + .rv-ring {
+  opacity: 1;
+}
+
+.card.review .rv-facts {
+  margin: 0;
+}
+
+.rv-facts .rv-files {
+  margin-right: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+
+.rv-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgb(var(--live));
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rv-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Why a project's page can't be seen: quiet, where the card would be. */
+.notice.review-problem {
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--t2);
+}
+
+.notice.review-problem strong {
+  color: var(--t1);
+}
+
+.notice.review-problem .rv-actions {
+  flex: none;
+}
+
+/* A check that found nothing changed: quieter still, one line. */
+.notice.review-check {
+  align-items: center;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.notice.review-check strong {
+  font-weight: 600;
+}
+
+.rv-buttons .btn {
+  flex: 1;
+}
+
+.rv-send {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rv-send textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t1);
+  font: inherit;
+  resize: vertical;
+}
+
+.rv-out {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t3);
+  font: 500 11px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* ---------- chat ---------- */
 .body {
   position: relative;
@@ -1015,30 +1705,6 @@ pre {
   margin: 0 0 6px;
 }
 
-.leftoff-status {
-  font-weight: 600;
-}
-
-.leftoff-commits {
-  margin-bottom: 6px !important;
-}
-
-.leftoff-commits code {
-  color: var(--hi);
-  font-size: 11px;
-}
-
-.leftoff-claude {
-  margin: 6px 0 0;
-  padding: 6px 10px;
-  border-left: 2px solid rgb(var(--glow));
-  background: var(--inset);
-}
-
-.leftoff-claude p {
-  margin: 2px 0 0;
-}
-
 .notice {
   display: flex;
   align-items: center;
@@ -1055,19 +1721,6 @@ pre {
   overflow-y: auto;
   padding: 12px;
   user-select: text;
-}
-
-.hint {
-  color: var(--t2);
-}
-
-.hint p {
-  margin: 0 0 4px;
-}
-
-.hint ul {
-  margin: 0;
-  padding-left: 18px;
 }
 
 .msg {
@@ -1196,32 +1849,189 @@ pre {
   margin-top: 8px;
 }
 
+/* The text box (design/main-chat.html): Ask | Auto on its left, the text, and a round Send on its right. */
 .composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--line);
 }
 
-.composer textarea {
-  flex: 1;
-  resize: none;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 10px;
+.cbox {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 16px;
   background: var(--inset);
   box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.cbox:focus-within {
+  box-shadow: inset 0 0 0 1.5px rgba(var(--glow), 0.8);
+}
+
+.cbox textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 6px 2px;
+  border: none;
+  background: transparent;
   outline: none;
   user-select: text;
 }
 
-.composer textarea::placeholder {
+.cbox textarea::placeholder {
   color: var(--t3);
 }
 
-.composer textarea:focus {
-  box-shadow: inset 0 0 0 1.5px rgba(var(--glow), 0.8);
+/* Ask | Auto, and what the mode means on hover or focus. */
+.mode {
+  position: relative;
+  flex: none;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.mseg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--inset);
+}
+
+.mseg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--t3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.mseg button[aria-pressed='true'] {
+  background: rgba(var(--fill), 0.9);
+  color: var(--t1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.mseg button.auto[aria-pressed='true'] {
+  background: rgb(var(--live));
+  color: #fff;
+}
+
+.mseg button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mseg button:focus-visible {
+  outline: 2px solid rgba(var(--glow), 0.9);
+  outline-offset: 1px;
+}
+
+.mode .pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  width: 276px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: rgb(var(--fill));
+  box-shadow: 0 0 0 1px var(--line), 0 12px 30px var(--shadow);
+  color: var(--t1);
+  font-size: 12.5px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s, transform 0.16s;
+}
+
+.mode:hover .pop,
+.mode:focus-within .pop {
+  opacity: 1;
+  transform: none;
+}
+
+.mode .pop b {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.mode .pop span {
+  color: var(--t3);
+}
+
+.mode .pop .sep {
+  display: block;
+  height: 6px;
+}
+
+/* Send: a round arrow, quiet while there's nothing to send, filled once there is. */
+.send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--inset2);
+  color: var(--t3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.send svg {
+  width: 15px;
+  height: 15px;
+}
+
+.send.on {
+  background: var(--btn);
+  color: var(--btn-t);
+}
+
+.send:disabled {
+  cursor: default;
+}
+
+.send:focus-visible {
+  outline: 2px solid rgba(var(--glow), 0.9);
+  outline-offset: 2px;
+}
+
+/* A Run card in Auto says why this one still asks. */
+.why-asks {
+  margin: 6px 0 0;
+  color: var(--warm);
+  font-weight: 600;
+}
+
+/* A command that ran without a card: "Ran automatically", and why it could. */
+.ran-by {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--live), 0.14);
+  color: rgb(var(--live));
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode .pop {
+    transform: none;
+  }
 }
 
 /* ---------- streaming reply ---------- */
@@ -2057,6 +2867,474 @@ a.icon-btn {
   object-position: top;
 }
 
+/* ---------- Overnight Watch ---------- */
+
+.card.goodnight {
+  /* All of it shows: it doesn't shrink and scroll inside like the other cards (Go rest is at its foot). */
+  flex: none;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card.goodnight .card-head {
+  margin-bottom: 0;
+}
+
+.gn-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--t1);
+  font-weight: 700;
+}
+
+.gn-title svg {
+  color: rgb(165, 139, 255);
+}
+
+.card .gn-sub {
+  margin: 0;
+}
+
+.card .gn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gn-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.45);
+  font-weight: 600;
+}
+
+.gn-list li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--t2);
+}
+
+.gn-list li span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gn-list small {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* On battery: the Mac may sleep, so the line stands out. */
+.gn-list li.warn small {
+  color: var(--t1);
+}
+
+.gn-wake {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.gn-wake input {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t1);
+  font: inherit;
+}
+
+.gn-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Watching: a slow glow by the title, the only thing that moves. */
+.gn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(165, 139, 255);
+  animation: gn-glow 3s ease-in-out infinite;
+}
+
+@keyframes gn-glow {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gn-dot {
+    animation: none;
+  }
+}
+
+/* ---------- Visual Review, big ---------- */
+
+/* On the card: the slider takes drags on the picture, so a corner button opens it big. It shows on hover and focus. */
+.rv-open {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 6;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-open span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rv-open svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* With no before picture there's no slider: all of the picture opens it. */
+.rv-open.all {
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+.rv-ba:hover .rv-open,
+.rv-open:focus-visible {
+  opacity: 1;
+}
+
+.rv-open:focus-visible {
+  outline: none;
+}
+
+.rv-open:focus-visible span {
+  box-shadow: 0 0 0 2px rgb(var(--live));
+}
+
+/* What Claude said it did: two lines at most on the card, all of it in the viewer. */
+.rv-said {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.rv-said b {
+  color: var(--t3);
+  font-weight: 700;
+}
+
+.rv-said-src {
+  margin-left: 4px;
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-viewer .viewer-head {
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.rvv-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rvv-title .chip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvv-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rvv-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--inset);
+}
+
+.rvv-seg button {
+  padding: 4px 11px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rvv-seg button[aria-pressed='true'] {
+  background: rgb(var(--fill));
+  color: var(--t1);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+.rvv-seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.rvv-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rvv-note p {
+  margin: 0;
+}
+
+.rvv-note .rv-said {
+  display: block;
+  font-size: 13.5px;
+}
+
+/* The pictures scroll here: a tall page down, and at 100% sideways too. */
+.rvv-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background: var(--inset);
+  outline: none;
+}
+
+.rvv-box {
+  position: relative;
+  display: block;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 6px 20px var(--shadow);
+}
+
+.rvv-pic {
+  display: block;
+  max-width: none;
+  height: auto;
+  user-select: none;
+}
+
+.rvv-pic[hidden] {
+  display: none;
+}
+
+.rvv-slide {
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.rvv-slide .rvv-pic {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.rvv-slide .rvv-after {
+  clip-path: inset(0 0 0 var(--x));
+}
+
+.rvv-box .rv-tag {
+  top: 10px;
+}
+
+.rvv-box .rv-tag.b {
+  left: 10px;
+}
+
+.rvv-box .rv-tag.a {
+  right: 10px;
+}
+
+.rvv-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x);
+  z-index: 3;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* The knob stays in sight while a tall page scrolls. */
+.rvv-knob {
+  position: sticky;
+  top: 38%;
+  width: 24px;
+  height: 24px;
+  margin-left: -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* The slider as a real control, for the keyboard and screen readers; the picture itself takes the drags. */
+.rvv-range {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rvv-slide:has(.rvv-range:focus-visible) {
+  box-shadow:
+    0 0 0 2px rgb(var(--live)),
+    0 6px 20px var(--shadow);
+}
+
+.rvv-sbs {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: max-content;
+  min-width: 100%;
+}
+
+.rvv-sbs figure {
+  margin: 0;
+}
+
+.rvv-sbs figcaption {
+  margin-bottom: 6px;
+  color: var(--t3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rvv-sbs .rvv-box {
+  height: auto;
+}
+
+.rvv-flip.can-flip {
+  cursor: pointer;
+}
+
+button.rvv-flip-tag {
+  border: none;
+  cursor: pointer;
+}
+
+.rvv-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.rvv-foot.sending {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.rvv-foot textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(var(--fill), 0.5);
+  color: var(--t1);
+  font: inherit;
+  resize: vertical;
+}
+
+.rvv-foot.sending .rv-buttons .btn {
+  flex: none;
+}
+
+.rvv-zoom {
+  margin-left: auto;
+}
+
+.rvv-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--bad);
+  font-size: 12px;
+}
+
+.rvv-keys {
+  margin: 0;
+  padding: 6px 14px 8px;
+  border-top: 1px solid var(--line);
+  color: var(--t3);
+  font-size: 11.5px;
+}
+
+.rvv-keys kbd {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--inset2);
+  font: 700 11px ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
 /* ==========================================================================
    Motion. Loops are keyframes; only transform and opacity ever animate.
    ========================================================================== */
@@ -2064,6 +3342,98 @@ a.icon-btn {
   from {
     opacity: 0;
     transform: translateX(calc(12px * var(--side)));
+  }
+}
+
+@keyframes panel-out {
+  to {
+    opacity: 0;
+    transform: translateX(calc(12px * var(--side)));
+  }
+}
+
+@keyframes panel-settle-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes panel-settle-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes panel-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The nudge under the notch, from narrow (140 points of its 340) and 30 points up, behind the chin. */
+@keyframes nudge-mid-in {
+  from {
+    transform: translateY(-30px) scaleX(0.35);
+  }
+}
+
+@keyframes nudge-l-in {
+  from {
+    transform: translate(100px, -30px);
+  }
+}
+
+@keyframes nudge-r-in {
+  from {
+    transform: translate(-100px, -30px);
+  }
+}
+
+@keyframes nudge-fil-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+@keyframes nudge-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes nudge-up {
+  to {
+    transform: translateY(-30px) scaleX(0.35);
+  }
+}
+
+@keyframes nudge-l-up {
+  to {
+    transform: translate(100px, -30px);
+  }
+}
+
+@keyframes nudge-r-up {
+  to {
+    transform: translate(-100px, -30px);
+  }
+}
+
+/* Its own name: App.tsx takes panel-fade-out's end as the end of the whole way back. */
+@keyframes nudge-text-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes nudge-fil-up {
+  to {
+    opacity: 0;
+    transform: scale(0.2);
   }
 }
 
@@ -2262,6 +3632,49 @@ a.icon-btn {
 
 /* Reduced motion: static icons, and fades instead of movement. */
 @media (prefers-reduced-motion: reduce) {
+  /* Closing in the notch, the panel only fades out. */
+  :root[data-leaving] #root > * {
+    animation-name: panel-fade-out;
+  }
+
+  /* A moved panel: a 150 ms fade in, and out, where it is. */
+  :root[data-placed] .panel {
+    animation-duration: 0.15s;
+  }
+
+  :root[data-leaving='in-place'] #root > * {
+    animation: panel-fade-out 0.15s linear forwards;
+  }
+
+  /* The nudge under the notch fades in and out whole, its pieces still. */
+  .notch-nudge > i,
+  .notch-nudge > .nn-fil,
+  .nn-line,
+  :root[data-leaving] .notch-nudge > i,
+  :root[data-leaving] .notch-nudge > .nn-fil,
+  :root[data-leaving] .nn-line {
+    animation: none;
+  }
+
+  .notch-nudge {
+    animation: fadein 0.2s linear both;
+  }
+
+  :root[data-leaving] #root > .notch-nudge {
+    animation: panel-fade-out 0.2s linear forwards;
+  }
+
+  :root[data-slide='out'] #root {
+    transform: none;
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
+  }
+
+  :root[data-slide='in'] #root {
+    opacity: 1;
+    transition: opacity 0.38s ease-out;
+  }
+
   .mini .scan,
   .shine .win,
   .prog .shim,
@@ -2334,4 +3747,134 @@ a.icon-btn {
   .prog .fill {
     transition: none;
   }
+}
+
+/* Overnight Watch's night report: like the brief, with room for a Visual Review card inside. */
+.card.night-report {
+  max-height: 72%;
+}
+
+.nr-summary {
+  color: var(--t1);
+  font-weight: 600;
+}
+
+/* When Steward couldn't see: said plainly, in the warm color the card's battery line uses. */
+.card .nr-gap {
+  margin: 0 0 6px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--warm);
+  border-radius: 4px;
+  background: var(--inset);
+}
+
+.card ul.nr-list {
+  list-style: none;
+  padding: 0;
+}
+
+.nr-list li {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.nr-list li:last-child {
+  border-bottom: 0;
+}
+
+.nr-list li.muted {
+  display: block;
+}
+
+.night-report time {
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  padding-top: 1px;
+}
+
+.card .nr-review {
+  margin: 4px 0;
+}
+
+/* A review card inside the report: a shape on the report's inset, not a second card. */
+.night-report .card.review {
+  margin: 6px 0 4px;
+  padding: 8px;
+  background: var(--inset);
+  animation: none;
+}
+
+.nr-deploys {
+  margin-bottom: 6px;
+}
+
+.nr-strip {
+  display: flex;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.nr-strip i {
+  flex: 1;
+  max-width: 28px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--ok);
+}
+
+.nr-strip i.bad {
+  background: var(--bad);
+}
+
+.nr-steps {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* What would call you once the phone comes: a small red word before it. */
+.nr-urgent {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/* Visual Review, Show changes: the changed areas outlined over the pictures, the one being looked at stronger. */
+.rvv-changes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Over the pictures, under the tags and the slider's bar (they come after it in the page). */
+.rvv-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rvv-mark {
+  position: absolute;
+  border: 2px solid rgba(255, 90, 90, 0.75);
+  border-radius: 6px;
+}
+
+.rvv-mark.on {
+  border-color: rgb(255, 70, 70);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.8),
+    0 0 0 5px rgba(255, 90, 90, 0.25);
 }

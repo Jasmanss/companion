@@ -20,8 +20,8 @@ jobs:
       # Unit tests don't launch Electron, so skip the ~100 MB download.
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -35,15 +35,18 @@ jobs:
     needs: checks
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - name: Launch the app and screenshot its panel and Settings
         run: npm run smoke
-      - uses: actions/upload-artifact@v4
+        env:
+          # The runner's screen has no notch: pretend it does (185 x 32 pt, a 33 pt menu bar) so the notch checks run.
+          STEWARD_SMOKE_NOTCH: '1'
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: smoke-screenshots

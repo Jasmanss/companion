@@ -19,11 +19,84 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   default, or left), dimmed and resting. It only takes clicks on that small
   peek, never on the rest of the screen.
 - **Pull it out:** hover the peek and click, or press the hotkey (⌥ Space). It
-  slides out into a panel: the character on top, the tray in the middle, and
-  an input box at the bottom.
+  slides out into a panel: the character on top, cards in the middle, and an
+  input box at the bottom.
+- **The panel's cards:** every block is the same card (one heading style, no
+  bullet points): Sessions (a row each, with a one-line summary), Where you
+  left off, Tray, Try (chips that fill the box), and when they come, a review,
+  a failed build, the morning brief or the night's report, news and notes. The
+  most important card is promoted: full width, first, with an accent border.
+  The order is what waits on you (a session waiting, a review, a failed build:
+  orange, "Waiting on you"), then sessions that finished within a day, then
+  the night's report or the morning brief, then where you left off, so there
+  is always a first card. While a chat is going only what waits on you stays
+  above it.
 - **Drop target:** drag an image toward the edge and it wakes up, slides partway
   out, and holds out its tray. Drop the image on it.
 - **Put it back:** click away or press Esc and it slides back in.
+- **Presence (Settings → Steward):** "Always visible" is the above. "Only when
+  needed" (the default for a new install) keeps Steward out of sight at rest,
+  on the edge and in the notch. It comes out when you push the cursor against
+  its edge or rest it on the notch (0.25 s), when a session needs you, while
+  the agent is working, or on the hotkey and the menu bar icon, which always
+  open the panel. It tucks away 1.5 s after the cursor leaves. In the notch it
+  sleeps as the notch's own black, with no chin and no eyes. It slides in and
+  out as a transform in the page, so every frame is the display's. Manual Hide
+  stays separate: nothing brings it back but you.
+- **The tab comes to you:** push the cursor against the edge (within 2 pt)
+  anywhere along it and hold still: 0.3 s near the tab's spot, 0.5 s anywhere
+  else. The tab comes out right at the cursor's height, and goes back to its
+  spot once it has tucked away. Sliding along the edge (a scrollbar) never
+  counts, and once it has been out, the cursor has to leave the edge before a
+  new push counts. With the Dock on the same edge, only the tab's spot counts.
+- **Move the tab:** drag it up or down its edge, as far as the menu bar and
+  the Dock. It remembers the height on each display; Settings → Steward →
+  Place → Reset puts it back in the middle. The panel opens centered on it.
+- **Move the panel:** drag it by its top bar (not the buttons) anywhere inside
+  the screen's work area. From then on it opens where you left it, popping in
+  there, and closes there too; the tab or the notch is back after. Double-click
+  the top bar, or Settings → Steward → Reset, to put it back at its edge or
+  under the notch, with its old way in. The viewer isn't movable.
+- **First launch:** a new install that hides until needed peeks out once, a
+  moment after it starts, with a one-line note on how to bring it back.
+- **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
+  eyes fade and stop moving, until something happens or the cursor comes near.
+- **In the notch (Settings → Steward → Screen edge → Notch, on a MacBook that
+  has one):** Steward becomes a black shape around the notch with its eyes lit
+  in it (a chin below it, or wings beside it). With the cursor on it, the black
+  grows a little and the eyes follow the cursor (in "Only when needed", waking
+  up is that grow). A click opens the panel centered under the notch, coming
+  down from it, on the notch's own screen; closing it puts Steward back in the
+  notch. An alert that peeks out comes out under the notch instead of from the
+  side: a black shape below the menu bar line, joined to the chin (Wings grows
+  one for it), with one line of text. A click opens the panel (an alert's
+  action is on its banner there), and it goes back up into the notch when it
+  tucks away. It never covers the menu bar.
+- **The notch island (In the notch → Island):** one black shape joined to the
+  notch, sized by what's going on, with Steward peeking from the notch's left
+  edge at rest. Every alert comes out as the island, never under the notch:
+  what waits on you (a session's approval or question, Steward's own request,
+  a failed build) grows it big, with Steward's eyes on the left and Open and
+  Later (Allow and Deny for Steward's own request, "Want me to look?" for a
+  failed build); a review grows it bigger, with its pictures, Open big and
+  Looks good; anything else is a note under the notch. Words too long for one
+  line make the note taller, up to three lines, never cut off. Messages stay a
+  few seconds (9 s for the big ones), longer with the cursor on them, then
+  settle to a mark on the island's right: amber for a wait, red for a failed
+  build.
+- **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
+  open panel) while an app fills the screen it's on (on for a new install), or
+  while an app on your list is in front ("Add app…", or one click for Keynote,
+  Zoom or FaceTime). Alerts wait in the menu bar and peek out once you're
+  back; the hotkey and the menu bar icon still open the panel. It listens to
+  macOS's own app-switch and Space notifications, and asks macOS only when the
+  Space changes, so nothing runs in between.
+- **Alerts that peek out (Settings → Steward → Presence):** only when a session
+  needs me (with Steward's own requests, reviews, failed builds and the card
+  after an Overnight Watch; the default in "Only when needed"), everything
+  switched on in Notifications (the default in "Always visible"), or nothing.
+  What doesn't peek out adds a dot to the menu bar and shows as a card when
+  the panel opens.
 
 ### States (the character's face shows these)
 
@@ -103,13 +176,13 @@ The tray survives restarts.
 A normal Mac window, centered on the main screen (or just clear of the panel when it's out): traffic lights, a
 sidebar frosted by macOS, and one window at a time. The gear in the panel, ⌘, in the panel and "Settings…" in the
 menu bar icon open it; ⌘W and Esc close it. Every change applies right away: the main process sends the new
-settings to the panel and the Settings window both, whichever one made the change (the pin in the panel's header
-and "Tuck the panel away when I click elsewhere" are the same setting). Going from the panel to Settings, or
+settings to the panel and the Settings window both, whichever one made the change (the Ask | Auto switch by the
+panel's text box and Settings → Running commands are the same setting). Going from the panel to Settings, or
 back, doesn't count as clicking away, so the panel stays out; clicking away from both tucks it in. Closing Settings
 hands focus back to the panel.
 
-- **General:** open at login (in the installed app; macOS keeps it, and asks first when it needs your OK), tuck the
-  panel away when I click elsewhere, and appearance (follows the Mac).
+- **General:** open at login (in the installed app; macOS keeps it, and asks first when it needs your OK), keep
+  the panel open when I click elsewhere, and appearance (follows the Mac).
 - **Steward:** a live preview of the character in any mood, next to the tab at its real size against the screen
   edge it's on, then its options: version (Glass, Flat, Blocky), color (six: Silver, Sky, Lilac, Mint, Peach and
   Graphite), glass tinted or clear, a mouth when it talks, personality (Calm or Lively), its name (shown in the panel,
@@ -144,6 +217,11 @@ only change the fields it shows.
 
 - **Every command and file edit shows an approval card** with the exact command
   or diff, unless it's on an allowlist I set (e.g. `npm test`, `git status`).
+  **Auto** (the Ask | Auto switch by the text box, or Settings → Running commands;
+  off by default) also skips the card for commands that aren't risky; risky ones,
+  deploys, rollbacks and `git push` still ask, and the card says why ("Auto is on,
+  but pushing always asks"). A command that ran without a card says so: "Ran
+  automatically", tagged `auto · safe`, or `on your list` for the allowlist.
 - Only works inside project folders I've added.
 - **Reading files is read-only and stays in the current project.** `read_file` and
   `list_files` need no approval, but every read shows as a step. Paths are resolved to
@@ -164,7 +242,7 @@ Built in this order; each one builds on the one before.
 
 1. **Session hub.** When any Claude Code session needs approval or input, or
    finishes, Steward peeks out ("Portlkit is waiting on you") without taking
-   keyboard focus. The panel shows a strip of every session and its state,
+   keyboard focus. The panel's Sessions card shows every session and its state,
    matched to my projects by folder.
    - Claude Code hooks send the hook JSON to a local HTTP server in Steward:
      bound to 127.0.0.1, secret token (made on first run, kept in the app's data
@@ -181,9 +259,9 @@ Built in this order; each one builds on the one before.
 2. **Moods from real events.** New faces: worried (build failed), celebrating
    (deploy ready or PR merged), sleepy (after midnight), driven by alerts, not
    only by chat.
-3. **Where you left off.** On switching projects, or opening the panel after 2+
-   hours away: the last 3 commits and branch, uncommitted and unpushed changes,
-   and the last thing that project's Claude session said. Fixed, read-only git
+3. **Where you left off.** A card in the panel, worked out on every open and on
+   switching projects: the branch, the last commits, uncommitted and unpushed
+   changes, and the last thing that project's Claude session said. Fixed, read-only git
    commands run by the app itself; the model never builds them.
 4. **Deploy watcher.** Vercel projects found from `.vercel/project.json`, token in
    the keychain. Polls every minute (faster for ~10 minutes after a push). A
@@ -193,7 +271,8 @@ Built in this order; each one builds on the one before.
    never allowlisted.
 5. **Morning brief.** First panel open each day: what deployed or broke
    overnight, which sessions finished, where I left off, and open Dependabot PRs
-   (if `gh` is installed). A template, not a model call, so it's free.
+   (if `gh` is installed). A template, not a model call, so it's free. On the
+   day after an Overnight Watch, the night report takes its place.
 
 Rules for all of it: quiet unless it matters (batch the rest, never repeat), and
 hook payloads, git output, build logs and session files are data, never
@@ -298,4 +377,4 @@ the panel.
 
 ## Open questions
 
-- The notch: a third spot to sit, under the MacBook notch (planned after the character)
+- The notch, still to come: dropping images on the notch, and the black growing into the panel (docs/briefs/notch-dock-phase-3.md)

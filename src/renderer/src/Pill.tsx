@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { colorHex } from '../../shared/steward'
 import type { Mood, StewardPrefs } from '../../shared/types'
-import { createEyes, pressKey, setMood, setStyle, stepEyes, type EyesState, type Glint, type SizeClass } from './pill/eyes'
+import { createEyes, eyesWait, pressKey, setMood, setStyle, stepEyes, type EyesState, type Glint, type SizeClass } from './pill/eyes'
 import { makeView, type PillView } from './pill/render'
 
 /** Typing to Steward: every Pill on the page nods once per key (it only shows while listening). */
@@ -32,12 +32,14 @@ export function toward(p: { x: number; y: number }, el: Element): { x: number; y
 }
 
 /**
- * Steps one eyes state and draws its views from it, paced: every frame while open; tucked away, resting 10 times a
- * second, sleepy 20 and the rest 30; with reduced motion 10 (nothing moves on its own). Nothing at all while the page
- * is hidden. cursor() is where the cursor is, relative to the eyes, or null. Returns a function that stops it.
+ * Steps one eyes state and draws its views from it, paced (eyesWait): every frame while open; tucked away, resting 10
+ * times a second, sleepy 20 and the rest 30, but every frame while near() says the cursor is close; with reduced motion
+ * 10 (nothing moves on its own). Nothing at all while the page is hidden. cursor() is where the cursor is, relative to
+ * the eyes, or null. Returns a function that stops it.
  */
-export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean }): () => void {
-  const every = () => (o.reduced || st.mood === 'resting' ? 0.1 : o.tucked ? (st.mood === 'sleepy' ? 0.05 : 1 / 30) : 0)
+export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x: number; y: number } | null; reduced: boolean; tucked: boolean; idle?: () => boolean; near?: () => boolean }): () => void {
+  // idle: nothing to see (the notch asleep): don't draw, and only look now and then to see if that's changed.
+  const every = () => eyesWait({ mood: st.mood, reduced: o.reduced, tucked: o.tucked, near: o.near?.(), idle: o.idle?.() })
   let frame = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = now()
@@ -52,7 +54,8 @@ export function runEyes(st: EyesState, views: PillView[], o: { cursor: () => { x
   const tick = (ms: number) => {
     frame = 0
     if (document.hidden) return
-    draw(ms / 1000)
+    if (o.idle?.()) last = ms / 1000
+    else draw(ms / 1000)
     schedule()
   }
   const schedule = () => {
@@ -89,24 +92,33 @@ export interface PillProps {
   height: number
   /** peek: the tab at the screen edge · header: the panel · big: Settings' preview. */
   cls: SizeClass
-  look: Pick<StewardPrefs, 'version' | 'color' | 'glass' | 'mouth' | 'personality'>
+  look: Pick<StewardPrefs, 'version' | 'color' | 'glass' | 'mouth' | 'personality'> & Partial<Pick<StewardPrefs, 'liveliness'>>
   /** Tucked away at the screen edge: it draws less often. */
   tucked?: boolean
+  /** Dim when idle: faded, still, and not drawn until it wakes. */
+  dimmed?: boolean
+  /** Which way the panel is from it (-1 left, 1 right; 0, the default: it's the panel's own). Needs you looks there when impatient. */
+  panelSide?: number
 }
 
 /**
  * The character, alive. Its eyes step every frame and look at the cursor while it's over the window. Tucked away
  * it draws less often (resting ten times a second), and while the page is hidden it doesn't draw at all.
  */
-export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false }: PillProps) {
+export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked = false, dimmed = false, panelSide = 0 }: PillProps) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), now()))
   const dark = useMedia('(prefers-color-scheme: dark)')
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
-  const { version, color, glass, mouth, personality } = look
+  const { version, color, glass, mouth, personality, liveliness } = look
 
   useEffect(() => setMood(st, mood, glint), [st, mood, glint])
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively' }), [st, mouth, personality])
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: panelSide, still: liveliness === 'off' }), [st, mouth, personality, panelSide, liveliness])
+  // Read by the drawing loop, so dimming and waking don't rebuild the character.
+  const dimNow = useRef(dimmed)
+  useEffect(() => {
+    dimNow.current = dimmed
+  }, [dimmed])
 
   useEffect(() => {
     const el = host.current
@@ -118,7 +130,7 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
     const onMove = (e: PointerEvent) => (pointer = { x: e.clientX, y: e.clientY })
     const onLeave = () => (pointer = null)
     const nod = () => pressKey(st)
-    const stop = runEyes(st, [view], { cursor: () => (pointer ? toward(pointer, el) : null), reduced, tucked })
+    const stop = runEyes(st, [view], { cursor: () => (pointer ? toward(pointer, el) : null), reduced, tucked, idle: () => dimNow.current })
     typed.add(nod)
     window.addEventListener('pointermove', onMove)
     document.documentElement.addEventListener('pointerleave', onLeave)
@@ -130,5 +142,5 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
     }
   }, [st, version, color, glass, mouth, cls, width, height, dark, reduced, tucked])
 
-  return <div ref={host} className="pill-host" style={{ width, height }} aria-hidden="true" />
+  return <div ref={host} className={dimmed ? 'pill-host dimmed' : 'pill-host'} style={{ width, height }} aria-hidden="true" />
 }

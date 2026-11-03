@@ -7,6 +7,7 @@ import {
   hookCommand,
   hookState,
   readClaudeSettings,
+  reviewHookInstalled,
   withStewardHooks,
   withoutStewardHooks,
   writeClaudeSettings,
@@ -38,7 +39,7 @@ describe('hookCommand', () => {
 })
 
 describe('Steward hooks in ~/.claude/settings.json', () => {
-  it('adds all three hooks next to the existing ones and keeps every other key', () => {
+  it('adds the hooks next to the existing ones and keeps every other key', () => {
     const next = withStewardHooks(existing, CMD)
     expect(Object.keys(next)).toEqual(['env', 'hooks', 'theme'])
     expect(next.env).toEqual(existing.env)
@@ -48,6 +49,25 @@ describe('Steward hooks in ~/.claude/settings.json', () => {
     expect(hooks.Notification).toHaveLength(1)
     expect(hookState(next, CMD)).toBe('current')
     expect(hookState(existing, CMD)).toBe('missing')
+  })
+
+  it('adds the prompt hook Visual Review needs, and tells a connection without it apart', () => {
+    const next = withStewardHooks(existing, CMD)
+    const hooks = next.hooks as Record<string, { hooks: { command: string }[] }[]>
+    expect(hooks.UserPromptSubmit).toEqual([{ hooks: [{ type: 'command', command: CMD, timeout: 5 }] }])
+    expect(reviewHookInstalled(next, CMD)).toBe(true)
+    expect(reviewHookInstalled(existing, CMD)).toBe(false)
+
+    // A connection from before Visual Review has the other three: still connected, but without the prompt hook.
+    const before = Object.fromEntries(Object.entries(hooks).filter(([event]) => event !== 'UserPromptSubmit'))
+    const older = { ...next, hooks: before }
+    expect(hookState(older, CMD)).toBe('current')
+    expect(reviewHookInstalled(older, CMD)).toBe(false)
+    // Updating adds it, and removing still takes out only Steward's hooks.
+    expect(reviewHookInstalled(withStewardHooks(older, CMD), CMD)).toBe(true)
+    expect(withoutStewardHooks(withStewardHooks(older, CMD))).toEqual(existing)
+    // A prompt hook that points somewhere else is an old connection.
+    expect(hookState({ ...next, hooks: { ...hooks, UserPromptSubmit: [{ hooks: [{ type: 'command', command: OLD_CMD }] }] } }, CMD)).toBe('outdated')
   })
 
   it('adding twice changes nothing', () => {

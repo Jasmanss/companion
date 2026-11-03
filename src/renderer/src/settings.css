@@ -305,6 +305,66 @@
   user-select: text;
 }
 
+.set-window input.set-address {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 8px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: 500 12px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  user-select: text;
+}
+
+.set-shot {
+  margin: 0;
+}
+
+.set-shot img {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.set-problem {
+  color: var(--t1);
+}
+
+.set-shot .set-note {
+  margin-top: 6px;
+}
+
+.set-shot figcaption {
+  margin-top: 4px;
+  color: var(--t2);
+  font-size: 12px;
+}
+
+/* Visual Review's history under an address: what it found after the last few turns. */
+.set-history small {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.set-history ul {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.set-history time {
+  display: inline-block;
+  min-width: 7.5em;
+  color: var(--t1);
+  font-variant-numeric: tabular-nums;
+}
+
 .set-window textarea {
   display: block;
   resize: vertical;
@@ -933,4 +993,18 @@
   .kb-key.down {
     transform: none;
   }
+}
+
+/* Visual Review: also at a phone's width, under a project's address. */
+.set-phone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.set-phone small {
+  display: block;
+  color: var(--t3);
 }
