@@ -7,7 +7,7 @@ export const gitInit = (dir: string): Promise<void> =>
   new Promise((resolve, reject) => execFile('git', ['init', '-q'], { cwd: dir }, (err) => (err ? reject(err) : resolve())))
 
 /** Two versions of a small page, for the smoke check: B has a longer heading and a different button. A spinner and a fade run in both. */
-export type SmokeVersion = 'a' | 'b' | 'fade' | 'reshaped'
+export type SmokeVersion = 'a' | 'b' | 'fade' | 'reshaped' | 'narrow'
 
 /** haven's soft fade, from its autumn wash to its surface: 'fade' reaches the surface at the bottom, 'reshaped' at 45%. */
 const FADES: Partial<Record<SmokeVersion, string>> = {
@@ -17,10 +17,12 @@ const FADES: Partial<Record<SmokeVersion, string>> = {
 
 /**
  * Versions of a small page, for the smoke check: B has a longer heading and a different button. 'fade' and 'reshaped' are A
- * with a soft gradient behind it that only changes shape (no colour moves by more than 23). A spinner and a fade run in all.
+ * with a soft gradient behind it that only changes shape (no colour moves by more than 23). 'narrow' is B at a desktop's
+ * width, and at a phone's its cards stack and the first is blue. A spinner and a fade run in all.
  */
 export function smokePage(version: SmokeVersion): string {
-  const a = version !== 'b'
+  const a = version !== 'b' && version !== 'narrow'
+  const narrow = version === 'narrow' ? '@media (max-width:500px){.cards{grid-template-columns:1fr}.cards div:first-child{background:#2f6feb}}' : ''
   return `<!doctype html><meta charset="utf-8"><title>Acme</title><style>
   body{margin:0;font:16px -apple-system,system-ui,sans-serif;background:${FADES[version] ?? '#f7f8fa'};min-height:100vh;color:#1c2330}
   header{position:fixed;top:0;left:0;right:0;height:56px;background:#fff;border-bottom:1px solid #e3e6ec;display:flex;align-items:center;padding:0 32px;font-weight:700}
@@ -32,6 +34,7 @@ export function smokePage(version: SmokeVersion): string {
   .spin{position:absolute;top:70px;right:40px;width:28px;height:28px;border-radius:6px;background:#e0662c;animation:spin 1s linear infinite}
   .fade{animation:fade 2s ease-in-out infinite alternate}
   @keyframes spin{to{transform:rotate(360deg)}} @keyframes fade{from{opacity:.2}to{opacity:1}}
+  ${narrow}
 </style><header>Acme</header><div class="spin"></div><main><h1>${a ? 'Build faster' : 'Build faster, ship calmer'}</h1><p class="fade">A small toolkit for web teams.</p><a>${a ? 'Learn more' : 'Get started'}</a><div class="cards"><div></div><div></div><div></div></div></main>`
 }
 
@@ -49,6 +52,8 @@ export async function startPageServer(): Promise<{ port: number; setVersion(vers
     if (req.url === '/away') res.writeHead(302, { location: 'http://example.invalid/' }).end()
     else if (req.url === '/private') res.writeHead(307, { location: '/login' }).end()
     else if (req.url === '/login') res.writeHead(200, { 'content-type': 'text/html' }).end(LOGIN_PAGE)
+    // Not a look at the page: the hits count page loads only.
+    else if (req.url === '/favicon.ico') res.writeHead(404).end()
     else {
       hits++
       res.writeHead(200, { 'content-type': 'text/html' }).end(smokePage(version))

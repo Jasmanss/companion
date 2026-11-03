@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { addressLabel, filesChangedLabel, reviewNote } from '../../shared/review'
+import { addressLabel, areasChangedLabel, filesChangedLabel, reviewNote } from '../../shared/review'
 import type { ReviewCheck, ReviewProblem, ReviewView } from '../../shared/types'
 import { CloseIcon, SearchIcon } from './icons'
 
@@ -102,6 +102,9 @@ export function ReviewCard({
 
       <p className="rv-facts muted small">
         {review.filesChanged !== null && <span className="chip rv-files">{filesChangedLabel(review.filesChanged)}</span>}
+        {review.regions !== null && review.regions.length > 0 && <span className="chip rv-files">{areasChangedLabel(review.regions.length)}</span>}
+        {review.phone?.changed && !review.phone.only && <span className="chip rv-files">Phone too</span>}
+        {review.phone?.only && "Only a phone's width looks different, so these look alike. "}
         {review.beforeFrom === 'none' && 'There is no earlier picture of this page, so only how it looks now is shown. '}
         {review.beforeFrom === 'last-look' && 'The before picture is from the last time Steward looked, not from when you sent the prompt. '}
         {taller && `The page is taller now (${review.heightAfter} px, was ${review.heightBefore} px): this shows the top. `}
@@ -114,7 +117,9 @@ export function ReviewCard({
       {asking ? (
         <div className="rv-send">
           <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What should change?" rows={3} autoFocus aria-label="What should change?" />
-          <pre className="rv-out">{reviewNote({ project: review.project, address: review.address, note, afterFile: review.files.after, beforeFile: review.files.before })}</pre>
+          <pre className="rv-out">
+            {reviewNote({ project: review.project, address: review.address, note, afterFile: review.files.after, beforeFile: review.files.before, phoneFile: review.files.phoneAfter })}
+          </pre>
           <div className="rv-buttons">
             <button
               className="btn primary"

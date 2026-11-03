@@ -994,3 +994,17 @@
     transform: none;
   }
 }
+
+/* Visual Review: also at a phone's width, under a project's address. */
+.set-phone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.set-phone small {
+  display: block;
+  color: var(--t3);
+}
