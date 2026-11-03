@@ -92,7 +92,7 @@ export interface PillProps {
   height: number
   /** peek: the tab at the screen edge · header: the panel · big: Settings' preview. */
   cls: SizeClass
-  look: Pick<StewardPrefs, 'version' | 'color' | 'glass' | 'mouth' | 'personality'>
+  look: Pick<StewardPrefs, 'version' | 'color' | 'glass' | 'mouth' | 'personality'> & Partial<Pick<StewardPrefs, 'liveliness'>>
   /** Tucked away at the screen edge: it draws less often. */
   tucked?: boolean
   /** Dim when idle: faded, still, and not drawn until it wakes. */
@@ -110,10 +110,10 @@ export function Pill({ mood, glint = 'sweep', width, height, cls, look, tucked =
   const [st] = useState(() => createEyes(seed(), now()))
   const dark = useMedia('(prefers-color-scheme: dark)')
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
-  const { version, color, glass, mouth, personality } = look
+  const { version, color, glass, mouth, personality, liveliness } = look
 
   useEffect(() => setMood(st, mood, glint), [st, mood, glint])
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: panelSide }), [st, mouth, personality, panelSide])
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: panelSide, still: liveliness === 'off' }), [st, mouth, personality, panelSide, liveliness])
   // Read by the drawing loop, so dimming and waking don't rebuild the character.
   const dimNow = useRef(dimmed)
   useEffect(() => {
