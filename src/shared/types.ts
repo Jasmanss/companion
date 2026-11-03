@@ -11,6 +11,8 @@ export type ViewerKind = 'tray' | 'review'
  * for a deploy or merge, sleepy for the hour. The reactions follow the chats (main/reactions.ts): focused while one
  * works, juggling while several do, a nod, done or proud when one stops (by how long its turn was), confused when one
  * asks you something, hello when you're back at the Mac. Watching is Overnight Watch: half-lidded, a slow blink.
+ * The idle loop's moves (shared/idle-loop) play now and then while nothing is going on: ponder, look around, a small
+ * smile, and rarely a yawn (a slow blink at the notch) or a stretch.
  */
 export type Mood =
   | 'resting'
@@ -31,6 +33,12 @@ export type Mood =
   | 'proud'
   | 'hello'
   | 'watching'
+  | 'ponder'
+  | 'lookaround'
+  | 'smile'
+  | 'yawn'
+  | 'stretch'
+  | 'slowblink'
 
 /** Glass: a tinted lens. Flat: one solid color. Blocky: pixels. */
 export type PillVersion = 'glass' | 'flat' | 'blocky'
@@ -138,6 +146,8 @@ export interface StewardPrefs {
   mouth: boolean
   /** Lively glances around, follows the cursor and hops when happy; calm mostly keeps still. */
   personality: 'calm' | 'lively'
+  /** The idle loop: calm adds a small move now and then while nothing is going on; quiet only blinks and glances; off holds still until something happens. */
+  liveliness: 'calm' | 'quiet' | 'off'
   /** Shown in the panel, and what the agent answers to. */
   name: string
   /** The side of the screen it docks on; also where it goes when it can't be in the notch. */
