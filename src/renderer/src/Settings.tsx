@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutInfo } from '../../shared/shortcuts'
 import { alertPeekAfterSwitch, DEFAULT_NAME, DEFAULT_STEWARD, MAX_NAME, PANEL_TINTS, PILL_COLORS, SUGGESTED_STEP_ASIDE_APPS, TAB_SIZES, panelTint } from '../../shared/steward'
+import { atRest } from '../../shared/idle-loop'
 import { historyLine } from '../../shared/review'
 import type { ClaudeHookStatus, DeployStatus, Mood, NotchGeometry, NotificationPrefs, Project, ReviewHistoryEntry, ReviewProblem, ReviewTryResult, SettingsPatch, SettingsView, ShortcutId, StewardPrefs } from '../../shared/types'
 import { usePresence } from './Activity'
@@ -278,7 +279,20 @@ const PREVIEWS: { id: string; label: string; mood: Mood; glint?: Glint }[] = [
   { id: 'resting', label: 'Resting', mood: 'resting' },
   { id: 'sleepy', label: 'Sleepy', mood: 'sleepy' },
   { id: 'watching', label: 'Watching overnight', mood: 'watching' },
+  // The idle loop's moves (Liveliness: Calm). The tab below shows the yawn as it plays at rest: a slow blink.
+  { id: 'ponder', label: 'Ponder', mood: 'ponder' },
+  { id: 'lookaround', label: 'Look around', mood: 'lookaround' },
+  { id: 'smile', label: 'Small smile', mood: 'smile' },
+  { id: 'yawn', label: 'Yawn', mood: 'yawn' },
+  { id: 'stretch', label: 'Stretch', mood: 'stretch' },
 ]
+
+/** What each Liveliness comes to, in one line. */
+const LIVELINESS_NOTE: Record<StewardPrefs['liveliness'], string> = {
+  calm: 'Blinks and glances, and now and then, when nothing is going on, ponders, looks around or smiles. Rarely a yawn or a stretch.',
+  quiet: 'Only blinks and glances.',
+  off: 'Keeps still until something happens.',
+}
 
 /** While the preview listens, someone types to it now and then, so you can see it nod along. */
 function useMakeBelieveTyping(on: boolean) {
@@ -371,7 +385,7 @@ export function StewardSection(props: SectionProps) {
         {/* The tab at its real size, against the screen edge it's on. */}
         <div className={`set-screen ${look.edge}`} aria-label={`The tab at the ${look.edge} screen edge, at its real size`} role="img">
           <div className="set-tab" style={{ width: tab.tab.width, height: tab.tab.height }}>
-            <Pill mood={preview.mood} glint={preview.glint} width={tab.pill.width} height={tab.pill.height} cls="peek" look={look} />
+            <Pill mood={atRest(preview.mood)} glint={preview.glint} width={tab.pill.width} height={tab.pill.height} cls="peek" look={look} />
           </div>
         </div>
       </div>
@@ -404,6 +418,9 @@ export function StewardSection(props: SectionProps) {
           note={look.personality === 'lively' ? 'Glances around, follows your cursor, and hops when it’s happy.' : 'Mostly keeps still, and glances around now and then.'}
         >
           <Segmented label="Personality" value={look.personality} options={[['calm', 'Calm'], ['lively', 'Lively']]} onChange={(personality) => set({ personality })} />
+        </Row>
+        <Row label="Liveliness" note={LIVELINESS_NOTE[look.liveliness]}>
+          <Segmented label="Liveliness" value={look.liveliness} options={[['calm', 'Calm'], ['quiet', 'Quiet'], ['off', 'Off']]} onChange={(liveliness) => set({ liveliness })} />
         </Row>
         <Row label="Name" note="Shown in the panel. The chat answers to it too.">
           <NameField name={look.name} onSave={(name) => set({ name })} />

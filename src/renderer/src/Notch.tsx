@@ -14,6 +14,7 @@
 // The third look, Island, is in notch-island.ts: Steward peeking beside the notch, and an island growing out of it.
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
+import { atRest } from '../../shared/idle-loop'
 import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
 import type { IslandNote, IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
@@ -21,6 +22,7 @@ import { runEyes, seed, toward, useMedia } from './Pill'
 import { createEyes, setMood, setStyle, type EyesState } from './pill/eyes'
 import { makeView, palette, type PillKind, type PillView } from './pill/render'
 import { useDimmed } from './dim'
+import { useCalm, useMoveShown } from './idle-loop'
 import { blob, div, px } from './notch-blob'
 import { buildIsland } from './notch-island'
 
@@ -64,16 +66,20 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
   // Dim when idle: awake and at rest for a while, the eyes fade and stop; the cursor coming near or a new mood wakes them.
   const [near, setNear] = useState(false)
   useEffect(() => api.notch.onCursor((p) => setNear(p !== null)), [])
-  const dimmed = useDimmed(canDim({ enabled: prefs.dimWhenIdle, atRest: awake, near }), mood)
+  // The idle loop's moves come from the panel (shared/idle-loop) and never wake dimmed eyes. One plays here only on
+  // eyes free for it: not dimmed, not following the cursor, no note out. Here a yawn is a slow blink.
+  const calm = useCalm(mood)
+  const dimmed = useDimmed(canDim({ enabled: prefs.dimWhenIdle, atRest: awake, near }), calm)
+  const face = atRest(useMoveShown(mood, calm, !dimmed && !near && !island.note))
   const dimNow = useRef(dimmed)
   useEffect(() => {
     dimNow.current = dimmed
   }, [dimmed])
-  const { notchStyle, version, color, mouth, personality } = prefs
+  const { notchStyle, version, color, mouth, personality, liveliness } = prefs
   const { cx, width, height } = layout
 
   // In the notch the panel opens at the side Settings says. Steady: no glance pulls the eyes off a cursor moving near.
-  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1, steady: true }), [st, mouth, personality, prefs.edge])
+  useEffect(() => setStyle(st, { mouth, lively: personality === 'lively', toward: prefs.edge === 'left' ? -1 : 1, steady: true, still: liveliness === 'off' }), [st, mouth, personality, prefs.edge, liveliness])
   const hoverNow = useRef(hover)
   const nudgeNow = useRef(nudge)
   const islandNow = useRef(island)
@@ -86,9 +92,9 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
     panelNow.current = panel
   }, [hover, nudge, island, panel])
   useEffect(() => {
-    setMood(st, mood, glint)
-    reshape.current?.(mood, awake, hover, nudge)
-  }, [st, mood, glint, awake, hover, nudge, island, panel])
+    setMood(st, face, glint)
+    reshape.current?.(face, awake, hover, nudge)
+  }, [st, face, glint, awake, hover, nudge, island, panel])
 
   useEffect(() => {
     const el = host.current
