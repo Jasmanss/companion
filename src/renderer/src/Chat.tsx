@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import type { CommandMode } from '../../shared/types'
 import { StepsGroup, ThinkingRow } from './Activity'
 import { groupEntries, type Entry } from './chat-groups'
-import { SendIcon, ShieldIcon, StopIcon } from './icons'
+import { HandIcon, SendIcon, ShieldIcon, StopIcon } from './icons'
 import { Markdown } from './Markdown'
 
 export type { Entry }
@@ -61,6 +61,7 @@ export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (
             return (
               <div key={entry.id} className={`approval ${entry.status}`}>
                 <p className="approval-title">
+                  {entry.status === 'pending' && <HandIcon />}
                   {entry.status === 'pending' ? 'Run this?' : entry.status === 'approved' ? 'Ran' : 'Skipped'}
                   <span className="cwd">in {entry.cwd.split('/').pop()}</span>
                 </p>

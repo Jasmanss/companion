@@ -55,10 +55,12 @@ const SLIDE_END_GRACE_MS = 100
 /** The most alerts the news card keeps. */
 const MAX_NEWS = 10
 /** Alerts with a card of their own (a session's, a review's, a failed build's, the night's): the news card leaves them out. */
+const isPanelOpen = (dock: DockState) => dock === 'expanded' || dock === 'viewing'
 const OWN_CARD = ['approval:', 'input:', 'agent-approval:', 'review:', 'finished:', 'night:', 'deploy-failed:', 'first-peek']
 
 export function App() {
   const [dock, setDock] = useState<DockState>('collapsed')
+  const dockNow = useRef(dock)
   const [items, setItems] = useState<TrayItem[]>([])
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
@@ -76,6 +78,8 @@ export function App() {
   const [nudgeAlerts, setNudgeAlerts] = useState<AlertView[]>([])
   /** Alerts that came while the panel was open, or waited for it to open: a failed build's card, and the news card. */
   const [held, setHeld] = useState<AlertView[]>([])
+  /** Alerts that came while tucked away and peeked out. Opening the panel from one keeps them on its cards; tucked away again, they've been seen. */
+  const peeked = useRef(new Set<string>())
   /** A thing to try, picked from the Try card: it goes in the box. */
   const [draft, setDraft] = useState<{ text: string; at: number } | null>(null)
   /** The one-time note about Steward hiding until it's needed. */
@@ -335,7 +339,18 @@ export function App() {
   function handleAlerts(list: AlertView[]) {
     setNudgeAlerts(list)
     setHeld((before) => [...list, ...before.filter((a) => !list.some((b) => b.key === a.key))].slice(0, MAX_NEWS))
+    if (!isPanelOpen(dockNow.current)) for (const a of list) if (!a.key.startsWith('deploy-failed:')) peeked.current.add(a.key)
   }
+
+  useEffect(() => {
+    dockNow.current = dock
+    if (isPanelOpen(dock)) peeked.current.clear()
+    else if (dock !== 'nudge' && peeked.current.size > 0) {
+      const seen = new Set(peeked.current)
+      peeked.current.clear()
+      setHeld((list) => list.filter((a) => !seen.has(a.key)))
+    }
+  }, [dock])
 
   const tuckAway = useCallback(() => {
     void api.dock.collapse()
@@ -806,7 +821,7 @@ export function App() {
   return (
     <div className={`panel ${dragOver ? 'drag-over' : ''}`} data-app>
       <header className="panel-head" title="Drag to move. Double-click to put it back." {...panelDrag}>
-        <Pill mood={mood} glint={glint} width={64} height={54} cls="header" look={look} />
+        <Pill mood={mood} glint={glint} width={48} height={41} cls="header" look={look} />
         <div className="head-text">
           <div className="head-top">
             <span className="name">{look.name}</span>

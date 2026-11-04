@@ -2331,7 +2331,26 @@ async function checkChatBar(w: BrowserWindow, out: string): Promise<void> {
   if (reduced) await newChat()
   else smoothly('the home coming back after a new chat', await watchMotion(wc, { selector: '.tiles.unfolding .tile', property: 'transform', label: '' }, 800, newChat))
   await until(`!document.querySelector('.status-bar') && !document.querySelector('.log') && !!document.querySelector('.try-row') && !document.querySelector('.tiles.above') && !document.querySelector('.tiles.unfolding')`, 'a new chat did not bring the home back')
-  console.log('smoke: a chat in the panel: the things to try by the box, the home folding into the status bar, the counts following, amber going to the Run card and opening what isn\'t in the thread, the sessions and the tray in reach, the thread staying where you read, and a new chat bringing the home back')
+
+  // News that peeked out at the tab: tucked away again, it's been seen; opening the panel from it keeps it on its card.
+  const peek = async () => {
+    setDock('collapsed')
+    await sleep(500)
+    wc.send('alerts:show', [{ id: 9101, key: 'deploy-ready:smoke-peek', level: 'normal', title: 'site deployed', detail: 'site.vercel.app', at: Date.now() }])
+    setDock('nudge')
+    await sleep(400)
+  }
+  await peek()
+  setDock('collapsed')
+  await sleep(400)
+  setDock('expanded')
+  await sleep(500)
+  if (await js(`!!document.querySelector('[data-card="news"]')`)) throw new Error('news that peeked out and was left stays on a card')
+  await peek()
+  setDock('expanded')
+  await until(`!!document.querySelector('[data-card="news"]')`, 'opening the panel from news that peeked out lost it')
+  await js<void>(`[...document.querySelectorAll('[data-card="news"] .chip')].find((c) => c.textContent === 'Clear').click()`)
+  console.log('smoke: a chat in the panel: the things to try by the box, the home folding into the status bar, the counts following, amber going to the Run card and opening what isn\'t in the thread, the sessions and the tray in reach, the thread staying where you read, a new chat bringing the home back, and news that peeked out leaving once it has been seen')
 }
 
 /**
