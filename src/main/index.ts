@@ -35,7 +35,7 @@ import { DeployWatcher, fetchBuildLog, type DeployChange } from './deploys'
 import { downloadImage } from './fetch-image'
 import { CiTracker, dependabotPRs, findGh, GH_COMMANDS, ghRunner, GIT_REMOTE, isGitHubRemote, mainRuns, MergeTracker, mergedPRs, type CiChange, type GhRunner } from './github'
 import type { HookPayload } from './hook-payload'
-import { HookServer, type HeldStop } from './hook-server'
+import { HOLD_PATH, HOOK_PATH, HookServer, type HeldStop } from './hook-server'
 import { runGit, whereYouLeftOff } from './left-off'
 import { LEGACY_APP_NAME, markSecretsDone, migrateUserData, readLegacyKeychainPassword, secretsPending } from './migrate'
 import { MoodBoard } from './moods'
@@ -67,7 +67,7 @@ import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { FIRST_QUIET_MS, GAP_MS, isIdleMove } from '../shared/idle-loop'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
-import { RecentStops, ReviewHolds } from './review-hold'
+import { HOLD_DECIDE_MS, RecentStops, ReviewHolds } from './review-hold'
 import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { hasPicture, isReviewId, looksChanged, ReviewStore, type ReviewRecord } from './review-store'
@@ -2178,6 +2178,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const reviewTimer = setTimeout(() => fail('visual review timed out'), 120_000)
       await checkReview(w, out)
       clearTimeout(reviewTimer)
+      const holdTimer = setTimeout(() => fail('holding the session for a review timed out'), 120_000)
+      await checkReviewHold(w, out)
+      clearTimeout(holdTimer)
       const wordsTimer = setTimeout(() => fail("the edge alert's words timed out"), 20_000)
       await checkTabAlertWords(w, out)
       clearTimeout(wordsTimer)
@@ -3000,6 +3003,8 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     })
     const field = 'input.set-address'
     await until(sw.webContents, `Boolean(document.querySelector(${JSON.stringify(field)}))`, 'Settings has no App address field')
+    // The hold is the second switch, and it says what it does. Its real work is in checkReviewHold.
+    await until(sw.webContents, `[...document.querySelectorAll('.set-phone')].some((l) => l.textContent.includes('Hold the session for my review') && l.textContent.includes('Adds one hook') && l.querySelector('input[role=switch]')?.checked === false)`, 'Settings has no switch to hold the session')
     // The phone's width, under the address: off, then on with a click, then off.
     const phoneSwitch = '.set-phone input[role=switch]'
     need((await sw.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(phoneSwitch)})?.checked`)) === false, "Settings has no phone's width switch, or it is on")
@@ -3029,6 +3034,182 @@ async function checkReview(w: BrowserWindow, out: string): Promise<void> {
     await until(wc, '!document.querySelector(".review-problem")', 'the panel still shows a message after a capture worked')
     console.log('smoke: a capture that works clears the message')
   } finally {
+    await reviews.clear()
+    await settings.removeProject(projectDir)
+    server.close()
+    await fs.rm(projectDir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * "Hold the session for my review", through the hook server's own front door: both Stop hooks posted at once with its
+ * token, the same way their curl commands do, and answered from the real card. A real Claude Code isn't here (CI has none).
+ */
+async function checkReviewHold(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const need = (ok: boolean, why: string) => {
+    if (!ok) throw new Error(why)
+  }
+  const wc = w.webContents
+  const until = async (script: string, why: string, ms = 15_000) => {
+    for (const started = Date.now(); Date.now() - started < ms; await sleep(100)) if (await wc.executeJavaScript(script)) return
+    throw new Error(why)
+  }
+  const server = await startPageServer()
+  const projectDir = path.join(os.tmpdir(), 'steward-smoke-hold-project')
+  await fs.mkdir(projectDir, { recursive: true })
+  // The smoke runs beside a normal copy, so it has no hook server of its own until here.
+  const userData = app.getPath('userData')
+  const hooks = new HookServer(userData, (event) => void onHookEvent(event), onHoldHook)
+  await hooks.start()
+  const token = (await fs.readFile(path.join(userData, 'hook-token'), 'utf8')).trim()
+  const post = (url: string, body: object, signal?: AbortSignal) =>
+    fetch(`http://127.0.0.1:${hooks.port}${url}`, { method: 'POST', signal, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const turn = (id: string) => ({ session_id: 'smoke-hold', prompt_id: id, cwd: projectDir })
+  const loaded = async (before: number, why: string) => {
+    for (const started = Date.now(); server.hits() === before; await sleep(50)) if (Date.now() - started > 15_000) throw new Error(why)
+  }
+  /** A prompt is sent: wait until the page has been loaded for the before picture, so the page can change now. */
+  const prompt = async (id: string) => {
+    const before = server.hits()
+    await post(HOOK_PATH, { ...turn(id), hook_event_name: 'UserPromptSubmit' })
+    await loaded(before, 'the before picture never asked for the page')
+  }
+  /** The turn stops: both hooks at the same moment. Comes back with the hold hook's response, and whether it's in yet. */
+  const stop = (id: string, extra: object = {}, signal?: AbortSignal) => {
+    const body = { ...turn(id), hook_event_name: 'Stop', ...extra }
+    void post(HOOK_PATH, body)
+    const held = { settled: false, response: post(HOLD_PATH, body, signal) }
+    void held.response.then(
+      () => (held.settled = true),
+      () => (held.settled = true),
+    )
+    return held
+  }
+  const waiting = (why: string) => until(`/^Claude is waiting for your answer · \\d:\\d\\d$/.test(document.querySelector('.card.review .rv-held')?.textContent ?? '')`, why)
+  const click = (label: string) => wc.executeJavaScript(`[...document.querySelectorAll('.card.review button')].find((b) => b.textContent === ${JSON.stringify(label)})?.click()`)
+  const letsGo = async (held: { response: Promise<Response> }, why: string) => {
+    const res = await Promise.race([held.response, sleep(10_000).then(() => null)])
+    need(res?.status === 204, `${why} (${res ? `answered ${res.status}` : 'no answer in 10 seconds'})`)
+  }
+  const realSettings = await fs.stat(CLAUDE_SETTINGS_FILE).then((s) => s.mtimeMs, () => null)
+  const claudeFile = claudeSettingsFile()
+  const stopHooks = async () => JSON.stringify(((await readClaudeSettings(claudeFile)).hooks as { Stop?: unknown } | undefined)?.Stop ?? [])
+  const setHold = (on: boolean) => wc.executeJavaScript(`window.steward.settings.setProjectHold(${JSON.stringify(projectDir)}, ${on}).then(() => true)`)
+  try {
+    await settings.addProject(projectDir)
+    await settings.setProjectUrl(projectDir, `localhost:${server.port}`)
+    setDock('expanded')
+
+    // The switch: no hook while Claude Code isn't connected, one beside the plain one when it is, none again when it's off.
+    await setHold(true)
+    need(!(await stopHooks()).includes(HOLD_PATH), 'the hold hook was added with Claude Code not connected')
+    await writeClaudeSettings(withStewardHooks({}, stewardHookCommand()), claudeFile)
+    await setHold(false)
+    await setHold(true)
+    const added = await stopHooks()
+    need(added.includes(HOLD_PATH) && added.includes(HOOK_PATH), `the hold hook is not beside the plain one (${added})`)
+    await setHold(false)
+    need(!(await stopHooks()).includes(HOLD_PATH), 'the hold hook stayed after the switch went off')
+    await setHold(true)
+    console.log("smoke: the switch adds the hold hook beside the plain one and takes it out, in the smoke's own copy of the settings")
+
+    // A turn with nothing to decide isn't held.
+    await prompt('nothing')
+    await letsGo(stop('nothing'), 'a page that did not change held the session')
+    need((await reviews.pending()).length === 0, 'a page that did not change made a review')
+
+    // The page changed: Claude waits, the card says so, and the note goes straight to it.
+    await prompt('sent')
+    server.setVersion('b')
+    const first = stop('sent', { last_assistant_message: 'I made the heading longer.' })
+    await waiting('the card never said Claude is waiting')
+    need(!first.settled, 'the Stop was let go before anyone answered')
+    await sleep(300)
+    await fs.writeFile(out.replace(/\.png$/, '-hold-card.png'), (await wc.capturePage()).toPNG())
+    await click('Send it back')
+    await until(`[...document.querySelectorAll('.card.review .rv-send button')].some((b) => b.textContent === 'Send to Claude')`, 'Send it back does not say it goes to Claude')
+    await wc.executeJavaScript(`(() => {
+      const t = document.querySelector('.rv-send textarea')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'Make the heading blue')
+      t.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+    await until(`document.querySelector('.rv-out').textContent.includes('Make the heading blue')`, 'the note was not typed')
+    const hitsAtSend = server.hits()
+    await click('Send to Claude')
+    const res = await first.response
+    need(res.status === 200, `the note was answered with ${res.status}`)
+    const answer = (await res.json()) as { decision?: string; reason?: string }
+    need(answer.decision === 'block' && Boolean(answer.reason?.includes('Make the heading blue')) && Boolean(answer.reason?.includes('after.png')), `Claude was not sent the note (${JSON.stringify(answer)})`)
+    await until(`document.body.textContent.includes('Sent to Claude.')`, 'the panel did not say the note was sent')
+    console.log(`smoke: the Stop stayed open until Send it back, and came back with the note (${answer.reason?.split('\n')[1]})`)
+
+    // The next Stop says a hook asked Claude to carry on, and it's a real end: a new look, from where the last one ended, held again.
+    await loaded(hitsAtSend, 'the next round took no before picture')
+    server.setVersion('a')
+    const second = stop('sent', { stop_hook_active: true, last_assistant_message: 'The heading is blue now.' })
+    await waiting('the round after Send it back was not held')
+    need(!second.settled, 'the second Stop was let go before anyone answered')
+    // Open big: the wait shows there too, and Looks good there lets Claude stop.
+    await wc.executeJavaScript(`document.querySelector('.card.review .rv-open').click()`)
+    await until(`/^Claude is waiting for your answer/.test(document.querySelector('.rvv-foot .rv-held')?.textContent ?? '')`, 'the viewer does not say Claude is waiting')
+    await sleep(500)
+    await fs.writeFile(out.replace(/\.png$/, '-hold-viewer.png'), (await wc.capturePage()).toPNG())
+    await wc.executeJavaScript(`[...document.querySelectorAll('.rvv-foot button')].find((b) => b.textContent === 'Looks good').click()`)
+    await letsGo(second, 'Looks good in the viewer did not let Claude stop')
+    await until(`!document.querySelector('.review-viewer') && !document.querySelector('.card.review')`, 'the viewer or the card stayed after Looks good')
+    console.log('smoke: the round after Send it back gets its own look and hold, and Looks good in the viewer lets Claude stop')
+
+    // Nobody answers: Claude stops, the card says so, and Send it back copies again.
+    holds.decideMs = 2000
+    await prompt('late')
+    server.setVersion('b')
+    const late = stop('late')
+    await waiting('the card never said Claude is waiting for the short wait')
+    await letsGo(late, 'the time limit did not let Claude stop')
+    await until(`document.querySelector('.card.review .rv-held.gone')?.textContent.includes('copies a note')`, 'the card did not say Claude stopped waiting')
+    await click('Send it back')
+    await until(`[...document.querySelectorAll('.card.review .rv-send button')].some((b) => b.textContent === 'Copy note for the session')`, 'Send it back still says it goes to Claude')
+    await click('Cancel')
+    await click('Looks good')
+    await until(`!document.querySelector('.card.review')`, 'Looks good did not clear the card')
+    holds.decideMs = HOLD_DECIDE_MS
+    console.log('smoke: at the time limit Claude stops, the card says so, and Send it back copies a note')
+
+    // A prompt typed into the session lets it go at once, and so does pressing stop.
+    await prompt('typed')
+    server.setVersion('a')
+    const typed = stop('typed')
+    await waiting('the fourth review was not held')
+    await post(HOOK_PATH, { ...turn('typed'), hook_event_name: 'UserPromptSubmit' })
+    await letsGo(typed, 'a typed prompt did not let the session go')
+    await click('Looks good')
+    await until(`!document.querySelector('.card.review')`, 'Looks good did not clear the card')
+    await prompt('stopped')
+    server.setVersion('b')
+    const abort = new AbortController()
+    const stopped = stop('stopped', {}, abort.signal)
+    await waiting('the fifth review was not held')
+    abort.abort()
+    await stopped.response.catch(() => {})
+    await until(`Boolean(document.querySelector('.card.review .rv-held.gone'))`, 'the card still says Claude is waiting after stop was pressed')
+    await click('Looks good')
+    await until(`!document.querySelector('.card.review')`, 'Looks good did not clear the card')
+    // Later: not now, so Claude can stop.
+    await prompt('later')
+    server.setVersion('a')
+    const later = stop('later')
+    await waiting('the sixth review was not held')
+    await wc.executeJavaScript(`document.querySelector('.card.review [aria-label="Look at this later"]').click()`)
+    await letsGo(later, 'Later did not let Claude stop')
+    console.log('smoke: a prompt typed into the session, the stop button and Later each end the wait')
+
+    await setHold(false)
+    need((await fs.stat(CLAUDE_SETTINGS_FILE).then((s) => s.mtimeMs, () => null)) === realSettings, 'the smoke changed the real Claude Code settings')
+  } finally {
+    holds.letGoAll()
+    holds.decideMs = HOLD_DECIDE_MS
+    hooks.stop()
     await reviews.clear()
     await settings.removeProject(projectDir)
     server.close()
