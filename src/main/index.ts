@@ -3212,6 +3212,15 @@ async function checkReviewHold(w: BrowserWindow, out: string): Promise<void> {
     holds.decideMs = HOLD_DECIDE_MS
     hooks.stop()
     await reviews.clear()
+    // Nothing of this goes on to the next checks: a batched alert or a note coming out later would move what they expect at rest.
+    sessions.dismiss('smoke-hold')
+    activity.reset()
+    islandNotes.drop()
+    alerts.flush()
+    heldAlerts = []
+    asideAlerts = []
+    sendSessions()
+    updateMenuBar()
     await settings.removeProject(projectDir)
     server.close()
     await fs.rm(projectDir, { recursive: true, force: true })
