@@ -10,13 +10,13 @@
 // a promoted card is not always urgent.
 //
 // With a chat going, the cards fold into the status bar's one line of counts (statusCounts): what you open from it comes
-// back above the thread, and so do one-time notes.
+// back above the thread. One-time notes stay, and so does the night's report, which you only get by asking for it.
 import type { SessionView } from './types'
 
 /**
  * sessions: Claude Code sessions (waiting ones and finished ones). review: Visual Review's card. failed: a build that
  * failed. news: other alerts that waited for the panel (a deploy, a merge). brief and night: the day's first card.
- * leftoff: where you left off. tray: the image tray. try: things to ask (with no chat going). note: one-time notes.
+ * leftoff: where you left off. tray: the image tray. try: things to ask (the empty state, by the box). note: one-time notes.
  */
 export type CardKind = 'sessions' | 'review' | 'failed' | 'news' | 'brief' | 'night' | 'leftoff' | 'tray' | 'try' | 'note'
 /** promoted: full width, first, with its heading and actions. wide: full width. small: half. */
@@ -51,7 +51,7 @@ export interface CardContext {
   tray: number
   /** One-time notes showing (how to bring Steward back, a review decided, no API key). */
   notes: number
-  /** A chat is going: the cards fold into the status bar. Only notes stay above it, and what the bar opened. */
+  /** A chat is going: the cards fold into the status bar. Only notes and the night's report stay above it, and what the bar opened. */
   chatting: boolean
   unfolded?: Unfolded | null
   now: number
@@ -86,7 +86,7 @@ export function rankCards(c: CardContext): Card[] {
   const all = top ? [{ ...top, size: 'promoted' as const }, ...rest] : rest
   if (!c.chatting) return all
   // Above a thread nothing is promoted or half width: it's the chat's place.
-  return all.filter((x) => x.kind === 'note' || (c.unfolded === 'waiting' && x.urgent) || x.kind === c.unfolded).map((x) => ({ ...x, size: 'wide' as const }))
+  return all.filter((x) => x.kind === 'note' || x.kind === 'night' || (c.unfolded === 'waiting' && x.urgent) || x.kind === c.unfolded).map((x) => ({ ...x, size: 'wide' as const }))
 }
 
 export interface StatusCounts {

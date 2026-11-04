@@ -139,7 +139,7 @@ export function Composer({
   mode?: CommandMode
   onMode: (mode: CommandMode) => void
   onSend: (text: string) => void
-  /** A thing to try, picked from the panel's Try card: it goes in the box, to send or change first. */
+  /** A thing to try, picked from the chips above the box: it goes in the box, to send or change first. */
   draft?: { text: string; at: number } | null
   onStop: () => void
   onTyping: (typing: boolean) => void

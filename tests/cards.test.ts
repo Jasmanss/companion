@@ -63,6 +63,11 @@ describe('the panel cards, one promoted', () => {
     expect(show({ chatting: true, reviews: 1, notes: 1 })).toEqual(['note:wide'])
   })
 
+  it("keeps the night's report above a chat: you asked for it, and no count opens it", () => {
+    expect(show({ chatting: true, first: 'night' })).toEqual(['night:wide'])
+    expect(show({ chatting: true, first: 'brief' })).toEqual([])
+  })
+
   it('opens above the thread what the status bar asks for, at full width', () => {
     const going = { chatting: true, reviews: 1, failed: true, sessions: [session('finished')], tray: 2 }
     expect(show({ ...going, unfolded: 'waiting' })).toEqual(['review:wide!', 'failed:wide!'])
