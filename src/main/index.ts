@@ -10,7 +10,7 @@ import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../sh
 import { clampPanel, clearOfPanel, PanelDrag, panelRect, pickSpot, spotFor, type PanelSpot } from '../shared/panel-place'
 import { DIM_AFTER_MS } from '../shared/dim'
 import { PHONE_SHOT, REVIEW_PICTURES, REVIEW_VIEWER_GAP, reviewViewerRect, type ReviewPicture } from '../shared/review'
-import type { AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, IslandAct, IslandNote, IslandNoteKind, Mood, NightReport, NotchGeometry, NotchLayout, NotchStyle, PillGlint, Project, SessionView, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
+import type { AgentEvent, AlertView, Appearance, ClaudeHookStatus, DeployStatus, DockState, IslandAct, IslandNote, IslandNoteKind, Mood, NightReport, NotchGeometry, NotchLayout, NotchStyle, PillGlint, Project, SessionView, SettingsSection, SettingsView, StepAsideApp, ViewerKind, WatchView } from '../shared/types'
 import { Agent } from './agent'
 import { AlertQueue, withNotificationPrefs, type AlertInput } from './alerts'
 import { AppState } from './app-state'
@@ -2084,6 +2084,9 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const cardsTimer = setTimeout(() => fail("the panel's cards timed out"), 40_000)
       await checkCards(w, out)
       clearTimeout(cardsTimer)
+      const chatTimer = setTimeout(() => fail('the chat in the panel timed out'), 40_000)
+      await checkChatBar(w, out)
+      clearTimeout(chatTimer)
       if (SMOKE_ONLY === 'panel') return app.exit(0)
       if (SMOKE_ONLY === 'idle') {
         const idleTimer = setTimeout(() => fail("Steward's idle loop timed out"), 60_000)
@@ -2228,6 +2231,107 @@ async function checkReactions(out: string): Promise<void> {
   }
   sw.close()
   await sleep(400)
+}
+
+/**
+ * A chat in the panel (main chat Phase M3): the things to try sit right by the box, and the first line of a chat folds the
+ * home into the status bar (with Reduce Motion, a plain swap). Its counts follow what's going on; amber goes to the Run
+ * card in the thread and opens what isn't in the thread; working and images open their cards above it. The thread doesn't
+ * pull you away while you read. A new chat brings the home back. There's no API key in a smoke run, so the agent's events
+ * go straight to the page.
+ */
+async function checkChatBar(w: BrowserWindow, out: string): Promise<void> {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const wc = w.webContents
+  const event = (e: AgentEvent) => wc.send('agent:event', e)
+  const js = <T>(script: string) => wc.executeJavaScript(script) as Promise<T>
+  const until = async (script: string, why: string, ms = 4000) => {
+    for (const t = Date.now(); Date.now() - t < ms; await sleep(100)) if (await js(script)) return
+    throw new Error(`${why}: ${await js(`document.querySelector('.status-bar')?.innerText.replace(/\\s+/g, ' ') ?? 'no status bar'`)}, cards ${await js(`JSON.stringify([...document.querySelectorAll('.tiles > .tile')].map((t) => t.dataset.card))`)}`)
+  }
+  const shot = async (name: string) => {
+    await sleep(500)
+    await fs.writeFile(out.replace(/\.png$/, `-chat-${name}.png`), (await wc.capturePage()).toPNG())
+  }
+  const bar = (working: number, waiting: number, images: number) => `document.querySelector('.status-bar')?.innerText.replace(/\\s+/g, ' ').trim() === ${JSON.stringify(`${working} working ${waiting} waiting ${images} ${images === 1 ? 'image' : 'images'}`)}`
+  const click = (nth: number) => js(`document.querySelectorAll('.status-bar .sb')[${nth}].click()`)
+  const has = (card: string) => `!!document.querySelector('.tiles.above [data-card="${card}"]')`
+  const reduced = await js<boolean>(`matchMedia('(prefers-reduced-motion: reduce)').matches`)
+  setDock('expanded')
+  await sleep(500)
+
+  // Nothing going on: no status bar, and the things to try right above the box.
+  const home = await js<{ gap: number; bar: boolean; inTiles: boolean }>(`(() => { const row = document.querySelector('.try-row'), box = document.querySelector('.cbox'); return { gap: row ? box.getBoundingClientRect().top - row.getBoundingClientRect().bottom : 999, bar: !!document.querySelector('.status-bar'), inTiles: !!document.querySelector('.tiles .try-row') } })()`)
+  if (home.bar || home.gap > 12 || home.gap < 0 || home.inTiles) throw new Error(`the empty state: status bar ${home.bar}, the things to try ${home.gap} points from the box, in the tiles ${home.inTiles}`)
+
+  // The first line of a chat folds the home away.
+  const start: AgentEvent = { type: 'text', delta: 'Looking at the tests.' }
+  if (reduced) {
+    event(start)
+    await until(bar(0, 0, 0), 'the first line of a chat did not bring the status bar')
+    if (await js(`!!document.querySelector('.tiles.folding, .try-row.folding')`)) throw new Error('with Reduce Motion the home folded instead of swapping')
+    console.log('smoke: motion the home folding into the chat: Reduce Motion is on, so it swaps plainly')
+  } else smoothly('the home folding into the chat', await watchMotion(wc, { selector: '.tiles.folding .tile', property: 'transform', label: '' }, 800, () => event(start)))
+  await until(`${bar(0, 0, 0)} && !document.querySelector('.tiles.folding, .try-row')`, 'the home did not fold into the status bar')
+  const other = await js<string[]>(`[...document.querySelectorAll('.tiles > .tile')].map((t) => t.dataset.card).filter((c) => c !== 'note')`)
+  if (other.length) throw new Error(`with a chat going, these cards stayed: ${other}`)
+
+  // The thread stays where you're reading, and a Run card comes into view anyway.
+  event({ type: 'text', delta: '\n\n' + 'Here is what I found so far, line by line.\n\n'.repeat(24) })
+  event({ type: 'done' })
+  await sleep(600)
+  const log = `document.querySelector('.log')`
+  // (Scrolling tells the page on its next frames, which come late in a hidden window.)
+  const scrollUp = () => js<void>(`new Promise((done) => { ${log}.scrollTop = 0; requestAnimationFrame(() => requestAnimationFrame(() => done())) })`)
+  await scrollUp()
+  event({ type: 'text', delta: 'One more line.\n' })
+  await sleep(300)
+  if ((await js<number>(`${log}.scrollTop`)) > 10) throw new Error('a new line pulled the thread away from what you were reading')
+  event({ type: 'activity', activity: { id: 'smoke-chat-1', kind: 'run-command', label: 'Running', target: 'npm test', status: 'running' } })
+  await until(bar(1, 0, 0), 'Steward working does not count as working')
+  const inView = `(() => { const c = document.querySelector('.approval.pending')?.getBoundingClientRect(), l = ${log}.getBoundingClientRect(); return !!c && c.top >= l.top - 1 && c.bottom <= l.bottom + 1 })()`
+  event({ type: 'approval', id: 'smoke-chat-run', command: 'git push origin main', cwd: '/tmp/steward-smoke-cards', reason: 'pushing always asks' })
+  await until(`${bar(0, 1, 0)} && document.querySelectorAll('.status-bar .sb.warn').length === 1`, 'a Run card does not show as one waiting, in amber')
+  await until(inView, 'a Run card did not come into view')
+  await shot('waiting')
+
+  // Amber goes to it from wherever you've scrolled.
+  await scrollUp()
+  await until(`!${inView}`, 'the thread did not scroll up')
+  await click(1)
+  await until(inView, 'the amber count did not go to the Run card')
+
+  // What isn't in the thread opens above it: one click with the Run card waiting too.
+  const cwd = '/tmp/steward-smoke-cards'
+  await onHookEvent({ hook_event_name: 'PermissionRequest', session_id: 'smoke-chat-2', cwd, tool_name: 'Bash', tool_input: { command: 'npm install' } } as HookPayload)
+  sendSessions()
+  await until(`${bar(0, 2, 0)} && !${has('sessions')}`, 'a session waiting is not in the count, or its card did not stay folded')
+  await click(1)
+  await until(`${has('sessions')} && document.querySelector('[data-card="sessions"]').classList.contains('urgent') && ${inView}`, 'the amber count did not open the waiting session above the thread')
+  await shot('unfolded')
+  event({ type: 'approval-resolved', id: 'smoke-chat-run', approved: false })
+  event({ type: 'done' })
+  await until(bar(0, 1, 0), 'the Run card answered, it still counts')
+  await click(1)
+  await until(`!${has('sessions')}`, 'a second click did not fold the waiting session')
+  sessions.dismiss('smoke-chat-2')
+  sendSessions()
+  await until(`${bar(0, 0, 0)} && !document.querySelector('.status-bar .sb.warn') && document.querySelectorAll('.status-bar .sb')[1].disabled`, 'with nothing waiting, the count is not quiet')
+
+  // The sessions and the tray stay in reach.
+  await click(2)
+  await until(has('tray'), 'the images count did not open the tray')
+  await click(0)
+  await until(`${has('sessions')} && !${has('tray')}`, 'the working count did not open the sessions in place of the tray')
+  await click(0)
+  await until(`!${has('sessions')}`, 'the working count did not fold the sessions')
+
+  // A new chat brings the home back.
+  const newChat = () => js<void>(`document.querySelector('[aria-label="New chat"]').click()`)
+  if (reduced) await newChat()
+  else smoothly('the home coming back after a new chat', await watchMotion(wc, { selector: '.tiles.unfolding .tile', property: 'transform', label: '' }, 800, newChat))
+  await until(`!document.querySelector('.status-bar') && !document.querySelector('.log') && !!document.querySelector('.try-row') && !document.querySelector('.tiles.above') && !document.querySelector('.tiles.unfolding')`, 'a new chat did not bring the home back')
+  console.log('smoke: a chat in the panel: the things to try by the box, the home folding into the status bar, the counts following, amber going to the Run card and opening what isn\'t in the thread, the sessions and the tray in reach, the thread staying where you read, and a new chat bringing the home back')
 }
 
 /**

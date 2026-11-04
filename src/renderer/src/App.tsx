@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { touchOf, type Touch } from '../../shared/activity'
-import { rankCards, type Card } from '../../shared/cards'
+import { rankCards, statusCounts, type Card, type Unfolded } from '../../shared/cards'
 import { canDim } from '../../shared/dim'
 import { acceleratorFromKey, formatAccelerator } from '../../shared/shortcuts'
 import { colorHex, DEFAULT_STEWARD, TAB_SIZES } from '../../shared/steward'
@@ -9,7 +9,7 @@ import { usePresence } from './Activity'
 import { ChatLog, Composer, type Entry } from './Chat'
 import type { StepEntry } from './chat-groups'
 import { ContextPill, ProjectSwitcher } from './ContextPill'
-import { BellIcon, BranchIcon, ChevronRightIcon, EyeIcon, GearIcon, ImageIcon, MoonIcon, NewChatIcon, PeopleIcon, SparkIcon, SunriseIcon, WarningIcon } from './icons'
+import { BellIcon, BranchIcon, ChevronRightIcon, EyeIcon, GearIcon, ImageIcon, MoonIcon, NewChatIcon, PeopleIcon, SunriseIcon, WarningIcon } from './icons'
 import { BriefCard } from './BriefCard'
 import { LeftOffBody, LeftOffSmall } from './LeftOffCard'
 import { ReviewCard, ReviewProblems } from './ReviewCard'
@@ -21,6 +21,8 @@ import { applyPanelLook } from './panel-look'
 import { isLateNight, pickMood } from './pick-mood'
 import { Pill, pillKey, useMedia } from './Pill'
 import { useIdleMove } from './idle-loop'
+import { useHomeChange } from './home-chat'
+import { StatusBar } from './StatusBar'
 import { glintFor, workingMood } from './pill/glint'
 import { palette } from './pill/render'
 import { useTabDrag } from './tab-drag'
@@ -628,6 +630,23 @@ export function App() {
     reviewNotice && { text: reviewNotice, label: 'Got it', run: () => setReviewNotice(null) },
     noKey && { text: 'Add your Anthropic API key to start chatting.', label: 'Open settings', run: () => void api.settings.open('connections') },
   ].filter((n): n is Note => !!n)
+  // A chat going: the cards fold into the status bar, and the first message folds them (the home stays while it goes).
+  const chatting = entries.length > 0
+  const homeChange = useHomeChange(chatting, reduced)
+  const approvals = entries.filter((e) => e.kind === 'approval' && e.status === 'pending').length
+  const counts = statusCounts({ sessions, busy, approvals, reviews: topReviews.length, failed: !!failedAlert, tray: items.length })
+  const [unfolded, setUnfolded] = useState<Unfolded | null>(null)
+  if (unfolded && (!chatting || (unfolded === 'waiting' && counts.waiting === 0))) setUnfolded(null)
+  /** The amber count: to the Run card in the thread, and what isn't in the thread (a session, a review, a failed build) opens above it. */
+  const toWaiting = () => {
+    if (counts.waiting > approvals) setUnfolded(unfolded === 'waiting' && !approvals ? null : 'waiting')
+    // On the next frame: what just opened above the thread moves it.
+    requestAnimationFrame(() => {
+      const run = document.querySelector<HTMLElement>('.approval.pending')
+      run?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
+      if (!reduced) run?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.025)' }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' })
+    })
+  }
   const cards = rankCards({
     sessions,
     reviews: topReviews.length,
@@ -637,9 +656,11 @@ export function App() {
     leftOff: !!leftOff,
     tray: items.length,
     notes: notes.length,
-    chatting: entries.length > 0,
+    chatting: chatting && homeChange !== 'folding',
+    unfolded,
     now: Date.now(),
   })
+  const tiles = cards.filter((c) => c.kind !== 'try')
   const tile = (card: Card) => {
     const promoted = card.size === 'promoted'
     switch (card.kind) {
@@ -712,17 +733,8 @@ export function App() {
             <Tray items={items} saveResult={saveResult} onDragOut={dragOut} onOpen={openViewer} onSave={saveToProject} onDismissSave={() => setSaveResult(null)} onError={showError} />
           </Tile>
         )
-      case 'try':
-        return (
-          <Tile key={card.kind} card={card} icon={<SparkIcon />} label="Try">
-            <TryChips
-              onPick={(text) => {
-                setDraft({ text, at: Date.now() })
-                composer.current?.focus()
-              }}
-            />
-          </Tile>
-        )
+      case 'try': // By the box (below).
+        return null
       case 'note':
         return (
           <Tile key={card.kind} card={card} icon={<BellIcon />} label="Note">
@@ -845,12 +857,24 @@ export function App() {
       )}
 
       <div className="body">
+        {chatting && <StatusBar counts={counts} unfolded={unfolded} onWaiting={toWaiting} onToggle={(what) => setUnfolded(unfolded === what ? null : what)} />}
         {watchView && (goodnight || watchView.watching) && <GoodnightCard view={watchView} onClose={() => setGoodnight(false)} onReport={openNightReport} onError={setToast} />}
         <ReviewProblems />
-        {cards.length > 0 && <div className={`tiles${entries.length > 0 ? ' above' : ''}`}>{cards.map(tile)}</div>}
-        {entries.length > 0 && <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />}
+        {tiles.length > 0 && <div className={['tiles', chatting && homeChange !== 'folding' && 'above', homeChange].filter(Boolean).join(' ')}>{tiles.map(tile)}</div>}
+        {chatting && <ChatLog entries={entries} onApprove={(id, ok) => api.agent.approve(id, ok)} />}
       </div>
       <Composer
+        above={
+          cards.some((c) => c.kind === 'try') && (
+            <TryChips
+              leaving={homeChange === 'folding'}
+              onPick={(text) => {
+                setDraft({ text, at: Date.now() })
+                composer.current?.focus()
+              }}
+            />
+          )
+        }
         busy={busy}
         disabled={noKey}
         mode={settings?.commandMode}

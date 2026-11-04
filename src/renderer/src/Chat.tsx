@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import type { CommandMode } from '../../shared/types'
 import { StepsGroup, ThinkingRow } from './Activity'
 import { groupEntries, type Entry } from './chat-groups'
@@ -9,13 +9,25 @@ export type { Entry }
 
 export function ChatLog({ entries, onApprove }: { entries: Entry[]; onApprove: (approvalId: string, approved: boolean) => void }) {
   const end = useRef<HTMLDivElement>(null)
+  // It follows the newest line, unless you've scrolled up to read. Your own message and a card asking for your OK come
+  // into view whatever you're reading.
+  const following = useRef(true)
   useEffect(() => {
-    void end.current?.scrollIntoView({ block: 'end' })
+    const last = entries.at(-1)
+    if (following.current || last?.kind === 'user' || (last?.kind === 'approval' && last.status === 'pending')) void end.current?.scrollIntoView({ block: 'end' })
   }, [entries])
   const blocks = useMemo(() => groupEntries(entries), [entries])
 
   return (
-    <div className="log" role="log" aria-live="polite">
+    <div
+      className="log"
+      role="log"
+      aria-live="polite"
+      onScroll={(e) => {
+        const log = e.currentTarget
+        following.current = log.scrollHeight - log.scrollTop - log.clientHeight < 40
+      }}
+    >
       {blocks.map((block) => {
         if (block.type === 'thinking') return <ThinkingRow key={block.entry.id} />
         if (block.type === 'steps') return <StepsGroup key={block.key} steps={block.steps} />
@@ -118,6 +130,7 @@ export function Composer({
   onStop,
   onTyping,
   inputRef,
+  above,
 }: {
   busy: boolean
   disabled: boolean
@@ -130,6 +143,8 @@ export function Composer({
   onStop: () => void
   onTyping: (typing: boolean) => void
   inputRef?: Ref<HTMLTextAreaElement>
+  /** Right above the box: the empty state's things to try. */
+  above?: ReactNode
 }) {
   const [text, setText] = useState('')
   const [drafted, setDrafted] = useState(draft)
@@ -153,6 +168,7 @@ export function Composer({
   const typed = text.trim().length > 0
   return (
     <div className="composer">
+      {above}
       <div className="cbox">
         {mode && <ModeSwitch mode={mode} onMode={onMode} />}
         <textarea
