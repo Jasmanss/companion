@@ -3058,6 +3058,19 @@ a.icon-btn {
   font-weight: 700;
 }
 
+.rv-held {
+  margin: 0;
+  color: var(--t2);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-held.gone {
+  color: var(--t3);
+  font-weight: 400;
+}
+
 .rv-said-src {
   margin-left: 4px;
   color: var(--t3);

@@ -23,6 +23,9 @@ import {
   hooksPreview,
   readClaudeSettings,
   reviewHookInstalled,
+  holdHookCommand,
+  withHoldHook,
+  withoutHoldHook,
   withStewardHooks,
   withoutStewardHooks,
   writeClaudeSettings,
@@ -32,7 +35,7 @@ import { DeployWatcher, fetchBuildLog, type DeployChange } from './deploys'
 import { downloadImage } from './fetch-image'
 import { CiTracker, dependabotPRs, findGh, GH_COMMANDS, ghRunner, GIT_REMOTE, isGitHubRemote, mainRuns, MergeTracker, mergedPRs, type CiChange, type GhRunner } from './github'
 import type { HookPayload } from './hook-payload'
-import { HookServer } from './hook-server'
+import { HookServer, type HeldStop } from './hook-server'
 import { runGit, whereYouLeftOff } from './left-off'
 import { LEGACY_APP_NAME, markSecretsDone, migrateUserData, readLegacyKeychainPassword, secretsPending } from './migrate'
 import { MoodBoard } from './moods'
@@ -64,6 +67,7 @@ import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { FIRST_QUIET_MS, GAP_MS, isIdleMove } from '../shared/idle-loop'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
+import { RecentStops, ReviewHolds } from './review-hold'
 import { SessionActivity } from './session-activity'
 import { cardPicture, CHANNEL_TOLERANCE, changedAt, comparePictures, GATE_MIN_PIXELS } from './review-diff'
 import { hasPicture, isReviewId, looksChanged, ReviewStore, type ReviewRecord } from './review-store'
@@ -151,6 +155,8 @@ let alerts: AlertQueue
 const moods = new MoodBoard()
 let moodTimer: ReturnType<typeof setTimeout> | undefined
 let hookServer: HookServer | null = null
+let holds: ReviewHolds
+const stopLooks = new RecentStops<ReviewRecord | null>()
 let deploys: DeployWatcher
 let gh: GhRunner | null = null
 const merges = new MergeTracker()
@@ -1498,7 +1504,8 @@ function islandNote(event: HookPayload, turns: Turns): void {
   islandNotes.show(note)
 }
 
-async function onHookEvent(event: HookPayload): Promise<void> {
+async function onHookEvent(raw: HookPayload): Promise<void> {
+  const event = holds.ownStop(raw)
   const turns = activity.turns
   activity.note(event, Date.now())
   // Anything from a session means it isn't stuck (Overnight Watch).
@@ -1508,14 +1515,48 @@ async function onHookEvent(event: HookPayload): Promise<void> {
   const command = event.hook_event_name === 'PermissionRequest' ? event.tool_input?.command : undefined
   if (typeof command === 'string' && alwaysAsks(command)) deploys.boost()
   // A prompt was sent: photograph the page now (in the background), before Claude changes it.
-  if (event.hook_event_name === 'UserPromptSubmit') reviews.turnStarted(event)
+  if (event.hook_event_name === 'UserPromptSubmit') {
+    // Typed into a session that's being held: don't make that prompt wait for the time limit.
+    holds.promptSent(event.session_id)
+    holds.turnBegan(event)
+    reviews.turnStarted(event)
+  }
   const alert = await sessions.apply(event)
   // After the session strip has it, so a note has the chat's name and a finished one what Claude said.
   islandNote(event, turns)
   sendSessions()
   if (alert) raise(alert)
   // The turn ended: photograph it again, and keep a review if the page looks different.
-  if (event.hook_event_name === 'Stop') void reviews.turnStopped(event).then((record) => record && reviewReady(record, event))
+  if (event.hook_event_name === 'Stop') void lookAfterStop(event)
+}
+
+/** The look after a Stop. A session being held goes on waiting for the user if it finds a review, and can stop if not. */
+function lookAfterStop(event: Extract<HookPayload, { hook_event_name: 'Stop' }>): Promise<ReviewRecord | null> {
+  return stopLooks.remember(
+    event,
+    reviews.turnStopped(event).then(async (record) => {
+      holds.looked(event, record?.id ?? null)
+      if (record) await reviewReady(record, event)
+      return record
+    }),
+  )
+}
+
+/** The hold hook of a Stop. The plain hook of the same Stop starts the look, either just before this or just after. */
+function onHoldHook(raw: Extract<HookPayload, { hook_event_name: 'Stop' }>, held: HeldStop): void {
+  const event = holds.ownStop(raw)
+  if (holds.begin(event, held)) void stopLooks.find(event)?.then((record) => holds.looked(event, record?.id ?? null))
+}
+
+const holdHookTrouble = (err: unknown) => console.error('[steward] visual review: could not update the hold hook:', err)
+
+/** The hold hook is in Claude Code's settings only while a project asks to be held and Claude Code is connected. */
+async function syncHoldHook(): Promise<void> {
+  const file = claudeSettingsFile()
+  const claude = await readClaudeSettings(file)
+  const wanted = settings.projects().some((p) => p.url && p.hold) && hookState(claude, stewardHookCommand()) !== 'missing'
+  const next = wanted ? withHoldHook(claude, holdHookCommand(app.getPath('userData'))) : withoutHoldHook(claude)
+  if (JSON.stringify(next) !== JSON.stringify(claude)) await writeClaudeSettings(next, file)
 }
 
 /**
@@ -1529,7 +1570,7 @@ async function reviewReady(record: ReviewRecord, event: { session_id: string; pr
   alerts.withdraw(same)
   heldAlerts = heldAlerts.filter((a) => !same(a))
   asideAlerts = asideAlerts.filter((a) => !same(a))
-  raise(reviewAlert(record))
+  raise(reviewAlert(record, holds.holding(event)))
 }
 
 /** Overnight Watch keeps the Mac from sleeping when idle (the screen may still sleep) for as long as a night goes on. */
@@ -1721,6 +1762,8 @@ function sendReviewProblems(): void {
 }
 
 const stewardHookCommand = () => hookCommand(app.getPath('userData'))
+/** The smoke check never touches the real settings: it has its own file in its throwaway data. */
+const claudeSettingsFile = () => (SMOKE_OUT ? path.join(app.getPath('userData'), 'claude-settings.json') : CLAUDE_SETTINGS_FILE)
 
 async function claudeStatus(): Promise<ClaudeHookStatus> {
   const base = { connected: false, outdated: false, reviewHook: false, serverRunning: (hookServer?.port ?? 0) > 0, settingsFile: CLAUDE_SETTINGS_FILE, backupFile: path.basename(await backupFile()) }
@@ -1836,6 +1879,8 @@ function registerIpc(): void {
   ipcMain.handle('settings:setProjectUrl', async (_e, projectPath: unknown, address: unknown) => {
     if (typeof projectPath !== 'string' || typeof address !== 'string') throw new Error('Bad request')
     await settings.setProjectUrl(projectPath, address)
+    // Clearing the address clears the hold with it.
+    await syncHoldHook().catch(holdHookTrouble)
     // A problem with the old address is no longer news.
     sendReviewProblems()
     return settings.view()
@@ -1843,6 +1888,17 @@ function registerIpc(): void {
   ipcMain.handle('settings:setProjectPhone', async (_e, projectPath: unknown, on: unknown) => {
     if (typeof projectPath !== 'string' || typeof on !== 'boolean') throw new Error('Bad request')
     await settings.setProjectPhone(projectPath, on)
+    return settings.view()
+  })
+  ipcMain.handle('settings:setProjectHold', async (_e, projectPath: unknown, on: unknown) => {
+    if (typeof projectPath !== 'string' || typeof on !== 'boolean') throw new Error('Bad request')
+    await settings.setProjectHold(projectPath, on)
+    try {
+      await syncHoldHook()
+    } catch (err) {
+      await settings.setProjectHold(projectPath, !on)
+      throw err
+    }
     return settings.view()
   })
   ipcMain.handle('settings:setApiKey', async (_e, key: string) => {
@@ -1889,6 +1945,7 @@ function registerIpc(): void {
   })
   ipcMain.handle('settings:removeProject', async (_e, folder: string) => {
     await settings.removeProject(folder)
+    await syncHoldHook().catch(holdHookTrouble)
     return settings.view()
   })
   ipcMain.handle('settings:setCurrentProject', async (_e, folder: string | null) => {
@@ -1945,12 +2002,25 @@ function registerIpc(): void {
   ipcMain.handle('review:problems', () => reviews.problems())
   ipcMain.handle('review:checks', () => reviews.checks())
   ipcMain.handle('review:tryIt', (_e, projectPath: unknown) => (typeof projectPath === 'string' ? reviews.tryIt(projectPath) : { ok: false, error: 'Bad request' }))
-  ipcMain.handle('review:markGood', (_e, id: unknown) => (isReviewId(id) ? reviews.markGood(id) : undefined))
+  ipcMain.handle('review:markGood', async (_e, id: unknown) => {
+    if (!isReviewId(id)) return
+    await reviews.markGood(id)
+    holds.letGo(id)
+  })
+  ipcMain.handle('review:letGo', (_e, id: unknown) => {
+    if (isReviewId(id)) holds.letGo(id)
+  })
   ipcMain.handle('review:sendBack', async (_e, id: unknown, note: unknown) => {
     if (!isReviewId(id) || typeof note !== 'string') throw new Error('Bad request')
     const text = await reviews.sendBack(id, note.slice(0, 2000))
+    const stop = holds.sendBack(id, text)
+    if (stop) {
+      // Claude is back at work on the same prompt: to the rest of Steward that's a turn starting, with a new before picture.
+      void onHookEvent({ hook_event_name: 'UserPromptSubmit', session_id: stop.session_id, cwd: stop.cwd, prompt_id: stop.prompt_id, transcript_path: stop.transcript_path })
+      return { text, sent: true }
+    }
     clipboard.writeText(text)
-    return text
+    return { text, sent: false }
   })
   ipcMain.handle('review:openFull', async (_e, id: unknown, which: unknown) => {
     const record = isReviewId(id) ? reviewStore.get(id) : null
@@ -1979,13 +2049,17 @@ function registerIpc(): void {
     if (typeof wakeTime === 'string') watch?.setWakeTime(wakeTime)
     return watchView()
   })
-  ipcMain.handle('review:clear', () => reviews.clear())
+  ipcMain.handle('review:clear', async () => {
+    holds.letGoAll()
+    await reviews.clear()
+  })
 
   // Connecting merges Steward's hooks into ~/.claude/settings.json; the renderer shows the preview first.
   ipcMain.handle('claude:status', () => claudeStatus())
   ipcMain.handle('claude:preview', () => hooksPreview(stewardHookCommand()))
   ipcMain.handle('claude:connect', async () => {
     await writeClaudeSettings(withStewardHooks(await readClaudeSettings(), stewardHookCommand()))
+    await syncHoldHook()
     return claudeStatus()
   })
   ipcMain.handle('claude:disconnect', async () => {
@@ -4687,7 +4761,10 @@ async function runAutoSmoke(w: BrowserWindow, out: string): Promise<void> {
       await settings.addProject(folder)
       await settings.setCurrentProject(folder)
     },
-    dropProject: (folder) => settings.removeProject(folder),
+    dropProject: async (folder) => {
+      await settings.removeProject(folder)
+      await syncHoldHook().catch(holdHookTrouble)
+    },
     runCommand: async (command) => {
       const tools = agent as unknown as { runTool(block: object, signal: AbortSignal): Promise<{ content: unknown }> }
       const result = await tools.runTool({ type: 'tool_use', id: 'smoke-auto', name: 'run_command', input: { command } }, new AbortController().signal)
@@ -4753,7 +4830,14 @@ app.whenReady().then(async () => {
   sessions = new SessionTracker({ projects: () => settings.projects() })
   reviewStore = new ReviewStore(path.join(userData, 'reviews'))
   await reviewStore.load()
+  holds = new ReviewHolds({
+    projects: () => settings.projects(),
+    awayForTheNight: () => Boolean(watch?.night),
+    onChange: () => void sendReviews(),
+    log: (message) => console.error(`[steward] visual review: ${message}`),
+  })
   reviews = new ReviewTracker({
+    holdOf: (id) => holds.view(id),
     projects: () => settings.projects(),
     capture: (url, size) => capturePage(url, { review: { settleMs: 10_000 }, ...(size === 'phone' ? { viewport: PHONE_SHOT } : {}) }),
     compare: (before, after, size) => comparePictures(before, after, size === 'phone' ? PHONE_SHOT : undefined),
@@ -4879,7 +4963,7 @@ app.whenReady().then(async () => {
     menuBar = new Tray(menuBarIcon())
     menuBar.setToolTip('Steward')
     updateMenuBar()
-    hookServer = new HookServer(userData, (event) => void onHookEvent(event))
+    hookServer = new HookServer(userData, (event) => void onHookEvent(event), onHoldHook)
     await hookServer.start().catch((err: Error) => {
       hookServer = null
       console.error(`[steward] hook server failed to start: ${err.message}`)
@@ -4927,6 +5011,7 @@ app.whenReady().then(async () => {
 app.on('second-instance', () => setDock('expanded'))
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  holds?.letGoAll()
   hookServer?.stop()
   deploys?.stop()
 })
