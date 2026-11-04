@@ -3102,6 +3102,7 @@ async function checkReviewHold(w: BrowserWindow, out: string): Promise<void> {
     setDock('expanded')
 
     // The switch: no hook while Claude Code isn't connected, one beside the plain one when it is, none again when it's off.
+    await writeClaudeSettings({}, claudeFile)
     await setHold(true)
     need(!(await stopHooks()).includes(HOLD_PATH), 'the hold hook was added with Claude Code not connected')
     await writeClaudeSettings(withStewardHooks({}, stewardHookCommand()), claudeFile)

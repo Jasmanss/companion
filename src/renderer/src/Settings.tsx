@@ -786,7 +786,7 @@ function ReviewAddressRow({ project, problem, run }: { project: Project; problem
           />
           <span>
             Hold the session for my review
-            <small>When the page changes, Claude waits up to 2 minutes for Looks good or Send it back, and your note goes straight to it. The session shows as running while it waits. Adds one hook to Claude Code's settings.</small>
+            <small>When the page changes, Claude waits up to 2 minutes for Looks good or Send it back, and your note goes straight to it. The session shows as running while it waits, and every turn ends a few seconds later while Steward looks. Adds one hook to Claude Code's settings.</small>
           </span>
         </label>
       )}
