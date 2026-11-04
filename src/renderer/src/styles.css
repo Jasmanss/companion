@@ -612,7 +612,7 @@ pre {
 .panel-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 11px;
   padding: 9px 10px 8px 12px;
   border-bottom: 1px solid var(--line);
   /* The bar is the handle to drag the panel by (panel-drag.ts): a double-click on it doesn't select the name. */
@@ -959,9 +959,9 @@ pre {
 }
 
 .btn {
-  padding: 6px 12px;
+  padding: 6px 13px;
   border: none;
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--inset2);
   font-weight: 600;
 }
