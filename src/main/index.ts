@@ -2755,8 +2755,9 @@ async function checkReviewViewer(w: BrowserWindow, out: string, id: string, said
     await sleep(30)
   }
   mouse('mouseUp', at(0.8))
-  await sleep(150)
-  const dragged = parseFloat((await look()).x ?? '0')
+  // A busy Mac can leave the page behind the pointer: what counts is where it ends up once it has caught up.
+  let dragged = 0
+  for (const t = Date.now(); Math.abs(dragged - 80) >= 2 && Date.now() - t < 3000; await sleep(100)) dragged = parseFloat((await look()).x ?? '0')
   need(Math.abs(dragged - 80) < 2, `dragging across the picture did not move the slider to about 80% (${dragged}%)`)
   await press('ArrowLeft', true)
   await sleep(300)
@@ -4472,7 +4473,13 @@ async function checkMovablePanel(): Promise<void> {
   await sleep(120)
   const sweptMs = Date.now() - swept
   mouse('mouseUp', sweep(60))
-  await sleep(200)
+  // A busy Mac can leave the page behind the pointer: what counts is where it ends up once it has caught up.
+  const savedHere = () => {
+    const b = w.getBounds()
+    const s = panelPlaces[String(screen.getDisplayMatching(b).id)]
+    return placed() && !!s && near(panelRect(area, { width: b.width, height: b.height }, s), b)
+  }
+  await settles(savedHere, 3000)
   const gaps = panelMoves.slice(1).map((m, i) => m.at - panelMoves[i].at)
   const longest = Math.round(Math.max(0, ...gaps))
   const longestAt = gaps.indexOf(Math.max(...gaps)) + 1
