@@ -2,7 +2,7 @@ import { constants, promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { z } from 'zod'
-import { HOOK_PATH } from './hook-server'
+import { HOLD_PATH, HOOK_PATH } from './hook-server'
 
 export const CLAUDE_SETTINGS_FILE = path.join(os.homedir(), '.claude', 'settings.json')
 export const HOOK_EVENTS = ['PermissionRequest', 'Notification', 'Stop'] as const
@@ -14,6 +14,12 @@ export const HOOK_EVENTS = ['PermissionRequest', 'Notification', 'Stop'] as cons
 export const REVIEW_HOOK_EVENT = 'UserPromptSubmit'
 const ALL_HOOK_EVENTS = [...HOOK_EVENTS, REVIEW_HOOK_EVENT] as const
 const HOOK_TIMEOUT_SECONDS = 5
+/**
+ * How long the hold hook may stay open: longer than Steward ever holds (review-hold.ts), so Steward's own answer always
+ * comes first. curl gives up before Claude Code does, and either way Claude just stops, as tried in both Claude Codes.
+ */
+const HOLD_CURL_SECONDS = 190
+const HOLD_TIMEOUT_SECONDS = 200
 
 type Settings = Record<string, unknown>
 
@@ -37,10 +43,24 @@ export function hookCommand(dataDir: string, home = os.homedir()): string {
 }
 
 /**
+ * The hold hook: post the Stop to Steward and print what it answers, which is nothing unless the user sent the turn back.
+ * Exits 0 whatever happens (2 would mean "block"), and if Steward isn't running it's over at once.
+ */
+export function holdHookCommand(dataDir: string, home = os.homedir()): string {
+  if (/["$`\\]/.test(dataDir)) throw new Error(`Can't build a hook command for ${dataDir}`)
+  const dir = dataDir.startsWith(home + path.sep) ? `$HOME${dataDir.slice(home.length)}` : dataDir
+  return (
+    `d="${dir}"; [ -r "$d/hook-token" ] && /usr/bin/curl -s -m ${HOLD_CURL_SECONDS} -X POST "http://127.0.0.1:$(cat "$d/hook-port")${HOLD_PATH}"` +
+    ` -H "Authorization: Bearer $(cat "$d/hook-token")" -H "Content-Type: application/json" --data-binary @-; exit 0`
+  )
+}
+
+/**
  * Ours, whichever data folder it points at. Every version of the command posts to HOOK_PATH, including the ones
  * installed before the rename, which read the token and port from the old data folder.
  */
 const isStewardHook = (hook: { type: string; [key: string]: unknown }) => typeof hook.command === 'string' && hook.command.includes(HOOK_PATH)
+const isHoldHook = (hook: { type: string; [key: string]: unknown }) => typeof hook.command === 'string' && hook.command.includes(HOLD_PATH)
 
 /**
  * current: each event has exactly one of our hooks, running this command (the prompt hook may be missing, see reviewHookInstalled)
@@ -79,12 +99,28 @@ export function withStewardHooks(settings: Settings, command: string): Settings 
   return { ...settings, hooks }
 }
 
-/** The settings with only Steward's hooks taken out. */
+/** The settings with only Steward's hooks taken out, the hold hook with them. */
 export function withoutStewardHooks(settings: Settings): Settings {
+  return withoutHooks(settings, (h) => isStewardHook(h) || isHoldHook(h))
+}
+
+/** The settings with the hold hook in place, on Stop beside the plain one. */
+export function withHoldHook(settings: Settings, command: string): Settings {
+  const hooks = hooksOf(withoutHooks(settings, isHoldHook))
+  hooks.Stop = [...(hooks.Stop ?? []), { hooks: [{ type: 'command', command, timeout: HOLD_TIMEOUT_SECONDS }] }]
+  return { ...settings, hooks }
+}
+
+/** The settings with only the hold hook taken out. */
+export function withoutHoldHook(settings: Settings): Settings {
+  return withoutHooks(settings, isHoldHook)
+}
+
+function withoutHooks(settings: Settings, matches: (hook: { type: string; [key: string]: unknown }) => boolean): Settings {
   if (settings.hooks === undefined) return settings
   const hooks = hooksOf(settings)
   for (const [event, groups] of Object.entries(hooks)) {
-    const kept = groups.map((g) => ({ ...g, hooks: g.hooks.filter((h) => !isStewardHook(h)) })).filter((g) => g.hooks.length > 0)
+    const kept = groups.map((g) => ({ ...g, hooks: g.hooks.filter((h) => !matches(h)) })).filter((g) => g.hooks.length > 0)
     if (kept.length) hooks[event] = kept
     else delete hooks[event]
   }
