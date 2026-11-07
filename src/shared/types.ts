@@ -202,6 +202,8 @@ export interface Project {
   url?: string
   /** Visual Review looks at the page at a phone's width (390 px) too. Only with an address. */
   phone?: boolean
+  /** Visual Review holds Claude at the end of a turn until the user decides, so Send it back reaches it directly. */
+  hold?: boolean
 }
 
 /** Which alerts peek out from the screen edge, and which cards the panel shows. All on by default. */
@@ -441,6 +443,21 @@ export interface ReviewView {
   regions: ReviewRegion[] | null
   /** The page at a phone's width (390 px), when the project asks for it: the same facts, and whether it changed. */
   phone: ReviewPhone | null
+  /** Claude is waiting for this decision, so Send it back goes straight to it. Null when it isn't. */
+  held: ReviewHold | null
+}
+
+/** A session waiting for a review. */
+export interface ReviewHold {
+  /** When it stops waiting (ms since 1970). */
+  until: number
+}
+
+/** What Send it back did with the note. */
+export interface ReviewSent {
+  text: string
+  /** It went straight to the waiting session. Otherwise it's on the clipboard. */
+  sent: boolean
 }
 
 /** Visual Review at a phone's width: the pictures are served as review://<id>/before-phone and /after-phone. */
@@ -660,6 +677,7 @@ export interface StewardAPI {
     setProjectUrl(path: string, url: string): Promise<SettingsView>
     /** Visual Review at a phone's width too, for a project with an address. */
     setProjectPhone(path: string, on: boolean): Promise<SettingsView>
+    setProjectHold(path: string, on: boolean): Promise<SettingsView>
     setCurrentProject(path: string | null): Promise<SettingsView>
     setAllowlist(list: string[]): Promise<SettingsView>
     suggestProjects(): Promise<Project[]>
@@ -709,7 +727,9 @@ export interface StewardAPI {
     tryIt(path: string): Promise<ReviewTryResult>
     markGood(id: string): Promise<void>
     /** Marks it sent back and copies the note for the session; resolves to what was copied. */
-    sendBack(id: string, note: string): Promise<string>
+    sendBack(id: string, note: string): Promise<ReviewSent>
+    /** Later: nothing to decide yet, so a session waiting on this review can stop. */
+    letGo(id: string): Promise<void>
     /** Open the full-page picture. */
     openFull(id: string, which: 'before' | 'after' | 'before-phone' | 'after-phone'): Promise<void>
     /** The looks after recent turns in a project, newest first. */

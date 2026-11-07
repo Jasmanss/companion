@@ -53,6 +53,11 @@ export function reviewNote(r: { project: string; address: string; note: string; 
   return lines.join('\n')
 }
 
+/** What the panel says after Send it back. */
+export function sentBackLine(sent: { sent: boolean }): string {
+  return sent.sent ? 'Sent to Claude. It carries on with your note, and you get another look when it stops.' : 'Copied. Paste it into the session; the picture is saved at the path in the note.'
+}
+
 /** One look in the history, in words: what Steward found when the turn ended, and what became of a review. */
 export function historyLine(e: Pick<ReviewHistoryEntry, 'found' | 'text' | 'decided'>): string {
   switch (e.found) {

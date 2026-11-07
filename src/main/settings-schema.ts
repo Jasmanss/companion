@@ -51,11 +51,11 @@ const isProject = (p: unknown): p is Project => typeof (p as Project)?.name === 
 
 /**
  * A project from a file: its name and path, and Visual Review's address only if it's still one on this Mac (a file can be
- * edited by hand), with its phone width only alongside an address.
+ * edited by hand), with its phone width and hold only alongside an address.
  */
-function cleanProject({ name, path, url, phone }: Project): Project {
+function cleanProject({ name, path, url, phone, hold }: Project): Project {
   const address = typeof url === 'string' ? parseAppAddress(url) : null
-  return address?.ok ? { name, path, url: address.url, ...(phone === true ? { phone } : {}) } : { name, path }
+  return address?.ok ? { name, path, url: address.url, ...(phone === true ? { phone } : {}), ...(hold === true ? { hold } : {}) } : { name, path }
 }
 
 /** The choices each of the character's options has (the name is free text, the frost a number). */

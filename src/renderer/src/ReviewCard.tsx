@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { addressLabel, areasChangedLabel, filesChangedLabel, reviewNote } from '../../shared/review'
-import type { ReviewCheck, ReviewProblem, ReviewView } from '../../shared/types'
+import { addressLabel, areasChangedLabel, filesChangedLabel, reviewNote, sentBackLine } from '../../shared/review'
+import type { ReviewCheck, ReviewHold, ReviewProblem, ReviewView } from '../../shared/types'
 import { CloseIcon, SearchIcon } from './icons'
 
 const api = () => window.steward
@@ -11,9 +11,39 @@ const message = (err: unknown) => (err instanceof Error ? err.message.replace(/^
 const TALLER_BY = 40
 
 /**
+ * While a session is held for this review: how long it goes on waiting. Once that's over, why Send it back copies again.
+ * Shared with the big viewer.
+ */
+export function HoldLine({ hold }: { hold: ReviewHold | null }) {
+  const [now, setNow] = useState(() => Date.now())
+  const [wasHeld, setWasHeld] = useState(false)
+  if (hold && !wasHeld) setWasHeld(true)
+  useEffect(() => {
+    if (!hold) return
+    setNow(Date.now())
+    const tick = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(tick)
+  }, [hold])
+  if (hold) {
+    const left = Math.max(0, Math.ceil((hold.until - now) / 1000))
+    return (
+      <p className="rv-held" role="status">
+        Claude is waiting for your answer · {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}
+      </p>
+    )
+  }
+  return wasHeld ? (
+    <p className="rv-held gone" role="status">
+      Claude stopped waiting, so Send it back copies a note now.
+    </p>
+  ) : null
+}
+
+/**
  * Visual Review: the page as it was and as it is now, with a slider, and the two buttons that are the whole decision.
- * Looks good marks it reviewed. Send it back asks what should change, then copies a note for the session. Open big
- * shows the whole page before and after in the big viewer, and what Claude said it did sits under the picture.
+ * Looks good marks it reviewed. Send it back asks what should change, then sends it to the session if it's held for
+ * this review, and copies a note for it if not. Open big shows the whole page before and after in the big viewer, and
+ * what Claude said it did sits under the picture.
  */
 export function ReviewCard({
   review,
@@ -40,10 +70,10 @@ export function ReviewCard({
   const [busy, setBusy] = useState(false)
   const taller = review.heightBefore !== null && review.heightAfter > review.heightBefore + TALLER_BY
 
-  const decide = (work: Promise<unknown>, done: string) => {
+  const decide = (work: Promise<string>) => {
     setBusy(true)
     work.then(
-      () => onDone(done),
+      onDone,
       (err: unknown) => {
         setBusy(false)
         onError(message(err))
@@ -114,6 +144,8 @@ export function ReviewCard({
         {more > 0 && ` · ${more} more to look at`}
       </p>
 
+      <HoldLine hold={review.held} />
+
       {asking ? (
         <div className="rv-send">
           <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What should change?" rows={3} autoFocus aria-label="What should change?" />
@@ -124,9 +156,9 @@ export function ReviewCard({
             <button
               className="btn primary"
               disabled={busy}
-              onClick={() => decide(api().review.sendBack(review.id, note), 'Copied. Paste it into the session; the picture is saved at the path in the note.')}
+              onClick={() => decide(api().review.sendBack(review.id, note).then(sentBackLine))}
             >
-              Copy note for the session
+              {review.held ? 'Send to Claude' : 'Copy note for the session'}
             </button>
             <button className="btn" disabled={busy} onClick={() => setAsking(false)}>
               Cancel
@@ -135,7 +167,7 @@ export function ReviewCard({
         </div>
       ) : (
         <div className="rv-buttons">
-          <button className="btn primary" disabled={busy} onClick={() => decide(api().review.markGood(review.id), 'Marked as reviewed.')}>
+          <button className="btn primary" disabled={busy} onClick={() => decide(api().review.markGood(review.id).then(() => 'Marked as reviewed.'))}>
             Looks good
           </button>
           <button className="btn" disabled={busy} onClick={() => setAsking(true)}>
