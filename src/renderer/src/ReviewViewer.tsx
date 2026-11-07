@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
-import { addressLabel, CARD_SHOT, filesChangedLabel, noChangesReason, PHONE_SHOT, reviewNote, reviewPictureUrl } from '../../shared/review'
+import { addressLabel, CARD_SHOT, filesChangedLabel, noChangesReason, PHONE_SHOT, reviewNote, reviewPictureUrl, sentBackLine } from '../../shared/review'
 import type { ReviewRegion, ReviewView } from '../../shared/types'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons'
+import { HoldLine } from './ReviewCard'
 
 const api = () => window.steward
 
@@ -370,11 +371,11 @@ function Decide({ review, atPhone, scale, side, onDone }: { review: ReviewView; 
     </p>
   )
 
-  const decide = (work: Promise<unknown>, done: string) => {
+  const decide = (work: Promise<string>) => {
     setBusy(true)
     setError(null)
     work.then(
-      () => onDone(done),
+      onDone,
       (err: unknown) => {
         setBusy(false)
         onError(message(err))
@@ -386,6 +387,7 @@ function Decide({ review, atPhone, scale, side, onDone }: { review: ReviewView; 
     return (
       <footer className="rvv-foot sending">
         {problem}
+        <HoldLine hold={review.held} />
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -404,8 +406,8 @@ function Decide({ review, atPhone, scale, side, onDone }: { review: ReviewView; 
           {reviewNote({ project: review.project, address: review.address, note, afterFile: review.files.after, beforeFile: review.files.before, phoneFile: review.files.phoneAfter })}
         </pre>
         <div className="rv-buttons">
-          <button className="btn primary" disabled={busy} onClick={() => decide(api().review.sendBack(review.id, note), 'Copied. Paste it into the session; the picture is saved at the path in the note.')}>
-            Copy note for the session
+          <button className="btn primary" disabled={busy} onClick={() => decide(api().review.sendBack(review.id, note).then(sentBackLine))}>
+            {review.held ? 'Send to Claude' : 'Copy note for the session'}
           </button>
           <button className="btn" disabled={busy} onClick={() => setAsking(false)}>
             Cancel
@@ -417,7 +419,8 @@ function Decide({ review, atPhone, scale, side, onDone }: { review: ReviewView; 
   return (
     <footer className="rvv-foot">
       {problem}
-      <button className="btn primary" disabled={busy} onClick={() => decide(api().review.markGood(review.id), 'Marked as reviewed.')}>
+      <HoldLine hold={review.held} />
+      <button className="btn primary" disabled={busy} onClick={() => decide(api().review.markGood(review.id).then(() => 'Marked as reviewed.'))}>
         Looks good
       </button>
       <button className="btn" disabled={busy} onClick={() => setAsking(true)}>

@@ -1,4 +1,4 @@
-import type { Project, ReviewCheck, ReviewHistoryEntry, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
+import type { Project, ReviewCheck, ReviewHistoryEntry, ReviewHold, ReviewProblem, ReviewTryResult, ReviewView } from '../shared/types'
 import { addressLabel, landingNote, reviewNote, sayFrom } from '../shared/review'
 import type { AlertInput } from './alerts'
 import type { HookPayload } from './hook-payload'
@@ -39,6 +39,8 @@ export interface ReviewDeps {
   onChecks?(): void
   /** A look after a turn was added to the history. */
   onHistory?(): void
+  /** Whether a session is waiting for the decision on this review (review-hold.ts). */
+  holdOf?(id: string): ReviewHold | null
   /** The project's git checkout: what it lists as changed when a turn starts, and how many files changed by its end (turn-files.ts). */
   gitFiles?: {
     look(dir: string): Promise<StatusEntry[] | null>
@@ -85,8 +87,8 @@ const dataUrl = (jpeg: Buffer) => `data:image/jpeg;base64,${jpeg.toString('base6
  * The alert a review gets. It waits for your decision, so it is urgent (no waiting for a batch) and counts as needing
  * you (presence.ts). A click opens the panel, where the card is at the top.
  */
-export function reviewAlert(record: Pick<ReviewRecord, 'id' | 'project' | 'projectPath'>): AlertInput {
-  return { key: `review:${record.id}`, level: 'urgent', title: `${record.project} changed`, detail: 'Review what Claude did?', scope: record.projectPath }
+export function reviewAlert(record: Pick<ReviewRecord, 'id' | 'project' | 'projectPath'>, claudeWaiting = false): AlertInput {
+  return { key: `review:${record.id}`, level: 'urgent', title: `${record.project} changed`, detail: claudeWaiting ? 'Claude is waiting for your answer.' : 'Review what Claude did?', scope: record.projectPath }
 }
 
 /**
@@ -309,6 +311,7 @@ export class ReviewTracker {
               only: looksChanged(r.phone) && r.before !== 'none' && !looksChanged(r),
             }
           : null,
+        held: this.deps.holdOf?.(r.id) ?? null,
       })
       if (views.length >= MAX_CARDS) break
     }

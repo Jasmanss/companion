@@ -6,6 +6,8 @@ import path from 'node:path'
 import { parseHookPayload, type HookPayload } from './hook-payload'
 
 export const HOOK_PATH = '/claude-hook'
+/** Visual Review's second Stop hook. It stays open until the user decides, and its answer is what Claude Code hears. */
+export const HOLD_PATH = '/claude-hold'
 /** Tried in order, then any free port. The chosen one is written to `hook-port` for the hook command. */
 const PREFERRED_PORTS = [47831, 47832, 47833]
 const MAX_BODY_BYTES = 1_000_000
@@ -27,7 +29,7 @@ export async function loadOrCreateToken(dir: string): Promise<string> {
 
 /** Why a request is refused (status and reason), or null if its body may be read. */
 export function refusal(req: Pick<http.IncomingMessage, 'method' | 'url' | 'headers'>, token: string, port: number): { status: number; reason: string } | null {
-  if (req.method !== 'POST' || req.url !== HOOK_PATH) return { status: 404, reason: 'not found' }
+  if (req.method !== 'POST' || (req.url !== HOOK_PATH && req.url !== HOLD_PATH)) return { status: 404, reason: 'not found' }
   // Browsers send Origin on cross-site POSTs; hook commands (curl) never do.
   if (req.headers.origin !== undefined) return { status: 403, reason: 'browser requests are not accepted' }
   // A web page that rebinds its domain to 127.0.0.1 still sends its own Host.
@@ -41,6 +43,17 @@ export function refusal(req: Pick<http.IncomingMessage, 'method' | 'url' | 'head
   return null
 }
 
+/** A Stop hook that is waiting for its answer. */
+export interface HeldStop {
+  /** Answer it, once: a note sends Claude back to work with those words, null lets it stop. */
+  answer(note: string | null): void
+  /** The hook went away unanswered: the user pressed stop, or the session closed, or a time limit ran out. */
+  whenGone(then: () => void): void
+}
+
+/** What Claude Code reads from a hook's output to keep going. It says "Stop hook error" beside it in the terminal; the words reach Claude as they are. */
+export const holdAnswer = (note: string) => JSON.stringify({ decision: 'block', reason: note })
+
 /** Receives Claude Code hook events on 127.0.0.1 and hands validated payloads to `onEvent`. */
 export class HookServer {
   private server: http.Server | null = null
@@ -49,6 +62,7 @@ export class HookServer {
   constructor(
     private readonly dir: string,
     private readonly onEvent: (event: HookPayload) => void,
+    private readonly onHold?: (event: Extract<HookPayload, { hook_event_name: 'Stop' }>, held: HeldStop) => void,
   ) {}
 
   async start(): Promise<void> {
@@ -94,10 +108,30 @@ export class HookServer {
     req.on('end', () => {
       if (res.writableEnded) return
       const payload = parseHookPayload(Buffer.concat(chunks).toString('utf8'))
+      if (req.url === HOLD_PATH) {
+        if (payload?.hook_event_name === 'Stop' && this.onHold) this.onHold(payload, heldStop(res))
+        else res.writeHead(payload ? 204 : 400).end()
+        return
+      }
       // Answer first so the hook (and Claude Code) never waits on Steward.
       res.writeHead(payload ? 204 : 400).end()
       if (payload) this.onEvent(payload)
     })
+  }
+}
+
+function heldStop(res: http.ServerResponse): HeldStop {
+  return {
+    answer(note) {
+      if (res.writableEnded) return
+      if (note === null) res.writeHead(204).end()
+      else res.writeHead(200, { 'Content-Type': 'application/json' }).end(holdAnswer(note))
+    },
+    whenGone(then) {
+      res.on('close', () => {
+        if (!res.writableEnded) then()
+      })
+    },
   }
 }
 
