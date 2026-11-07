@@ -23,14 +23,20 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
   input box at the bottom.
 - **The panel's cards:** every block is the same card (one heading style, no
   bullet points): Sessions (a row each, with a one-line summary), Where you
-  left off, Tray, Try (chips that fill the box), and when they come, a review,
-  a failed build, the morning brief or the night's report, news and notes. The
-  most important card is promoted: full width, first, with an accent border.
-  The order is what waits on you (a session waiting, a review, a failed build:
-  orange, "Waiting on you"), then sessions that finished within a day, then
-  the night's report or the morning brief, then where you left off, so there
-  is always a first card. While a chat is going only what waits on you stays
-  above it.
+  left off, Tray, and when they come, a review, a failed build, the morning
+  brief or the night's report, news and notes. The most important card is
+  promoted: full width, first, with an accent border. The order is what waits
+  on you (a session waiting, a review, a failed build: orange, "Waiting on
+  you"), then sessions that finished within a day, then the night's report or
+  the morning brief, then where you left off, so there is always a first card.
+  With nothing else calling, things to try sit right above the box, as chips
+  that fill it.
+- **A chat in the panel:** the first line folds the cards away (with Reduce
+  Motion, a plain swap) into one status line: how many are working, waiting and
+  how many images. Waiting turns amber when something waits on you, and a click
+  goes to it: the Run card in the thread, and what isn't in the thread (a
+  session, a review, a failed build) opens above it. Working and images open the
+  sessions and the tray the same way. New chat brings the cards back.
 - **Drop target:** drag an image toward the edge and it wakes up, slides partway
   out, and holds out its tray. Drop the image on it.
 - **Put it back:** click away or press Esc and it slides back in.

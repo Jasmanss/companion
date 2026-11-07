@@ -100,6 +100,12 @@ export const ImageIcon = () => (
   </svg>
 )
 
+export const HandIcon = () => (
+  <svg {...base}>
+    <path d="M5.5 8V3.4a1 1 0 012 0V7M7.5 7V2.6a1 1 0 012 0V7M9.5 7V3.4a1 1 0 012 0V9.6a4.4 4.4 0 01-4.4 4.4h-.4a3.4 3.4 0 01-2.7-1.4L2 9.8a1 1 0 011.6-1.2L5.5 10" />
+  </svg>
+)
+
 export const LogsIcon = () => (
   <svg {...base}>
     <path d="M3 3.5h10M3 6.5h10M3 9.5h6.5M3 12.5h8" />
