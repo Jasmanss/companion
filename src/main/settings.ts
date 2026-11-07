@@ -143,11 +143,22 @@ export class SettingsStore {
     if (address.trim() === '') {
       delete project.url
       delete project.phone
+      delete project.hold
     } else {
       const parsed = parseAppAddress(address)
       if (!parsed.ok) throw new Error(parsed.reason)
       project.url = parsed.url
     }
+    await this.save()
+  }
+
+  /** Hold Claude at the end of a turn for the user's decision, for a project that has an address. */
+  async setProjectHold(projectPath: string, on: boolean): Promise<void> {
+    const project = this.data.projects.find((p) => p.path === projectPath)
+    if (!project) throw new Error('Unknown project')
+    if (on && !project.url) throw new Error('Add an address first.')
+    if (on) project.hold = true
+    else delete project.hold
     await this.save()
   }
 

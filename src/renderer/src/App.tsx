@@ -694,7 +694,11 @@ export function App() {
               review={top}
               more={topReviews.length - 1}
               onOpen={() => openReview(shownReviews.indexOf(top))}
-              onLater={() => setLaterReviews(new Set(laterReviews).add(top.id))}
+              onLater={() => {
+                setLaterReviews(new Set(laterReviews).add(top.id))
+                // Not now: a session waiting on this can stop. The review stays, and Send it back copies a note later.
+                void api.review.letGo(top.id)
+              }}
               onDone={setReviewNotice}
               onError={setToast}
             />

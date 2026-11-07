@@ -26,7 +26,7 @@ afterEach(async () => {
 })
 
 /** A tracker over a real store in a temp folder, with captures it is told to make: a page that is whatever `page` says now. */
-async function setup(opts: { projects?: Project[]; page?: () => string | Error | Shot; changed?: boolean } = {}) {
+async function setup(opts: { projects?: Project[]; page?: () => string | Error | Shot; changed?: boolean; holdOf?: () => { until: number } | null } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-review-test-'))
   dirs.push(dir)
   const store = new ReviewStore(dir, REVIEW_LIMITS)
@@ -50,6 +50,7 @@ async function setup(opts: { projects?: Project[]; page?: () => string | Error |
     onChange,
     onProblems,
     onChecks,
+    holdOf: opts.holdOf,
     log: (m) => log.push(m),
   })
   return { tracker, store, state, captured, log, onChange, onProblems, onChecks }
@@ -437,6 +438,36 @@ describe('ReviewTracker, decisions', () => {
     expect(onChange).toHaveBeenCalledTimes(2)
   })
 
+  it('a round after Send it back reached Claude is a turn of its own: its before is where the last one ended', async () => {
+    const { tracker, store, state } = await setup()
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'new page'
+    const first = (await tracker.turnStopped(stop()))!
+    await tracker.sendBack(first.id, 'Make it blue')
+    // What main does when the note goes to Claude: the same prompt starts again, and the next Stop counts as its end.
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'blue page'
+    const second = (await tracker.turnStopped({ ...stop(), stop_hook_active: false }))!
+    expect(second.id).not.toBe(first.id)
+    expect(second.before).toBe('turn-start')
+    expect((await store.read(second.id, 'before'))?.toString()).toBe('new page')
+    expect((await store.read(second.id, 'after'))?.toString()).toBe('blue page')
+  })
+
+  it('shows on the card when Claude is waiting for this review', async () => {
+    let held: { until: number } | null = null
+    const { tracker, state } = await setup({ holdOf: () => held })
+    tracker.turnStarted(start())
+    await tick()
+    state.page = 'new page'
+    await tracker.turnStopped(stop())
+    expect((await tracker.pending())[0].held).toBeNull()
+    held = { until: 12345 }
+    expect((await tracker.pending())[0].held).toEqual({ until: 12345 })
+  })
+
   it('Send it back gives the note with the user’s words and the path of the picture, and takes it off the list', async () => {
     const { tracker, store, state } = await setup()
     tracker.turnStarted(start())
@@ -544,6 +575,12 @@ describe('ReviewTracker, problems the user should see', () => {
 })
 
 describe('the review alert', () => {
+  it('says so when Claude is waiting for the answer', () => {
+    const record = { id: '20261024-101010-abcdef12', project: 'haven', projectPath: '/Users/me/haven' }
+    expect(reviewAlert(record, true).detail).toBe('Claude is waiting for your answer.')
+    expect(reviewAlert(record, false).detail).toBe('Review what Claude did?')
+  })
+
   it('needs you: urgent, under its own key, and opens on the card', () => {
     expect(reviewAlert({ id: '20261024-101010-abcdef12', project: 'haven', projectPath: '/Users/me/haven' })).toEqual({
       key: 'review:20261024-101010-abcdef12',

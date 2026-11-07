@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 import {
   backupFile,
   hookCommand,
+  holdHookCommand,
+  withHoldHook,
+  withoutHoldHook,
   hookState,
   readClaudeSettings,
   reviewHookInstalled,
@@ -35,6 +38,53 @@ describe('hookCommand', () => {
 
   it('refuses folders that would break the quoting', () => {
     expect(() => hookCommand('/Users/me/we"ird', '/Users/me')).toThrow()
+  })
+})
+
+describe('the hold hook', () => {
+  const HOLD = holdHookCommand('/Users/me/Library/Application Support/Steward', '/Users/me')
+  const connected = withStewardHooks({}, CMD)
+
+  it('prints what Steward answers, and exits 0 whatever happens', () => {
+    expect(HOLD).toContain('$HOME/Library/Application Support/Steward')
+    expect(HOLD).toContain('/claude-hold')
+    expect(HOLD).not.toContain('-o /dev/null')
+    expect(HOLD).toMatch(/; exit 0$/)
+    expect(() => holdHookCommand('/Users/me/we"ird', '/Users/me')).toThrow()
+  })
+
+  it('goes on Stop beside the plain hook, with a timeout longer than curl gives it', () => {
+    const stop = (withHoldHook(connected, HOLD).hooks as Record<string, { hooks: { command: string; timeout: number }[] }[]>).Stop
+    expect(stop.map((g) => g.hooks[0].command)).toEqual([CMD, HOLD])
+    expect(stop[1].hooks[0].timeout).toBeGreaterThan(Number(/-m (\d+)/.exec(HOLD)![1]))
+  })
+
+  it('is there once, however many times it is added', () => {
+    const twice = withHoldHook(withHoldHook(connected, HOLD), HOLD)
+    expect(twice).toEqual(withHoldHook(connected, HOLD))
+  })
+
+  it('does not change what counts as connected', () => {
+    expect(hookState(withHoldHook(connected, HOLD), CMD)).toBe('current')
+    expect(hookState(withHoldHook({}, HOLD), CMD)).toBe('missing')
+  })
+
+  it('stays when the plain hooks are refreshed', () => {
+    const refreshed = withStewardHooks(withHoldHook(connected, HOLD), CMD)
+    expect(JSON.stringify(refreshed)).toContain('/claude-hold')
+    expect(hookState(refreshed, CMD)).toBe('current')
+  })
+
+  it('comes out on its own, leaving the plain hooks and everyone else', () => {
+    const theirs = { type: 'command', command: 'echo mine' }
+    const settings = withHoldHook({ theme: 'dark', hooks: { Stop: [{ hooks: [theirs] }] } }, HOLD)
+    expect(withoutHoldHook(settings)).toEqual({ theme: 'dark', hooks: { Stop: [{ hooks: [theirs] }] } })
+    expect(withoutHoldHook(withHoldHook(connected, HOLD))).toEqual(connected)
+    expect(withoutHoldHook({ theme: 'dark' })).toEqual({ theme: 'dark' })
+  })
+
+  it('comes out with the rest on disconnect', () => {
+    expect(withoutStewardHooks(withHoldHook({ theme: 'dark', ...connected }, HOLD))).toEqual({ theme: 'dark' })
   })
 })
 
