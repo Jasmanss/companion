@@ -8,12 +8,15 @@
 // night's report, or the morning brief), then where you left off. The first of those that exists is promoted, so
 // there's always one clear thing first. Only the waiting-on-you ones are marked urgent (the orange border and label):
 // a promoted card is not always urgent.
+//
+// With a chat going, the cards fold into the status bar's one line of counts (statusCounts): what you open from it comes
+// back above the thread. One-time notes stay, and so does the night's report, which you only get by asking for it.
 import type { SessionView } from './types'
 
 /**
  * sessions: Claude Code sessions (waiting ones and finished ones). review: Visual Review's card. failed: a build that
  * failed. news: other alerts that waited for the panel (a deploy, a merge). brief and night: the day's first card.
- * leftoff: where you left off. tray: the image tray. try: things to ask (with no chat going). note: one-time notes.
+ * leftoff: where you left off. tray: the image tray. try: things to ask (the empty state, by the box). note: one-time notes.
  */
 export type CardKind = 'sessions' | 'review' | 'failed' | 'news' | 'brief' | 'night' | 'leftoff' | 'tray' | 'try' | 'note'
 /** promoted: full width, first, with its heading and actions. wide: full width. small: half. */
@@ -25,6 +28,9 @@ export interface Card {
   /** Waiting on you: the orange border and "Waiting on you" label. */
   urgent: boolean
 }
+
+/** What the status bar opens above the thread: what waits on you, the sessions, or the tray. */
+export type Unfolded = 'waiting' | 'sessions' | 'tray'
 
 /** A session that finished longer ago than this isn't promoted over where you left off. */
 export const STALE_FINISHED_MS = 24 * 60 * 60 * 1000
@@ -45,8 +51,9 @@ export interface CardContext {
   tray: number
   /** One-time notes showing (how to bring Steward back, a review decided, no API key). */
   notes: number
-  /** A chat is going: only what's waiting on you (and notes) stays above it. */
+  /** A chat is going: the cards fold into the status bar. Only notes and the night's report stay above it, and what the bar opened. */
   chatting: boolean
+  unfolded?: Unfolded | null
   now: number
 }
 
@@ -73,11 +80,32 @@ export function rankCards(c: CardContext): Card[] {
     ...(c.first && !has(c.first) ? [card(c.first, false, 'wide')] : []),
     ...(leftOff && !has('leftoff') ? [card('leftoff', false, 'small')] : []),
     card('tray', false, c.tray > 0 ? 'wide' : 'small'),
-    ...(c.chatting ? [] : [card('try', false, 'wide')]),
+    // Things to ask are for when nothing else is calling: the empty state, by the box.
+    ...(c.chatting || (top && top.kind !== 'leftoff') ? [] : [card('try', false, 'wide')]),
   ]
   const all = top ? [{ ...top, size: 'promoted' as const }, ...rest] : rest
-  // A chat going: the cards fold away (the status bar is Phase M3), but what's waiting on you and the notes stay.
-  return c.chatting ? all.filter((x) => x.urgent || x.kind === 'note') : all
+  if (!c.chatting) return all
+  // Above a thread nothing is promoted or half width: it's the chat's place.
+  return all.filter((x) => x.kind === 'note' || x.kind === 'night' || (c.unfolded === 'waiting' && x.urgent) || x.kind === c.unfolded).map((x) => ({ ...x, size: 'wide' as const }))
+}
+
+export interface StatusCounts {
+  working: number
+  waiting: number
+  images: number
+}
+
+/**
+ * The status bar's counts. Working: sessions working, and Steward's own chat while it works (not while it waits for your
+ * Run: that's waiting). Waiting: sessions waiting for you, Run cards in the thread, reviews, a failed build.
+ */
+export function statusCounts(c: { sessions: Pick<SessionView, 'state'>[]; busy: boolean; approvals: number; reviews: number; failed: boolean; tray: number }): StatusCounts {
+  const sessions = (...states: SessionView['state'][]) => c.sessions.filter((s) => states.includes(s.state)).length
+  return {
+    working: sessions('working') + (c.busy && c.approvals === 0 ? 1 : 0),
+    waiting: sessions('needs-approval', 'needs-input') + c.approvals + c.reviews + (c.failed ? 1 : 0),
+    images: c.tray,
+  }
 }
 
 const card = (kind: CardKind, urgent = false, size: CardSize = 'wide'): Card => ({ kind, size, urgent })
