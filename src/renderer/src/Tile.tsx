@@ -69,11 +69,11 @@ export function SessionRows({ sessions, onDismiss }: { sessions: SessionView[]; 
   )
 }
 
-/** Things to ask, as chips: a click puts it in the box, to send or change. */
+/** Things to ask, as chips right above the box: a click puts it in the box, to send or change. */
 export const TRY = ['Find 4 landing pages with bento grids', '3 dark desk-setup photos for a hero', 'Run the tests']
-export function TryChips({ onPick }: { onPick: (text: string) => void }) {
+export function TryChips({ onPick, leaving }: { onPick: (text: string) => void; leaving?: boolean }) {
   return (
-    <div className="chain">
+    <div className={leaving ? 'try-row folding' : 'try-row'} data-card="try" role="group" aria-label="Things to try">
       {TRY.map((t) => (
         <button key={t} className="chip" onClick={() => onPick(t)}>
           {t}
