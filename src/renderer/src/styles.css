@@ -612,8 +612,8 @@ pre {
 .panel-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px 8px 6px;
+  gap: 11px;
+  padding: 9px 10px 8px 12px;
   border-bottom: 1px solid var(--line);
   /* The bar is the handle to drag the panel by (panel-drag.ts): a double-click on it doesn't select the name. */
   user-select: none;
@@ -641,7 +641,7 @@ pre {
 
 .name {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: -0.01em;
 }
 
@@ -959,9 +959,9 @@ pre {
 }
 
 .btn {
-  padding: 6px 12px;
+  padding: 6px 13px;
   border: none;
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--inset2);
   font-weight: 600;
 }
@@ -1005,11 +1005,171 @@ pre {
   overflow-y: auto;
 }
 
-/* With a chat going only what waits on you stays, above it, and never takes over. */
+/* With a chat going, what the status bar opened sits above it, and never takes over. */
 .tiles.above {
   flex: none;
   max-height: 46%;
+  padding-top: 0;
   border-bottom: 1px solid var(--line);
+}
+
+/* The home folding into a chat: the tiles rise and fade over the thread, which is already in place under them. */
+.tiles.folding {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tiles.folding .tile,
+.try-row.folding {
+  animation: fold-away 0.22s ease-in both;
+}
+
+.tiles.folding .tile:nth-child(2) {
+  animation-delay: 15ms;
+}
+
+.tiles.folding .tile:nth-child(3) {
+  animation-delay: 30ms;
+}
+
+.tiles.folding .tile:nth-child(n + 4) {
+  animation-delay: 45ms;
+}
+
+/* And back, one after another, after a new chat. */
+.tiles.unfolding .tile:nth-child(2) {
+  animation-delay: 30ms;
+}
+
+.tiles.unfolding .tile:nth-child(3) {
+  animation-delay: 60ms;
+}
+
+.tiles.unfolding .tile:nth-child(n + 4) {
+  animation-delay: 90ms;
+}
+
+@keyframes fold-away {
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+}
+
+/* The empty state's things to try, by the box. */
+.try-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  animation: popin 0.3s var(--spring) both;
+}
+
+/* While a chat is open, the cards as one line of counts. Amber is the one cue that something waits on you. */
+.status-bar {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  animation: bar-in 0.28s var(--spring) 0.06s both;
+}
+
+@keyframes bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.sb {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--inset);
+  color: var(--t3);
+  font-size: 12px;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    transform 0.12s ease;
+}
+
+.sb b {
+  color: var(--t1);
+  font-weight: 600;
+}
+
+.sb svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.sb:hover:not(:disabled),
+.sb[aria-expanded='true'] {
+  background: var(--inset2);
+}
+
+.sb:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.sb.warn {
+  border-color: color-mix(in srgb, var(--warm) 35%, transparent);
+  background: color-mix(in srgb, var(--warm) 16%, transparent);
+  color: var(--warm);
+}
+
+.sb.warn:hover,
+.sb.warn[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--warm) 24%, transparent);
+}
+
+.sb.warn b {
+  color: inherit;
+}
+
+.sb-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 1px;
+  border-radius: 50%;
+  background: var(--t3);
+  opacity: 0.45;
+}
+
+.sb-dot.live {
+  background: rgb(var(--live));
+  opacity: 1;
+  animation: sb-live 1.6s ease-in-out infinite;
+}
+
+@keyframes sb-live {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Reduce Motion: the home and the chat swap, plainly. */
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .try-row,
+  .status-bar,
+  .sb-dot.live,
+  .msg.user,
+  .approval {
+    animation: none;
+  }
 }
 
 .tile {
@@ -1457,6 +1617,18 @@ pre {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  margin-left: auto;
+}
+
+/* A long project name: the address goes under it rather than being cut off. */
+.review .card-head {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.review .card-head > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rv-actions .chip {
@@ -1801,12 +1973,13 @@ pre {
   font-size: 12px;
 }
 
+/* Amber, like the status bar's waiting count that goes to it. */
 .approval {
   margin: 0 0 10px;
   padding: 10px;
   border-radius: 12px;
-  background: rgba(var(--glow), 0.12);
-  box-shadow: inset 0 0 0 1px rgba(var(--glow), 0.6);
+  background: color-mix(in srgb, var(--warm) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warm) 35%, transparent);
   animation: popin 0.3s var(--spring) both;
 }
 
@@ -1820,6 +1993,17 @@ pre {
 .approval-title {
   margin: 0 0 6px;
   font-weight: 700;
+}
+
+.approval.pending .approval-title {
+  color: var(--warm);
+}
+
+.approval-title svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
 }
 
 .cwd {
