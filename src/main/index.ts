@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
+import { islandBodyKind, islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
@@ -712,9 +712,12 @@ function presenceChanged(): void {
   updateMenuBar()
 }
 
-/** The notch window checks the cursor often while it's near; it says whether it's on the notch. */
+/**
+ * The notch window checks the cursor often while it's near; it says whether it's on the notch. (In a smoke run that's
+ * the check's made-up cursor, never the real one: none put there is a cursor that isn't on the notch.)
+ */
 function lookAtNotch(over: boolean): void {
-  if (!drivenBySmoke && quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
+  if (quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
 }
 
 /** Within this many points of the tab, the cursor is near: Dim when idle wakes the eyes. */
@@ -2158,9 +2161,11 @@ function runSmokeCheck(w: BrowserWindow, out: string): void {
       const cardsTimer = setTimeout(() => fail("the panel's cards timed out"), 40_000)
       await checkCards(w, out)
       clearTimeout(cardsTimer)
-      const chatTimer = setTimeout(() => fail('the chat in the panel timed out'), 40_000)
-      await checkChatBar(w, out)
-      clearTimeout(chatTimer)
+      if (SMOKE_ONLY !== 'island') {
+        const chatTimer = setTimeout(() => fail('the chat in the panel timed out'), 40_000)
+        await checkChatBar(w, out)
+        clearTimeout(chatTimer)
+      }
       if (SMOKE_ONLY === 'panel') return app.exit(0)
       if (SMOKE_ONLY === 'idle') {
         const idleTimer = setTimeout(() => fail("Steward's idle loop timed out"), 60_000)
@@ -3974,23 +3979,24 @@ async function checkNotch(out: string): Promise<void> {
     const resting = await notch.capture()
     if (!resting || resting.isEmpty()) throw new Error(`the sleeping notch (${notchStyle}) rendered empty`)
     if (!solid(resting, layout.cx, layout.height / 2)) throw new Error('the sleeping notch does not cover the notch')
-    if (solid(resting, layout.cx, below) || solid(resting, layout.cx - beside, layout.height / 2) || solid(resting, layout.cx + beside, layout.height / 2)) throw new Error(`the sleeping notch (${notchStyle}) still reaches beyond the notch`)
+    // What the app thinks, next to what's drawn: the two disagreeing points at the page.
+    if (solid(resting, layout.cx, below) || solid(resting, layout.cx - beside, layout.height / 2) || solid(resting, layout.cx + beside, layout.height / 2)) throw new Error(`the sleeping notch (${notchStyle}) still reaches beyond the notch (the app has it ${JSON.stringify({ presence: presenceNow, dock, busy: agent?.busy, awake: notch.state().awake, hover: notch.state().hover })})`)
     await fs.writeFile(file.replace(/\.png$/, '-asleep.png'), resting.toPNG())
-    // The cursor resting on it for 250 ms wakes it; leaving for 1.5 s puts it back to sleep.
-    lookAtCursor(true, true, NOTCH_DWELL_MS)
-    await sleep(100)
-    lookAtCursor(true, true, NOTCH_DWELL_MS)
-    if (presenceNow.revealed) throw new Error('the notch woke before the cursor had rested on it for 250 ms')
-    await sleep(200)
+    // The cursor resting on it for 250 ms wakes it; leaving for 1.5 s puts it back to sleep. The notch's own cursor watch
+    // sees the check's made-up cursor, as it would the real one.
     const notchLook = await motionLook(notch.contents()!, MOVING_BLACK[notchStyle], '.nt')
-    smoothly(`the notch waking (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(true, true, NOTCH_DWELL_MS)))
+    smokeNotchCursor = { x: notchGeo.x + notchGeo.width / 2, y: notchGeo.y + 10 }
+    await sleep(100)
+    if (presenceNow.revealed) throw new Error('the notch woke before the cursor had rested on it for 250 ms')
+    smoothly(`the notch waking (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => {}))
     if (!presenceNow.revealed) throw new Error('the notch did not wake when the cursor rested on it')
     await sleep(300)
     const woke = await notch.capture()
     if (!woke || (notchStyle === 'chin' ? !solid(woke, layout.cx, below) : !solid(woke, layout.cx - beside, layout.height / 2))) throw new Error(`the notch (${notchStyle}) did not grow when it woke`)
-    lookAtCursor(false, false, NOTCH_DWELL_MS)
-    await sleep(1600)
-    smoothly(`the notch going to sleep (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(false, false, NOTCH_DWELL_MS)))
+    smokeNotchCursor = { x: notchGeo.x + notchGeo.width / 2, y: notchGeo.y + 300 }
+    await sleep(TUCK_MS - 300)
+    smoothly(`the notch going to sleep (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => {}))
+    smokeNotchCursor = null
     if (presenceNow.revealed) throw new Error('the notch did not go back to sleep after the cursor left')
     console.log(`smoke: notch ${notchStyle}: asleep is the notch's black only, resting the cursor on it wakes it, leaving puts it back to sleep`)
     await settings.update({ steward: { presence: 'always' } })
@@ -4092,6 +4098,12 @@ async function checkIsland(out: string): Promise<void> {
   }
   await sleep(900)
 
+  // Steward in the island is the look chosen (Glass by default), drawn as glass: no longer swapped for the flat body.
+  const body = String(await page.executeJavaScript(`document.querySelector('.isl-body')?.dataset.kind ?? ''`))
+  const wanted = islandBodyKind(settings.steward().version, nativeTheme.prefersReducedTransparency)
+  if (body !== wanted) throw new Error(`with the look set to ${settings.steward().version}, the island's Steward is drawn ${body || 'not at all'}, not ${wanted}`)
+  console.log(`smoke: island: with the look set to ${settings.steward().version}, Steward in the notch is drawn ${body}`)
+
   // A prompt sent: the compact island grows out of the notch, Steward steps into its left side, the time on its right.
   const grows = await motionLook(page, '.isl .bp', '.isl')
   smoothly(`the island growing out of the notch${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-1')))
@@ -4140,6 +4152,38 @@ async function checkIsland(out: string): Promise<void> {
   await sleep(800)
   if (win!.isVisible() || notch.state().panel || !black(await shot(), layout.cx + hw + 60, 6)) throw new Error('closing the panel did not bring the island back')
   console.log(`smoke: island: a click on it opens the panel at the ${edge} side (${panel.width}x${panel.height} at ${panel.x},${panel.y}); the island steps back to Steward peeking toward it, and comes back after`)
+
+  // A moved panel (put on the other side from its edge, so the look can't pass by chance): a click on the island pops it
+  // in at its spot, Steward looks toward where it really is, and it closes where it is (never sliding off toward an edge
+  // or into the notch), the island coming back.
+  const spot = { x: edge === 'left' ? area.x + area.width - panel.width - 60 : area.x + 60, y: area.y + Math.max(0, Math.round((area.height - panel.height) / 2)), width: panel.width, height: panel.height }
+  savePanelPlace(spot, notchDisplay())
+  await settings.update({ keepPanelOpen: true })
+  page.sendInputEvent({ type: 'mouseDown', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  page.sendInputEvent({ type: 'mouseUp', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+  await sleep(900)
+  const popped = win!.getBounds()
+  const nearSpot = (b: Electron.Rectangle) => Math.abs(b.x - spot.x) <= 1 && Math.abs(b.y - spot.y) <= 1
+  if (dockNow() !== 'expanded' || !nearSpot(popped)) throw new Error(`a click on the island opened ${dockNow()} at ${JSON.stringify(popped)}, not the moved panel at ${JSON.stringify(spot)}`)
+  const look = notch.state().panel
+  if (!look || Math.sign(look.x) !== (edge === 'left' ? 1 : -1)) throw new Error(`with a moved panel open, Steward looks ${JSON.stringify(look)}, not toward it`)
+  img = await shot()
+  if (!clear(img, layout.cx + hw + 30, 8) || !steward(img, layout.cx - hw - 12, restPill.y)) throw new Error('with a moved panel open, the island did not step back to Steward peeking')
+  // How the page leaves ('in-place', or '' for toward its side or into the notch), as long as it's still there.
+  const ways = new Set<string>()
+  const away: Electron.Rectangle[] = []
+  setDock('collapsed')
+  for (const t = Date.now(); win!.isVisible() && Date.now() - t < 1500; await sleep(16)) {
+    if (!nearSpot(win!.getBounds())) away.push(win!.getBounds())
+    const way = await win!.webContents.executeJavaScript(`document.documentElement.getAttribute('data-leaving')`).catch(() => null)
+    if (typeof way === 'string') ways.add(way)
+  }
+  await settings.update({ keepPanelOpen: keptOpen })
+  if (!ways.has('in-place') || ways.has('') || away.length) throw new Error(`a moved panel did not close where it is (it left ${JSON.stringify([...ways])}, the window at ${JSON.stringify(away[0] ?? null)})`)
+  await sleep(800)
+  if (win!.isVisible() || notch.state().panel || !black(await shot(), layout.cx + hw + 60, 6)) throw new Error('closing a moved panel did not bring the island back')
+  await resetPanelPlace()
+  console.log(`smoke: island: a moved panel pops in at its spot from the island, Steward looks toward it (${look.x}), and it closes where it is`)
 
   // A second project: the island grows into a note, "started", with a count on its right.
   const noted = Date.now()
@@ -4207,7 +4251,23 @@ async function checkIsland(out: string): Promise<void> {
   await sleep(1200)
   img = await shot()
   if (!clear(img, layout.cx - hw - 12, restPill.y) || !black(img, layout.cx, 8)) throw new Error('asleep, Steward is not tucked behind the notch')
-  console.log('smoke: island: asleep, Steward is tucked behind the notch')
+  // Resting the cursor on the notch wakes it: Steward leans out, with no island; the cursor gone, it goes back to sleep.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 10 }
+  await sleep(NOTCH_DWELL_MS + 700)
+  img = await shot()
+  const woke = notch.state().awake && steward(img, layout.cx - hw - 12, restPill.y) && clear(img, layout.cx + hw + 30, 8)
+  await fs.writeFile(out.replace(/\.png$/, '-island-woken.png'), img.toPNG())
+  if (!woke) {
+    smokeNotchCursor = null
+    throw new Error(`asleep, resting the cursor on the notch did not wake Steward (awake ${notch.state().awake})`)
+  }
+  // The cursor moves away (still the made-up one, so the watch sees it go), and Steward goes back to sleep.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 300 }
+  await sleep(TUCK_MS + 1200)
+  img = await shot()
+  smokeNotchCursor = null
+  if (notch.state().awake || !clear(img, layout.cx - hw - 12, restPill.y)) throw new Error('the cursor gone, the woken notch did not go back to sleep')
+  console.log('smoke: island: asleep, Steward is tucked behind the notch; resting the cursor wakes it, leaning out with no island, and it sleeps again once the cursor has gone')
 
   // A Visual Review in the island comes out as the island itself, at the review size with Steward joined: its title,
   // its words and Open big and Looks good, never as the old alert under the notch. Asleep (Only when needed), the island
@@ -5132,6 +5192,9 @@ app.whenReady().then(async () => {
   // The idle loop's moves would land in the middle of the other checks' faces and pictures, so the smoke check runs with
   // Liveliness Quiet; checkIdleLoop turns Calm on for itself.
   if (SMOKE_OUT) await settings.update({ steward: { liveliness: 'quiet' } })
+  // STEWARD_SMOKE_LOOK=flat (or blocky): the same run with another look, to compare what each costs.
+  const look = process.env.STEWARD_SMOKE_LOOK
+  if (SMOKE_OUT && (look === 'glass' || look === 'flat' || look === 'blocky')) await settings.update({ steward: { version: look } })
   // Only when needed, the window starts out of sight, with its page slid out ready to come in.
   slidOut = quiet()
   registerGlobalShortcuts()
@@ -5240,6 +5303,7 @@ app.whenReady().then(async () => {
     cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
     // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
     hoverable: () => !quiet(),
+    solid: () => nativeTheme.prefersReducedTransparency,
   })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
@@ -5320,6 +5384,8 @@ app.whenReady().then(async () => {
   nativeTheme.on('updated', () => {
     applied = null
     applyMaterial()
+    // Reduce Transparency: the island's Glass Steward turns solid, or back.
+    notch?.refresh()
     if (settingsWin && !settingsWin.isDestroyed()) {
       const { vibrant } = settingsAppearance()
       settingsWin.setVibrancy(vibrant ? 'sidebar' : null)

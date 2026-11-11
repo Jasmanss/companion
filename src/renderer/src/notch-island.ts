@@ -84,7 +84,10 @@ export function elapsed(ms: number): string {
 
 export interface IslandOptions {
   layout: NotchLayout
+  /** Steward's body (islandBodyKind: the look chosen, or flat with Reduce Transparency). */
   kind: PillKind
+  /** Glass only: tinted with the color, or clear. */
+  tinted: boolean
   /** The Pill's color, and the color its eyes glow in on black (the spinner and the count use it). */
   color: string
   lit: string
@@ -152,17 +155,18 @@ export function buildIsland(host: HTMLElement, o: IslandOptions): IslandFace {
   const shape = div('isl-shape')
   root.append(shape)
   const black = blob(shape, biggest.width, biggest.height, ISLAND_RADIUS)
-  // Steward, the panel header's Pill. Outside the black it's the solid body: glass needs something to refract. Joined
-  // to the island, the body fades into the black and a lit view of the same eyes (lined up with the body's) takes its
-  // place, in front of a dark avatar disc, like a caller's photo.
+  // Steward, the panel header's Pill, in the look you chose (on the menu bar, glass too close to it gets a fine edge).
+  // Joined to the island, the body fades into the black and a lit view of the same eyes (lined up with the body's) takes
+  // its place, in front of a dark avatar disc, like a caller's photo.
   const pill = div('isl-pill')
-  const kind = o.kind === 'glass' ? 'flat' : o.kind
+  const kind = o.kind
   const avatar = div('isl-avatar')
-  const view = makeView(kind, PEEK_SIZE.width, PEEK_SIZE.height, { color: o.color, tinted: true, light: o.light, mouth: o.mouth, cls: 'header' })
-  const eyes = makeView(kind, PEEK_SIZE.width, PEEK_SIZE.height, { color: o.color, tinted: true, light: false, mouth: o.mouth, cls: 'header', lit: true, symAt: { x: -999, y: -999 } })
+  const view = makeView(kind, PEEK_SIZE.width, PEEK_SIZE.height, { color: o.color, tinted: o.tinted, light: o.light, mouth: o.mouth, cls: 'header', onBar: true })
+  const eyes = makeView(kind, PEEK_SIZE.width, PEEK_SIZE.height, { color: o.color, tinted: o.tinted, light: false, mouth: o.mouth, cls: 'header', lit: true, symAt: { x: -999, y: -999 } })
   for (const v of [view, eyes]) Object.assign(v.el.style, { position: 'absolute', left: px(-PEEK_SIZE.width / 2), top: px(-PEEK_SIZE.height / 2) })
   // Each view fades in a wrapper of its own: resting's standby glow animates the view's own opacity.
   const body = div('isl-body')
+  body.dataset.kind = kind
   const litEyes = div('isl-lit')
   body.append(view.el)
   litEyes.append(eyes.el)
