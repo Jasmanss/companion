@@ -578,10 +578,15 @@ function restingPresence(afterNudge = false): PresenceState {
   return quiet() && (!inNotch() || afterNudge) ? { revealed: true, since: null } : asleep()
 }
 
+/** How many times the notch has been looked for: the newest look wins. */
+let notchAsks = 0
 /** Ask macOS where the notch is (at launch, and whenever a display changes), and put Steward where it belongs. */
 async function refreshNotch(): Promise<void> {
+  // Asking macOS can take seconds (waking, a display coming and going), so a second ask can start before the first
+  // answers. Only the newest answer counts: an older one landing last would put Steward where the notch no longer is.
+  const ask = ++notchAsks
   const found = pretendNotch(process.env, screen.getPrimaryDisplay()) ?? findNotch(await probeScreens(), screen.getAllDisplays())
-  if (JSON.stringify(found) === JSON.stringify(notchGeo)) return
+  if (ask !== notchAsks || JSON.stringify(found) === JSON.stringify(notchGeo)) return
   notchGeo = found
   notch?.setNotch(found)
   for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('notch:geometry', found)
