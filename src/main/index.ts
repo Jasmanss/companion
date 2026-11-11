@@ -4311,6 +4311,16 @@ async function checkIsland(out: string): Promise<void> {
   img = await shot()
   if (!black(img, layout.cx, reviewSize.height - 3) || !black(img, layout.cx - reviewSize.width / 2 + 10, 6)) throw new Error('the review did not grow the island to the review size')
   await fs.writeFile(out.replace(/\.png$/, '-island-review.png'), img.toPNG())
+  // Resting the cursor on it a moment and leaving doesn't take it away early: the presence rules tuck Steward 1.5 s after
+  // the cursor leaves, but a card stays out until it settles (notchAwake).
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + reviewSize.height - 20 }
+  await sleep(NOTCH_DWELL_MS + 500)
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 400 }
+  await sleep(TUCK_MS + 500)
+  img = await shot()
+  const stayed = notch.state()
+  if (stayed.island?.note?.kind !== 'review' || !stayed.awake || !black(img, layout.cx, reviewSize.height - 3)) throw new Error(`Only when needed, the review went away ${TUCK_MS + 500} ms after the cursor left it, before it settled (awake ${stayed.awake}, ${JSON.stringify(stayed.island?.note?.kind ?? null)})`)
+  console.log(`smoke: island: Only when needed, the cursor resting on a review and leaving doesn't take it away before it settles (still out ${TUCK_MS + 500} ms after)`)
   // The cursor on it keeps it past its nine seconds, Only when needed too (where the island doesn't grow with it).
   smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + reviewSize.height - 20 }
   await sleep(BIG_NOTE_MS + 600)
