@@ -106,8 +106,10 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
     taller, up to three lines, never cut off.
   - Messages stay 4.5 s (6.5 s for a long note, 9 s for the big ones), as
     long as the cursor is on them and 1.5 s more, then settle back to compact
-    with the mark on the right. "Alerts that peek out: Nothing" keeps only
-    those marks.
+    with the mark on the right; in "Only when needed" a message keeps the
+    island awake until then. One that something bigger takes the place of
+    before it settles waits for the panel (the menu bar's dot), offer and
+    all. "Alerts that peek out: Nothing" keeps only those marks.
   - A click on the island opens the panel at its side (or where you dragged
     it, popping in and closing there), and Steward steps back to peeking,
     looking toward it.
