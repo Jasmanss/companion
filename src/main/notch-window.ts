@@ -30,6 +30,8 @@ interface Options {
    * grow, so it doesn't grow again on top of that.
    */
   hoverable?(): boolean
+  /** Reduce Transparency is on: the island's Steward is drawn solid. */
+  solid?(): boolean
 }
 
 /** The cursor counts as on the shape this far outside it, so the edge of the black isn't a flicker. */
@@ -97,6 +99,11 @@ export class NotchDock {
     this.send()
   }
 
+  /** Something the page's state is made from changed outside it (Reduce Transparency): send it again. */
+  refresh(): void {
+    this.send()
+  }
+
   /** Send the page something (settings, as they change). */
   post(channel: string, payload: unknown): void {
     if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload)
@@ -140,7 +147,7 @@ export class NotchDock {
   }
 
   state(): NotchState {
-    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.grown(), nudge: this.nudge, island: this.island, panel: this.panel }
+    return { layout: this.layout(), mood: this.mood, glint: this.glint, awake: this.awake, hover: this.grown(), nudge: this.nudge, island: this.island, panel: this.panel, solid: this.o.solid?.() ?? false }
   }
 
   /** Grown a little with the cursor on it: hovering, where the black grows for that (Always visible). */

@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
 import { atRest } from '../../shared/idle-loop'
-import { islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize } from '../../shared/notch'
+import { islandBodyKind, islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
 import type { IslandNote, IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
@@ -47,12 +47,12 @@ export function NotchWindow() {
     return () => window.removeEventListener('click', click)
   }, [])
   if (!state?.layout) return null
-  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} island={state.island ?? NO_ISLAND} panel={state.panel ?? null} prefs={prefs} />
+  return <NotchFace layout={state.layout} mood={state.mood} glint={state.glint} awake={state.awake} hover={!!state.hover} nudge={!!state.nudge} island={state.island ?? NO_ISLAND} panel={state.panel ?? null} solid={!!state.solid} prefs={prefs} />
 }
 
 type Look = { x: number; y: number }
 
-function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; island: IslandStatus; panel: Look | null; prefs: StewardPrefs }) {
+function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, solid, prefs }: { layout: NotchLayout; mood: Mood; glint: NotchState['glint']; awake: boolean; hover: boolean; nudge: boolean; island: IslandStatus; panel: Look | null; solid: boolean; prefs: StewardPrefs }) {
   const host = useRef<HTMLDivElement>(null)
   const [st] = useState(() => createEyes(seed(), performance.now() / 1000))
   const reduced = useMedia('(prefers-reduced-motion: reduce)')
@@ -103,7 +103,8 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
       const lit = palette(version, { color: colorHex(color), tinted: true, light: false, mouth, cls: 'peek', lit: true }).lit ?? '#ffffff'
       const face = buildIsland(el, {
         layout: { cx, width, height },
-        kind: version,
+        kind: islandBodyKind(version, solid),
+        tinted: prefs.glass === 'tinted',
         color: colorHex(color),
         lit,
         mouth,
@@ -144,7 +145,7 @@ function NotchFace({ layout, mood, glint, awake, hover, nudge, island, panel, pr
       reshape.current = null
       el.replaceChildren()
     }
-  }, [st, cx, width, height, notchStyle, version, color, mouth, reduced, dark])
+  }, [st, cx, width, height, notchStyle, version, color, prefs.glass, mouth, reduced, dark, solid])
 
   return <div ref={host} className={dimmed ? 'notch-root dim' : 'notch-root'} aria-hidden="true" />
 }

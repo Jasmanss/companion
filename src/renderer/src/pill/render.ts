@@ -40,6 +40,8 @@ export interface ViewOptions {
   /** The symbol's size (vector) and blocky's mark pixel, instead of the size class's. */
   markSize?: number
   markPx?: number
+  /** Sits on the menu bar (Steward peeking in the notch): glass too close to the bar gets a fine edge. */
+  onBar?: boolean
 }
 export interface PillView {
   el: HTMLElement
@@ -107,6 +109,16 @@ const edgeFor = (o: ViewOptions): string | null => (contrast(o.color, BACKDROP(o
 
 /** What a glass Pill roughly looks like: what's behind it, then the tint over that. */
 const glassFace = (o: ViewOptions) => mix(BACKDROP(o.light), o.tinted ? o.color : WHITE, o.tinted ? (o.light ? 0.7 : 0.42) : o.light ? 0.16 : 0.06)
+
+/**
+ * The same rule for glass on the menu bar (the notch): within 2 to 1 of the bar, a fine edge, darker on a light bar and
+ * lighter on a dark one (design/pill/render.js). The panel's glass sits on its own frost and needs none.
+ */
+export const glassEdgeFor = (o: Pick<ViewOptions, 'color' | 'tinted' | 'light' | 'onBar'>): string | null => {
+  if (!o.onBar) return null
+  const face = glassFace(o as ViewOptions)
+  return contrast(face, BACKDROP(o.light)) < 2 ? (o.light ? darken(face, 0.4) : lighten(face, 0.5)) : null
+}
 
 export interface Palette {
   face: string
@@ -214,6 +226,7 @@ function vectorView(kind: PillKind, el: HTMLElement, W: number, H: number, o: Vi
   let base: string
   if (o.lit) base = ''
   else if (glass) {
+    const glassEdge = glassEdgeFor(o)
     const fill = o.tinted ? rgba(o.color, o.light ? 0.55 : 0.42) : o.light ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)'
     base = `
       <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><defs><filter id="${id}b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${(G.H * 0.05).toFixed(2)}"/></filter></defs>
@@ -231,6 +244,7 @@ function vectorView(kind: PillKind, el: HTMLElement, W: number, H: number, o: Vi
           <ellipse cx="${G.x0 + G.W * 0.36}" cy="${G.y0 + G.H * 0.16}" rx="${G.W * 0.2}" ry="${G.H * 0.08}" fill="#fff" opacity="${o.light ? 0.55 : 0.4}" filter="url(#${id}b)"/>
         </g>
         <path d="${PATH}" fill="none" stroke="rgba(255,255,255,${o.light ? 0.7 : 0.35})" stroke-width="${(0.9 / s).toFixed(2)}"/>
+        ${glassEdge ? `<path d="${PATH}" fill="none" stroke="${glassEdge}" stroke-width="${(1.3 / s).toFixed(2)}"/>` : ''}
       </svg>`
   } else {
     const edge = edgeFor(o)

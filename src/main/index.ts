@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
+import { islandBodyKind, islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
@@ -4097,6 +4097,12 @@ async function checkIsland(out: string): Promise<void> {
   }
   await sleep(900)
 
+  // Steward in the island is the look chosen (Glass by default), drawn as glass: no longer swapped for the flat body.
+  const body = String(await page.executeJavaScript(`document.querySelector('.isl-body')?.dataset.kind ?? ''`))
+  const wanted = islandBodyKind(settings.steward().version, nativeTheme.prefersReducedTransparency)
+  if (body !== wanted) throw new Error(`with the look set to ${settings.steward().version}, the island's Steward is drawn ${body || 'not at all'}, not ${wanted}`)
+  console.log(`smoke: island: with the look set to ${settings.steward().version}, Steward in the notch is drawn ${body}`)
+
   // A prompt sent: the compact island grows out of the notch, Steward steps into its left side, the time on its right.
   const grows = await motionLook(page, '.isl .bp', '.isl')
   smoothly(`the island growing out of the notch${grows.label}`, await watchMotion(page, grows, 900, () => hook('UserPromptSubmit', 'smoke-island-1')))
@@ -5288,6 +5294,7 @@ app.whenReady().then(async () => {
     cursor: () => (drivenBySmoke ? smokeNotchCursor : screen.getCursorScreenPoint()),
     // Only when needed, waking up is the grow; Always visible, the cursor on the black grows it a little.
     hoverable: () => !quiet(),
+    solid: () => nativeTheme.prefersReducedTransparency,
   })
   // Only when needed, it starts asleep.
   notch.setAwake(out())
@@ -5368,6 +5375,8 @@ app.whenReady().then(async () => {
   nativeTheme.on('updated', () => {
     applied = null
     applyMaterial()
+    // Reduce Transparency: the island's Glass Steward turns solid, or back.
+    notch?.refresh()
     if (settingsWin && !settingsWin.isDestroyed()) {
       const { vibrant } = settingsAppearance()
       settingsWin.setVibrancy(vibrant ? 'sidebar' : null)

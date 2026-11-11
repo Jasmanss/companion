@@ -15,7 +15,7 @@
 // line grows taller still (the long note), never cut off. For something that needs you (an approval, a question, a
 // failed build) or a review it grows big, and Steward joins it: its body melts into the black and its lit eyes sit in
 // an avatar spot on the left, like a caller's photo.
-import type { IslandNote, IslandRight, Mood, NotchGeometry, NotchLayout, NotchStyle } from './types'
+import type { IslandNote, IslandRight, Mood, NotchGeometry, NotchLayout, NotchStyle, PillVersion } from './types'
 
 /** How tall the eyes are, in points; the lip and the wings are sized from it. */
 export const NOTCH_EYE = 14
@@ -166,6 +166,13 @@ export function noteSize(note: Pick<IslandNote, 'kind' | 'fit'>): IslandNoteSize
   if (note.kind === 'wait' || note.kind === 'input' || note.kind === 'agent' || note.kind === 'failed') return 'approval'
   return note.fit === 'long' || note.fit === 'toolong' ? 'long' : 'note'
 }
+
+/**
+ * Steward's body in the island is the look you chose: Glass, Flat or Blocky. The app's glass has no lens (a tint, shading,
+ * a rim and a shine), so it draws over the menu bar as well as over the panel. With Reduce Transparency on it's the flat
+ * body, so nothing see-through shows.
+ */
+export const islandBodyKind = (version: PillVersion, reduceTransparency: boolean): PillVersion => (version === 'glass' && reduceTransparency ? 'flat' : version)
 
 /** Whether Steward joins the island at this level (the big sizes): its body melts into the black, its eyes stay lit. */
 export const joins = (level: IslandLevel): boolean => level === 'approval' || level === 'review'
