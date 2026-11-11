@@ -4257,10 +4257,15 @@ async function checkIsland(out: string): Promise<void> {
   img = await shot()
   const woke = notch.state().awake && steward(img, layout.cx - hw - 12, restPill.y) && clear(img, layout.cx + hw + 30, 8)
   await fs.writeFile(out.replace(/\.png$/, '-island-woken.png'), img.toPNG())
-  smokeNotchCursor = null
-  if (!woke) throw new Error(`asleep, resting the cursor on the notch did not wake Steward (awake ${notch.state().awake})`)
+  if (!woke) {
+    smokeNotchCursor = null
+    throw new Error(`asleep, resting the cursor on the notch did not wake Steward (awake ${notch.state().awake})`)
+  }
+  // The cursor moves away (still the made-up one, so the watch sees it go), and Steward goes back to sleep.
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 300 }
   await sleep(TUCK_MS + 1200)
   img = await shot()
+  smokeNotchCursor = null
   if (notch.state().awake || !clear(img, layout.cx - hw - 12, restPill.y)) throw new Error('the cursor gone, the woken notch did not go back to sleep')
   console.log('smoke: island: asleep, Steward is tucked behind the notch; resting the cursor wakes it, leaning out with no island, and it sleeps again once the cursor has gone')
 
