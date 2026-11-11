@@ -58,7 +58,14 @@ function serve(port) {
     if (file !== out && !file.startsWith(out + sep)) return void res.writeHead(403).end()
     try {
       const body = await readFile(file)
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(body)
+      const head = { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store', 'accept-ranges': 'bytes' }
+      // Browsers ask a video for byte ranges; without them they cannot jump to a chapter.
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '')
+      if (!range) return void res.writeHead(200, head).end(body)
+      const start = range[1] ? Number(range[1]) : Math.max(0, body.length - Number(range[2]))
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1
+      if (start > end) return void res.writeHead(416, { 'content-range': `bytes */${body.length}` }).end()
+      res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${body.length}` }).end(body.subarray(start, end + 1))
     } catch {
       res.writeHead(404).end('Not found')
     }

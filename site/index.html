@@ -104,12 +104,13 @@ a:focus-visible,button:focus-visible{outline:2px solid rgb(var(--live));outline-
 .card li b{color:#f2f6fb;font-weight:700}
 .card .say{font-size:clamp(1.35rem,1rem + 1.2vw,2rem);line-height:1.22;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
 
-/* ---------- closing line over the sky, then a plain footer ---------- */
-.end{position:relative;isolation:isolate;text-align:center;padding:16vh 20px 18vh;overflow:hidden}
-.end .sky{transform:scaleY(-1)}
+/* ---------- closing line over the sky, which here deepens downward into the footer ---------- */
+.end{position:relative;isolation:isolate;text-align:center;padding:16vh 20px 14vh;overflow:hidden}
+.end .sky{background:radial-gradient(50% 38% at 22% 56%,rgba(255,255,255,.7),transparent 70%),radial-gradient(40% 32% at 80% 44%,rgba(255,255,255,.6),transparent 70%),
+  radial-gradient(80% 40% at 50% 30%,rgba(var(--soft),.4),transparent 75%),linear-gradient(180deg,#fff 0%,#e4f1ff 32%,#c8e4ff 66%,#a8d2ff 100%)}
 .end .pill{margin:0 auto 28px;--u:1.6px}
 .end p{font-size:clamp(1.7rem,1.05rem + 2.7vw,3.4rem);line-height:1.1;font-weight:700;letter-spacing:-.035em;max-width:19em;margin:0 auto;text-wrap:balance}
-.foot{text-align:center;padding:26px 20px 32px;font-size:.86rem;color:var(--ink3)}
+.foot{text-align:center;padding:22px 20px 30px;font-size:.86rem;color:var(--ink2);background:#a8d2ff}
 
 /* ---------- phone ---------- */
 @media (max-width:720px){
@@ -152,7 +153,8 @@ a:focus-visible,button:focus-visible{outline:2px solid rgb(var(--live));outline-
 <!-- needs clips/walkthrough.mp4 -->
 <!-- The walkthrough ships only once the recording exists. The chapter times are the shot list's; the real ones go in with the video. -->
 <section class="watch" id="watch" aria-label="Walkthrough" data-state="paused">
-  <div class="frame a k-rise">
+  <div class="a k-rise">
+  <div class="frame">
     <div class="bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="ttl">Steward</span></div>
     <div class="vid">
       <video muted loop playsinline preload="none" poster="posters/walkthrough.jpg" aria-label="A silent walkthrough of Steward on a Mac"><source src="clips/walkthrough.mp4" type="video/mp4"></video>
@@ -165,6 +167,7 @@ a:focus-visible,button:focus-visible{outline:2px solid rgb(var(--live));outline-
     <button type="button" data-t="20">Ask and watch</button>
     <button type="button" data-t="35">Quiet until it matters</button>
     <button type="button" data-t="45">At home in the notch</button>
+  </div>
   </div>
 </section>
 <!-- end needs -->
@@ -184,6 +187,7 @@ a:focus-visible,button:focus-visible{outline:2px solid rgb(var(--live));outline-
     <p class="say">One person and a few AI chats. Nothing merges without my OK.</p>
   </div>
 </section>
+
 
 <section class="end">
   <div class="sky" aria-hidden="true"></div>
