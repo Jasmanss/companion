@@ -44,7 +44,7 @@ describe('the site check', () => {
   it.each([
     ['<!-- /Users/someone/companion -->', 'a home folder path'],
     ['<p>From Good Projects</p>', 'the private folder name'],
-    ['<p>local_266f8d20</p>', 'a chat session id'],
+    ['<p>local_0a1b2c3d</p>', 'a chat session id'],
     ['<p>claude/site-phase-2</p>', 'a branch name'],
     ['<p>by Jasmanss</p>', 'the GitHub username'],
     ['<p>Fixed in PR #23</p>', 'a PR number'],
