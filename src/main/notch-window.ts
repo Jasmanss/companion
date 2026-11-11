@@ -75,7 +75,8 @@ export class NotchDock {
     this.wanted = on
     if (!on || !this.notch) {
       this.stopWatching()
-      this.hovering = noHover()
+      // Through hover(), so whoever listens hears the cursor is off it: a note kept by the cursor settles again.
+      this.hover(noHover())
       if (this.win && !this.win.isDestroyed() && this.win.isVisible()) {
         this.win.hide()
         this.win.setIgnoreMouseEvents(true)
@@ -245,6 +246,7 @@ export class NotchDock {
 
   private close(): void {
     this.stopWatching()
+    this.hover(noHover())
     if (this.win && !this.win.isDestroyed()) this.win.destroy()
     this.win = null
   }

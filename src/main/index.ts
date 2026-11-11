@@ -63,7 +63,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
+import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, messageKeepsAwake, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { FIRST_QUIET_MS, GAP_MS, isIdleMove } from '../shared/idle-loop'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
@@ -189,6 +189,12 @@ const quiet = (): boolean => settings?.steward().presence === 'quiet'
 let presenceNow: PresenceState = asleep()
 /** Steward is showing: always, or when it's been brought out. At the edge that's the tab, in the notch it's awake. */
 const out = (): boolean => !quiet() || presenceNow.revealed
+/**
+ * The notch is awake while Steward is out, and in Island while an alert's message is out on it, whatever the presence
+ * rules say meanwhile: a tuck (the cursor gone a moment) never takes a card away before it settles. Every place that
+ * wakes the notch or puts it to sleep asks this, so none of them can disagree.
+ */
+const notchAwake = (): boolean => out() || (inNotch() && settings.steward().notchStyle === 'island' && messageKeepsAwake(islandNotes.current))
 let watchTimer: ReturnType<typeof setTimeout> | undefined
 let slideTimer: ReturnType<typeof setTimeout> | undefined
 /** The window's page is slid out, off the screen edge (see setSlide). */
@@ -557,7 +563,7 @@ function placeAfterDisplayChange(): void {
 
 /** The tab or the notch follows whether Steward is out: it slides in or out, or the notch wakes or goes to sleep. */
 function applyPresence(): void {
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   if (!win || win.isDestroyed() || dock !== 'collapsed' || inNotch()) return
   if (out()) showTab(boundsFor('collapsed'))
   else tuckTab()
@@ -586,7 +592,7 @@ async function refreshNotch(): Promise<void> {
 function replaceForNotch(): void {
   placeNotch()
   presenceNow = asleep()
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   syncWatch()
   if (!win || win.isDestroyed()) return
   // A nudge that's out moves too: under the notch, or back to the edge.
@@ -612,7 +618,7 @@ function setDock(state: DockState): void {
   }
   // Only when needed: a nudge brings Steward out, and at rest it stays out only while the cursor is on it (or work goes on).
   presenceNow = state === 'nudge' ? { revealed: quiet(), since: null } : state === 'collapsed' ? restingPresence(wasNudge) : asleep()
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   if (wasOpen && !isOpen(state)) void appState?.update({ lastSeenAt: Date.now() })
   if (!wasOpen && isOpen(state)) onPanelOpened()
   // The material first, so the panel's very first frame is drawn for it (frosted or solid).
@@ -856,7 +862,7 @@ function applyStepAside(): void {
     if (!inNotch() && out()) showTab(boundsFor('collapsed'), false)
   }
   placeNotch()
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   syncWatch()
   updateMenuBar()
   if (!on && asideAlerts.length) {
@@ -1230,13 +1236,16 @@ function islandAct(what: unknown, at: unknown): void {
   }
 }
 
+/** How long after a big message shows it counts as still waiting anyway, as the alert can come before the state. */
+const WAIT_GRACE_MS = 1000
+
 /**
  * Whether what a big message is about still waits: a session's approval or question until it moves on, Steward's own
  * request until it's answered, a review until it's decided. A moment's grace after it shows, as the alert can come just
  * before the state it's about.
  */
 function stillWaits(note: IslandNote, now: number): boolean {
-  if (now - note.at < 1000) return true
+  if (now - note.at < WAIT_GRACE_MS) return true
   const session = (state: SessionView['state']) => sessions.list().some((s) => s.state === state && !!note.key?.includes(`:${s.id}:`))
   if (note.kind === 'wait') return session('needs-approval')
   if (note.kind === 'input') return session('needs-input')
@@ -1487,11 +1496,15 @@ function updateIsland(): void {
   const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, failed: moods.troubled(now), note: shown, now }
   notch.setIsland(islandStatus(input))
   // An alert's message comes out even when Steward only shows when needed: the island wakes while it shows, as the tab
-  // comes out for a nudge, and goes back to sleep once it settles. (Finished and started are about work going on.)
-  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || (!!shown && shown.kind !== 'finished' && shown.kind !== 'started'))
+  // comes out for a nudge, and goes back to sleep once it settles (notchAwake).
+  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(notchAwake())
   clearTimeout(islandTimer)
+  // A big message still in its moment's grace is looked at again once that's over: what it's about may have moved on
+  // meanwhile (answered in the terminal), and nothing else may come along to look.
   const next = nextChange(input)
-  if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
+  const grace = shown && now - shown.at < WAIT_GRACE_MS ? shown.at + WAIT_GRACE_MS : null
+  const soonest = next === null ? grace : grace === null ? next : Math.min(next, grace)
+  if (soonest !== null) islandTimer = setTimeout(updateIsland, soonest - now + 50)
 }
 
 /**
@@ -1972,7 +1985,13 @@ function registerIpc(): void {
     if (win && !win.isDestroyed() && dock !== 'hidden' && (after.edge !== before.edge || after.size !== before.size)) win.setBounds(boundsFor(dock))
     // Into the notch or out of it, or the other notch style.
     if (after.notch !== before.notch || after.edge !== before.edge) replaceForNotch()
-    if (after.notchStyle !== before.notchStyle) notch.restyle()
+    if (after.notchStyle !== before.notchStyle) {
+      // Its window resizes, and it's awake by the new style's rule: out of Island, a message on the island no longer
+      // keeps it awake.
+      notch.restyle()
+      notch.setAwake(notchAwake())
+      updateIsland()
+    }
     // Always visible or only when needed: Steward comes out, or slips away, now.
     if (after.presence !== before.presence) presenceChanged()
     else if (after.dimWhenIdle !== before.dimWhenIdle) syncWatch()
@@ -5306,7 +5325,7 @@ app.whenReady().then(async () => {
     solid: () => nativeTheme.prefersReducedTransparency,
   })
   // Only when needed, it starts asleep.
-  notch.setAwake(out())
+  notch.setAwake(notchAwake())
   updateIsland()
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
   await refreshNotch()

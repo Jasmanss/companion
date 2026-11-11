@@ -31,6 +31,12 @@ export const NOTE_AFTER_HOVER_MS = 1500
 export const LONG_NOTE_MS = 6500
 export const BIG_NOTE_MS = 9000
 
+/**
+ * In Only when needed, whether the message out keeps the island awake until it settles: an alert's does, as the tab
+ * comes out for one. Finished and started are about work going on, which brings Steward out on its own when it should.
+ */
+export const messageKeepsAwake = (note: IslandNote | null | undefined): boolean => !!note && note.kind !== 'finished' && note.kind !== 'started'
+
 /** The turns going on, by session id: when each began. */
 export type Turns = Record<string, number>
 

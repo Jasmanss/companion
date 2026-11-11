@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
-import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
+import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, messageKeepsAwake, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
 import { fadesFor, fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
@@ -440,5 +440,33 @@ describe('the island with Reduce Motion', () => {
     // A note growing into a long note moves; the cursor on a note changes nothing about its shape.
     expect(fadesFor({ level: 'note', hover: false }, { level: 'long', hover: false }, notch)).toBe(true)
     expect(fadesFor({ level: 'note', hover: false }, { level: 'note', hover: true }, notch)).toBe(false)
+  })
+})
+
+describe('the island holding up', () => {
+  it("keeps the island awake in Only when needed while an alert's message is out, not for work going on", () => {
+    const note = (kind: IslandNote['kind']): IslandNote => ({ kind, name: 'api', text: '', at: 0 })
+    for (const kind of ['wait', 'input', 'agent', 'failed', 'review', 'good', 'first', 'alert'] as const) expect(messageKeepsAwake(note(kind))).toBe(true)
+    for (const kind of ['finished', 'started'] as const) expect(messageKeepsAwake(note(kind))).toBe(false)
+    expect(messageKeepsAwake(null)).toBe(false)
+  })
+
+  it('a note kept by the cursor settles once the cursor is off it, however the cursor went (the notch hidden, say)', () => {
+    vi.useFakeTimers()
+    try {
+      let changes = 0
+      const notes = new IslandNotes({ changed: () => changes++ })
+      notes.show({ kind: 'alert', name: 'api', text: 'something', at: Date.now() })
+      notes.hover(true)
+      vi.advanceTimersByTime(NOTE_SHOW_MS + 5000)
+      expect(notes.current).not.toBeNull()
+      // What the notch window now says when it hides: the cursor is off the island.
+      notes.hover(false)
+      vi.advanceTimersByTime(NOTE_AFTER_HOVER_MS + 10)
+      expect(notes.current).toBeNull()
+      expect(changes).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
