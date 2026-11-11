@@ -3979,7 +3979,8 @@ async function checkNotch(out: string): Promise<void> {
     const resting = await notch.capture()
     if (!resting || resting.isEmpty()) throw new Error(`the sleeping notch (${notchStyle}) rendered empty`)
     if (!solid(resting, layout.cx, layout.height / 2)) throw new Error('the sleeping notch does not cover the notch')
-    if (solid(resting, layout.cx, below) || solid(resting, layout.cx - beside, layout.height / 2) || solid(resting, layout.cx + beside, layout.height / 2)) throw new Error(`the sleeping notch (${notchStyle}) still reaches beyond the notch`)
+    // What the app thinks, next to what's drawn: the two disagreeing points at the page.
+    if (solid(resting, layout.cx, below) || solid(resting, layout.cx - beside, layout.height / 2) || solid(resting, layout.cx + beside, layout.height / 2)) throw new Error(`the sleeping notch (${notchStyle}) still reaches beyond the notch (the app has it ${JSON.stringify({ presence: presenceNow, dock, busy: agent?.busy, awake: notch.state().awake, hover: notch.state().hover })})`)
     await fs.writeFile(file.replace(/\.png$/, '-asleep.png'), resting.toPNG())
     // The cursor resting on it for 250 ms wakes it; leaving for 1.5 s puts it back to sleep. The notch's own cursor watch
     // sees the check's made-up cursor, as it would the real one.

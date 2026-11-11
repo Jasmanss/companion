@@ -37,6 +37,15 @@ export const NOTCH_HOVER_WINGS = 8
 const MIDDLE: ReadonlySet<Mood> = new Set(['thinking', 'talking'])
 export const needsMiddle = (mood: Mood): boolean => MIDDLE.has(mood)
 
+/**
+ * With Reduce Motion the notch fades out, changes and fades back in. For the next shape: 'stay' (it is the one drawn, or
+ * the one already being faded to), 'fade' (fade to it), or 'cancel' (back to the drawn one mid-fade: call the fade off,
+ * so waking and sleeping again quickly never leaves the wrong shape drawn). Without Reduce Motion nothing is ever
+ * fading, so it is 'stay' or 'fade'.
+ */
+export const reducedReshape = (drawn: string, fading: string | null, next: string): 'stay' | 'fade' | 'cancel' =>
+  next === (fading ?? drawn) ? 'stay' : next === drawn ? 'cancel' : 'fade'
+
 /** The black, for a style and mood: how far down the lip reaches (from the top), and how wide the wings are (0: none). */
 export interface NotchShape {
   lip: number

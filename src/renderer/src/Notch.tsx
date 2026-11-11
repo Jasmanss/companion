@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { canDim } from '../../shared/dim'
 import { atRest } from '../../shared/idle-loop'
-import { islandBodyKind, islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize } from '../../shared/notch'
+import { islandBodyKind, islandLevel, NOTCH_EYE, NOTCH_HOVER_LIP, NOTCH_LIP, NOTCH_RADIUS, NOTCH_WING, needsMiddle, notchShape, noteSize, reducedReshape } from '../../shared/notch'
 import { colorHex, DEFAULT_STEWARD } from '../../shared/steward'
 import type { IslandNote, IslandStatus, Mood, NotchLayout, NotchState, NotchStyle, StewardPrefs } from '../../shared/types'
 import { runEyes, seed, toward, useMedia } from './Pill'
@@ -227,13 +227,16 @@ function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillV
   }
   snap(st.mood, o.awake, o.hover, o.nudge)
   let fade: ReturnType<typeof setTimeout> | undefined
+  // The shape a Reduce Motion fade is on its way to, until it's drawn.
+  let fading: string | null = null
   let last = { mood: st.mood, awake: o.awake, nudge: o.nudge }
   return {
     views,
     center: (spots.main ?? spots.chin)!,
     reshape(mood, awake, hover, nudge) {
       const next = signature(mood, awake, hover, nudge)
-      if (next === sig) return
+      const step = reducedReshape(sig, fading, next)
+      if (step === 'stay') return
       // Only the hover changed: a quicker, softer move than a change of mood or waking (design/notch.html: 220 ms, out).
       root.classList.toggle('quick', mood === last.mood && awake === last.awake && nudge === last.nudge)
       last = { mood, awake, nudge }
@@ -241,10 +244,18 @@ function build(host: HTMLElement, st: EyesState, o: FaceOptions): { views: PillV
         sig = apply(mood, awake, hover, nudge)
         return
       }
-      // Reduced motion: fade out, change, fade back in, instead of flowing.
-      root.classList.add('rm-out')
+      // Reduced motion: fade out, change, fade back in, instead of flowing. Back to the drawn shape before the change,
+      // the fade is called off: otherwise the change it was waiting for would still be drawn.
       clearTimeout(fade)
+      if (step === 'cancel') {
+        fading = null
+        root.classList.remove('rm-out')
+        return
+      }
+      fading = next
+      root.classList.add('rm-out')
       fade = setTimeout(() => {
+        fading = null
         snap(mood, awake, hover, nudge)
         root.classList.remove('rm-out')
       }, 150)
