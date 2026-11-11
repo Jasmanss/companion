@@ -134,6 +134,8 @@ export interface NotchState {
   island?: IslandStatus
   /** The panel is open at the side: which way it is from the notch (x and y from -1 to 1), for Steward to look at. */
   panel?: { x: number; y: number } | null
+  /** Reduce Transparency is on (macOS): nothing see-through, so a Glass Steward in the island is the flat body. */
+  solid?: boolean
 }
 
 /** How the character looks and behaves, and where it sits: Settings → Steward. */

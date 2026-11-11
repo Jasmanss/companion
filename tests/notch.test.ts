@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findNotch, parseProbe, probeScreens, type ScreenProbe } from '../src/main/notch'
-import { HOVER_IN_MS, HOVER_OUT_MS, inBoxes, noHover, notchBoxes, notchShape, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_NUDGE_BELOW, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, stepHover, underNotch } from '../src/shared/notch'
+import { HOVER_IN_MS, HOVER_OUT_MS, inBoxes, noHover, notchBoxes, notchShape, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_NUDGE_BELOW, NOTCH_WINDOW, NOTCH_WING, nudgeUnderNotch, reducedReshape, stepHover, underNotch } from '../src/shared/notch'
 
 /** What macOS reports for the 14-inch MacBook Pro at its default 1512 x 982, measured on the user's Mac (Mac16,1). */
 const MBP14: ScreenProbe = { id: 1, frame: [0, 0, 1512, 982], safeTop: 32, left: [0, 950, 663.5, 32], right: [848.5, 950, 663.5, 32] }
@@ -196,5 +196,18 @@ describe('a nudge under the notch', () => {
     expect(notchShape('wings', 'needs-you', notch, true, false, true)).toEqual({ lip: 32 + NOTCH_LIP, wings: 185 + 2 * NOTCH_WING })
     expect(notchShape('chin', 'needs-you', notch, true, false, true)).toEqual(notchShape('chin', 'needs-you', notch))
     for (const style of ['chin', 'wings'] as const) expect(notchShape(style, 'idle', notch, false, false, true)).toEqual({ lip: 32, wings: 0 })
+  })
+})
+
+describe('the notch with Reduce Motion', () => {
+  it('fades to a new shape once, and calls the fade off when it goes back to the drawn one before the change', () => {
+    expect(reducedReshape('asleep', null, 'asleep')).toBe('stay')
+    expect(reducedReshape('asleep', null, 'awake')).toBe('fade')
+    // Already fading to it: the fade isn't started over.
+    expect(reducedReshape('asleep', 'awake', 'awake')).toBe('stay')
+    // Woken and put to sleep again within the fade (Always visible, then Only when needed): asleep stays drawn.
+    expect(reducedReshape('asleep', 'awake', 'asleep')).toBe('cancel')
+    // On to a third shape mid-fade: fade to that one instead.
+    expect(reducedReshape('asleep', 'awake', 'nudge')).toBe('fade')
   })
 })
