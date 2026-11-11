@@ -11,6 +11,8 @@
 //
 // In the notch (lit), the black notch is the body: only the eyes are drawn, lit in the Pill's color, and the marks
 // are colored for black. From design/notch/notch.js.
+import { BACKDROP, contrast, edgeFor, fromHsl, glassEdgeFor, glassFace, lighten, mix, onBackdrop, rgba, toHsl } from './color'
+export { BACKDROP, contrast, glassEdgeFor, mix } from './color'
 import { MARK_SPRITES, marks, pixelEyes, ZSPRITES, vectorEyes, type Cell, type EyesState, type SizeClass } from './eyes'
 
 /** The classic Pill in a 100 x 100 design box. */
@@ -40,73 +42,14 @@ export interface ViewOptions {
   /** The symbol's size (vector) and blocky's mark pixel, instead of the size class's. */
   markSize?: number
   markPx?: number
+  /** Sits on the menu bar (Steward peeking in the notch): glass too close to the bar gets a fine edge. */
+  onBar?: boolean
 }
 export interface PillView {
   el: HTMLElement
   update(st: EyesState): void
   standby(on: boolean): void
 }
-
-/* ---------------- color helpers ---------------- */
-type RGB = [number, number, number]
-const rgb = (h: string): RGB => {
-  const n = parseInt(h.slice(1), 16)
-  return [n >> 16, (n >> 8) & 255, n & 255]
-}
-const hex = (a: number[]) => '#' + a.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')
-const rgba = (h: string, a: number) => `rgba(${rgb(h).join(',')},${a})`
-export const mix = (a: string, b: string, t: number) => {
-  const x = rgb(a), y = rgb(b)
-  return hex(x.map((v, i) => v + (y[i] - v) * t))
-}
-const lighten = (h: string, t: number) => mix(h, WHITE, t)
-const darken = (h: string, t: number) => mix(h, '#000000', t)
-const luminance = (h: string) => {
-  const c = rgb(h).map((v) => {
-    v /= 255
-    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
-  })
-  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-}
-export const contrast = (a: string, b: string) => {
-  const x = luminance(a), y = luminance(b)
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
-}
-function toHsl(h: string): [number, number, number] {
-  const [r, g, b] = rgb(h).map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2
-  if (max === min) return [0, 0, l]
-  const d = max - min, s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-  const hh = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4
-  return [hh / 6, s, l]
-}
-function fromHsl(h: number, s: number, l: number): string {
-  h = ((h % 1) + 1) % 1
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q
-  const f = (t: number) => {
-    t = ((t % 1) + 1) % 1
-    return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p
-  }
-  return hex([f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255])
-}
-/** What's right behind the Pill and its marks: about the tab at the screen edge, or the panel's glass. */
-export const BACKDROP = (light: boolean) => (light ? '#ebf1f9' : '#2b3039')
-/** Push a color lighter (dark mode) or darker (light mode) until it reaches the contrast asked for. */
-function onBackdrop(base: string, light: boolean, min: number): string {
-  for (let t = 0.35; t <= 1.001; t += 0.05) {
-    const c = light ? darken(base, t) : lighten(base, t)
-    if (contrast(c, BACKDROP(light)) >= min) return c
-  }
-  return light ? '#111111' : '#ffffff'
-}
-
-/**
- * A Pill whose color is too close to what's behind it (silver and the pastels in light mode, graphite in dark) gets
- * a fine edge, a shade darker or lighter than itself, so it doesn't fade into the tab.
- */
-const edgeFor = (o: ViewOptions): string | null => (contrast(o.color, BACKDROP(o.light)) < 2 ? (o.light ? darken(o.color, 0.22) : lighten(o.color, 0.22)) : null)
-
-/** What a glass Pill roughly looks like: what's behind it, then the tint over that. */
-const glassFace = (o: ViewOptions) => mix(BACKDROP(o.light), o.tinted ? o.color : WHITE, o.tinted ? (o.light ? 0.7 : 0.42) : o.light ? 0.16 : 0.06)
 
 export interface Palette {
   face: string
@@ -214,6 +157,7 @@ function vectorView(kind: PillKind, el: HTMLElement, W: number, H: number, o: Vi
   let base: string
   if (o.lit) base = ''
   else if (glass) {
+    const glassEdge = glassEdgeFor(o)
     const fill = o.tinted ? rgba(o.color, o.light ? 0.55 : 0.42) : o.light ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)'
     base = `
       <svg viewBox="${vb}" style="position:absolute;inset:0;overflow:visible"><defs><filter id="${id}b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${(G.H * 0.05).toFixed(2)}"/></filter></defs>
@@ -231,6 +175,7 @@ function vectorView(kind: PillKind, el: HTMLElement, W: number, H: number, o: Vi
           <ellipse cx="${G.x0 + G.W * 0.36}" cy="${G.y0 + G.H * 0.16}" rx="${G.W * 0.2}" ry="${G.H * 0.08}" fill="#fff" opacity="${o.light ? 0.55 : 0.4}" filter="url(#${id}b)"/>
         </g>
         <path d="${PATH}" fill="none" stroke="rgba(255,255,255,${o.light ? 0.7 : 0.35})" stroke-width="${(0.9 / s).toFixed(2)}"/>
+        ${glassEdge ? `<path d="${PATH}" fill="none" stroke="${glassEdge}" stroke-width="${(1.3 / s).toFixed(2)}"/>` : ''}
       </svg>`
   } else {
     const edge = edgeFor(o)
