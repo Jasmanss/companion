@@ -56,6 +56,7 @@ export class NotchDock {
   private ignoring = true
   private timer: ReturnType<typeof setTimeout> | undefined
   private sentCursor = ''
+  private paused = false
 
   constructor(private o: Options) {}
 
@@ -87,6 +88,17 @@ export class NotchDock {
     const w = this.window(this.notch)
     if (!w.isVisible()) w.showInactive()
     this.watch()
+  }
+
+  /**
+   * The screen is asleep or locked: nobody can point at the notch, so the cursor isn't checked (up to 60 times a second
+   * while it rests near the notch) until the screen is back. What the cursor was on stays as it was.
+   */
+  pause(paused: boolean): void {
+    if (paused === this.paused) return
+    this.paused = paused
+    if (paused) this.stopWatching()
+    else if (this.wanted && this.notch && this.win && !this.win.isDestroyed() && this.win.isVisible()) this.watch()
   }
 
   get visible(): boolean {
@@ -253,7 +265,7 @@ export class NotchDock {
 
   /** Check the cursor: let clicks in over the shape, and tell the eyes where it is while it's near. */
   private watch(): void {
-    if (this.timer) return
+    if (this.timer || this.paused) return
     const tick = () => {
       this.timer = undefined
       const w = this.win, layout = this.layout()

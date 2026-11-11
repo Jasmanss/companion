@@ -5384,6 +5384,7 @@ app.whenReady().then(async () => {
   const screenIs = (asleepNow: boolean) => () => {
     screenAsleep = asleepNow
     syncWatch()
+    notch?.pause(asleepNow)
   }
   // Overnight Watch writes down when the Mac slept and woke, and the battery; the goodnight card says which it's on.
   powerMonitor.on('suspend', () => watch?.power('suspend'))
