@@ -713,11 +713,12 @@ function presenceChanged(): void {
 }
 
 /**
- * The notch window checks the cursor often while it's near; it says whether it's on the notch. (In a smoke run that's
- * the check's made-up cursor, never the real one, so the wake is checked too.)
+ * The notch window checks the cursor often while it's near; it says whether it's on the notch. In a smoke run that's the
+ * check's made-up cursor, never the real one: it counts while a check has put one there, and otherwise the checks that
+ * feed the wake themselves aren't undone by a cursor that isn't there.
  */
 function lookAtNotch(over: boolean): void {
-  if (quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
+  if ((!drivenBySmoke || smokeNotchCursor) && quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
 }
 
 /** Within this many points of the tab, the cursor is near: Dim when idle wakes the eyes. */
