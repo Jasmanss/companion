@@ -5,149 +5,249 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Steward: a small helper at the edge of your screen</title>
 <meta name="description" content="Steward is a small helper that lives at the edge of your Mac screen while you code.">
-<meta name="theme-color" content="#050608">
+<meta name="theme-color" content="#cfe6ff">
 <!-- The tab icon is the Pill, inlined as base64 so the page needs no extra file. -->
-<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NiAyNiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZTllZWY1Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGQ5OWFiIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI2IiByeD0iMTMiIGZpbGw9InVybCgjZykiLz48cmVjdCB4PSIxNCIgeT0iOCIgd2lkdGg9IjUiIGhlaWdodD0iOSIgcng9IjIuNSIgZmlsbD0iIzYwYmVmZiIvPjxyZWN0IHg9IjI3IiB5PSI4IiB3aWR0aD0iNSIgaGVpZ2h0PSI5IiByeD0iMi41IiBmaWxsPSIjNjBiZWZmIi8+PC9zdmc+">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MCAyOCI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjI2IiByeD0iMTMiIGZpbGw9IiNjYWQ0ZTIiIHN0cm9rZT0iIzdhODA4OCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48cmVjdCB4PSIxNSIgeT0iOS41IiB3aWR0aD0iNSIgaGVpZ2h0PSI5IiByeD0iMi41IiBmaWxsPSIjMWQxYTJiIi8+PHJlY3QgeD0iMzAiIHk9IjkuNSIgd2lkdGg9IjUiIGhlaWdodD0iOSIgcng9IjIuNSIgZmlsbD0iIzFkMWEyYiIvPjwvc3ZnPg==">
 <script>
 // ?fallback in the address turns off the CSS scroll driver, so the script driver below can be compared against it.
 if (/[?&]fallback\b/.test(location.search)) document.documentElement.classList.add('fb');
 </script>
 <style>
-/* The Steward showcase site. One file of plain HTML and CSS: no libraries, no web fonts, no images.
-   Only transform and opacity animate. The scenes are drawn from the app's own look (the Ice tint, glass, the Pill), not screenshots. */
+/* The Steward showcase site. One file of plain HTML and CSS: no libraries, no web fonts. Light and airy, in Steward's own
+   look: the Ice tint's blue-white and the glass Pill. Only transform and opacity animate. */
 :root{
-  --bg:#050608;--t1:#f5f7fa;--t2:rgba(245,247,250,.62);--t3:rgba(245,247,250,.4);--line:rgba(255,255,255,.1);
-  --glow:96,190,255;--tint:200,228,255;--eye:96,190,255;--u:1px;
+  --ink:#0b1220;--ink2:rgba(11,18,32,.66);--ink3:rgba(11,18,32,.5);--line:rgba(11,18,32,.1);
+  --tint:200,228,255;--soft:178,220,255;--glow:96,190,255;--live:26,140,255;--deep:18,70,120;
+  /* The glass Pill on the sky: what is behind it with the silver tint over that, and the fine darker edge it gets
+     because that face is within contrast 2 of the page behind it (the app's rule from the notch island). */
+  --face:#cad4e2;--edge:#7a8088;--eye:#1d1a2b;--u:1px;
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",system-ui,sans-serif;
-  color-scheme:dark;
+  color-scheme:light;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;background:var(--bg)}
-body{margin:0;background:var(--bg);color:var(--t1);font:500 16px/1.5 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+html{scroll-behavior:smooth;background:#fff}
+body{margin:0;background:#fff;color:var(--ink);font:500 16px/1.5 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 a{color:inherit}
-h1,h2,h3,p{margin:0}
-a:focus-visible{outline:2px solid rgb(var(--glow));outline-offset:3px;border-radius:6px}
+h1,h2,p,ul{margin:0}
+a:focus-visible,button:focus-visible{outline:2px solid rgb(var(--live));outline-offset:3px}
 
-/* ---------- the Pill, sized by --u ---------- */
-.pill{display:block;position:relative;flex:none;width:calc(46*var(--u));height:calc(26*var(--u));border-radius:999px;background:linear-gradient(180deg,#e9eef5,#8d99ab);
-  box-shadow:inset 0 calc(1*var(--u)) 0 rgba(255,255,255,.9),inset 0 calc(-2*var(--u)) calc(4*var(--u)) rgba(0,0,0,.14),0 calc(4*var(--u)) calc(10*var(--u)) rgba(0,0,0,.5)}
-.pill i{position:absolute;top:calc(8*var(--u));width:calc(5*var(--u));height:calc(9*var(--u));border-radius:999px;background:rgb(var(--eye));
-  box-shadow:0 0 calc(6*var(--u)) calc(1*var(--u)) rgba(var(--eye),.75);animation:blink 5s infinite}
-.pill i:nth-child(1){left:calc(14*var(--u))}.pill i:nth-child(2){right:calc(14*var(--u))}.pill i:nth-child(3){display:none}
+/* ---------- the glass Pill, sized by --u ---------- */
+.pill{display:block;position:relative;flex:none;width:calc(48*var(--u));height:calc(26*var(--u));border-radius:999px;
+  background:radial-gradient(ellipse 22% 18% at 34% 22%,rgba(255,255,255,.75),transparent 70%),radial-gradient(farthest-side,transparent 62%,rgba(0,0,0,.08)),
+    linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 32%,rgba(255,255,255,0) 72%,rgba(255,255,255,.4)),var(--face);
+  box-shadow:inset 0 0 0 calc(.5*var(--u)) rgba(255,255,255,.7),0 0 0 max(1px,calc(.5*var(--u))) var(--edge),0 calc(3*var(--u)) calc(7*var(--u)) calc(-1*var(--u)) rgba(var(--deep),.22)}
+.pill i{position:absolute;top:calc(8.5*var(--u));width:calc(5*var(--u));height:calc(9*var(--u));border-radius:999px;background:var(--eye);animation:blink 5s infinite}
+.pill i:nth-child(1){left:calc(15*var(--u))}.pill i:nth-child(2){right:calc(15*var(--u))}
 @keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
 
 /* ---------- top bar ---------- */
-.top{position:fixed;top:0;left:0;right:0;z-index:20;-webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);background:rgba(5,6,8,.55);border-bottom:1px solid var(--line)}
-.top div{max-width:70rem;margin:0 auto;padding-inline:20px;height:48px;display:flex;align-items:center;gap:6px}
-.top .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;text-decoration:none;--u:.45px}
+.top{position:fixed;top:0;left:0;right:0;z-index:20;-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);background:rgba(255,255,255,.55);border-bottom:1px solid rgba(11,18,32,.06)}
+.top div{max-width:72rem;margin:0 auto;padding-inline:20px;height:52px;display:flex;align-items:center;gap:6px}
+.top .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:.98rem;text-decoration:none;border-radius:8px;--u:.5px}
+.top nav{margin-left:auto;display:flex;gap:2px}
+.top nav a{font-size:.88rem;color:var(--ink2);text-decoration:none;padding:6px 12px;border-radius:999px}
+.top nav a:hover{color:var(--ink);background:rgba(11,18,32,.06)}
 
-/* ---------- scenes: a tall box, a pinned screen inside, scroll progress drives the motion ---------- */
-.scene{position:relative;height:var(--len,260vh);view-timeline:--sc block}
-.pin{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.4fr);align-items:center;gap:4vw;
-  padding:64px max(20px,4vw) 24px;max-width:84rem;margin:0 auto}
-@media (max-width:820px){.pin{grid-template-columns:1fr;grid-template-rows:auto auto;align-content:center;gap:4vh;padding-top:68px}}
+/* ---------- the sky: soft blobs from radial gradients over a blue-white fall, no artwork ---------- */
+.sky{position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(55% 42% at 16% 20%,rgba(255,255,255,.9),transparent 70%),radial-gradient(42% 36% at 86% 26%,rgba(255,255,255,.75),transparent 70%),
+    radial-gradient(38% 30% at 62% 8%,rgba(255,255,255,.55),transparent 70%),radial-gradient(80% 40% at 50% 62%,rgba(var(--soft),.45),transparent 75%),
+    linear-gradient(180deg,#a8d2ff 0%,#c8e4ff 34%,#e4f1ff 68%,#fff 100%)}
 
-/* The animation drivers. Every moving part has class "a" and a keyframe named k-*. The keyframes are paused and read at --p, the
-   scene's progress from 0 to 1, which the script sets. Where the browser has scroll-driven animations the scene's own timeline
-   drives them instead and the script does nothing, so the page also moves without any script. */
+/* ---------- scroll motion, the hero only: the Pill tilts to look down and the video frame rises into place ----------
+   Each moving part has class "a" and a keyframe k-*, read at --p, the scroll progress over the first 80vh. Where the
+   browser has scroll-driven animations the page's scroll drives them and the script does nothing, so it also works
+   without script. The base styles are the finished picture, which is what reduced motion shows. */
 .a{animation-duration:1s;animation-timing-function:linear;animation-fill-mode:both;animation-play-state:paused;animation-delay:calc(var(--p,0)*-1s)}
-@supports (animation-timeline:view()){
-  html:not(.fb) .a{animation-timeline:--sc;animation-range:contain 0% contain 100%;animation-play-state:running;animation-delay:0s;animation-duration:auto}
+@supports (animation-timeline:scroll()){
+  html:not(.fb) .a{animation-timeline:scroll(root);animation-range:0 80vh;animation-play-state:running;animation-delay:0s;animation-duration:auto}
 }
-
-/* ---------- the mock Mac screen, built in cqw so it scales ---------- */
-.screen{container-type:inline-size;position:relative;width:100%;max-width:880px;aspect-ratio:16/10;border-radius:16px;overflow:hidden;justify-self:center;
-  box-shadow:0 30px 80px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.12)}
-.wall{position:absolute;inset:0;background:radial-gradient(60cqw 40cqw at 18% 8%,#3b4d86,transparent 70%),radial-gradient(55cqw 40cqw at 92% 95%,#1f6a86aa,transparent 70%),linear-gradient(160deg,#151b2e,#0a0d15)}
-.bar{position:absolute;top:0;left:0;right:0;height:3.4cqw;background:rgba(255,255,255,.08)}
-.bar b{position:absolute;top:1.2cqw;height:1cqw;border-radius:.5cqw;background:rgba(255,255,255,.35)}
-.win{position:absolute;left:6cqw;top:8cqw;width:60cqw;height:42cqw;border-radius:1.4cqw;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .1cqw rgba(255,255,255,.14)}
-.win::before{content:"";position:absolute;left:2cqw;top:1.4cqw;width:6cqw;height:1.2cqw;border-radius:.6cqw;background:rgba(255,255,255,.3)}
-.win::after{content:"";position:absolute;inset:5cqw 4cqw 3cqw;background:repeating-linear-gradient(180deg,rgba(255,255,255,.14) 0 1cqw,transparent 1cqw 3cqw);-webkit-mask:linear-gradient(90deg,#000 80%,transparent);mask:linear-gradient(90deg,#000 80%,transparent)}
-.glassy{background:linear-gradient(180deg,rgba(var(--tint),.16),rgba(var(--tint),.05)),rgb(28,31,39);box-shadow:inset 0 .1cqw 0 rgba(255,255,255,.26),inset 0 0 0 .08cqw rgba(255,255,255,.1)}
-.tab{position:absolute;right:0;width:9cqw;height:20cqw;top:calc(var(--y)*1cqw - 10cqw);border-radius:2.4cqw 0 0 2.4cqw;display:grid;place-items:center;--u:.1cqw}
-
-/* ---------- keyframes: the end of each is the finished picture; the base styles are the static (reduced motion) picture ---------- */
-@keyframes k-h1{0%,12%{transform:none;opacity:1}100%{transform:translateY(-12vh) scale(.8);opacity:0}}
-@keyframes k-tag{0%,8%{opacity:1}30%,100%{opacity:0}}
-@keyframes k-hs{0%{transform:translateY(40vh) scale(.88)}65%,100%{transform:translateY(-21vh) scale(1)}}
-@keyframes k-tabh{0%,40%{transform:translateX(100%)}72%,100%{transform:none}}
-.k-h1{animation-name:k-h1}.k-tag{animation-name:k-tag}.k-hs{animation-name:k-hs}.k-tabh{animation-name:k-tabh}
+@keyframes k-tilt{0%{transform:none}100%{transform:translateY(8px) rotate(-9deg)}}
+@keyframes k-rise{0%{transform:translateY(9vh) scale(.94)}100%{transform:none}}
+.k-tilt{animation-name:k-tilt}.k-rise{animation-name:k-rise}
 
 /* ---------- hero ---------- */
-.hero .pin{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;padding-top:12vh;max-width:none;text-align:center}
-.hero h1{font-size:clamp(3.8rem,16vw,11rem);line-height:.95;font-weight:800;letter-spacing:-.05em;background:linear-gradient(180deg,#fff 30%,#8fa6c4);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.06em}
-.hero .tag{font-size:clamp(1.1rem,2.6vw,1.7rem);color:var(--t2);margin-top:1.4vh}
-.hero .screen{margin-top:5vh;width:min(92vw,860px,96vh)}
-.hero .glow{position:absolute;left:50%;top:48%;width:80vw;height:60vh;transform:translate(-50%,0);background:radial-gradient(closest-side,rgba(var(--glow),.18),transparent);pointer-events:none}
-/* On a phone the headline sits at the top and the screen rises to the middle of the view, whatever the phone's height. */
-@media (max-width:820px){
-  .hero .screen{position:absolute;left:50%;top:calc(50% + 24px);margin:0;translate:-50% -50%}
-  .hero .glow{top:calc(50% + 24px);transform:translate(-50%,-50%)}
-  @keyframes k-hs{0%{transform:translateY(36vh) scale(.88)}65%,100%{transform:none}}
+.hero{position:relative;isolation:isolate;text-align:center;padding:calc(52px + 13vh) 20px 30vh}
+.hero:not(:has(+ .watch)){padding-bottom:16vh}
+.hero .mascot{display:inline-block;--u:2.2px}
+.hero h1{font-size:clamp(2.25rem,1.43rem + 3.37vw,4.125rem);line-height:1.04;font-weight:700;letter-spacing:-.035em;max-width:12.5em;margin:30px auto 0;text-wrap:balance}
+.hero .lead{font-size:clamp(1.06rem,.95rem + .45vw,1.32rem);color:var(--ink2);max-width:31em;margin:18px auto 0;text-wrap:balance}
+
+/* ---------- the walkthrough: a light window frame that starts in the sky and overlaps its bottom edge ---------- */
+.watch{position:relative;margin-top:-24vh;padding:0 20px 4vh}
+.frame{max-width:68rem;margin:0 auto;border-radius:18px;overflow:hidden;background:#fff;
+  box-shadow:0 0 0 1px rgba(11,18,32,.08),0 40px 90px -30px rgba(var(--deep),.45),0 14px 34px -18px rgba(var(--deep),.3)}
+.frame .bar{position:relative;height:38px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#fdfeff,#f1f5fa);border-bottom:1px solid var(--line)}
+.frame .dots{position:absolute;left:14px;top:13px;display:flex;gap:8px}
+.frame .dots i{width:12px;height:12px;border-radius:50%;background:#ff5f57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.15)}
+.frame .dots i:nth-child(2){background:#febc2e}.frame .dots i:nth-child(3){background:#28c840}
+.frame .ttl{font-size:.8rem;font-weight:600;color:var(--ink3)}
+.frame .vid{position:relative;aspect-ratio:16/10;background:#0b1220}
+.frame video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;cursor:pointer}
+.play{position:absolute;right:14px;bottom:14px;display:flex;align-items:center;gap:8px;font:600 .84rem var(--font);color:#fff;background:rgba(11,18,32,.6);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:8px 14px;cursor:pointer}
+.play::before{content:"";width:9px;height:11px;border-inline:3px solid #fff}
+.watch[data-state=paused] .play::before{border:0;border-left:10px solid #fff;border-block:6px solid transparent;width:0;height:0}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:68rem;margin:22px auto 0;padding:0;list-style:none}
+.chips button{font:600 .9rem var(--font);color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;white-space:nowrap}
+.chips button:hover{background:rgba(var(--tint),.45)}
+.chips button[aria-current=true]{background:rgb(var(--deep));border-color:rgb(var(--deep));color:#fff}
+
+/* ---------- how it's built: a small dark card on the light page ---------- */
+.built{padding:12vh 20px 6vh}
+.card{max-width:68rem;margin:0 auto;border-radius:28px;background:#0d1320;color:#f2f6fb;padding:clamp(28px,5vw,60px);
+  display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:clamp(28px,5vw,64px);align-items:end;box-shadow:0 30px 70px -36px rgba(11,18,32,.6)}
+.card h2{font-size:clamp(1.7rem,1.2rem + 1.6vw,2.5rem);letter-spacing:-.03em;line-height:1.08;margin-bottom:22px}
+.card ul{list-style:none;padding:0;display:grid;gap:12px}
+.card li{position:relative;padding-left:22px;color:rgba(242,246,251,.72)}
+.card li::before{content:"";position:absolute;left:0;top:.62em;width:8px;height:8px;border-radius:50%;background:rgb(var(--glow));box-shadow:0 0 10px rgba(var(--glow),.8)}
+.card li b{color:#f2f6fb;font-weight:700}
+.card .say{font-size:clamp(1.35rem,1rem + 1.2vw,2rem);line-height:1.22;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+
+/* ---------- closing line over the sky, then a plain footer ---------- */
+.end{position:relative;isolation:isolate;text-align:center;padding:16vh 20px 18vh;overflow:hidden}
+.end .sky{transform:scaleY(-1)}
+.end .pill{margin:0 auto 28px;--u:1.6px}
+.end p{font-size:clamp(1.7rem,1.05rem + 2.7vw,3.4rem);line-height:1.1;font-weight:700;letter-spacing:-.035em;max-width:19em;margin:0 auto;text-wrap:balance}
+.foot{text-align:center;padding:26px 20px 32px;font-size:.86rem;color:var(--ink3)}
+
+/* ---------- phone ---------- */
+@media (max-width:720px){
+  .top nav a{padding:6px 9px}
+  .hero{padding-top:calc(52px + 9vh)}
+  .hero .mascot{--u:1.7px}
+  .watch{padding-inline:12px}
+  .frame{border-radius:14px}
+  .frame .bar{height:30px}.frame .dots{top:10px;left:11px;gap:6px}.frame .dots i{width:10px;height:10px}
+  .play{right:10px;bottom:10px;padding:6px 11px;font-size:.78rem}
+  /* The chips scroll sideways inside their own row; the page itself never scrolls sideways. */
+  .chips{flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;margin-inline:-12px;padding:2px 12px 6px;scroll-padding-inline:12px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .card{grid-template-columns:1fr;border-radius:22px}
 }
 
-/* ---------- closing screen ---------- */
-.end{text-align:center;padding:16vh 20px 14vh}
-.end .pill{margin:0 auto 22px;--u:1.5px}
-.end p{color:var(--t2);max-width:34ch;margin:0 auto;font-size:1.1rem}
-.end b{display:block;font-size:clamp(2.6rem,9vw,6rem);letter-spacing:-.045em;line-height:1;color:var(--t1);margin-bottom:16px}
-
-/* ---------- reduced motion: no pinning, no scroll motion, the finished picture of every scene ---------- */
+/* ---------- reduced motion: no scroll motion, no blinking, no autoplay (the script leaves the video on its poster) ---------- */
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  .scene{height:auto}.pin{position:static;height:auto;min-height:0;padding-block:72px 40px}
   .a,html:not(.fb) .a{animation:none!important}
   .pill i{animation:none!important}
-  .hero .pin{padding-top:96px}.hero .screen{position:relative;left:auto;top:auto;translate:none;margin-top:30px}
 }
-/* Forced colors drop backgrounds, which would leave the gradient headline invisible. */
-@media (forced-colors:active){.hero h1{background:none;color:CanvasText}}
 </style>
 </head>
 <body>
 <header class="top"><div>
-  <a class="brand" href="#top"><span class="pill" aria-hidden="true"><i></i><i></i><i></i></span>Steward</a>
+  <a class="brand" href="#top"><span class="pill" aria-hidden="true"><i></i><i></i></span>Steward</a>
+  <nav aria-label="Sections"><!-- needs clips/walkthrough.mp4 --><a href="#watch">Watch</a><!-- end needs --><a href="#built">How it's built</a></nav>
 </div></header>
 
 <main id="top">
 
-<!-- 1. Hero: Steward, very large; the screen rises and the tab slides out as you scroll -->
-<section class="scene hero" style="--len:230vh"><div class="pin">
-  <div class="glow" aria-hidden="true"></div>
-  <h1 class="a k-h1">Steward</h1>
-  <p class="a k-tag tag">A small helper at the edge of your screen.</p>
-  <div class="screen a k-hs" aria-hidden="true">
-    <div class="wall"></div><div class="bar"><b style="left:2cqw;width:4cqw"></b><b style="left:8cqw;width:6cqw"></b><b style="left:16cqw;width:5cqw"></b></div><div class="win"></div>
-    <div class="tab glassy a k-tabh" style="--y:34"><span class="pill"><i></i><i></i><i></i></span></div>
-  </div>
-</div></section>
+<section class="hero">
+  <div class="sky" aria-hidden="true"></div>
+  <span class="mascot a k-tilt" aria-hidden="true"><span class="pill"><i></i><i></i></span></span>
+  <h1>A small helper at the edge of your screen.</h1>
+  <p class="lead">It waits out of the way, tells you when Claude needs you, and shows what it did.</p>
+</section>
 
-<!-- The scenes go here: edge, moods, quiet, notch, request, then the clips, the demo and how it is built. -->
+<!-- needs clips/walkthrough.mp4 -->
+<!-- The walkthrough ships only once the recording exists. The chapter times are the shot list's; the real ones go in with the video. -->
+<section class="watch" id="watch" aria-label="Walkthrough" data-state="paused">
+  <div class="frame a k-rise">
+    <div class="bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="ttl">Steward</span></div>
+    <div class="vid">
+      <video muted loop playsinline preload="none" poster="posters/walkthrough.jpg" aria-label="A silent walkthrough of Steward on a Mac"><source src="clips/walkthrough.mp4" type="video/mp4"></video>
+      <button class="play" type="button">Play</button>
+    </div>
+  </div>
+  <div class="chips" role="group" aria-label="Chapters">
+    <button type="button" data-t="0">It comes to you</button>
+    <button type="button" data-t="10">A face that tells you</button>
+    <button type="button" data-t="20">Ask and watch</button>
+    <button type="button" data-t="35">Quiet until it matters</button>
+    <button type="button" data-t="45">At home in the notch</button>
+  </div>
+</section>
+<!-- end needs -->
+
+<section class="built" id="built" aria-labelledby="built-h">
+  <div class="card">
+    <div>
+      <h2 id="built-h">How it's built</h2>
+      <ul>
+        <li><b>AI chats with four roles.</b> A front door, a designer, builders and a researcher.</li>
+        <li><b>One phase at a time.</b> Each one small enough to check on its own.</li>
+        <li><b>CI on every phase.</b> Lint, type checks and tests run again before it counts.</li>
+        <li><b>More than 700 tests.</b> Plus a smoke run that opens the real app.</li>
+        <li><b>The code is private.</b></li>
+      </ul>
+    </div>
+    <p class="say">One person and a few AI chats. Nothing merges without my OK.</p>
+  </div>
+</section>
 
 <section class="end">
-  <span class="pill" aria-hidden="true"><i></i><i></i><i></i></span>
-  <b>Steward</b>
+  <div class="sky" aria-hidden="true"></div>
+  <span class="pill" aria-hidden="true"><i></i><i></i></span>
   <p>A personal project, made for one person. It is not for sale and has no download or waitlist.</p>
 </section>
 </main>
 
+<footer class="foot"><p>Steward, 2026</p></footer>
+
 <script>
-// Script driver: set --p (0 to 1) on each scene from its scroll position. Not needed where CSS scroll-driven animations drive the page.
-if (!CSS.supports('animation-timeline: view()') || document.documentElement.classList.contains('fb')) {
-  const scenes = [...document.querySelectorAll('.scene')];
+// Script driver: set --p (0 to 1) from how far the page has scrolled through its first 80vh. Not needed where CSS
+// scroll-driven animations drive the page.
+if (!CSS.supports('animation-timeline: scroll()') || document.documentElement.classList.contains('fb')) {
+  const root = document.documentElement;
   let queued = false;
   const update = () => {
     queued = false;
-    for (const s of scenes) {
-      const r = s.getBoundingClientRect(), span = r.height - innerHeight;
-      if (r.bottom < -100 || r.top > innerHeight + 100 || span <= 0) continue;
-      s.style.setProperty('--p', Math.min(1, Math.max(0, -r.top / span)).toFixed(4));
-    }
+    root.style.setProperty('--p', Math.min(1, Math.max(0, scrollY / (innerHeight * 0.8))).toFixed(4));
   };
   addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(update); } }, { passive: true });
   addEventListener('resize', update);
   update();
+}
+
+// The walkthrough: plays muted while at least half of it is on screen and stops when it leaves. Pause holds it until
+// Play is pressed. With reduced motion it never starts by itself. A chapter chip jumps there and plays.
+const watch = document.getElementById('watch');
+if (watch) {
+  const video = watch.querySelector('video'), button = watch.querySelector('.play'), chips = [...watch.querySelectorAll('.chips button')];
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let held = still;
+  const play = () => video.play().catch(() => {}); // a refused play() leaves the button saying Play
+  const show = () => {
+    watch.dataset.state = video.paused ? 'paused' : 'playing';
+    button.textContent = video.paused ? 'Play' : 'Pause';
+  };
+  video.addEventListener('play', show);
+  video.addEventListener('pause', show);
+  button.addEventListener('click', () => {
+    held = !video.paused;
+    if (video.paused) play(); else video.pause();
+  });
+  video.addEventListener('click', () => button.click());
+  new IntersectionObserver(([e]) => {
+    if (e.intersectionRatio >= 0.5) { if (!held) play(); } else video.pause();
+  }, { threshold: [0, 0.5] }).observe(video);
+  chips.forEach((chip) => chip.addEventListener('click', () => {
+    video.currentTime = Number(chip.dataset.t);
+    held = false;
+    play();
+  }));
+  // The chip for the chapter now playing is marked, and on a phone its row scrolls to keep it in sight.
+  let current = -1;
+  video.addEventListener('timeupdate', () => {
+    let k = 0;
+    chips.forEach((chip, i) => { if (Number(chip.dataset.t) <= video.currentTime + 0.25) k = i; });
+    if (k === current) return;
+    current = k;
+    chips.forEach((chip, i) => (i === k ? chip.setAttribute('aria-current', 'true') : chip.removeAttribute('aria-current')));
+    const row = chips[k].parentElement;
+    if (row.scrollWidth > row.clientWidth) row.scrollTo({ left: chips[k].offsetLeft - (row.clientWidth - chips[k].offsetWidth) / 2, behavior: still ? 'auto' : 'smooth' });
+  });
+  show();
 }
 </script>
 </body>
