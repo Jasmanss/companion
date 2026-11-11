@@ -470,6 +470,26 @@ describe('the island holding up', () => {
     }
   })
 
+  it('keeps a message taken off before it settled, so a bigger one never makes it vanish', () => {
+    const replaced: IslandNote[] = []
+    const notes = new IslandNotes({ changed: () => {}, replaced: (n) => replaced.push(n) })
+    const n = (kind: IslandNote['kind'], key?: string): IslandNote => ({ kind, name: 'haven', text: kind, at: 0, key })
+    notes.show(n('good', 'deploy-ready:a'))
+    // Good news joining good news is the same note, so nothing is replaced.
+    notes.show(n('good', 'deploy-ready:b'))
+    expect(replaced).toEqual([])
+    // A failed build takes good news' place; a session's approval then takes the failed build's.
+    notes.show(n('failed', 'deploy-failed:x'))
+    notes.show(n('wait', 'approval:s1:1'))
+    expect(replaced.map((r) => r.key)).toEqual(['deploy-ready:a', 'deploy-failed:x'])
+    // A small one can't take a big one's place (it waits for the panel already), and the same message again only
+    // updates it.
+    expect(notes.show(n('alert', 'other:1'))).toBe(false)
+    notes.show(n('wait', 'approval:s1:1'))
+    expect(replaced).toHaveLength(2)
+    notes.drop()
+  })
+
   // The notch in points on Macs and settings it runs on: Larger Text, the default, a 16-inch, and More Space.
   const notches = [
     { width: 140, height: 24 },

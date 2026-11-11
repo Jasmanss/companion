@@ -1206,6 +1206,18 @@ function showOnIsland(alert: AlertView): void {
 }
 
 /**
+ * An alert's message taken off the island by another before it settled (a failed build's card by a session's approval,
+ * good news by anything big) waits for the panel, as one that couldn't show does: the menu bar's dot, then its card,
+ * with its offer. Notes about work going on (finished, started) aren't alerts, so nothing waits for them.
+ */
+function holdReplaced(note: IslandNote): void {
+  const alert = note.key ? islandAlerts.get(note.key) : undefined
+  if (!alert || alert.key.startsWith('night:')) return
+  heldAlerts = [alert, ...heldAlerts.filter((a) => a.key !== alert.key)].slice(0, MAX_HELD)
+  updateMenuBar()
+}
+
+/**
  * A button on the island's message (at: which message, so a late press on one that's gone does nothing). Open and a
  * click on the island open the panel (a message too long for the island shows there whole); Later settles it now; Want
  * me to look? opens the panel and has Steward's agent read the build log; Allow and Deny answer Steward's own request;
@@ -1484,7 +1496,7 @@ let agentSince: number | undefined
 let pendingReviews = 0
 let islandTimer: ReturnType<typeof setTimeout> | undefined
 /** Its note, one line under the notch for a few seconds: a session finished, or a second project started. */
-const islandNotes = new IslandNotes({ changed: () => updateIsland() })
+const islandNotes = new IslandNotes({ changed: () => updateIsland(), replaced: (note) => holdReplaced(note) })
 
 /**
  * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
@@ -4570,6 +4582,16 @@ async function checkIslandAlerts(out: string, { page, layout, shot, black, clear
       await sleep(900)
     }
     if (k.kind === 'failed' && notch.state().island?.right !== 'failed') throw new Error(`a failed build shows "${notch.state().island?.right}" on the right, not the red mark`)
+    if (k.kind === 'failed') {
+      // Something big taking its card's place before it settles doesn't lose it: it waits for the panel, offer and all.
+      raise({ key: 'deploy-failed:dpl_smoke2', level: 'urgent', title: 'api deploy failed', detail: 'Build exceeded the time limit', mood: 'mad', scope: cwd })
+      alerts.flush()
+      await sleep(400)
+      const kept = heldAlerts.find((a) => a.key === 'deploy-failed:dpl_smoke')
+      if (notch.state().island?.note?.key !== 'deploy-failed:dpl_smoke2' || !kept?.action) throw new Error(`a failed build's card taken off by another big one was lost (out: ${notch.state().island?.note?.key}; held: ${JSON.stringify(heldAlerts.map((a) => a.key))})`)
+      heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('deploy-failed:dpl_smoke'))
+      console.log("smoke: island: a failed build's card taken off by another big one waits for the panel, with its offer")
+    }
     console.log(`smoke: island: ${k.what} opens as the ${k.size} size (${notch.state().island?.note ? 'out' : 'settled by its button'}), never the old pill`)
   }
   moods.clear(cwd)

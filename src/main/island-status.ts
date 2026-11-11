@@ -163,8 +163,11 @@ export class IslandNotes {
   private hovered = false
   private timer: ReturnType<typeof setTimeout> | undefined
 
-  /** changed: the note came or went, so the island should be worked out again. */
-  constructor(private readonly o: { changed(): void; now?(): number }) {}
+  /**
+   * changed: the note came or went, so the island should be worked out again. replaced: a message was taken off before
+   * it settled, by another one, so whoever shows messages can keep it for later (the panel).
+   */
+  constructor(private readonly o: { changed(): void; now?(): number; replaced?(note: IslandNote): void }) {}
 
   get current(): IslandNote | null {
     return this.note
@@ -180,6 +183,8 @@ export class IslandNotes {
       return true
     }
     if (cur && big(cur) && !big(note)) return false
+    // The one it takes the place of hasn't settled: it isn't lost (the same message again only updates it).
+    if (cur && cur.key !== note.key) this.o.replaced?.(cur)
     this.note = note
     this.shownAt = this.now()
     this.arm(noteShowMs(note))
