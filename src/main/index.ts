@@ -5186,6 +5186,9 @@ app.whenReady().then(async () => {
   // The idle loop's moves would land in the middle of the other checks' faces and pictures, so the smoke check runs with
   // Liveliness Quiet; checkIdleLoop turns Calm on for itself.
   if (SMOKE_OUT) await settings.update({ steward: { liveliness: 'quiet' } })
+  // STEWARD_SMOKE_LOOK=flat (or blocky): the same run with another look, to compare what each costs.
+  const look = process.env.STEWARD_SMOKE_LOOK
+  if (SMOKE_OUT && (look === 'glass' || look === 'flat' || look === 'blocky')) await settings.update({ steward: { version: look } })
   // Only when needed, the window starts out of sight, with its page slid out ready to come in.
   slidOut = quiet()
   registerGlobalShortcuts()
