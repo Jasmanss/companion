@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { islandBodyKind } from '../src/shared/notch'
 import { PILL_COLORS } from '../src/shared/steward'
-import { BACKDROP, contrast, glassEdgeFor } from '../src/renderer/src/pill/render'
+import { BACKDROP, contrast, glassEdgeFor } from '../src/renderer/src/pill/color'
 
 const hex = (id: string) => PILL_COLORS.find((c) => c.id === id)!.hex
 
