@@ -2,6 +2,8 @@
 
 Status: ready
 
+**Parked 2026-11-11 (the user: "Yes, park them").** R3 (frustrated, with the new PostToolUseFailure hook) is not planned for now. R1 and R2 stay merged. The design for R3 below stays as written. Status unchanged.
+
 Set by the front door, 2026-10-25: the user typed the go for Phase R1 into Main building directly, after island Phase 2 merged (#36), as they chose ("Main building builds it after island Phase 2"). R2 and R3 each wait for their own go.
 
 Designed 2026-10-24 on the front door's request. Waits for the user's go. The live page is `design/showcase.html`, section 9 "Steward's reactions" (open `#reactions`); the model it runs is `design/pill/reactions.js`.

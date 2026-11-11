@@ -2,6 +2,8 @@
 
 Status: ready
 
+**Parked 2026-11-11 (the user: "Yes, park them").** 3c (drop images onto the notch) is not planned for now, and its spike with it. 3a and 3b stay merged. The design for 3c below stays as written. Status unchanged.
+
 Set by the front door, 2026-10-19: the user typed the go for Phase 3a into Main building directly. 3b, 3c and 3d each wait for their own go. 3e (added 2026-10-20) waits for its own go too, after 3b is merged.
 
 ## Ask (front door)

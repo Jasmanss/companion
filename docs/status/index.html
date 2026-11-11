@@ -91,6 +91,8 @@ h2 { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weig
 .next { --c: rgb(var(--ink)); }
 .small { --c: rgb(var(--warm)); }
 .ideas { --c: var(--t3); }
+.parked { --c: var(--t3); }
+.finish { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius); background: rgba(var(--fill), 0.7); border: 1px solid var(--line); font-size: 0.85rem; font-weight: 600; color: var(--t1); }
 .done { --c: rgb(var(--ok)); }
 :root[data-theme="dark"] .next { --c: rgb(var(--soft)); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .next { --c: rgb(var(--soft)); } }
@@ -116,8 +118,9 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       <p class="sub">Checked against git and GitHub on Nov 11. Each date is when that line last changed.</p>
     </div>
   </header>
+  <p class="finish">The finish line (2026-11-11): Notch island Phase 5, the website, your hand tests, then one pass of the Small fixes list. Everything else is parked.</p>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">5</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">2</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Hand-test what has merged</span><time datetime="2026-11-11">Nov 11</time></div>
@@ -127,18 +130,6 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
         <div class="row"><span class="name">Website: record the walkthrough video (30 to 45 minutes)</span><time datetime="2026-11-11">Nov 11</time></div>
         <p>One screen recording of the real app, 45 to 60 seconds, with Cmd-Shift-5. Shot list, steps and what to keep out of frame (menu bar icons, notifications, real project names) are in docs/briefs/steward-site.md. It can happen while Phase 2 is built. Tell the front door where the file is.</p>
       </li>
-      <li>
-        <div class="row"><span class="name">Idea inbox</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Pick the recommended version or the smaller one. Design: memory/research/2026-10-15-idea-inbox-design.md.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Pick the recommended version (a review block on the push approval card) or the bigger one (a PreToolUse gate). Design: memory/research/2026-10-15-review-before-push-design.md.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Start Twilio sign-up and US text registration (takes days)</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Make a Twilio account and a US number, then start US text registration. Steps, costs and where the keys go: design/overnight-watch.html, section 6. You type the keys into the app yourself, never into a chat. Until texts are approved, Overnight Watch will only call.</p>
-      </li>
     </ul>
   </section>
   <section id="progress" class="card progress">
@@ -146,40 +137,20 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <ul>
       <li>
         <div class="row"><span class="name">Nothing is being built right now</span><time datetime="2026-11-11">Nov 11</time></div>
-        <p>Merged since 2026-10-24: Notch island 2 to 4, Visual Review 1b to 4, Steward's reactions R1 and R2, Main chat M1 to M3, Overnight Watch 1 to 3. The next builds wait for your go typed into the build chat: Notch island 5, Steward's reactions R3, and Overnight Watch 4 (needs your Twilio account).</p>
+        <p>Merged since 2026-10-24: Notch island 2 to 4, Visual Review 1b to 4, Steward's reactions R1 and R2, Main chat M1 to M3, Overnight Watch 1 to 3. Left to build: Notch island Phase 5 and the website (waiting for your go typed into the build chats). Then your hand tests and one pass of the Small fixes.</p>
       </li>
     </ul>
   </section>
   <section id="next" class="card next">
-    <h2><span class="dot"></span>Up next <span class="count">7</span></h2>
+    <h2><span class="dot"></span>Up next <span class="count">2</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Notch island, Phase 5</span><time datetime="2026-11-11">Nov 11</time></div>
         <p>Phases 1 to 4 are merged (#34, #36, #42, #54). Phase 5 is hardening and docs. It waits for your go typed into Main building.</p>
       </li>
       <li>
-        <div class="row"><span class="name">Steward's reactions, R3: frustrated</span><time datetime="2026-11-02">Nov 2</time></div>
-        <p>Frustrated when runs keep failing, with one new hook (PostToolUseFailure) that you add yourself in Settings, Connections, Update. R1 and R2 are merged. Waits for your go in Main building.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Overnight Watch, phase 4: calls and texts</span><time datetime="2026-11-02">Nov 2</time></div>
-        <p>Settings, Watch, the test buttons and the call-then-text ladder. Decided: a text at 45 minutes of silence and a call at 90; calls only until US text registration is approved (approvals and the stuck text then stay on screen and in the report). Needs your Twilio keys for the last live check. Comes after phases 1 to 3. Phases 1 to 3 are merged. Feature building; needs your Twilio account.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Overnight Watch, phase 5: off the Mac</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>A GitHub Actions job that calls for CI or deploy failures when the Mac sleeps. Which key goes in GitHub secrets is decided when this phase comes. After Visual Review 3.</p>
-      </li>
-      <li>
         <div class="row"><span class="name">Website, Phases 2 to 4: the light page, the video, going live</span><time datetime="2026-11-11">Nov 11</time></div>
         <p>Planned around your vision (light and airy, one walkthrough video in a window frame under a big headline). Three phases: the light page, the video going in, going live. Cut from the first launch: the five animated scenes, Try it, feature cards. Optional, cheap to cut: How it's built. Phase 2 waits for your go typed into Site building.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Notch 3c: drop images</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Does not fold into the island: it is a separate feature (drag events on the notch window). Its spike can run any time, but its &quot;mouth&quot; look was drawn for the old chin, so it needs a small redraw as the island growing to the note size. Best after island Phase 1 is in the app, which it now is. Waits for your go in Main building.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Idea inbox and Review before push</span><time datetime="2026-10-15">Oct 15</time></div>
-        <p>Designed in side chats, waiting for a pick. No brief files yet.</p>
       </li>
     </ul>
   </section>
@@ -249,6 +220,31 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       <li>
         <div class="row"><span class="name">Main chat M3: thread gets half the panel</span><time datetime="2026-11-07">Nov 7</time></div>
         <p>A waiting session plus the API key note above the thread leave the thread about half the panel. Check it in the hand pass; if it bothers you, the note can fold into the status line.</p>
+      </li>
+    </ul>
+  </section>
+  <section id="parked" class="card parked">
+    <h2><span class="dot"></span>Parked <span class="count">5</span></h2>
+    <ul>
+      <li>
+        <div class="row"><span class="name">Overnight Watch, phases 4 and 5</span><time datetime="2026-11-11">Nov 11</time></div>
+        <p>Calls and texts, then the off-the-Mac job. Phases 1 to 3 stay merged. The Twilio sign-up and US text registration no longer wait on you. Design is in docs/briefs/overnight-watch.md and design/overnight-watch.html.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Steward's reactions, R3: frustrated</span><time datetime="2026-11-11">Nov 11</time></div>
+        <p>Frustrated when runs keep failing, with a PostToolUseFailure hook you would add yourself. R1 and R2 stay merged. Brief: docs/briefs/steward-reactions.md.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch 3c: drop images</span><time datetime="2026-11-11">Nov 11</time></div>
+        <p>Drag a screenshot onto the notch. Not started, spike included. Brief: docs/briefs/notch-dock-phase-3.md.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Idea inbox</span><time datetime="2026-11-11">Nov 11</time></div>
+        <p>Designed in a side chat, waiting for a pick, no brief file. Design: memory/research/2026-10-15-idea-inbox-design.md.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Review before push</span><time datetime="2026-11-11">Nov 11</time></div>
+        <p>Designed in a side chat, waiting for a pick, no brief file. Design: memory/research/2026-10-15-review-before-push-design.md.</p>
       </li>
     </ul>
   </section>

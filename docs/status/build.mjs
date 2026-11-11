@@ -124,6 +124,8 @@ h2 { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weig
 .next { --c: rgb(var(--ink)); }
 .small { --c: rgb(var(--warm)); }
 .ideas { --c: var(--t3); }
+.parked { --c: var(--t3); }
+.finish { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius); background: rgba(var(--fill), 0.7); border: 1px solid var(--line); font-size: 0.85rem; font-weight: 600; color: var(--t1); }
 .done { --c: rgb(var(--ok)); }
 :root[data-theme="dark"] .next { --c: rgb(var(--soft)); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .next { --c: rgb(var(--soft)); } }
@@ -148,7 +150,8 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       <h1>Steward status</h1>
       <p class="sub">Checked against git and GitHub on ${short(data.checked)}. Each date is when that line last changed.</p>
     </div>
-  </header>${data.sections.map(section).join('')}
+  </header>${data.finish ? `
+  <p class="finish">${esc(data.finish)}</p>` : ''}${data.sections.map(section).join('')}
   <footer>Source: docs/status/status.json. Roadmap &amp; design keeps this page current.</footer>
 </main>
 `

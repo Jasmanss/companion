@@ -2,6 +2,8 @@
 
 Status: ready
 
+**Parked 2026-11-11 (the user: "Yes, park them").** Phases 4 (calls and texts) and 5 (off the Mac) are not planned for now, so the Twilio sign-up no longer waits on the user. Phases 1 to 3 stay merged and nothing is removed. The design for 4 and 5 below stays as written for when it is picked up again. Status unchanged.
+
 Set by the front door, 2026-10-26: the user typed the go for Phase 1 into Feature building directly (built as PR #40). Phases 2 to 5 each wait for their own go.
 
 Designed 2026-10-24 on the front door's request. Not `ready`: it waits for the user's go, and the account in "What you set up" can start now because it takes days.
