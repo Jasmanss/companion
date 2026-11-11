@@ -17,11 +17,22 @@ export const smokeHidden = (env: Env): boolean => smokeRuns(env) && !on(env.STEW
 export const PRETEND_NOTCH = { width: 185, height: 32 }
 export const PRETEND_MENU_BAR = 33
 
+/**
+ * STEWARD_SMOKE_NOTCH=1 pretends the measured notch; a size instead (220x38: a 14-inch MacBook Pro at More Space, where
+ * the notch is wider in points) pretends that one. Its menu bar is a point taller than the notch, as measured (32, 33).
+ */
+export function pretendNotchSize(env: Env): { width: number; height: number } {
+  const size = /^(\d{2,3})x(\d{2})$/.exec(env.STEWARD_SMOKE_NOTCH ?? '')
+  return size ? { width: Number(size[1]), height: Number(size[2]) } : PRETEND_NOTCH
+}
+const pretendMenuBar = (env: Env): number => Math.max(PRETEND_MENU_BAR, pretendNotchSize(env).height + 1)
+
 /** STEWARD_SMOKE_NOTCH=1: the main display has a notch, centered at its top, wherever the run really is. Null: ask macOS as usual. */
 export function pretendNotch(env: Env, display: Pick<Display, 'id' | 'bounds'>): NotchGeometry | null {
   if (!smokeRuns(env) || !on(env.STEWARD_SMOKE_NOTCH)) return null
   const { x, y, width } = display.bounds
-  return { displayId: display.id, x: x + (width - PRETEND_NOTCH.width) / 2, y, ...PRETEND_NOTCH }
+  const notch = pretendNotchSize(env)
+  return { displayId: display.id, x: x + (width - notch.width) / 2, y, ...notch }
 }
 
 /**
@@ -31,7 +42,7 @@ export function pretendNotch(env: Env, display: Pick<Display, 'id' | 'bounds'>):
  */
 export function withNotchedMenuBar(env: Env, display: Display): Display {
   if (!smokeRuns(env) || !on(env.STEWARD_SMOKE_NOTCH)) return display
-  const top = display.bounds.y + PRETEND_MENU_BAR
+  const top = display.bounds.y + pretendMenuBar(env)
   const { x, y, width, height } = display.workArea
   if (y >= top) return display
   return { ...display, workArea: { x, y: top, width, height: y + height - top } }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { App, BrowserWindow, Display, Screen } from 'electron'
-import { HIDDEN_OPACITY, keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, PRETEND_MENU_BAR, smokeHidden, withNotchedMenuBar } from '../src/main/smoke-env'
+import { HIDDEN_OPACITY, keepMacAwake, keepOffTheUsersScreen, pretendNotch, pretendNotchScreen, pretendNotchSize, PRETEND_MENU_BAR, smokeHidden, withNotchedMenuBar } from '../src/main/smoke-env'
 
 const SMOKE = { STEWARD_SMOKE_OUT: 'out/smoke.png' }
 /** A CI runner's screen: 1920 x 1080, menu bar 25 pt, Dock at the bottom. */
@@ -26,6 +26,15 @@ describe('the pretend notch', () => {
     expect(pretendNotch({ ...SMOKE, STEWARD_SMOKE_NOTCH: '1' }, RUNNER)).toEqual({ displayId: 7, x: 867.5, y: 0, width: 185, height: 32 })
     const offset = { id: 2, bounds: { x: -1512, y: 180, width: 1512, height: 982 } }
     expect(pretendNotch({ ...SMOKE, STEWARD_SMOKE_NOTCH: '1' }, offset)).toEqual({ displayId: 2, x: -1512 + 663.5, y: 180, width: 185, height: 32 })
+  })
+
+  it('pretends a wider notch when given its size (a 14-inch at More Space), with a menu bar a point taller', () => {
+    const env = { ...SMOKE, STEWARD_SMOKE_NOTCH: '220x38' }
+    expect(pretendNotchSize(env)).toEqual({ width: 220, height: 38 })
+    expect(pretendNotch(env, RUNNER)).toEqual({ displayId: 7, x: (1920 - 220) / 2, y: 0, width: 220, height: 38 })
+    expect(withNotchedMenuBar(env, RUNNER).workArea.y).toBe(39)
+    // Anything else that turns it on is the measured notch.
+    expect(pretendNotchSize({ ...SMOKE, STEWARD_SMOKE_NOTCH: 'true' })).toEqual({ width: 185, height: 32 })
   })
 
   it('is off unless asked for, and never outside a smoke run', () => {
