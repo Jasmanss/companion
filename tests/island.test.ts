@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
 import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, messageKeepsAwake, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
-import { fadesFor, fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
+import { fadesFor, fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, islandWindow, ISLAND_OVERSHOOT, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
 /** The 14-inch MacBook Pro's notch. */
@@ -468,5 +468,30 @@ describe('the island holding up', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // The notch in points on Macs and settings it runs on: Larger Text, the default, a 16-inch, and More Space.
+  const notches = [
+    { width: 140, height: 24 },
+    { width: 185, height: 32 },
+    { width: 200, height: 34 },
+    { width: 220, height: 38 },
+    { width: 246, height: 42 },
+  ]
+  it("gives every size room in its window, springs' overshoot and all, whatever the notch's size in points", () => {
+    for (const notch of notches) {
+      const box = islandWindow(notch)
+      expect(box.width).toBeGreaterThanOrEqual(ISLAND_WINDOW.width)
+      expect(box.height).toBeGreaterThanOrEqual(ISLAND_WINDOW.height)
+      for (const level of ['rest', 'compact', 'note', 'long', 'approval', 'review'] as const) {
+        const parts = islandParts(level, notch, level === 'compact')
+        expect(parts.width * ISLAND_OVERSHOOT).toBeLessThanOrEqual(box.width)
+        expect(parts.height * ISLAND_OVERSHOOT).toBeLessThanOrEqual(box.height)
+      }
+    }
+    // The default notch keeps the window it always had.
+    expect(islandWindow({ width: 185, height: 32 })).toEqual(ISLAND_WINDOW)
+    // More Space would have clipped the review's springs in the old 500-point window.
+    expect(islandParts('review', { width: 220, height: 38 }).width * ISLAND_OVERSHOOT).toBeGreaterThan(ISLAND_WINDOW.width)
   })
 })

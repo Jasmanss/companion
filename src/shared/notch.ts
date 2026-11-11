@@ -226,6 +226,19 @@ export function islandParts(level: IslandLevel, notch: { width: number; height: 
   return at(notch.width + 2 * ISLAND_SIDE + (hover ? ISLAND_HOVER : 0), notch.height, pill(-hw - 34), { x: hw + 34 + (hover ? ISLAND_HOVER / 2 : 0), y })
 }
 
+/** How far past its size a spring may carry the island, at most: the window leaves this much room. */
+export const ISLAND_OVERSHOOT = 1.1
+
+/**
+ * The island's window for a notch: room for the biggest size (the review) and the springs' overshoot past it, and never
+ * smaller than ISLAND_WINDOW. A Mac set to More Space has a wider notch in points (about 220 by 38 on a 14-inch
+ * MacBook Pro, against 185 by 32), so the window grows with it rather than clipping the review's edges.
+ */
+export function islandWindow(notch: { width: number; height: number }): { width: number; height: number } {
+  const big = islandParts('review', notch)
+  return { width: Math.max(ISLAND_WINDOW.width, 2 * Math.ceil((big.width * ISLAND_OVERSHOOT) / 2)), height: Math.max(ISLAND_WINDOW.height, Math.ceil(big.height * ISLAND_OVERSHOOT)) }
+}
+
 /* ---------- A note's words: never cut off ---------- */
 
 /**

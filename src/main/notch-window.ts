@@ -11,7 +11,7 @@
 // (in Wings too) and it doesn't grow with the cursor on it. While the panel is open at the side, it stays, and Steward
 // looks toward the panel.
 import { BrowserWindow, screen } from 'electron'
-import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_WINDOW, noHover, notchBoxes, notchShape, NOTCH_WINDOW, noteSize, stepHover, type HoverState } from '../shared/notch'
+import { inBoxes, islandBoxes, islandLevel, islandParts, islandWindow, noHover, notchBoxes, notchShape, NOTCH_WINDOW, noteSize, stepHover, type HoverState } from '../shared/notch'
 import type { IslandStatus, Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
 import { inRect } from './presence'
 
@@ -184,7 +184,7 @@ export class NotchDock {
   }
 
   private bounds(n: NotchGeometry): Electron.Rectangle {
-    const size = this.o.style() === 'island' ? ISLAND_WINDOW : NOTCH_WINDOW
+    const size = this.o.style() === 'island' ? islandWindow(n) : NOTCH_WINDOW
     return { x: Math.round(n.x + n.width / 2 - size.width / 2), y: n.y, ...size }
   }
 

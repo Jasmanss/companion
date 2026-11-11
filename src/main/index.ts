@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { islandBodyKind, islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
+import { islandBodyKind, islandParts, islandWindow, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
@@ -4073,10 +4073,11 @@ async function checkIsland(out: string): Promise<void> {
   const page = notch.contents()!
   const layout = notch.state().layout!
   const hw = layout.width / 2
-  if (notch.windowBounds()?.width !== ISLAND_WINDOW.width) throw new Error(`the island's window is ${notch.windowBounds()?.width} wide, not ${ISLAND_WINDOW.width}`)
+  const islandWide = islandWindow(layout).width
+  if (notch.windowBounds()?.width !== islandWide) throw new Error(`the island's window is ${notch.windowBounds()?.width} wide, not ${islandWide}`)
   const pixel = (img: Electron.NativeImage, x: number, y: number) => {
     const { width, height } = img.getSize()
-    const k = width / ISLAND_WINDOW.width
+    const k = width / islandWide
     const i = (Math.min(height - 1, Math.round(y * k)) * width + Math.min(width - 1, Math.round(x * k))) * 4
     const b = img.toBitmap()
     return { alpha: b[i + 3], light: Math.max(b[i], b[i + 1], b[i + 2]) }
