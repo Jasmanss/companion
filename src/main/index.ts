@@ -713,12 +713,11 @@ function presenceChanged(): void {
 }
 
 /**
- * The notch window checks the cursor often while it's near; it says whether it's on the notch. In a smoke run that's the
- * check's made-up cursor, never the real one: it counts while a check has put one there, and otherwise the checks that
- * feed the wake themselves aren't undone by a cursor that isn't there.
+ * The notch window checks the cursor often while it's near; it says whether it's on the notch. (In a smoke run that's
+ * the check's made-up cursor, never the real one: none put there is a cursor that isn't on the notch.)
  */
 function lookAtNotch(over: boolean): void {
-  if ((!drivenBySmoke || smokeNotchCursor) && quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
+  if (quiet() && inNotch() && dock === 'collapsed') lookAtCursor(over, over, NOTCH_DWELL_MS)
 }
 
 /** Within this many points of the tab, the cursor is near: Dim when idle wakes the eyes. */
@@ -3982,21 +3981,21 @@ async function checkNotch(out: string): Promise<void> {
     if (!solid(resting, layout.cx, layout.height / 2)) throw new Error('the sleeping notch does not cover the notch')
     if (solid(resting, layout.cx, below) || solid(resting, layout.cx - beside, layout.height / 2) || solid(resting, layout.cx + beside, layout.height / 2)) throw new Error(`the sleeping notch (${notchStyle}) still reaches beyond the notch`)
     await fs.writeFile(file.replace(/\.png$/, '-asleep.png'), resting.toPNG())
-    // The cursor resting on it for 250 ms wakes it; leaving for 1.5 s puts it back to sleep.
-    lookAtCursor(true, true, NOTCH_DWELL_MS)
-    await sleep(100)
-    lookAtCursor(true, true, NOTCH_DWELL_MS)
-    if (presenceNow.revealed) throw new Error('the notch woke before the cursor had rested on it for 250 ms')
-    await sleep(200)
+    // The cursor resting on it for 250 ms wakes it; leaving for 1.5 s puts it back to sleep. The notch's own cursor watch
+    // sees the check's made-up cursor, as it would the real one.
     const notchLook = await motionLook(notch.contents()!, MOVING_BLACK[notchStyle], '.nt')
-    smoothly(`the notch waking (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(true, true, NOTCH_DWELL_MS)))
+    smokeNotchCursor = { x: notchGeo.x + notchGeo.width / 2, y: notchGeo.y + 10 }
+    await sleep(100)
+    if (presenceNow.revealed) throw new Error('the notch woke before the cursor had rested on it for 250 ms')
+    smoothly(`the notch waking (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => {}))
     if (!presenceNow.revealed) throw new Error('the notch did not wake when the cursor rested on it')
     await sleep(300)
     const woke = await notch.capture()
     if (!woke || (notchStyle === 'chin' ? !solid(woke, layout.cx, below) : !solid(woke, layout.cx - beside, layout.height / 2))) throw new Error(`the notch (${notchStyle}) did not grow when it woke`)
-    lookAtCursor(false, false, NOTCH_DWELL_MS)
-    await sleep(1600)
-    smoothly(`the notch going to sleep (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => void lookAtCursor(false, false, NOTCH_DWELL_MS)))
+    smokeNotchCursor = { x: notchGeo.x + notchGeo.width / 2, y: notchGeo.y + 300 }
+    await sleep(TUCK_MS - 300)
+    smoothly(`the notch going to sleep (${notchStyle})${notchLook.label}`, await watchMotion(notch.contents()!, notchLook, 1300, () => {}))
+    smokeNotchCursor = null
     if (presenceNow.revealed) throw new Error('the notch did not go back to sleep after the cursor left')
     console.log(`smoke: notch ${notchStyle}: asleep is the notch's black only, resting the cursor on it wakes it, leaving puts it back to sleep`)
     await settings.update({ steward: { presence: 'always' } })
