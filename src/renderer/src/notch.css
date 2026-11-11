@@ -128,6 +128,16 @@
   width: 0;
   height: 0;
 }
+/* Steward moves and shrinks into the avatar spot as it joins a big island, its body fading into the black. Each piece
+   on a layer of its own from the start, drawn once and then only moved, scaled and blended: otherwise the glass body's
+   blurred shine and shadow are drawn again partway through, and that one frame takes over 100 ms. */
+.isl-pill {
+  will-change: transform;
+}
+.isl-body,
+.isl-lit {
+  will-change: opacity;
+}
 .isl-lit {
   opacity: 0;
 }
