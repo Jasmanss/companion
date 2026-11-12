@@ -91,7 +91,7 @@ Cut any chapter that does not come out well; the chips under the video follow wh
 - **Windows and tabs:** only the editor and Steward. No browser tabs, no other chats, no real project or folder names, no email, no API key, nothing from Settings that shows a key.
 - **Steward's own cards:** the Sessions card lists real session names. Close the panel's Sessions card or use only demo-named sessions. Quiet mode's "Hide from screen sharing" option does not hide Steward from this recording and was left out, so use "In full-screen apps" and "Hide in these apps" only to step Steward aside if needed.
 
-**What Claude does with it (ffmpeg is installed):** trims the stillness, crops to 16:10 by trimming the bottom (the Dock area; the menu bar and notch stay), scales to 1920 wide, 30 fps, H.264, no audio track, `+faststart`, roughly `ffmpeg -i in.mov -an -vf "crop=iw:iw*10/16:0:0,scale=1920:-2,fps=30" -c:v libx264 -crf 27 -preset slow -movflags +faststart walkthrough.mp4`. Aim for **8 to 10 MB and never over 12 MB** for 55 s. Also a poster frame (WebP or JPEG, about 100 KB) and the chapter start times for the chips. The raw `.mov` is **not** committed; the final file is committed once, so the repo does not grow with every re-encode.
+**What Claude does with it (ffmpeg is installed):** trims the stillness, crops to 16:10 by trimming the bottom (the Dock area; the menu bar and notch stay), scales to 1920 wide, 30 fps, H.264, no audio track, `+faststart`, roughly `ffmpeg -i in.mov -an -vf "crop=iw:iw*10/16:0:0,scale=1920:-2,fps=30" -c:v libx264 -crf 27 -preset slow -movflags +faststart walkthrough.mp4`. Aim for **8 to 10 MB and never over 12 MB** for 55 s. Also a poster frame (JPEG, about 100 KB; this ffmpeg cannot write WebP) and the chapter start times for the chips. The raw `.mov` is **not** committed; the final file is committed once, so the repo does not grow with every re-encode.
 - **Playback:** `preload="none"` with the poster first, so the page's first load stays small. Starts when in view, stops when it leaves. A visible Pause button reachable by keyboard. With reduced motion there is no autoplay: the poster shows with a Play button.
 - **Page weight:** the page itself is about 25 KB. The video downloads only when it is near the screen.
 
@@ -148,7 +148,7 @@ Fails the build if the built site contains:
 - **Size and links:** a video over 12 MB, an image over 200 KB, an external URL, a missing poster or label, or `autoplay` without `muted`.
 
 ### Files likely touched
-- **New:** `site/check.mjs`, `site/clips/walkthrough.mp4` and `site/posters/walkthrough.webp` (Phase 3), a `site` entry in `.gitignore` for `site/dist` (check it is already there), a CI step that runs the check.
+- **New:** `site/check.mjs`, `site/clips/walkthrough.mp4` and `site/posters/walkthrough.jpg` (Phase 3), a `site` entry in `.gitignore` for `site/dist` (check it is already there), a CI step that runs the check.
 - **Changed:** `site/index.html` (rewritten light), `site/build.mjs` (probably nothing, maybe the video's content type).
 - **Shared / config files, small and additive:** `eslint.config.js` (ignore `site/dist`), `.github/workflows/ci.yml` (run the site check), `package.json` (a `site:check` script).
 - **Not touched:** anything under `src/`. The site is separate from the app.
@@ -193,3 +193,15 @@ Built by Site building, a separate long-lived chat. Status stays `ready`: phases
 - **Not checked:** a real phone, Safari and Firefox.
 - **Next:** phase 2 (the five scenes) waits for the user's go, typed into Site building.
 - **Merged (2026-10-20):** the user merged PR #23 into main: merge commit `6629f38`. Docs PR #22 (the Feature and Site building chats in CLAUDE.md) merged too (`6cc3bf6`). Phase 2 still waits for the user's vision talk about the website.
+
+### Site Phase 2: the light page (recorded 2026-11-12, from the front door)
+- **PR #55**, merge `4483bc5` (2026-11-12), on the user's OK. Status stays `ready`: Phases 3 and 4 are not built. CI green (Linux, macOS, CodeRabbit). Built by Site building.
+- **Built:**
+  - **The sky hero**, CSS only: the glass Pill with the fine edge, the headline "A small helper at the edge of your screen." and one line. No input box and no button. On scroll the Pill tilts down and the video frame rises.
+  - **The video section:** a window frame, five chapter chips, muted playback while at least half of it is in view, a Pause button, no autoplay with reduced motion. **It is left out of the build, along with the top bar's "Watch" link, until the real recording exists**, so no placeholder ships.
+  - **How it's built:** the dark text-only card. **The closing line** over the sky, and the footer.
+  - **`site/check.mjs`** with 22 tests (`tests/site-check.test.ts`): it blocks private strings, unbuilt feature names, forms and sign-up words, outside URLs, heavy files, and a video with no poster or label. A planted bad page failed with all 10 problems listed. `npm run site:check` builds and checks, and CI runs it after the tests. `site:serve` now answers byte-range requests, so chips can jump within the video locally.
+- **Where the build differs from the brief:** "AI chats with four roles" instead of "four chats"; the phone frame keeps a 12 px gutter; the poster is a JPEG (this ffmpeg cannot write WebP); the chip times are the shot list's placeholders until Phase 3. The front door added `71352a6`: the check's test had used a real local chat id as its sample, now a made-up one.
+- **Checks:** lint, typecheck, 777 tests. Smoke skipped, no app code changed. Headless Chrome at 390, 820 and 1440 wide with no sideways overflow or console errors; the CSS and script scroll drivers match; reduced motion keeps everything still; eight scroll runs held 60 fps with a throwaway test clip playing (not committed), no frame over 20 ms; keyboard and focus rings checked.
+- **Not checked:** Safari, Firefox, a real phone, the real recording, and whether Vercel serves byte ranges for the video (believed yes).
+- **Next:** Phase 3 waits for the user's recording and then the user's go typed into Site building.
