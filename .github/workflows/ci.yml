@@ -29,6 +29,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Check the showcase site for private strings, outside links and heavy files
+        run: npm run site:check
 
   mac:
     name: Build, smoke test, package (macOS)

@@ -25,6 +25,7 @@
     "design": "node scripts/design-server.mjs",
     "site:build": "node site/build.mjs",
     "site:serve": "node site/build.mjs --serve",
+    "site:check": "node site/build.mjs && node site/check.mjs",
     "pack": "electron-vite build && electron-builder --mac --dir",
     "dist": "electron-vite build && electron-builder --mac"
   },
