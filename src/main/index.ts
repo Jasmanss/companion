@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { islandBodyKind, islandParts, ISLAND_WINDOW, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
+import { islandBodyKind, islandParts, islandWindow, NOTCH_HOVER_LIP, NOTCH_HOVER_WINGS, NOTCH_LIP, NOTCH_WINDOW, NOTCH_WING, NOTE_LINES, noteSize, nudgeUnderNotch, type IslandNoteSize } from '../shared/notch'
 import { checkShortcut, formatAccelerator, GLOBAL_SHORTCUTS, isGlobalShortcut, isShortcutId, normalizeAccelerator, shortcutInfo, type GlobalShortcutId } from '../shared/shortcuts'
 import { NUDGE_WIDTH, TAB_SIZES } from '../shared/steward'
 import { clampTop, placeFor, TabDrag, topAround, topFor, type Rect } from '../shared/tab-place'
@@ -63,7 +63,7 @@ import {
   type EdgePush,
   type PresenceState,
 } from './presence'
-import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
+import { alertNote, BIG_NOTE_MS, hookNote, IslandNotes, islandStatus, messageKeepsAwake, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, type Turns } from './island-status'
 import { cameBack, idleLookMs, nextReactionChange, pickReaction, recentStops, type ReactionInput } from './reactions'
 import { FIRST_QUIET_MS, GAP_MS, isIdleMove } from '../shared/idle-loop'
 import { reviewAlert, ReviewTracker, sameTurnFinished } from './review'
@@ -189,6 +189,12 @@ const quiet = (): boolean => settings?.steward().presence === 'quiet'
 let presenceNow: PresenceState = asleep()
 /** Steward is showing: always, or when it's been brought out. At the edge that's the tab, in the notch it's awake. */
 const out = (): boolean => !quiet() || presenceNow.revealed
+/**
+ * The notch is awake while Steward is out, and in Island while an alert's message is out on it, whatever the presence
+ * rules say meanwhile: a tuck (the cursor gone a moment) never takes a card away before it settles. Every place that
+ * wakes the notch or puts it to sleep asks this, so none of them can disagree.
+ */
+const notchAwake = (): boolean => out() || (inNotch() && settings.steward().notchStyle === 'island' && messageKeepsAwake(islandNotes.current))
 let watchTimer: ReturnType<typeof setTimeout> | undefined
 let slideTimer: ReturnType<typeof setTimeout> | undefined
 /** The window's page is slid out, off the screen edge (see setSlide). */
@@ -557,7 +563,7 @@ function placeAfterDisplayChange(): void {
 
 /** The tab or the notch follows whether Steward is out: it slides in or out, or the notch wakes or goes to sleep. */
 function applyPresence(): void {
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   if (!win || win.isDestroyed() || dock !== 'collapsed' || inNotch()) return
   if (out()) showTab(boundsFor('collapsed'))
   else tuckTab()
@@ -572,10 +578,15 @@ function restingPresence(afterNudge = false): PresenceState {
   return quiet() && (!inNotch() || afterNudge) ? { revealed: true, since: null } : asleep()
 }
 
+/** How many times the notch has been looked for: the newest look wins. */
+let notchAsks = 0
 /** Ask macOS where the notch is (at launch, and whenever a display changes), and put Steward where it belongs. */
 async function refreshNotch(): Promise<void> {
+  // Asking macOS can take seconds (waking, a display coming and going), so a second ask can start before the first
+  // answers. Only the newest answer counts: an older one landing last would put Steward where the notch no longer is.
+  const ask = ++notchAsks
   const found = pretendNotch(process.env, screen.getPrimaryDisplay()) ?? findNotch(await probeScreens(), screen.getAllDisplays())
-  if (JSON.stringify(found) === JSON.stringify(notchGeo)) return
+  if (ask !== notchAsks || JSON.stringify(found) === JSON.stringify(notchGeo)) return
   notchGeo = found
   notch?.setNotch(found)
   for (const w of [win, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('notch:geometry', found)
@@ -586,7 +597,7 @@ async function refreshNotch(): Promise<void> {
 function replaceForNotch(): void {
   placeNotch()
   presenceNow = asleep()
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   syncWatch()
   if (!win || win.isDestroyed()) return
   // A nudge that's out moves too: under the notch, or back to the edge.
@@ -612,7 +623,7 @@ function setDock(state: DockState): void {
   }
   // Only when needed: a nudge brings Steward out, and at rest it stays out only while the cursor is on it (or work goes on).
   presenceNow = state === 'nudge' ? { revealed: quiet(), since: null } : state === 'collapsed' ? restingPresence(wasNudge) : asleep()
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   if (wasOpen && !isOpen(state)) void appState?.update({ lastSeenAt: Date.now() })
   if (!wasOpen && isOpen(state)) onPanelOpened()
   // The material first, so the panel's very first frame is drawn for it (frosted or solid).
@@ -856,7 +867,7 @@ function applyStepAside(): void {
     if (!inNotch() && out()) showTab(boundsFor('collapsed'), false)
   }
   placeNotch()
-  notch?.setAwake(out())
+  notch?.setAwake(notchAwake())
   syncWatch()
   updateMenuBar()
   if (!on && asideAlerts.length) {
@@ -1195,6 +1206,18 @@ function showOnIsland(alert: AlertView): void {
 }
 
 /**
+ * An alert's message taken off the island by another before it settled (a failed build's card by a session's approval,
+ * good news by anything big) waits for the panel, as one that couldn't show does: the menu bar's dot, then its card,
+ * with its offer. Notes about work going on (finished, started) aren't alerts, so nothing waits for them.
+ */
+function holdReplaced(note: IslandNote): void {
+  const alert = note.key ? islandAlerts.get(note.key) : undefined
+  if (!alert || alert.key.startsWith('night:')) return
+  heldAlerts = [alert, ...heldAlerts.filter((a) => a.key !== alert.key)].slice(0, MAX_HELD)
+  updateMenuBar()
+}
+
+/**
  * A button on the island's message (at: which message, so a late press on one that's gone does nothing). Open and a
  * click on the island open the panel (a message too long for the island shows there whole); Later settles it now; Want
  * me to look? opens the panel and has Steward's agent read the build log; Allow and Deny answer Steward's own request;
@@ -1230,13 +1253,16 @@ function islandAct(what: unknown, at: unknown): void {
   }
 }
 
+/** How long after a big message shows it counts as still waiting anyway, as the alert can come before the state. */
+const WAIT_GRACE_MS = 1000
+
 /**
  * Whether what a big message is about still waits: a session's approval or question until it moves on, Steward's own
  * request until it's answered, a review until it's decided. A moment's grace after it shows, as the alert can come just
  * before the state it's about.
  */
 function stillWaits(note: IslandNote, now: number): boolean {
-  if (now - note.at < 1000) return true
+  if (now - note.at < WAIT_GRACE_MS) return true
   const session = (state: SessionView['state']) => sessions.list().some((s) => s.state === state && !!note.key?.includes(`:${s.id}:`))
   if (note.kind === 'wait') return session('needs-approval')
   if (note.kind === 'input') return session('needs-input')
@@ -1470,7 +1496,7 @@ let agentSince: number | undefined
 let pendingReviews = 0
 let islandTimer: ReturnType<typeof setTimeout> | undefined
 /** Its note, one line under the notch for a few seconds: a session finished, or a second project started. */
-const islandNotes = new IslandNotes({ changed: () => updateIsland() })
+const islandNotes = new IslandNotes({ changed: () => updateIsland(), replaced: (note) => holdReplaced(note) })
 
 /**
  * Work out what the notch island shows (Settings → Steward → In the notch → Island) and tell the notch window. Called
@@ -1487,11 +1513,15 @@ function updateIsland(): void {
   const input = { sessions: sessions.list(), turns: activity.turns, ...recentStops(activity.lastStops(), now), agentBusy: agent.busy, agentSince, agentWaiting: agent.waitingForApproval, reviews: pendingReviews, failed: moods.troubled(now), note: shown, now }
   notch.setIsland(islandStatus(input))
   // An alert's message comes out even when Steward only shows when needed: the island wakes while it shows, as the tab
-  // comes out for a nudge, and goes back to sleep once it settles. (Finished and started are about work going on.)
-  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(out() || (!!shown && shown.kind !== 'finished' && shown.kind !== 'started'))
+  // comes out for a nudge, and goes back to sleep once it settles (notchAwake).
+  if (inNotch() && settings.steward().notchStyle === 'island') notch.setAwake(notchAwake())
   clearTimeout(islandTimer)
+  // A big message still in its moment's grace is looked at again once that's over: what it's about may have moved on
+  // meanwhile (answered in the terminal), and nothing else may come along to look.
   const next = nextChange(input)
-  if (next !== null) islandTimer = setTimeout(updateIsland, next - now + 50)
+  const grace = shown && now - shown.at < WAIT_GRACE_MS ? shown.at + WAIT_GRACE_MS : null
+  const soonest = next === null ? grace : grace === null ? next : Math.min(next, grace)
+  if (soonest !== null) islandTimer = setTimeout(updateIsland, soonest - now + 50)
 }
 
 /**
@@ -1972,7 +2002,13 @@ function registerIpc(): void {
     if (win && !win.isDestroyed() && dock !== 'hidden' && (after.edge !== before.edge || after.size !== before.size)) win.setBounds(boundsFor(dock))
     // Into the notch or out of it, or the other notch style.
     if (after.notch !== before.notch || after.edge !== before.edge) replaceForNotch()
-    if (after.notchStyle !== before.notchStyle) notch.restyle()
+    if (after.notchStyle !== before.notchStyle) {
+      // Its window resizes, and it's awake by the new style's rule: out of Island, a message on the island no longer
+      // keeps it awake.
+      notch.restyle()
+      notch.setAwake(notchAwake())
+      updateIsland()
+    }
     // Always visible or only when needed: Steward comes out, or slips away, now.
     if (after.presence !== before.presence) presenceChanged()
     else if (after.dimWhenIdle !== before.dimWhenIdle) syncWatch()
@@ -4054,10 +4090,11 @@ async function checkIsland(out: string): Promise<void> {
   const page = notch.contents()!
   const layout = notch.state().layout!
   const hw = layout.width / 2
-  if (notch.windowBounds()?.width !== ISLAND_WINDOW.width) throw new Error(`the island's window is ${notch.windowBounds()?.width} wide, not ${ISLAND_WINDOW.width}`)
+  const islandWide = islandWindow(layout).width
+  if (notch.windowBounds()?.width !== islandWide) throw new Error(`the island's window is ${notch.windowBounds()?.width} wide, not ${islandWide}`)
   const pixel = (img: Electron.NativeImage, x: number, y: number) => {
     const { width, height } = img.getSize()
-    const k = width / ISLAND_WINDOW.width
+    const k = width / islandWide
     const i = (Math.min(height - 1, Math.round(y * k)) * width + Math.min(width - 1, Math.round(x * k))) * 4
     const b = img.toBitmap()
     return { alpha: b[i + 3], light: Math.max(b[i], b[i + 1], b[i + 2]) }
@@ -4068,9 +4105,11 @@ async function checkIsland(out: string): Promise<void> {
   const clear = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y).alpha < 20
   /**
    * Steward's body (lit, not black) at this point, a little under where its eyes are. At rest its standby glow breathes
-   * the body's opacity down to 0.36 (dark) or 0.58 (light), so it's there when it's well above see-through.
+   * the body's opacity down to 0.36 (dark) or 0.58 (light). The Glass body (the default look) is partly see-through to
+   * start with, so at the bottom of that breath it reads about 56: it's there when it's well above clear (under 20) and
+   * lit, never the island's black. (Gone is always checked with clear, never with this.)
    */
-  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 80 && pixel(img, x, y + 9).light > 40
+  const steward = (img: Electron.NativeImage, x: number, y: number) => pixel(img, x, y + 9).alpha > 40 && pixel(img, x, y + 9).light > 40
   const right = () => page.executeJavaScript(`(() => { const r = document.querySelector('.isl-right-in'); return { html: r?.innerHTML ?? '', time: r?.querySelector('.isl-time')?.textContent ?? '', count: r?.querySelector('.isl-count')?.textContent ?? '', shown: Number(getComputedStyle(document.querySelector('.isl-right')).opacity) } })()`) as Promise<{ html: string; time: string; count: string; shown: number }>
   const hook = (hook_event_name: 'UserPromptSubmit' | 'Stop', session_id: string, said?: string) =>
     onHookEvent({ hook_event_name, session_id, cwd: '/tmp/steward-smoke-island', ...(hook_event_name === 'UserPromptSubmit' ? { prompt: 'make the button blue' } : { last_assistant_message: said }) } as HookPayload)
@@ -4286,6 +4325,16 @@ async function checkIsland(out: string): Promise<void> {
   img = await shot()
   if (!black(img, layout.cx, reviewSize.height - 3) || !black(img, layout.cx - reviewSize.width / 2 + 10, 6)) throw new Error('the review did not grow the island to the review size')
   await fs.writeFile(out.replace(/\.png$/, '-island-review.png'), img.toPNG())
+  // Resting the cursor on it a moment and leaving doesn't take it away early: the presence rules tuck Steward 1.5 s after
+  // the cursor leaves, but a card stays out until it settles (notchAwake).
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + reviewSize.height - 20 }
+  await sleep(NOTCH_DWELL_MS + 500)
+  smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + 400 }
+  await sleep(TUCK_MS + 500)
+  img = await shot()
+  const stayed = notch.state()
+  if (stayed.island?.note?.kind !== 'review' || !stayed.awake || !black(img, layout.cx, reviewSize.height - 3)) throw new Error(`Only when needed, the review went away ${TUCK_MS + 500} ms after the cursor left it, before it settled (awake ${stayed.awake}, ${JSON.stringify(stayed.island?.note?.kind ?? null)})`)
+  console.log(`smoke: island: Only when needed, the cursor resting on a review and leaving doesn't take it away before it settles (still out ${TUCK_MS + 500} ms after)`)
   // The cursor on it keeps it past its nine seconds, Only when needed too (where the island doesn't grow with it).
   smokeNotchCursor = { x: geo.x + geo.width / 2, y: geo.y + reviewSize.height - 20 }
   await sleep(BIG_NOTE_MS + 600)
@@ -4533,6 +4582,16 @@ async function checkIslandAlerts(out: string, { page, layout, shot, black, clear
       await sleep(900)
     }
     if (k.kind === 'failed' && notch.state().island?.right !== 'failed') throw new Error(`a failed build shows "${notch.state().island?.right}" on the right, not the red mark`)
+    if (k.kind === 'failed') {
+      // Something big taking its card's place before it settles doesn't lose it: it waits for the panel, offer and all.
+      raise({ key: 'deploy-failed:dpl_smoke2', level: 'urgent', title: 'api deploy failed', detail: 'Build exceeded the time limit', mood: 'mad', scope: cwd })
+      alerts.flush()
+      await sleep(400)
+      const kept = heldAlerts.find((a) => a.key === 'deploy-failed:dpl_smoke')
+      if (notch.state().island?.note?.key !== 'deploy-failed:dpl_smoke2' || !kept?.action) throw new Error(`a failed build's card taken off by another big one was lost (out: ${notch.state().island?.note?.key}; held: ${JSON.stringify(heldAlerts.map((a) => a.key))})`)
+      heldAlerts = heldAlerts.filter((a) => !a.key.startsWith('deploy-failed:dpl_smoke'))
+      console.log("smoke: island: a failed build's card taken off by another big one waits for the panel, with its offer")
+    }
     console.log(`smoke: island: ${k.what} opens as the ${k.size} size (${notch.state().island?.note ? 'out' : 'settled by its button'}), never the old pill`)
   }
   moods.clear(cwd)
@@ -5306,7 +5365,7 @@ app.whenReady().then(async () => {
     solid: () => nativeTheme.prefersReducedTransparency,
   })
   // Only when needed, it starts asleep.
-  notch.setAwake(out())
+  notch.setAwake(notchAwake())
   updateIsland()
   // Where the notch is decides whether the tab shows at the edge, so it's known before the window shows.
   await refreshNotch()
@@ -5325,6 +5384,7 @@ app.whenReady().then(async () => {
   const screenIs = (asleepNow: boolean) => () => {
     screenAsleep = asleepNow
     syncWatch()
+    notch?.pause(asleepNow)
   }
   // Overnight Watch writes down when the Mac slept and woke, and the battery; the goodnight card says which it's on.
   powerMonitor.on('suspend', () => watch?.power('suspend'))

@@ -11,7 +11,7 @@
 // (in Wings too) and it doesn't grow with the cursor on it. While the panel is open at the side, it stays, and Steward
 // looks toward the panel.
 import { BrowserWindow, screen } from 'electron'
-import { inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_WINDOW, noHover, notchBoxes, notchShape, NOTCH_WINDOW, noteSize, stepHover, type HoverState } from '../shared/notch'
+import { inBoxes, islandBoxes, islandLevel, islandParts, islandWindow, noHover, notchBoxes, notchShape, NOTCH_WINDOW, noteSize, stepHover, type HoverState } from '../shared/notch'
 import type { IslandStatus, Mood, NotchGeometry, NotchLayout, NotchState, NotchStyle, PillGlint } from '../shared/types'
 import { inRect } from './presence'
 
@@ -56,6 +56,7 @@ export class NotchDock {
   private ignoring = true
   private timer: ReturnType<typeof setTimeout> | undefined
   private sentCursor = ''
+  private paused = false
 
   constructor(private o: Options) {}
 
@@ -75,7 +76,8 @@ export class NotchDock {
     this.wanted = on
     if (!on || !this.notch) {
       this.stopWatching()
-      this.hovering = noHover()
+      // Through hover(), so whoever listens hears the cursor is off it: a note kept by the cursor settles again.
+      this.hover(noHover())
       if (this.win && !this.win.isDestroyed() && this.win.isVisible()) {
         this.win.hide()
         this.win.setIgnoreMouseEvents(true)
@@ -86,6 +88,17 @@ export class NotchDock {
     const w = this.window(this.notch)
     if (!w.isVisible()) w.showInactive()
     this.watch()
+  }
+
+  /**
+   * The screen is asleep or locked: nobody can point at the notch, so the cursor isn't checked (up to 60 times a second
+   * while it rests near the notch) until the screen is back. What the cursor was on stays as it was.
+   */
+  pause(paused: boolean): void {
+    if (paused === this.paused) return
+    this.paused = paused
+    if (paused) this.stopWatching()
+    else if (this.wanted && this.notch && this.win && !this.win.isDestroyed() && this.win.isVisible()) this.watch()
   }
 
   get visible(): boolean {
@@ -183,7 +196,7 @@ export class NotchDock {
   }
 
   private bounds(n: NotchGeometry): Electron.Rectangle {
-    const size = this.o.style() === 'island' ? ISLAND_WINDOW : NOTCH_WINDOW
+    const size = this.o.style() === 'island' ? islandWindow(n) : NOTCH_WINDOW
     return { x: Math.round(n.x + n.width / 2 - size.width / 2), y: n.y, ...size }
   }
 
@@ -245,13 +258,14 @@ export class NotchDock {
 
   private close(): void {
     this.stopWatching()
+    this.hover(noHover())
     if (this.win && !this.win.isDestroyed()) this.win.destroy()
     this.win = null
   }
 
   /** Check the cursor: let clicks in over the shape, and tell the eyes where it is while it's near. */
   private watch(): void {
-    if (this.timer) return
+    if (this.timer || this.paused) return
     const tick = () => {
       this.timer = undefined
       const w = this.win, layout = this.layout()
