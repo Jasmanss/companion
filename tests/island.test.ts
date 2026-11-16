@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookPayload } from '../src/main/hook-payload'
-import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
-import { fadesFor, fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
+import { alertKind, alertNote, BIG_NOTE_MS, FINISHED_SHOW_MS, hookNote, IslandNotes, islandStatus, LONG_NOTE_MS, messageKeepsAwake, nextChange, NOTE_AFTER_HOVER_MS, NOTE_SHOW_MS, noteShowMs, noteSize, noteTurn, TURN_GIVE_UP_MS, type IslandInput } from '../src/main/island-status'
+import { fadesFor, fitNote, inBoxes, islandBoxes, islandLevel, islandParts, ISLAND_AVATAR_IN, ISLAND_HOVER, ISLAND_LONG_LINES, ISLAND_NOTE_LINE, ISLAND_SIDE, ISLAND_WINDOW, islandWindow, ISLAND_OVERSHOOT, joins, linesFor, NOTCH_LIP, NOTCH_WINDOW, PEEK_SCALE, PEEK_SIZE } from '../src/shared/notch'
 import type { IslandNote, SessionState, SessionView } from '../src/shared/types'
 
 /** The 14-inch MacBook Pro's notch. */
@@ -440,5 +440,78 @@ describe('the island with Reduce Motion', () => {
     // A note growing into a long note moves; the cursor on a note changes nothing about its shape.
     expect(fadesFor({ level: 'note', hover: false }, { level: 'long', hover: false }, notch)).toBe(true)
     expect(fadesFor({ level: 'note', hover: false }, { level: 'note', hover: true }, notch)).toBe(false)
+  })
+})
+
+describe('the island holding up', () => {
+  it("keeps the island awake in Only when needed while an alert's message is out, not for work going on", () => {
+    const note = (kind: IslandNote['kind']): IslandNote => ({ kind, name: 'api', text: '', at: 0 })
+    for (const kind of ['wait', 'input', 'agent', 'failed', 'review', 'good', 'first', 'alert'] as const) expect(messageKeepsAwake(note(kind))).toBe(true)
+    for (const kind of ['finished', 'started'] as const) expect(messageKeepsAwake(note(kind))).toBe(false)
+    expect(messageKeepsAwake(null)).toBe(false)
+  })
+
+  it('a note kept by the cursor settles once the cursor is off it, however the cursor went (the notch hidden, say)', () => {
+    vi.useFakeTimers()
+    try {
+      let changes = 0
+      const notes = new IslandNotes({ changed: () => changes++ })
+      notes.show({ kind: 'alert', name: 'api', text: 'something', at: Date.now() })
+      notes.hover(true)
+      vi.advanceTimersByTime(NOTE_SHOW_MS + 5000)
+      expect(notes.current).not.toBeNull()
+      // What the notch window now says when it hides: the cursor is off the island.
+      notes.hover(false)
+      vi.advanceTimersByTime(NOTE_AFTER_HOVER_MS + 10)
+      expect(notes.current).toBeNull()
+      expect(changes).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a message taken off before it settled, so a bigger one never makes it vanish', () => {
+    const replaced: IslandNote[] = []
+    const notes = new IslandNotes({ changed: () => {}, replaced: (n) => replaced.push(n) })
+    const n = (kind: IslandNote['kind'], key?: string): IslandNote => ({ kind, name: 'haven', text: kind, at: 0, key })
+    notes.show(n('good', 'deploy-ready:a'))
+    // Good news joining good news is the same note, so nothing is replaced.
+    notes.show(n('good', 'deploy-ready:b'))
+    expect(replaced).toEqual([])
+    // A failed build takes good news' place; a session's approval then takes the failed build's.
+    notes.show(n('failed', 'deploy-failed:x'))
+    notes.show(n('wait', 'approval:s1:1'))
+    expect(replaced.map((r) => r.key)).toEqual(['deploy-ready:a', 'deploy-failed:x'])
+    // A small one can't take a big one's place (it waits for the panel already), and the same message again only
+    // updates it.
+    expect(notes.show(n('alert', 'other:1'))).toBe(false)
+    notes.show(n('wait', 'approval:s1:1'))
+    expect(replaced).toHaveLength(2)
+    notes.drop()
+  })
+
+  // The notch in points on Macs and settings it runs on: Larger Text, the default, a 16-inch, and More Space.
+  const notches = [
+    { width: 140, height: 24 },
+    { width: 185, height: 32 },
+    { width: 200, height: 34 },
+    { width: 220, height: 38 },
+    { width: 246, height: 42 },
+  ]
+  it("gives every size room in its window, springs' overshoot and all, whatever the notch's size in points", () => {
+    for (const notch of notches) {
+      const box = islandWindow(notch)
+      expect(box.width).toBeGreaterThanOrEqual(ISLAND_WINDOW.width)
+      expect(box.height).toBeGreaterThanOrEqual(ISLAND_WINDOW.height)
+      for (const level of ['rest', 'compact', 'note', 'long', 'approval', 'review'] as const) {
+        const parts = islandParts(level, notch, level === 'compact')
+        expect(parts.width * ISLAND_OVERSHOOT).toBeLessThanOrEqual(box.width)
+        expect(parts.height * ISLAND_OVERSHOOT).toBeLessThanOrEqual(box.height)
+      }
+    }
+    // The default notch keeps the window it always had.
+    expect(islandWindow({ width: 185, height: 32 })).toEqual(ISLAND_WINDOW)
+    // More Space would have clipped the review's springs in the old 500-point window.
+    expect(islandParts('review', { width: 220, height: 38 }).width * ISLAND_OVERSHOOT).toBeGreaterThan(ISLAND_WINDOW.width)
   })
 })
