@@ -31,6 +31,12 @@ export const NOTE_AFTER_HOVER_MS = 1500
 export const LONG_NOTE_MS = 6500
 export const BIG_NOTE_MS = 9000
 
+/**
+ * In Only when needed, whether the message out keeps the island awake until it settles: an alert's does, as the tab
+ * comes out for one. Finished and started are about work going on, which brings Steward out on its own when it should.
+ */
+export const messageKeepsAwake = (note: IslandNote | null | undefined): boolean => !!note && note.kind !== 'finished' && note.kind !== 'started'
+
 /** The turns going on, by session id: when each began. */
 export type Turns = Record<string, number>
 
@@ -157,8 +163,11 @@ export class IslandNotes {
   private hovered = false
   private timer: ReturnType<typeof setTimeout> | undefined
 
-  /** changed: the note came or went, so the island should be worked out again. */
-  constructor(private readonly o: { changed(): void; now?(): number }) {}
+  /**
+   * changed: the note came or went, so the island should be worked out again. replaced: a message was taken off before
+   * it settled, by another one, so whoever shows messages can keep it for later (the panel).
+   */
+  constructor(private readonly o: { changed(): void; now?(): number; replaced?(note: IslandNote): void }) {}
 
   get current(): IslandNote | null {
     return this.note
@@ -174,6 +183,8 @@ export class IslandNotes {
       return true
     }
     if (cur && big(cur) && !big(note)) return false
+    // The one it takes the place of hasn't settled: it isn't lost (the same message again only updates it).
+    if (cur && cur.key !== note.key) this.o.replaced?.(cur)
     this.note = note
     this.shownAt = this.now()
     this.arm(noteShowMs(note))
