@@ -115,16 +115,20 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <div class="pill" aria-hidden="true"></div>
     <div>
       <h1>Steward status</h1>
-      <p class="sub">Checked against git and GitHub on Nov 12. Each date is when that line last changed.</p>
+      <p class="sub">Checked against git and GitHub on Nov 16. Each date is when that line last changed.</p>
     </div>
   </header>
   <p class="finish">The finish line (2026-11-11): Notch island Phase 5, the website, your hand tests, then one pass of the Small fixes list. Everything else is parked.</p>
   <section id="waiting" class="card waiting">
-    <h2><span class="dot"></span>Waiting on you <span class="count">2</span></h2>
+    <h2><span class="dot"></span>Waiting on you <span class="count">3</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Hand-test what has merged</span><time datetime="2026-11-12">Nov 12</time></div>
-        <p>These merged with only automatic checks and need you at the Mac. Main chat M1, required before it counts as done: run risky commands in Auto (deleting, pushing, installing) and see the card still ask and say why. Notch island 2 and 3: the note, a failed build, a long message, the eyes following the cursor, the panel at the side. Notch island 4 (about 5 minutes): with the Glass look, watch Steward in the notch over a light and a dark wallpaper and look for the fine edge on a light bar; turn Reduce Transparency on in the Mac's settings and see the notch go flat; wake the notch with your real cursor in Only when needed; with Reduce Motion on, wake and sleep the notch quickly and check it never looks half awake; watch Steward join a big island for any stall. Main chat M3 (about 5 minutes, on the real desktop): open a chat with your API key and watch the home fold into the one status line (working, waiting, images). Make something wait and click the amber count. Press New chat and see the cards come back. Try Reduce Motion, light and dark, and the notch and a moved panel. Look at whether a waiting session plus the API key note leave the thread too little room. Visual Review 1b to 3: a real turn, the big viewer's keys, a phone-width page. Visual Review 4 (about 3 minutes, steps in Feature building's report): turn on Hold the session for my review, ask for a visible change in the Claude desktop app, and look at the session while Steward's card counts down (does it look running, is there a stop button?). Send a note back and see whether Claude acts on it and how the note looks in the transcript. Type a message during a wait. Run claude /login first for the terminal, since its login has expired. Steward's moods (R1, R2): an hour of idle. Overnight Watch 1 to 3: a real night. Movable panel and notch 3b from before. The website's light page (2 minutes): run npm run site:serve and look at it in Safari and on your phone. The video section is not there yet, by design. Tell the front door what feels off; small things go on the Small fixes list.</p>
+        <div class="row"><span class="name">Hand test: about 25 minutes, in this order</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>After Notch island Phase 5 (#57) merges. 1) Main chat with your API key, 8 min: a chat that runs a command, the status line fold, the amber count, New chat; in Auto a risky command must still ask and say why; one light and one dark (this also covers the Anthropic SDK 1.3.0). 2) The notch, 6 min: glass Steward over a light and a dark wallpaper, a note, a long message, a failed build, your real cursor waking it in Only when needed, Reduce Motion wake and sleep. 3) Visual Review, 7 min: run claude /login first; a real turn, the big viewer, Show changes, Hold the session for my review (does the Sessions card look right while held, does Claude act on a sent-back note, does the viewer's top bar fit). Can skip: the website's light page (2 min, until the video is in), moving the panel and Reduce Transparency (3 min), the moods (just glance when idle), Overnight Watch 1 to 3 (needs a real night; optional). Tell the front door what feels off. Full checklist: docs/briefs/final-pass.md.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Final pass: OK the three notch picks</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>a) With a notch message out, opening the panel by hotkey and closing it brings the card back if time is left: leave as is. b) Clicking a settled amber mark opens the panel but not on that session: open it on that session. c) Chin and Wings are still in Settings and Chin is the default: make Island the default, remove Chin and Wings, move old settings to Island. These are the front door's picks. Say yes or change one.</p>
       </li>
       <li>
         <div class="row"><span class="name">Website: record the walkthrough video (30 to 45 minutes)</span><time datetime="2026-11-12">Nov 12</time></div>
@@ -136,66 +140,38 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     <h2><span class="dot"></span>In progress <span class="count">1</span></h2>
     <ul>
       <li>
-        <div class="row"><span class="name">Notch island Phase 5 is in review</span><time datetime="2026-11-12">Nov 12</time></div>
-        <p>Built and open as draft PR #57 (hardening and docs), CI running. Merged since 2026-10-24: Notch island 2 to 4, Visual Review 1b to 4, Steward's reactions R1 and R2, Main chat M1 to M3, Overnight Watch 1 to 3, Website Phase 2. Left: the website's video and going live, then your hand tests and one pass of the Small fixes.</p>
+        <div class="row"><span class="name">Notch island Phase 5 is in review</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Built and open as draft PR #57 (hardening and docs), CI running. Merged since 2026-10-24: Notch island 2 to 4, Visual Review 1b to 4, Steward's reactions R1 and R2, Main chat M1 to M3, Overnight Watch 1 to 3, Website Phase 2. Left: the website's video and going live, then your hand test and the final pass (two small phases, planned).</p>
       </li>
     </ul>
   </section>
   <section id="next" class="card next">
-    <h2><span class="dot"></span>Up next <span class="count">1</span></h2>
+    <h2><span class="dot"></span>Up next <span class="count">2</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Website, Phases 3 and 4: the video, going live</span><time datetime="2026-11-12">Nov 12</time></div>
         <p>Phase 2, the light page, is merged. Phase 3 puts your recording in (compress, poster, chapter times, turn the video section on) and waits for your recording and your go typed into Site building. Phase 4 is going live on Vercel: a protected preview first, and nothing public until you say OK.</p>
       </li>
+      <li>
+        <div class="row"><span class="name">Final pass: two small phases after your hand test</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Designed, not ready. F1: plain words and visible rough edges (alert names, Idle moves, the held session's wording, the hold switch text, one release line). F2: the notch with one style (the amber mark opens on its session; Island becomes the default and Chin and Wings go). Three questions need your OK on the picks. Your hand test comes first and what it finds joins the brief. Plan: docs/briefs/final-pass.md.</p>
+      </li>
     </ul>
   </section>
   <section id="small" class="card small">
-    <h2><span class="dot"></span>Small fixes, later <span class="count">16</span></h2>
+    <h2><span class="dot"></span>Small fixes kept for the final pass <span class="count">8</span></h2>
     <ul>
-      <li>
-        <div class="row"><span class="name">Movable panel, Phase 2: screens and edges</span><time datetime="2026-10-21">Oct 21</time></div>
-        <p>A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Moved here from Up next.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Feature building row in CLAUDE.md</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>The front door's docs commit that adds the Feature building row to the chat table in CLAUDE.md. Not in main yet.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Notch nudge: short entrance in smoke</span><time datetime="2026-10-22">Oct 22</time></div>
-        <p>The smoke check for the notch nudge's short entrance. One nudge check missed once on CI, unexplained.</p>
-      </li>
       <li>
         <div class="row"><span class="name">release.yml does not set STEWARD_SMOKE_NOTCH</span><time datetime="2026-10-24">Oct 24</time></div>
         <p>The release workflow runs smoke without the pretend notch that the CI workflow sets.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Model line in Settings</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Show which model answered.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Stray thumbnail in the Showcase</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Bug. A leftover screenshot thumbnail on the page.</p>
       </li>
       <li>
         <div class="row"><span class="name">Friendly names in alerts</span><time datetime="2026-11-02">Nov 2</time></div>
         <p>Chat names are in the note and alerts (island Phase 2). Still to check: alerts that say raw tool names like mcp__ccd_directory__propose_branch instead of plain words (&quot;wants to switch branch&quot;).</p>
       </li>
       <li>
-        <div class="row"><span class="name">Haiku 5.5 for cheap jobs</span><time datetime="2026-10-24">Oct 24</time></div>
-        <p>Check it works with Steward's tools.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Visual Review: outlines at a phone's width</span><time datetime="2026-11-02">Nov 2</time></div>
-        <p>Bug. When a turn makes a phone-width page taller than the window, Show changes also outlines the spinner and one area from the heading down, though they look unchanged. The review itself is right. Cause unknown; making every capture scrollable did not change it. Needs a look with the pictures in hand.</p>
-      </li>
-      <li>
         <div class="row"><span class="name">Rename Liveliness to Idle moves</span><time datetime="2026-11-02">Nov 2</time></div>
         <p>Settings → Steward has both &quot;Personality: Calm | Lively&quot; and &quot;Liveliness: Calm | Quiet | Off&quot;. The new row only controls the idle loop's small moves, so &quot;Idle moves&quot; says what it does and does not read as a second Personality.</p>
-      </li>
-      <li>
-        <div class="row"><span class="name">Goodnight card: old hooks</span><time datetime="2026-11-02">Nov 2</time></div>
-        <p>Stuck-session alerts need the prompt hook Visual Review added. Someone who connected Claude Code before that and never updated the hooks gets none, and the goodnight card does not say so.</p>
       </li>
       <li>
         <div class="row"><span class="name">Viewer top bar on a small screen</span><time datetime="2026-11-02">Nov 2</time></div>
@@ -220,7 +196,7 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
     </ul>
   </section>
   <section id="parked" class="card parked">
-    <h2><span class="dot"></span>Parked <span class="count">5</span></h2>
+    <h2><span class="dot"></span>Parked <span class="count">13</span></h2>
     <ul>
       <li>
         <div class="row"><span class="name">Overnight Watch, phases 4 and 5</span><time datetime="2026-11-11">Nov 11</time></div>
@@ -241,6 +217,38 @@ footer { color: var(--t3); font-size: 0.75rem; text-align: center; padding-top: 
       <li>
         <div class="row"><span class="name">Review before push</span><time datetime="2026-11-11">Nov 11</time></div>
         <p>Designed in a side chat, waiting for a pick, no brief file. Design: memory/research/2026-10-15-review-before-push-design.md.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Movable panel, Phase 2: screens and edges</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: Only matters with a second screen or a full-screen app.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Feature building row in CLAUDE.md</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: A docs line about our own chats, not the product.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Notch nudge: short entrance in smoke</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: A test flake that missed once on CI; reopen if it fails again.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Model line in Settings</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: Nice to have, nothing is broken without it.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Stray thumbnail in the Showcase</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: On a design page, not in the app or the site.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Haiku 5.5 for cheap jobs</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: A check, not a fix.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Visual Review: outlines at a phone's width</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: Only in the off-by-default phone-width view; cause unknown, could eat the pass.</p>
+      </li>
+      <li>
+        <div class="row"><span class="name">Goodnight card: old hooks</span><time datetime="2026-11-16">Nov 16</time></div>
+        <p>Parked in the final pass: One user who can press Update in Connections.</p>
       </li>
     </ul>
   </section>

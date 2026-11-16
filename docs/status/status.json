@@ -1,12 +1,13 @@
 {
-  "checked": "2026-11-12",
+  "checked": "2026-11-16",
   "finish": "The finish line (2026-11-11): Notch island Phase 5, the website, your hand tests, then one pass of the Small fixes list. Everything else is parked.",
   "sections": [
     {
       "id": "waiting",
       "title": "Waiting on you",
       "items": [
-        { "name": "Hand-test what has merged", "line": "These merged with only automatic checks and need you at the Mac. Main chat M1, required before it counts as done: run risky commands in Auto (deleting, pushing, installing) and see the card still ask and say why. Notch island 2 and 3: the note, a failed build, a long message, the eyes following the cursor, the panel at the side. Notch island 4 (about 5 minutes): with the Glass look, watch Steward in the notch over a light and a dark wallpaper and look for the fine edge on a light bar; turn Reduce Transparency on in the Mac's settings and see the notch go flat; wake the notch with your real cursor in Only when needed; with Reduce Motion on, wake and sleep the notch quickly and check it never looks half awake; watch Steward join a big island for any stall. Main chat M3 (about 5 minutes, on the real desktop): open a chat with your API key and watch the home fold into the one status line (working, waiting, images). Make something wait and click the amber count. Press New chat and see the cards come back. Try Reduce Motion, light and dark, and the notch and a moved panel. Look at whether a waiting session plus the API key note leave the thread too little room. Visual Review 1b to 3: a real turn, the big viewer's keys, a phone-width page. Visual Review 4 (about 3 minutes, steps in Feature building's report): turn on Hold the session for my review, ask for a visible change in the Claude desktop app, and look at the session while Steward's card counts down (does it look running, is there a stop button?). Send a note back and see whether Claude acts on it and how the note looks in the transcript. Type a message during a wait. Run claude /login first for the terminal, since its login has expired. Steward's moods (R1, R2): an hour of idle. Overnight Watch 1 to 3: a real night. Movable panel and notch 3b from before. The website's light page (2 minutes): run npm run site:serve and look at it in Safari and on your phone. The video section is not there yet, by design. Tell the front door what feels off; small things go on the Small fixes list.", "date": "2026-11-12" },
+        { "name": "Hand test: about 25 minutes, in this order", "line": "After Notch island Phase 5 (#57) merges. 1) Main chat with your API key, 8 min: a chat that runs a command, the status line fold, the amber count, New chat; in Auto a risky command must still ask and say why; one light and one dark (this also covers the Anthropic SDK 1.3.0). 2) The notch, 6 min: glass Steward over a light and a dark wallpaper, a note, a long message, a failed build, your real cursor waking it in Only when needed, Reduce Motion wake and sleep. 3) Visual Review, 7 min: run claude /login first; a real turn, the big viewer, Show changes, Hold the session for my review (does the Sessions card look right while held, does Claude act on a sent-back note, does the viewer's top bar fit). Can skip: the website's light page (2 min, until the video is in), moving the panel and Reduce Transparency (3 min), the moods (just glance when idle), Overnight Watch 1 to 3 (needs a real night; optional). Tell the front door what feels off. Full checklist: docs/briefs/final-pass.md.", "date": "2026-11-16" },
+        { "name": "Final pass: OK the three notch picks", "line": "a) With a notch message out, opening the panel by hotkey and closing it brings the card back if time is left: leave as is. b) Clicking a settled amber mark opens the panel but not on that session: open it on that session. c) Chin and Wings are still in Settings and Chin is the default: make Island the default, remove Chin and Wings, move old settings to Island. These are the front door's picks. Say yes or change one.", "date": "2026-11-16" },
         { "name": "Website: record the walkthrough video (30 to 45 minutes)", "line": "The page is built and waits for it: the video section stays hidden until a real recording exists. One screen recording of the real app, 45 to 60 seconds, with Cmd-Shift-5. Shot list, steps and what to keep out of frame (menu bar icons, notifications, real project names) are in docs/briefs/steward-site.md. Tell the front door where the file is.", "date": "2026-11-12" }
       ]
     },
@@ -14,31 +15,24 @@
       "id": "progress",
       "title": "In progress",
       "items": [
-        { "name": "Notch island Phase 5 is in review", "line": "Built and open as draft PR #57 (hardening and docs), CI running. Merged since 2026-10-24: Notch island 2 to 4, Visual Review 1b to 4, Steward's reactions R1 and R2, Main chat M1 to M3, Overnight Watch 1 to 3, Website Phase 2. Left: the website's video and going live, then your hand tests and one pass of the Small fixes.", "date": "2026-11-12" }
+        { "name": "Notch island Phase 5 is in review", "line": "Built and open as draft PR #57 (hardening and docs), CI running. Merged since 2026-10-24: Notch island 2 to 4, Visual Review 1b to 4, Steward's reactions R1 and R2, Main chat M1 to M3, Overnight Watch 1 to 3, Website Phase 2. Left: the website's video and going live, then your hand test and the final pass (two small phases, planned).", "date": "2026-11-16" }
       ]
     },
     {
       "id": "next",
       "title": "Up next",
       "items": [
-        { "name": "Website, Phases 3 and 4: the video, going live", "line": "Phase 2, the light page, is merged. Phase 3 puts your recording in (compress, poster, chapter times, turn the video section on) and waits for your recording and your go typed into Site building. Phase 4 is going live on Vercel: a protected preview first, and nothing public until you say OK.", "date": "2026-11-12" }
+        { "name": "Website, Phases 3 and 4: the video, going live", "line": "Phase 2, the light page, is merged. Phase 3 puts your recording in (compress, poster, chapter times, turn the video section on) and waits for your recording and your go typed into Site building. Phase 4 is going live on Vercel: a protected preview first, and nothing public until you say OK.", "date": "2026-11-12" },
+        { "name": "Final pass: two small phases after your hand test", "line": "Designed, not ready. F1: plain words and visible rough edges (alert names, Idle moves, the held session's wording, the hold switch text, one release line). F2: the notch with one style (the amber mark opens on its session; Island becomes the default and Chin and Wings go). Three questions need your OK on the picks. Your hand test comes first and what it finds joins the brief. Plan: docs/briefs/final-pass.md.", "date": "2026-11-16" }
       ]
     },
     {
       "id": "small",
-      "title": "Small fixes, later",
+      "title": "Small fixes kept for the final pass",
       "items": [
-        { "name": "Movable panel, Phase 2: screens and edges", "line": "A second screen, a shrinking work area, a full-screen app, notch mode on another screen, Reduce Motion by hand. Moved here from Up next.", "date": "2026-10-21" },
-        { "name": "Feature building row in CLAUDE.md", "line": "The front door's docs commit that adds the Feature building row to the chat table in CLAUDE.md. Not in main yet.", "date": "2026-10-24" },
-        { "name": "Notch nudge: short entrance in smoke", "line": "The smoke check for the notch nudge's short entrance. One nudge check missed once on CI, unexplained.", "date": "2026-10-22" },
         { "name": "release.yml does not set STEWARD_SMOKE_NOTCH", "line": "The release workflow runs smoke without the pretend notch that the CI workflow sets.", "date": "2026-10-24" },
-        { "name": "Model line in Settings", "line": "Show which model answered.", "date": "2026-10-24" },
-        { "name": "Stray thumbnail in the Showcase", "line": "Bug. A leftover screenshot thumbnail on the page.", "date": "2026-10-24" },
         { "name": "Friendly names in alerts", "line": "Chat names are in the note and alerts (island Phase 2). Still to check: alerts that say raw tool names like mcp__ccd_directory__propose_branch instead of plain words (\"wants to switch branch\").", "date": "2026-11-02" },
-        { "name": "Haiku 5.5 for cheap jobs", "line": "Check it works with Steward's tools.", "date": "2026-10-24" },
-        { "name": "Visual Review: outlines at a phone's width", "line": "Bug. When a turn makes a phone-width page taller than the window, Show changes also outlines the spinner and one area from the heading down, though they look unchanged. The review itself is right. Cause unknown; making every capture scrollable did not change it. Needs a look with the pictures in hand.", "date": "2026-11-02" },
         { "name": "Rename Liveliness to Idle moves", "line": "Settings → Steward has both \"Personality: Calm | Lively\" and \"Liveliness: Calm | Quiet | Off\". The new row only controls the idle loop's small moves, so \"Idle moves\" says what it does and does not read as a second Personality.", "date": "2026-11-02" },
-        { "name": "Goodnight card: old hooks", "line": "Stuck-session alerts need the prompt hook Visual Review added. Someone who connected Claude Code before that and never updated the hooks gets none, and the goodnight card does not say so.", "date": "2026-11-02" },
         { "name": "Viewer top bar on a small screen", "line": "The big viewer's top bar now holds seven things (name, address, files changed, two segmented controls, Show changes with its counter, Fit and 100%). Check it by hand on a small screen to see whether it wraps.", "date": "2026-11-02" },
         { "name": "Sessions card says finished while Claude is held", "line": "While Claude is held for a review, the review card says it is waiting for your answer and the Sessions card says \"finished just now\". Suggest the session's row says \"waiting for your review\" with the countdown.", "date": "2026-11-06" },
         { "name": "Hold switch text is long", "line": "Four lines under \"Hold the session for my review\" in Settings. Suggest two lines of explanation plus one small consent line (\"Adds one hook to Claude Code's settings.\"); the card says the session shows as running. Optional: a clock icon or warm color for the countdown on the card.", "date": "2026-11-06" },
@@ -54,7 +48,15 @@
         { "name": "Steward's reactions, R3: frustrated", "line": "Frustrated when runs keep failing, with a PostToolUseFailure hook you would add yourself. R1 and R2 stay merged. Brief: docs/briefs/steward-reactions.md.", "date": "2026-11-11" },
         { "name": "Notch 3c: drop images", "line": "Drag a screenshot onto the notch. Not started, spike included. Brief: docs/briefs/notch-dock-phase-3.md.", "date": "2026-11-11" },
         { "name": "Idea inbox", "line": "Designed in a side chat, waiting for a pick, no brief file. Design: memory/research/2026-10-15-idea-inbox-design.md.", "date": "2026-11-11" },
-        { "name": "Review before push", "line": "Designed in a side chat, waiting for a pick, no brief file. Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-11-11" }
+        { "name": "Review before push", "line": "Designed in a side chat, waiting for a pick, no brief file. Design: memory/research/2026-10-15-review-before-push-design.md.", "date": "2026-11-11" },
+        { "name": "Movable panel, Phase 2: screens and edges", "line": "Parked in the final pass: Only matters with a second screen or a full-screen app.", "date": "2026-11-16" },
+        { "name": "Feature building row in CLAUDE.md", "line": "Parked in the final pass: A docs line about our own chats, not the product.", "date": "2026-11-16" },
+        { "name": "Notch nudge: short entrance in smoke", "line": "Parked in the final pass: A test flake that missed once on CI; reopen if it fails again.", "date": "2026-11-16" },
+        { "name": "Model line in Settings", "line": "Parked in the final pass: Nice to have, nothing is broken without it.", "date": "2026-11-16" },
+        { "name": "Stray thumbnail in the Showcase", "line": "Parked in the final pass: On a design page, not in the app or the site.", "date": "2026-11-16" },
+        { "name": "Haiku 5.5 for cheap jobs", "line": "Parked in the final pass: A check, not a fix.", "date": "2026-11-16" },
+        { "name": "Visual Review: outlines at a phone's width", "line": "Parked in the final pass: Only in the off-by-default phone-width view; cause unknown, could eat the pass.", "date": "2026-11-16" },
+        { "name": "Goodnight card: old hooks", "line": "Parked in the final pass: One user who can press Update in Connections.", "date": "2026-11-16" }
       ]
     },
     {
