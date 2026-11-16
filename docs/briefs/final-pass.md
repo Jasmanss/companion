@@ -1,8 +1,10 @@
 # Final pass: the last small fixes and the hand test
 
-Status: designed
+Status: ready
 
 Designed 2026-11-16 on the front door's request. **Not ready:** it becomes ready after the user's hand tests, because whatever they turn up joins it (see "Hand test first"). Nothing is built.
+
+Set to ready by the front door on the user's go, 2026-11-16, for F1's five firm items and for F2 with the front door's three notch picks (a: leave as is; b: the amber mark opens its session; c: Island becomes the default, Chin and Wings are removed, old settings move to Island). Asked "OK my notch picks and start F1 and F2 now?", the user answered "Yes, start both". The three items that depend on the hand test, and anything the hand test finds, wait for a later F1b. Each phase is built in a fresh temporary chat the front door starts (to keep usage down), not in Main building. Web search repeating itself was fixed separately (draft PR #59).
 
 ## Ask (front door)
 The user set the finish line on 2026-11-11: "Yes, park them" (Notch island Phase 5, the website, the hand tests, then one pass of the Small fixes; everything else parked). On 2026-11-16 they asked the front door to keep going ("yo continue") and want to be done soon, so this is kept small:
