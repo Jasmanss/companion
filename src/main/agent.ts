@@ -14,6 +14,11 @@ import type { TrayStore } from './tray-store'
 
 const MODEL = 'claude-sonnet-5-5'
 const MAX_CONTINUATIONS = 5
+/**
+ * Web searches and page reads in one answer. max_uses only holds within a single request when the search runs
+ * from code (dynamic filtering, the default for the 20260209 tools), so the loop keeps its own count.
+ */
+const MAX_WEB_STEPS = 12
 
 /** Follows "You are <name>, ". */
 const BASE_PROMPT = `a desktop assistant that lives at the edge of the user's Mac screen and helps while they code. Talk like a sharp, friendly teammate: short and direct, a few sentences at most, no headings. Light Markdown (bold, lists, links, inline code) renders.
@@ -217,7 +222,13 @@ export class Agent {
   private async loop(client: Anthropic, signal: AbortSignal): Promise<void> {
     let continuations = 0
     let jsonRetries = 0
+    const answerStart = this.messages.length
+    // Searches run from code in a container. Each request gets a new one unless its id goes back, losing what the code found.
+    let container: string | undefined
+    let webSteps = 0
     for (;;) {
+      // Out of searches: no more tools, answer with what's found. A tool call still waiting runs first.
+      const outOfSearches = webSteps >= MAX_WEB_STEPS && !serverToolWaiting(this.messages.slice(answerStart))
       const stream = client.beta.messages.stream(
         {
           model: MODEL,
@@ -227,7 +238,10 @@ export class Agent {
           output_config: { effort: 'medium' },
           cache_control: { type: 'ephemeral' },
           system: this.systemPrompt(),
+          // Tools stay the same on every request. tool_choice can change without breaking thinking or the tools and system cache.
           tools: TOOLS,
+          ...(outOfSearches ? { tool_choice: { type: 'none' } } : {}),
+          ...(container ? { container } : {}),
           messages: this.messages,
         },
         { signal },
@@ -249,6 +263,8 @@ export class Agent {
             const block = event.content_block
             if (block.type !== 'thinking' && block.type !== 'redacted_thinking') stopThinking()
             if (block.type === 'server_tool_use' && (block.name === 'web_search' || block.name === 'web_fetch')) {
+              // Counted as it starts, so a request that fails partway still counts what it ran.
+              webSteps++
               const step = this.start(block.name === 'web_fetch' ? 'fetch-page' : 'search-web', serverTarget(block.name, block.input))
               this.serverSteps.set(block.id, step)
               serverInput.set(event.index, { step, json: '' })
@@ -276,6 +292,7 @@ export class Agent {
         message = await stream.finalMessage()
         stopThinking()
         jsonRetries = 0
+        container = message.container?.id ?? container
       } catch (err) {
         stopThinking()
         // A streamed tool input that isn't valid JSON rejects here; re-issue that turn a couple of times.
@@ -601,6 +618,13 @@ export class Agent {
       else this.finish(step, false, { detail: errorCode(content) })
     }
   }
+}
+
+/** A server tool call (a search, a code run) in these messages whose result hasn't come back: the next request runs it. */
+function serverToolWaiting(messages: Anthropic.Beta.BetaMessageParam[]): boolean {
+  const blocks = messages.flatMap((m) => (m.role === 'assistant' && Array.isArray(m.content) ? m.content : []))
+  const answered = new Set(blocks.flatMap((b) => ('tool_use_id' in b && typeof b.tool_use_id === 'string' ? [b.tool_use_id] : [])))
+  return blocks.some((b) => b.type === 'server_tool_use' && !answered.has(b.id))
 }
 
 /** What a web search or page read is about: the query or the URL, once it's known. */
