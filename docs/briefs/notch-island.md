@@ -454,3 +454,19 @@ Unit: the state sizes, the island staying inside the work area, the moved-panel 
 - **Honest notes:** `b96f19a` briefly broke typecheck (a test pulled in DOM types), fixed in `e791890`. Some smoke runs failed for reasons outside this phase: the Visual Review "page that did not change" hold check once, and stalls while the Mac slept, was locked, or had a full-screen app in front. The second one is worth watching.
 - **Not checked:** the real notch over real light and dark wallpapers (the pictures use stand-in bars); Reduce Transparency itself (system settings are off limits; covered by a unit test and a smoke check that the body kind matches the setting); waking with the real cursor; the Reduce Motion fade by eye; tried by hand.
 - **Shared files touched:** `src/shared/types.ts` (`NotchState.solid?`), `src/renderer/src/Notch.tsx`, `notch-island.ts`, `notch.css`, `pill/render.ts`, `pill/color.ts` (new); also `src/shared/notch.ts` (`islandBodyKind`), `src/main/notch-window.ts`, `src/main/index.ts`.
+
+### Phase 5 built and merged (recorded 2026-11-16, from the PR and the front door's check)
+- **PR #57**, merge `7cde449` (2026-11-16), on the user's OK. All five phases are now merged; Status stays `ready` like the other finished briefs. CI green on Linux and macOS (it ran before #46, the SDK 1.3.0, and #55, the site, reached main; neither touches the notch). The front door checked the 11 commits: worktree clean, no secrets, private strings or em dashes.
+- **Built:** a read-only audit of the island code against this brief's risks and test list, with each finding checked in the code before it was fixed. **All of these bugs were on main too.**
+  - **A note always settles.** Before, if the notch hid (a full-screen app, step aside) while the cursor was on a note, no note settled on its own afterwards, and a failed build's card never did.
+  - **Cards no longer vanish early in "Only when needed".** Resting the cursor on a card and leaving let Steward fall asleep 1.5 s later, card and all. Every place that wakes or sleeps the notch now follows one rule.
+  - **An answered approval goes away at once** (it could stay up to 9 s).
+  - **A replaced message is no longer lost.** If something big arrived while another message was out, the first was dropped, so a failed build's "Want me to look?" could vanish. It now waits for the panel, with the menu bar dot.
+  - **More Space screens have room for a review.** The notch is about 220 pt wide there and the review clipped. The window now grows with the notch and is unchanged on the default.
+  - **Smaller:** switching away from Island applies the new style's awake rule; after a display change only the newest notch lookup counts; no cursor checks while the screen sleeps or is locked.
+- **Docs:** the SPEC's notch section describes the island as built (every state, timing, quiet mode, the glass Steward and the menu bar it covers); the README's smoke switches are current.
+- **Smoke:** new checks for a card staying out after the cursor rests on it and leaves (it failed with the old rule put back, as it should) and for a replaced failed-build card waiting for the panel. `STEWARD_SMOKE_NOTCH=220x38` pretends a wider notch. **Fixed:** the island-only run had failed on main every time, because its "Steward is there" pixel test was set for the flat body, not the Glass look.
+- **Checks:** lint, typecheck, 759 tests; the full hidden smoke passed (248 steps) and the island checks pass at 220x38.
+- **Not checked:** a hand test on the real notch, locking the screen (the smoke cannot lock it), a real More Space screen (tested with a pretend notch).
+- **Three questions Main building raised** are in `docs/briefs/final-pass.md` as part of phase F2 (they wait for the user's OK on the front door's picks).
+- **Shared files touched:** `src/shared/notch.ts` only.

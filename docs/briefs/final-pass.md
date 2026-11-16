@@ -7,7 +7,7 @@ Designed 2026-11-16 on the front door's request. **Not ready:** it becomes ready
 ## Ask (front door)
 The user set the finish line on 2026-11-11: "Yes, park them" (Notch island Phase 5, the website, the hand tests, then one pass of the Small fixes; everything else parked). On 2026-11-16 they asked the front door to keep going ("yo continue") and want to be done soon, so this is kept small:
 1. A trimmed Small fixes list: keep only what a user of the finished app would notice, or what is broken; park the rest with a one-line reason.
-2. The three questions Main building raised in Notch island Phase 5 (draft PR #57), with the front door's picks. **The picks are not yet approved by the user.**
+2. The three questions Main building raised in Notch island Phase 5 (PR #57, now merged), with the front door's picks. **The picks are not yet approved by the user.**
 3. What is kept, grouped into one or two Main building phases.
 4. A short hand-test checklist: 20 to 30 minutes at most, most important first, minutes for each block, skippable blocks marked.
 
@@ -17,7 +17,7 @@ The user set the finish line on 2026-11-11: "Yes, park them" (Notch island Phase
 One pass, then the app is done. A fix is in only if (a) a user of the finished app would notice it, or (b) something is broken or can fail a release. Everything else is parked and not looked at again unless the hand test shows it matters. Nothing new is added. Each phase is a draft PR into main with CI green.
 
 ### Hand test first (it feeds this brief)
-The user runs the checklist below once, after Notch island Phase 5 (#57) is merged, so the notch part tests the final code. What they find is sorted by the front door into this brief ("Found in the hand test", at the bottom) and then the brief is set ready. A finding that is bigger than a small fix (anything touching a hero feature's design) is not slipped in: it comes back to Roadmap & design as its own item.
+The user runs the checklist below once. Notch island Phase 5 (#57) is merged (`7cde449`, 2026-11-16), so the notch part tests the final code. What they find is sorted by the front door into this brief ("Found in the hand test", at the bottom) and then the brief is set ready. A finding that is bigger than a small fix (anything touching a hero feature's design) is not slipped in: it comes back to Roadmap & design as its own item.
 
 ### The Small fixes list, trimmed (16 items: 8 kept, 8 parked)
 
@@ -65,7 +65,7 @@ Items 6 to 8 are "look first": they cost nothing if the hand test shows nothing 
 - Whatever the hand test turned up that is small and not in the notch (below).
 - Checks: lint, typecheck, test; a unit test for the MCP names; a smoke step for the held session's row text (extend the existing hold check). Smoke is needed because Settings and the Sessions card change.
 
-**Phase F2: the notch, one style.** Start only after #57 is merged (same files: `src/shared/notch.ts`, `Notch.tsx`, `notch-island.ts`).
+**Phase F2: the notch, one style.** **Not blocked:** #57 is merged (`7cde449`), so F2 can start on the user's go. It touches the same files #57 did (`src/shared/notch.ts`, `Notch.tsx`, `notch-island.ts`), so it builds on the merged code.
 - **(b)** The amber mark opens the panel on that session.
 - **(c)** `notchStyle` defaults to `island`. `migrateSettings` (in `settings-schema.ts`) moves a stored `chin` or `wings` to `island`. The Style row in Settings goes (or shows only Island). **How far to remove:** take out the Chin and Wings code and tests only where they are cleanly separate; if a path is tangled with the island, leave it unused rather than risk the notch the user just hand-tested, and list what is left in the report so it can be removed later. Update the SPEC's notch section.
 - **Shared files touched, small:** `src/main/settings-schema.ts` (default and migration), `src/renderer/src/Settings.tsx` (the Style row), `src/shared/types.ts` (the style type) if the type narrows.
@@ -74,7 +74,7 @@ Items 6 to 8 are "look first": they cost nothing if the hand test shows nothing 
 **Order:** hand test, then F1, then F2 (or F2 first if the user prefers; they do not touch the same files). One go for each, typed into Main building. Expected: F1 about the size of a Visual Review phase's polish, F2 a little larger because of the migration.
 
 ### The hand-test checklist (about 25 minutes, most important first)
-Run it once after #57 merges. Say what feels off; small things go to the front door, which adds them to "Found in the hand test" below. **Skip a block marked "can skip" if you are short on time.**
+Run it once (#57 is merged). Say what feels off; small things go to the front door, which adds them to "Found in the hand test" below. **Skip a block marked "can skip" if you are short on time.**
 
 | # | Block | Minutes | What to do | Skip? |
 |---|---|---|---|---|
@@ -93,7 +93,7 @@ Nothing new. Not here: the website's video and going live (their own phases in `
 
 ### Risks
 1. **The settings migration (F2) touches a stored file.** Every user's settings pass through `migrateSettings`. A test for each old value and for a missing one is required, and a bad value must fall back to Island, not crash.
-2. **Notch code just changed.** F2 starts after #57 merges and the user's notch hand test, so it works on code that has been seen.
+2. **Notch code just changed.** #57 is merged but has not been hand-tested yet. F2 changes the same code, so the user's notch block comes before F2 starts, or F2 may start first if the user prefers and the notch block then tests both.
 3. **Hand-test scope creep.** The rule above keeps it small: a finding that is not a small fix is a new item, not part of this pass.
 
 ### How to test
