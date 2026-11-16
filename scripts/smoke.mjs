@@ -4,6 +4,7 @@
 //   npm run smoke                        hidden: real windows, but see-through, click-through and never focused
 //   npm run smoke -- --visible           the windows on screen (also STEWARD_SMOKE_VISIBLE=1), to watch or to see the frost
 //   STEWARD_SMOKE_NOTCH=1 npm run smoke  pretend the main display has a notch (for a Mac without one, like CI's)
+//   STEWARD_SMOKE_NOTCH=220x38 ...      the same with a wider notch (a 14-inch at More Space)
 //   npm run smoke -- some/file.png       where the screenshot goes (default out/smoke.png); more land next to it
 //
 // One run at a time: a second waits for the first (up to STEWARD_SMOKE_LOCK_WAIT seconds, default 360), then gives up.

@@ -61,35 +61,64 @@ Single user (me). Built for my web projects (Portfolio, haven, tally, bite, …)
 - **Move the panel:** drag it by its top bar (not the buttons) anywhere inside
   the screen's work area. From then on it opens where you left it, popping in
   there, and closes there too; the tab or the notch is back after. Double-click
-  the top bar, or Settings → Steward → Reset, to put it back at its edge or
-  under the notch, with its old way in. The viewer isn't movable.
+  the top bar, or Settings → Steward → Reset, to put it back at its edge (in
+  the notch, at its side), with its old way in. The viewer isn't movable.
 - **First launch:** a new install that hides until needed peeks out once, a
   moment after it starts, with a one-line note on how to bring it back.
 - **Dim when idle (Settings → Steward → Presence):** after 20 s at rest the
   eyes fade and stop moving, until something happens or the cursor comes near.
 - **In the notch (Settings → Steward → Screen edge → Notch, on a MacBook that
-  has one):** Steward becomes a black shape around the notch with its eyes lit
-  in it (a chin below it, or wings beside it). With the cursor on it, the black
-  grows a little and the eyes follow the cursor (in "Only when needed", waking
-  up is that grow). A click opens the panel centered under the notch, coming
-  down from it, on the notch's own screen; closing it puts Steward back in the
-  notch. An alert that peeks out comes out under the notch instead of from the
-  side: a black shape below the menu bar line, joined to the chin (Wings grows
-  one for it), with one line of text. A click opens the panel (an alert's
-  action is on its banner there), and it goes back up into the notch when it
-  tucks away. It never covers the menu bar.
+  has one):** Steward lives in the notch, in one of three looks (In the notch:
+  Chin, Wings or Island). Chin and Wings are a black shape around the notch
+  with its eyes lit in it (a chin below it, or wings beside it). With the
+  cursor on it, the black grows a little and the eyes follow the cursor (in
+  "Only when needed", waking up is that grow). A click, the hotkey or the menu
+  bar icon opens the panel at the side Settings → Steward → Panel opens on
+  says (Left or Right), near the top of the notch's screen, or where you
+  dragged it: never under the notch. Steward stays in the notch looking toward
+  the panel, and closing the panel puts it back at rest. With Chin or Wings an
+  alert that peeks out comes out under the notch instead of from the side: a
+  black shape below the menu bar line, joined to the chin (Wings grows one for
+  it), with one line of text. A click opens the panel (an alert's action is on
+  its banner there), and it goes back up into the notch when it tucks away.
+  It never covers the menu bar.
 - **The notch island (In the notch → Island):** one black shape joined to the
-  notch, sized by what's going on, with Steward peeking from the notch's left
-  edge at rest. Every alert comes out as the island, never under the notch:
-  what waits on you (a session's approval or question, Steward's own request,
-  a failed build) grows it big, with Steward's eyes on the left and Open and
-  Later (Allow and Deny for Steward's own request, "Want me to look?" for a
-  failed build); a review grows it bigger, with its pictures, Open big and
-  Looks good; anything else is a note under the notch. Words too long for one
-  line make the note taller, up to three lines, never cut off. Messages stay a
-  few seconds (9 s for the big ones), longer with the cursor on them, then
-  settle to a mark on the island's right: amber for a wait, red for a failed
-  build.
+  notch, flush with the top of the screen, growing out of it with springs and
+  sized by what's going on.
+  - At rest there's no island: Steward peeks out from behind the notch's left
+    edge, in the chosen look. In "Only when needed" it sleeps tucked fully
+    behind the notch, and resting the cursor on the notch (0.25 s) wakes it.
+  - While Claude works it's the compact island: Steward at its left, a
+    spinner with the turn's time at its right, or a count when two projects
+    work at once. The right side shows the most pressing thing: an amber mark
+    for a wait, a red one for a failed build, a thumbnail for a review, a
+    check for 20 s when a chat finishes.
+  - News is a note, one line under the notch with the chat's name ("Main
+    building finished · what Claude said", "api started", "haven deployed");
+    good news close together joins one note.
+  - Every alert comes out as the island, never under the notch. What waits on
+    you (a session's approval or question, Steward's own request, a failed
+    build) grows it big, with Open and Later (Allow and Deny for Steward's own
+    request, "Want me to look?" for a failed build); a review grows it bigger,
+    with its pictures, Open big and Looks good; anything else is a note. For
+    the big ones Steward joins the island: its body melts into the black and
+    its eyes carry on as the avatar. Words too long for one line make the note
+    taller, up to three lines, never cut off.
+  - Messages stay 4.5 s (6.5 s for a long note, 9 s for the big ones), as
+    long as the cursor is on them and 1.5 s more, then settle back to compact
+    with the mark on the right; in "Only when needed" a message keeps the
+    island awake until then. One that something bigger takes the place of
+    before it settles waits for the panel (the menu bar's dot), offer and
+    all. "Alerts that peek out: Nothing" keeps only those marks.
+  - A click on the island opens the panel at its side (or where you dragged
+    it, popping in and closing there), and Steward steps back to peeking,
+    looking toward it.
+  - With the Glass look Steward is the glass Pill here too, with a fine
+    darker or lighter edge where it would fade into the menu bar. Reduce
+    Transparency draws it flat, and Reduce Motion fades instead of springing.
+  - The cost: while an island is out it covers part of the menu bar, about
+    70 pt each side of the notch when compact and up to 128 pt for a review.
+    It lets clicks through everywhere but its shape.
 - **Step aside (Settings → Steward):** Steward hides (the tab, the notch, an
   open panel) while an app fills the screen it's on (on for a new install), or
   while an app on your list is in front ("Add app…", or one click for Keynote,
@@ -383,4 +412,4 @@ the panel.
 
 ## Open questions
 
-- The notch, still to come: dropping images on the notch, and the black growing into the panel (docs/briefs/notch-dock-phase-3.md)
+- The notch: dropping images on the notch is parked (docs/briefs/notch-dock-phase-3.md, 3c, 2026-11-11). The black growing into the panel (3d) no longer fits, since the panel opens at the side, never under the notch
